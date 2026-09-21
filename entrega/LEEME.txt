@@ -1,0 +1,24 @@
+VOZ LOCAL 0.2.0 — ANDROID
+
+1. Copia Voz-local-0.2.0.apk a tu celular.
+2. Abre el APK desde Archivos y permite instalar desde esa app si Android lo solicita.
+3. Instala Voz local y permite usar el micrófono.
+4. Graba, pausa y toca Detener y guardar. Tus audios aparecen debajo.
+
+Requiere Android 8.0 o posterior. APK de desarrollo para uso personal.
+Incluye grabación sin internet, reproducción, títulos, búsqueda, compartir y borrar.
+Incluye Configuración para tu clave de OpenAI, transcripción con voces,
+nombres editables y condiciones de conexión/carga.
+Para probar nombres sin clave: Configuración > Probar edición de hablantes.
+
+Google Drive requiere activar la API y registrar esta app en Google Cloud.
+Consulta Configuración > Ayuda para activar Google Drive y README.md.
+El emulador local actual no incluye los servicios de Google necesarios para
+vincular una cuenta. El acceso real requiere un teléfono con Google Play
+o un emulador con Google APIs y las credenciales correspondientes.
+
+Antes de usarla para una conversación importante, prueba grabar y reproducir
+un audio con la pantalla bloqueada en tu propio teléfono.
+
+Los audios quedan dentro de la app. Desinstalarla o borrar sus datos los elimina.
+Para conservar una copia externa, usa Opciones > Compartir audio.
