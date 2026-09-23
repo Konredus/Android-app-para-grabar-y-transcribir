@@ -30,10 +30,11 @@ final class TranscriptExport {
     }
 
     static Intent shareIntent(Uri uri) {
-        return new Intent(Intent.ACTION_SEND).setType("text/plain")
+        Intent intent = new Intent(Intent.ACTION_SEND).setType("text/plain")
             .putExtra(Intent.EXTRA_STREAM, uri)
-            .setClipData(ClipData.newRawUri("Transcripción", uri))
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        intent.setClipData(ClipData.newRawUri("Transcripción", uri));
+        return intent;
     }
 
     static String filename(String title) {
