@@ -28,5 +28,7 @@ final class LocalStorage {
         Uri created=DocumentsContract.createDocument(c.getContentResolver(),parent,mime,name);if(created==null)throw new IOException();return created;
     }
     static void writeText(Context c,Uri uri,String value)throws Exception{write(c,uri,new ByteArrayInputStream(value.getBytes(StandardCharsets.UTF_8)));}
-    static void write(Context c,Uri uri,InputStream input)throws Exception{try(InputStream in=input;OutputStream out=c.getContentResolver().openOutputStream(uri,"wt")){if(out==null)throw new IOException();byte[] buffer=new byte[65536];int read;while((read=in.read(buffer))>=0)out.write(buffer,0,read);}}
+    static void write(Context c,Uri uri,InputStream input)throws Exception{try(InputStream in=input;OutputStream out=open(c,uri)){if(out==null)throw new IOException();byte[] buffer=new byte[65536];int read;while((read=in.read(buffer))>=0)out.write(buffer,0,read);}}
+    /** "wt" trunca el archivo existente; algunos proveedores de nube (p. ej. Google Drive) solo aceptan "w", que en ellos ya reemplaza el contenido. */
+    private static OutputStream open(Context c,Uri uri)throws Exception{try{return c.getContentResolver().openOutputStream(uri,"wt");}catch(IllegalArgumentException|UnsupportedOperationException|FileNotFoundException e){Diagnostics.event("local_copy_mode_fallback",null);return c.getContentResolver().openOutputStream(uri,"w");}}
 }

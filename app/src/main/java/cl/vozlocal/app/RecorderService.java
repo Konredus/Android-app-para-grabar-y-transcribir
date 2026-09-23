@@ -11,6 +11,9 @@ public class RecorderService extends Service {
     static volatile String activeId;
     static volatile boolean paused;
     static volatile String error;
+    /** Última grabación guardada; la pantalla de inicio la consume para ofrecer los siguientes pasos. */
+    static volatile String lastSavedId;
+    static volatile String activeTitle;
     private static volatile long accumulated, started;
     private MediaRecorder recorder;
     private Recording recording;
@@ -29,6 +32,7 @@ public class RecorderService extends Service {
         String action = intent == null ? "STOP" : intent.getAction();Diagnostics.event("recorder_action",activeId,"action",action);
         if ("START".equals(action) && recorder == null) startRecording(intent.getStringExtra("title"));
         else if ("PAUSE".equals(action) && recorder != null) togglePause();
+        else if ("TITLE".equals(action) && recording != null) { String t = intent.getStringExtra("title"); if (t != null && !t.trim().isEmpty()) { recording.title = t.trim().substring(0, Math.min(120, t.trim().length())); activeTitle = recording.title; } }
         else if ("STOP".equals(action)) { finishRecording(); stopSelf(); }
         return START_NOT_STICKY;
     }
@@ -49,7 +53,7 @@ public class RecorderService extends Service {
             long now = System.currentTimeMillis();
             recording = new Recording(UUID.randomUUID().toString(), Recording.defaultTitle(now), now, 0);
             if(title!=null && !title.trim().isEmpty())recording.title=title.trim().substring(0,Math.min(120,title.trim().length()));
-            activeId = recording.id;
+            activeId = recording.id; activeTitle = title != null && !title.trim().isEmpty() ? recording.title : null;
             recorder = Build.VERSION.SDK_INT >= 31 ? new MediaRecorder(this) : new MediaRecorder();
             recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
             recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
@@ -86,7 +90,8 @@ public class RecorderService extends Service {
             else recording.audio(this).delete();
         }
         String savedId=valid && recording!=null?recording.id:null;
-        activeId = null; paused = false; recording = null; stopForeground(STOP_FOREGROUND_REMOVE);
+        if (savedId != null) lastSavedId = savedId;
+        activeId = null; activeTitle = null; paused = false; recording = null; stopForeground(STOP_FOREGROUND_REMOVE);
         if(savedId!=null)Pipeline.afterRecording(this,savedId);
         Pipeline.schedule(this,false);
     }

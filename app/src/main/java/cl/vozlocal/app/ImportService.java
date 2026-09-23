@@ -53,7 +53,7 @@ public class ImportService extends Service {
     private Notification notification(ImportSession s,boolean finished){
         Intent open=s.done?new Intent(this,MainActivity.class).putExtra("library",true):new Intent(this,ImportActivity.class);open.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent launch=PendingIntent.getActivity(this,14,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        Notification.Builder b=new Notification.Builder(this,"importing").setSmallIcon(R.drawable.ic_mic).setContentTitle(finished?(s.done?"Audio guardado":"Importación pendiente"):s.stage).setContentText(finished?(s.done?"Disponible en Biblioteca":s.error):progressText(s)).setContentIntent(launch).setOnlyAlertOnce(true).setOngoing(!finished).setAutoCancel(finished);
+        Notification.Builder b=new Notification.Builder(this,"importing").setSmallIcon(R.drawable.ic_notification).setContentTitle(finished?(s.done?"Audio guardado":"Importación pendiente"):s.stage).setContentText(finished?(s.done?"Disponible en Biblioteca":s.error):progressText(s)).setContentIntent(launch).setOnlyAlertOnce(true).setOngoing(!finished).setAutoCancel(finished);
         if(!finished){b.setProgress(100,percent(s),s.total<=0);PendingIntent stop=PendingIntent.getService(this,15,new Intent(this,ImportService.class).setAction("CANCEL"),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);b.addAction(new Notification.Action.Builder(null,"Cancelar",stop).build());}return b.build();
     }
     static int percent(ImportSession s){return s.total<=0?0:(int)Math.min(99,Math.max(0,s.position*100/s.total));}

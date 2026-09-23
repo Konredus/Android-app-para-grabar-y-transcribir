@@ -1,22 +1,25 @@
 # Voz local para Android
 
-Grabadora y transcriptor local para Android 8 o posterior. Versión **0.3.0** (preliminar), licencia MIT.
+Grabadora y transcriptor local para Android 8 o posterior. Versión **0.4.0** (preliminar), licencia MIT.
 
-[Descargar APKs](https://github.com/Konredus/Android-app-para-grabar-y-transcribir/releases) · [Historial](CHANGELOG.md)
+[Descargar APKs](https://github.com/Konredus/Android-app-para-grabar-y-transcribir/releases) · [Historial](CHANGELOG.md) · [Criterios de diseño](docs/diseno/CRITERIOS.md)
+
+<img src="docs/diseno/capturas/01-grabar.png" width="200"> <img src="docs/diseno/capturas/04-biblioteca.png" width="200"> <img src="docs/diseno/capturas/06-detalle-transcrito.png" width="200">
 
 ## Qué hace
 
-- Inicio dedicado a **Grabar audio** e **Importar audio**; biblioteca separada.
-- Graba sin internet, con pausa y servicio de micrófono para continuar con la pantalla bloqueada. El medidor muestra amplitudes reales recientes.
+- Tres pestañas: **Grabar** (botón principal, importar y recientes), **Biblioteca** (búsqueda, filtros por estado, agrupación por fecha) y **Ajustes**. Modo claro y oscuro.
+- Graba sin internet con un toque, con pausa y servicio de micrófono para continuar con la pantalla bloqueada. Onda en vivo según el volumen real.
 - Importa archivos de grabadoras o usa **Compartir → Voz local** desde WhatsApp/otras apps que compartan audio. Convierte a AAC/M4A con los decodificadores de Android. M4A, MP3, WAV y OGG/Opus dependen del soporte del teléfono y del archivo.
-- Recorte no destructivo: elige inicio y final en segundos y escucha desde el inicio. Se crea una grabación nueva; el archivo original queda intacto. No es un editor de ondas completo. Mantén abierta la pantalla mientras se prepara el archivo.
-- Título opcional antes de grabar y cambio de título posterior.
+- Recorte no destructivo: elige inicio y final con dos manijas (o en segundos) y escucha el tramo. Se crea una grabación nueva; el archivo original queda intacto. No es un editor de ondas completo. Mantén abierta la pantalla mientras se prepara el archivo.
+- Título opcional mientras grabas o al terminar; resumen al guardar con el siguiente paso.
+- Pantalla de detalle: reproductor (±15 s, velocidad), estado y transcripción. Tocar el tiempo de una intervención reproduce desde ahí.
 - Transcripción manual o automática al guardar/importar; condiciones de red y cargador. Estados visibles: espera, preparación, envío, transcripción, finalización o error.
 - Separación de hablantes con un modelo compatible: Persona 1, Persona 2…; nombres editables en todas sus intervenciones.
-- Copiar texto y compartir texto o archivo `.txt` por las aplicaciones instaladas. Compartir audio M4A.
+- Copiar texto, compartir texto o `.txt`, y **Guardar en…** cualquier ubicación (incluida Google Drive si su app está instalada). Compartir audio M4A.
 - Carpeta elegida mediante el selector de Android, con audio, información y transcripción `.txt`/`.json`. Las carpetas por grabación usan un identificador estable; el título está en `informacion.txt`.
 - Diagnóstico local limitado, informe exportable y conteos de acciones. Sin telemetría remota.
-- **Sin integración de Google Drive.** No necesita cuenta Google ni servicios de Google Play.
+- Sin inicio de sesión de Google: para usar Drive se elige su carpeta en el selector de Android. No necesita servicios de Google Play.
 
 ## Instalar y configurar
 

@@ -72,7 +72,7 @@ public class PipelineJob extends JobService {
     private void notice(String text,boolean ongoing){
         NotificationManager manager=getSystemService(NotificationManager.class);manager.createNotificationChannel(new NotificationChannel("processing","Transcripciones",NotificationManager.IMPORTANCE_LOW));
         PendingIntent open=PendingIntent.getActivity(this,9,new Intent(this,MainActivity.class).putExtra("library",true),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        Notification.Builder builder=new Notification.Builder(this,"processing").setSmallIcon(cl.vozlocal.app.R.drawable.ic_mic).setContentTitle("Voz local").setContentText(text).setContentIntent(open).setOngoing(ongoing).setAutoCancel(!ongoing);
+        Notification.Builder builder=new Notification.Builder(this,"processing").setSmallIcon(cl.vozlocal.app.R.drawable.ic_notification).setContentTitle("Voz local").setContentText(text).setContentIntent(open).setOngoing(ongoing).setAutoCancel(!ongoing);
         if(ongoing)builder.setProgress(0,0,true);try{manager.notify(9,builder.build());}catch(SecurityException ignored){}
     }
     static String hash(byte[] data)throws Exception{return android.util.Base64.encodeToString(java.security.MessageDigest.getInstance("SHA-256").digest(data),android.util.Base64.NO_WRAP);}

@@ -1,5 +1,19 @@
 # Historial de versiones
 
+## 0.4.0 — 2026-09-23
+
+Rediseño completo de UX/UI. Criterios y decisiones en [docs/diseno/CRITERIOS.md](docs/diseno/CRITERIOS.md).
+
+- Design system nativo (sin dependencias): tokens de color, tipografía, espacio y movimiento en claro y oscuro; kit de componentes y hojas inferiores en lugar de diálogos.
+- Grabar con un toque: botón círculo→cuadrado, onda en vivo en dB, punto REC, pausa, título durante la grabación y resumen al guardar. Modo foco sin mover el botón.
+- Biblioteca con búsqueda, filtros por estado, secciones por fecha y menú por grabación.
+- Nueva pantalla de detalle: reproductor (±15 s, velocidad), estado, transcripción con colores por hablante, tiempos que reproducen y barra de exportación.
+- "Guardar en…" para exportar la transcripción a cualquier ubicación, incluida Google Drive vía su app. Copia a carpeta compatible con proveedores que solo aceptan escritura "w".
+- Importar con selector de tramo de dos manijas.
+- Ajustes como lista agrupada con tarjeta de estado; bienvenida en el primer uso.
+- Ícono adaptativo nuevo e ícono de notificación monocromo.
+- Correcciones: cierre al importar en Android 8 (API 28), errores de compilación de `setClipData` y CI de GitHub.
+
 ## 0.3.0 — 2026-09-21
 
 - Inicio centrado en grabar/importar, biblioteca separada, paleta clara y azul.

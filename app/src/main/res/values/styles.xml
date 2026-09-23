@@ -1,21 +1,30 @@
 <resources>
+    <!-- Colores base: deben coincidir con AppTheme.Palette (docs/diseno/CRITERIOS.md). -->
     <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#1859DC</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:colorAccent">#2F5BEA</item>
+        <item name="android:colorControlActivated">#2F5BEA</item>
+        <item name="android:textColorHighlight">#402F5BEA</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">#F2F2F7</item>
         <item name="android:navigationBarColor">#FFFFFF</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowBackground">#F5F7FC</item>
+        <item name="android:windowBackground">#F2F2F7</item>
+        <item name="android:textColorPrimary">#1C1C1E</item>
+        <item name="android:textColorSecondary">#6C6C70</item>
     </style>
     <style name="AppThemeDark" parent="android:style/Theme.Material.NoActionBar">
-        <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#91B6FF</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:colorAccent">#8EA8FF</item>
+        <item name="android:colorControlActivated">#8EA8FF</item>
+        <item name="android:textColorHighlight">#408EA8FF</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:navigationBarColor">#1B2230</item>
+        <item name="android:statusBarColor">#000000</item>
+        <item name="android:navigationBarColor">#1C1C1E</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowBackground">#10141D</item>
-        <item name="android:colorBackground">#1B2230</item>
-        <item name="android:textColorPrimary">#F3F5FA</item>
-        <item name="android:textColorSecondary">#ADB8CB</item>
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:colorBackground">#1C1C1E</item>
+        <item name="android:textColorPrimary">#F5F5F7</item>
+        <item name="android:textColorSecondary">#A1A1A6</item>
     </style>
 </resources>
