@@ -38,7 +38,7 @@ public class RecorderSmokeTest extends Instrumentation {
             check(RecorderService.activeId != null, "Recording stopped with screen off");
             getUiAutomation().executeShellCommand("input keyevent KEYCODE_WAKEUP").close();
             getUiAutomation().executeShellCommand("wm dismiss-keyguard").close();
-            command(c, "STOP"); Thread.sleep(500);
+            command(c, "STOP"); long stopDeadline=System.currentTimeMillis()+20000;while(RecorderService.activeId!=null&&System.currentTimeMillis()<stopDeadline)Thread.sleep(100);
             check(RecorderService.activeId == null && RecorderService.error == null, "Recorder stop failed: " + RecorderService.error);
             Recording r = Recording.list(c).stream().filter(item -> item.id.equals(id)).findFirst().orElseThrow();
             check(r.audio(c).length() > 100, "Audio file is empty");
@@ -64,7 +64,7 @@ public class RecorderSmokeTest extends Instrumentation {
             check(disposable.delete(c) && !disposable.audio(c).exists(), "Deletion failed");
             check("1:01:01".equals(Recording.time(3661000)), "Long duration format failed");
             FeatureChecks.run(c,r);
-            report.putString("stream", "PASS: recorder regression, pre-recording title, Keystore credentials, diarization multipart contract, speaker naming persistence, block speaker isolation, HTTP error classification, Drive resumable contract, valid long-audio splitting. Live OpenAI/Google credentials were not used.\n");
+            report.putString("stream", "PASS: recorder regression, pre-recording title, Keystore credentials, diarization multipart contract, speaker naming persistence, block speaker isolation, HTTP error classification, valid long-audio splitting. Live API credentials were not used.\n");
             finish(Activity.RESULT_OK, report);
         } catch (Throwable error) {
             report.putString("stream", "FAIL: " + android.util.Log.getStackTraceString(error));

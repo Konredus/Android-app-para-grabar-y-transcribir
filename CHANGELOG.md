@@ -1,5 +1,19 @@
 # Historial de versiones
 
+## 0.3.0 — 2026-09-21
+
+- Inicio centrado en grabar/importar, biblioteca separada, paleta clara y azul.
+- Eliminación de Google Drive y su dependencia de Google Play.
+- Importación mediante selector y compartir desde otras apps; conversión AAC y recorte de una copia.
+- Modelos OpenAI seleccionables, servidor compatible personalizado y claves cifradas independientes.
+- Campo de clave oculto después de configurar; comprobación de conexión conservada.
+- Carpeta local elegible, exportación de texto/archivo y edición de nombres preservada.
+- Estados/notificaciones de procesamiento, bloques de hasta 15 minutos y diagnóstico HTTP más preciso.
+- Registro técnico local acotado, frecuencia de acciones e informe de soporte sin contenido personal.
+- Gradle wrapper y compilación automatizada en GitHub.
+
+Versión preliminar. Las llamadas de API se validan con respuestas controladas; falta confirmar con una solicitud real el error HTTP 400 reportado por el usuario. La compatibilidad de archivos importados depende de los decodificadores Android. El recorte es por rango temporal, no un editor de ondas.
+
 ## 0.2.0 — 2026-09-20
 
 - Grabación local, pausa, reproducción, títulos y biblioteca.

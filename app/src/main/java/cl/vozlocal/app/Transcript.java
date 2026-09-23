@@ -16,7 +16,7 @@ final class Transcript {
     LinkedHashMap<String,String> speakers() throws Exception {
         LinkedHashMap<String,String> speakers=new LinkedHashMap<>();
         JSONArray segments=segments();
-        for(int i=0;i<segments.length();i++) { String id=segments.getJSONObject(i).getString("speaker"); if(!speakers.containsKey(id))speakers.put(id,"Persona "+(speakers.size()+1)); }
+        for(int i=0;i<segments.length();i++) { String id=segments.getJSONObject(i).getString("speaker"); if(!speakers.containsKey(id))speakers.put(id,data.optBoolean("diarized",true)?"Persona "+(speakers.size()+1):"Texto"); }
         JSONObject names=data.optJSONObject("names");
         if(names!=null)for(String id:speakers.keySet()){String name=names.optString(id,"").trim();if(!name.isEmpty())speakers.put(id,name);}
         return speakers;
@@ -33,7 +33,9 @@ final class Transcript {
         StringBuilder text=new StringBuilder(r.title).append("\n")
             .append(new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm",new Locale("es","CL")).format(new Date(r.created))).append("\n\n");
         if(data.optBoolean("demo"))text.append("EJEMPLO DE DEMOSTRACIÓN · No proviene de una transcripción real.\n\n");
-        if(data.optInt("parts",1)>1)text.append("Audio procesado en bloques. Las etiquetas de personas son independientes entre bloques; revisa sus nombres.\n\n");
+        if(data.optInt("parts",1)>1)text.append(data.optBoolean("diarized",true)
+            ? "Audio procesado en bloques. Las etiquetas de personas son independientes entre bloques; revisa sus nombres.\n\n"
+            : "Audio procesado en bloques. Los tiempos indican el inicio de cada bloque, no de cada frase.\n\n");
         Map<String,String> names=speakers(); JSONArray segments=segments();
         for(int i=0;i<segments.length();i++){JSONObject segment=segments.getJSONObject(i);text.append("[").append(Recording.time((long)(segment.getDouble("start")*1000))).append("] ").append(names.get(segment.getString("speaker"))).append(": ").append(segment.getString("text")).append("\n\n");}
         if(segments.length()==0)text.append("No se detectó habla en este audio.\n");
@@ -52,6 +54,6 @@ final class Transcript {
                     .put("start",segment.getDouble("start")+offsets.get(p)).put("end",segment.getDouble("end")+offsets.get(p)).put("text",segment.getString("text")));
             }
         }
-        return new Transcript(new JSONObject().put("segments",segments).put("parts",parts.size()).put("names",new JSONObject()).put("model","gpt-4o-transcribe-diarize"));
+        return new Transcript(new JSONObject().put("segments",segments).put("parts",parts.size()).put("names",new JSONObject()).put("diarized",parts.isEmpty()||parts.get(0).optBoolean("_diarized",true)));
     }
 }

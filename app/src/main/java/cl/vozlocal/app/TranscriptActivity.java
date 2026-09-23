@@ -16,13 +16,21 @@ public class TranscriptActivity extends Screen {
             else{recording=FilesStore.recording(this,id);if(recording==null)throw new Exception();transcript=Transcript.load(this,id);}
             setup(demo?"Prueba de voces":"Transcripción",recording.title);
             if(demo)help(page,"EJEMPLO · Texto de demostración, no generado por la API. Puedes editar los nombres sin enviar datos.");
-            else help(page,"Cada etiqueta identifica una voz detectada. Revisa las asignaciones: el ruido o las voces superpuestas pueden producir errores.");
-            LinearLayout actions=card("Quién está hablando");Button names=button("Nombrar hablantes",true);names.setOnClickListener(v->editSpeakers());actions.addView(names);
-            Button share=button("Compartir transcripción",false);share.setOnClickListener(v->{try{startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,transcript.text(recording)),"Compartir transcripción"));}catch(Exception e){message("Transcripción","No se pudo compartir el texto.");}});actions.addView(share);
-            if(!demo){Button sync=button("Sincronizar con Drive",false);sync.setOnClickListener(v->{try{if(!new Settings(this).driveConnected()){startActivity(new Intent(this,SettingsActivity.class));return;}Pipeline.request(this,id);message("En cola","Se actualizará la transcripción cuando se cumplan tus condiciones de conexión.");}catch(Exception e){message("No se pudo sincronizar",e.getMessage());}});actions.addView(sync);}
-            if(transcript.data.optInt("parts",1)>1)help(page,"Este audio se procesó en bloques. Una persona puede aparecer con varias etiquetas: puedes asignarles el mismo nombre si reconoces la misma voz.");
+            else if(transcript.data.optBoolean("diarized",true))help(page,"Cada etiqueta identifica una voz detectada. Revisa las asignaciones: el ruido o las voces superpuestas pueden producir errores.");
+            if(!transcript.data.optBoolean("diarized",true))help(page,"Este modelo entrega texto sin separar hablantes. Los tiempos indican el inicio de cada bloque, no de cada frase.");LinearLayout actions=card(transcript.data.optBoolean("diarized",true)?"Voces y texto":"Texto");Button names=button("Nombrar hablantes",true);names.setOnClickListener(v->editSpeakers());if(transcript.data.optBoolean("diarized",true))actions.addView(names);
+            Button share=button("Compartir como texto",false);share.setOnClickListener(v->{try{refreshExport();startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,transcript.text(recording)),"Compartir transcripción"));}catch(Exception e){message("Transcripción","No se pudo compartir el texto.");}});actions.addView(share);
+            Button copy=button("Copiar texto",false);copy.setOnClickListener(v->{try{refreshExport();getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("Transcripción",transcript.text(recording)));Toast.makeText(this,"Texto copiado",Toast.LENGTH_SHORT).show();}catch(Exception e){message("Texto","No se pudo copiar.");}});actions.addView(copy);
+            Button file=button("Compartir archivo .txt",false);file.setOnClickListener(v->{try{refreshExport();android.net.Uri uri=TranscriptExport.create(this,recording,transcript);startActivity(Intent.createChooser(TranscriptExport.shareIntent(uri),"Compartir archivo .txt"));}catch(Exception e){message("Archivo","No se pudo crear el archivo.");}});actions.addView(file);
+            help(actions,transcript.data.optBoolean("diarized",true)?"El archivo .txt usa el título de tu audio y conserva los nombres de los hablantes.":"El archivo .txt usa el título de tu audio.");
+            if(transcript.data.optInt("parts",1)>1&&transcript.data.optBoolean("diarized",true))help(page,"Este audio se procesó en bloques. Una persona puede aparecer con varias etiquetas: puedes asignarles el mismo nombre si reconoces la misma voz.");
             content=column();page.addView(content);render();
         }catch(Exception e){setup("Transcripción","No se pudo abrir esta grabación.");help(page,"Vuelve a la biblioteca y comprueba su estado.");}
+    }
+    private void refreshExport() throws Exception {
+        if(demo)return;
+        Recording latest=FilesStore.recording(this,id);
+        if(latest==null)throw new java.io.FileNotFoundException();
+        recording=latest;transcript=Transcript.load(this,id);
     }
     static Transcript example()throws Exception{return new Transcript(new JSONObject("{\"demo\":true,\"names\":{},\"segments\":[{\"speaker\":\"A\",\"start\":0,\"end\":7,\"text\":\"Me gustaría que guardemos las ideas de esta conversación.\"},{\"speaker\":\"B\",\"start\":7,\"end\":14,\"text\":\"Sí, y después podemos revisar juntos lo que dijimos.\"},{\"speaker\":\"C\",\"start\":14,\"end\":20,\"text\":\"Yo puedo ayudar a ordenar los próximos pasos.\"},{\"speaker\":\"A\",\"start\":20,\"end\":27,\"text\":\"Perfecto. Así no se nos pierde ninguna idea.\"}]}"));}
     private void render()throws Exception{

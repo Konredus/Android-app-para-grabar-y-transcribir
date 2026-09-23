@@ -12,7 +12,7 @@ final class AudioParts {
         return prepare(c,r,http,24_000_000,18_000_000);
     }
     static List<Part> prepare(Context c,Recording r,HttpApi http,long singleLimit,long partLimit)throws Exception{
-        if(r.audio(c).length()<=singleLimit)return java.util.Collections.singletonList(new Part(r.audio(c),0));
+        if(r.audio(c).length()<=singleLimit && r.duration<=15*60*1000)return java.util.Collections.singletonList(new Part(r.audio(c),0));
         List<Part> parts=new ArrayList<>(); MediaExtractor extractor=new MediaExtractor();MediaMuxer muxer=null;
         try{
             extractor.setDataSource(r.audio(c).getPath());int track=-1;
@@ -23,7 +23,7 @@ final class AudioParts {
             long base=0,partBytes=0;int target=-1;
             while(extractor.getSampleTime()>=0){
                 http.check();long time=extractor.getSampleTime();
-                if(muxer==null || partBytes>=partLimit){
+                if(muxer==null || partBytes>=partLimit || time-base>=15L*60*1_000_000){
                     if(muxer!=null){muxer.stop();muxer.release();muxer=null;}
                     base=time;partBytes=0;File file=new File(c.getCacheDir(),r.id+"-part-"+parts.size()+".m4a");
                     muxer=new MediaMuxer(file.getPath(),MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);target=muxer.addTrack(format);muxer.start();parts.add(new Part(file,base/1_000_000d));
@@ -34,6 +34,6 @@ final class AudioParts {
             }
             if(muxer!=null){muxer.stop();muxer.release();muxer=null;}
             return parts;
-        }finally{extractor.release();if(muxer!=null)try{muxer.release();}catch(Exception ignored){}}
+        }catch(Exception e){for(Part part:parts)part.file.delete();throw e;}finally{extractor.release();if(muxer!=null)try{muxer.release();}catch(Exception ignored){}}
     }
 }
