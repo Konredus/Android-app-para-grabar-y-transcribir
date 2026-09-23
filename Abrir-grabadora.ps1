@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $env:ANDROID_HOME = Join-Path $PSScriptRoot '.tools/android-sdk'
 $env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
 $env:ANDROID_AVD_HOME = Join-Path $PSScriptRoot '.tools/avd'
@@ -12,9 +12,12 @@ if (-not ($devices -match 'emulator-5554\s+device')) {
     Start-Process -FilePath $emulator -ArgumentList '-avd VozLocalTest -port 5554 -no-boot-anim -no-snapshot -gpu swiftshader_indirect'
 }
 $ready = $false
-for ($attempt = 0; $attempt -lt 90; $attempt++) {
+# adb escribe avisos en stderr ("device not found" al arrancar, "Activity not started" si ya está abierta);
+# en Windows PowerShell 5.1 eso detendría el script con 'Stop'. Desde aquí se revisa $LASTEXITCODE.
+$ErrorActionPreference = 'Continue'
+for ($attempt = 0; $attempt -lt 180; $attempt++) {
     $boot = & $adb -s emulator-5554 shell getprop sys.boot_completed 2>$null
-    if ($boot -eq '1') { $ready = $true; break }
+    if ("$boot".Trim() -eq '1') { $ready = $true; break }
     Start-Sleep -Seconds 1
 }
 if (-not $ready) { throw 'Android aún no termina de iniciar. Espera un momento y vuelve a abrir este archivo.' }
