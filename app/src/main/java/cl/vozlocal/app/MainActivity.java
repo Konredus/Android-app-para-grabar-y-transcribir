@@ -18,10 +18,15 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class MainActivity extends Activity {
-    private static final int BG = Color.rgb(245,243,237), INK = Color.rgb(28,45,39), MUTED = Color.rgb(88,104,96), GREEN = Color.rgb(36,102,84), RED = Color.rgb(164,49,45);
+    private int BG, INK, MUTED, GREEN, RED, SURFACE;
+    private AppTheme.Palette palette;
+    private BottomNav bottomNav;
+    private ScrollView scroll;
+    private TextView heading, intro;
+    private int homeScroll, libraryScroll;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService disk = Executors.newSingleThreadExecutor();
-    private LinearLayout library;
+    private LinearLayout library, homePanel, libraryPanel; private TextView processing; private boolean showLibrary;
     private TextView timer, status, count;
     private Button record, pause;
     private LevelView meter;
@@ -44,54 +49,64 @@ public class MainActivity extends Activity {
             if (!state.equals(lastState)) {
                 lastState = state; starting = false;
                 record.setEnabled(true); record.setText(active ? "Detener y guardar" : "Grabar audio");
-                record.setBackgroundTintList(ColorStateList.valueOf(active ? RED : GREEN));
+                record.setBackgroundTintList(ColorStateList.valueOf(active ? 0xFFB6293A : palette.primary));
                 pause.setVisibility(active ? View.VISIBLE : View.GONE);
                 pause.setText(RecorderService.paused ? "Continuar grabación" : "Pausar");
-                status.setText(active ? (RecorderService.paused ? "EN PAUSA" : "GRABANDO EN EL TELÉFONO") : "LISTO PARA GRABAR");
+                status.setText(active ? (RecorderService.paused ? "En pausa" : "Grabando en tu teléfono") : "Listo para grabar");status.setTextColor(active?RED:GREEN);
                 loadLibrary();
             }
             if (RecorderService.error != null) { String message = RecorderService.error; RecorderService.error = null; starting = false; record.setEnabled(true); showError(message); }
-            meter.level = active ? RecorderService.amplitude() / 32767f : 0; meter.invalidate();
+            meter.sample(active && !RecorderService.paused ? RecorderService.amplitude() / 32767f : 0);
             int version=FilesStore.version.get();if(dataVersion!=version){dataVersion=version;loadLibrary();}
             handler.postDelayed(this, 250);
         }
     };
     @Override public void onCreate(Bundle saved) {
+        palette=AppTheme.apply(this);BG=palette.background;INK=palette.ink;MUTED=palette.muted;GREEN=palette.accent;SURFACE=palette.surface;RED=palette.danger;
         super.onCreate(saved);
-        if(saved!=null)pendingTitle=saved.getString("pendingTitle","");
-        getWindow().setStatusBarColor(BG); getWindow().setNavigationBarColor(Build.VERSION.SDK_INT >= 27 ? BG : INK);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | (Build.VERSION.SDK_INT >= 27 ? View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : 0));
-        ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(BG);
-        LinearLayout page = column(); page.setPadding(dp(24),dp(16),dp(24),dp(24)); scroll.addView(page);
-        scroll.setOnApplyWindowInsetsListener((v,insets) -> {
-            if (Build.VERSION.SDK_INT >= 30) { android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()); v.setPadding(bars.left,bars.top,bars.right,bars.bottom); }
-            else v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());
-            return insets;
-        });
-        setContentView(scroll); scroll.requestApplyInsets();
-        TextView eyebrow = text("TU VOZ, A MANO",12,GREEN); eyebrow.setLetterSpacing(.15f); page.addView(eyebrow);
-        TextView heading = text("Voz local",36,INK); heading.setTypeface(null,Typeface.BOLD); page.addView(heading);
-        TextView intro = text("Captura una idea. Guarda una conversación.",16,MUTED); intro.setPadding(0,dp(6),0,dp(24)); page.addView(intro);
-        Button settings=button("Configuración",false);settings.setOnClickListener(v->startActivity(new Intent(this,SettingsActivity.class)));page.addView(settings);
-        LinearLayout studio = column(); studio.setPadding(dp(20),dp(24),dp(20),dp(20)); studio.setBackground(round(Color.WHITE,24)); page.addView(studio);
-        status = text("LISTO PARA GRABAR",12,GREEN); status.setGravity(Gravity.CENTER); status.setLetterSpacing(.08f); status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE); studio.addView(status);
+        if(saved!=null){pendingTitle=saved.getString("pendingTitle","");filter=saved.getString("filter","");homeScroll=saved.getInt("homeScroll");libraryScroll=saved.getInt("libraryScroll");}
+        showLibrary=saved!=null?saved.getBoolean("library"):getIntent().getBooleanExtra("library",false);
+        AppTheme.window(this,palette);
+        LinearLayout root=column();root.setBackgroundColor(BG);
+        scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);
+        LinearLayout page=column();page.setPadding(dp(24),dp(24),dp(24),dp(24));scroll.addView(page);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        bottomNav=new BottomNav(this,palette,showLibrary?1:0,destination->{if(destination==2){closePlayer();startActivity(new Intent(this,SettingsActivity.class));}else section(destination==1);});root.addView(bottomNav,new LinearLayout.LayoutParams(-1,-2));
+        root.setOnApplyWindowInsetsListener((v,insets)->{
+            if(Build.VERSION.SDK_INT>=30){Insets bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout()|WindowInsets.Type.ime());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);}
+            else v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;
+        });setContentView(root);root.requestApplyInsets();
+        heading=text("Voz local",34,INK);heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));if(Build.VERSION.SDK_INT>=28)heading.setAccessibilityHeading(true);page.addView(heading);
+        intro=text("Graba una idea. Guarda una conversación.",16,MUTED);intro.setPadding(0,dp(8),0,dp(24));page.addView(intro);
+        homePanel=column();page.addView(homePanel);libraryPanel=column();page.addView(libraryPanel);
+        LinearLayout studio = column(); studio.setPadding(dp(20),dp(24),dp(20),dp(20)); studio.setBackground(round(SURFACE,24)); homePanel.addView(studio);
+        status = text("Listo para grabar",14,GREEN); status.setGravity(Gravity.CENTER);  status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE); studio.addView(status);
         timer = text("00:00",48,INK); timer.setTypeface(Typeface.create("sans-serif-light",Typeface.NORMAL)); timer.setGravity(Gravity.CENTER); timer.setPadding(0,dp(12),0,0); studio.addView(timer);
         meter = new LevelView(); meter.setContentDescription("Nivel de entrada del micrófono"); studio.addView(meter,new LinearLayout.LayoutParams(-1,dp(64)));
         record = button("Grabar audio",true); record.setOnClickListener(v -> {
             if (RecorderService.activeId != null) send("STOP"); else prepareRecording();
         }); studio.addView(record);
         pause = button("Pausar",false); pause.setVisibility(View.GONE); pause.setOnClickListener(v -> send("PAUSE")); studio.addView(pause);
-        TextView local = text("Sin internet · Audio guardado en tu celular",13,MUTED); local.setGravity(Gravity.CENTER); local.setPadding(0,dp(12),0,0); studio.addView(local);
-        count = text("Tus grabaciones",22,INK); count.setTypeface(null,Typeface.BOLD); count.setPadding(0,dp(28),0,dp(12)); page.addView(count);
-        EditText search = new EditText(this); search.setSingleLine(true); search.setTextSize(16); search.setHint("Buscar por título"); search.setContentDescription("Buscar grabaciones por título"); search.setTextColor(INK); search.setHintTextColor(MUTED); search.setPadding(dp(16),dp(12),dp(16),dp(12)); search.setBackground(round(Color.WHITE,12)); page.addView(search,new LinearLayout.LayoutParams(-1,dp(52)));
-        search.addTextChangedListener(new TextWatcher() { public void beforeTextChanged(CharSequence s,int st,int c,int a) {} public void onTextChanged(CharSequence s,int st,int before,int c) { filter=s.toString(); renderLibrary(); } public void afterTextChanged(Editable e) {} });
-        library = column(); page.addView(library);
-        TextView note = text("Voz local · 0.2\nGraba sin conexión. Procesa cuando tú decidas.",13,MUTED); note.setPadding(0,dp(24),0,dp(12)); page.addView(note);
+        TextView local = text("Guardado local, incluso sin internet",13,MUTED); local.setGravity(Gravity.CENTER); local.setPadding(0,dp(12),0,0); studio.addView(local);
+        Button upload=button("Importar audio",false);upload.setOnClickListener(v->{if(RecorderService.activeId!=null){showError("Guarda primero la grabación en curso.");return;}startActivity(new Intent(this,ImportActivity.class));});homePanel.addView(upload);
+        TextView formats=text("Grabadora, archivos y audios de WhatsApp",14,MUTED);formats.setGravity(Gravity.CENTER);formats.setPadding(0,dp(6),0,dp(20));homePanel.addView(formats);
+        processing=text("",15,GREEN);processing.setPadding(dp(18),dp(18),dp(18),dp(18));processing.setBackground(round(SURFACE,18));processing.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);homePanel.addView(processing);
+        count = text("Tus grabaciones",18,INK); count.setTypeface(null,Typeface.BOLD); count.setPadding(0,0,0,dp(16)); libraryPanel.addView(count);
+        EditText search = new EditText(this); search.setSingleLine(true); search.setTextSize(16); search.setHint("Buscar por título"); search.setContentDescription("Buscar grabaciones por título"); search.setTextColor(INK); search.setHintTextColor(MUTED); search.setPadding(dp(16),dp(12),dp(16),dp(12)); search.setBackground(round(SURFACE,12)); libraryPanel.addView(search,new LinearLayout.LayoutParams(-1,dp(52)));
+        search.setText(filter);search.addTextChangedListener(new TextWatcher() { public void beforeTextChanged(CharSequence s,int st,int c,int a) {} public void onTextChanged(CharSequence s,int st,int before,int c) { filter=s.toString(); renderLibrary(); } public void afterTextChanged(Editable e) {} });
+        library = column(); libraryPanel.addView(library);
+        processing.setOnClickListener(v->section(true));processing.setContentDescription("Estado del procesamiento. Abrir biblioteca");section(showLibrary);
     }
-    @Override protected void onResume() { super.onResume(); handler.post(tick); loadLibrary(); Pipeline.schedule(this,false); }
+    @Override protected void onResume() { super.onResume();if(palette.dark!=AppTheme.isDark(this)){recreate();return;}handler.post(tick); loadLibrary(); Pipeline.schedule(this,false); }
     @Override protected void onPause() { handler.removeCallbacks(tick); closePlayer(); super.onPause(); }
     @Override protected void onDestroy() { handler.removeCallbacksAndMessages(null); disk.shutdown(); super.onDestroy(); }
-    @Override protected void onSaveInstanceState(Bundle out){out.putString("pendingTitle",pendingTitle);super.onSaveInstanceState(out);}
+    @Override protected void onSaveInstanceState(Bundle out){out.putString("pendingTitle",pendingTitle);out.putBoolean("library",showLibrary);out.putString("filter",filter);if(showLibrary)libraryScroll=scroll.getScrollY();else homeScroll=scroll.getScrollY();out.putInt("homeScroll",homeScroll);out.putInt("libraryScroll",libraryScroll);super.onSaveInstanceState(out);}
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);section(intent.getBooleanExtra("library",false));}
+    @Override public void onBackPressed(){if(showLibrary)section(false);else super.onBackPressed();}
+    private void section(boolean libraryVisible){
+        if(showLibrary!=libraryVisible){if(showLibrary)libraryScroll=scroll.getScrollY();else homeScroll=scroll.getScrollY();}
+        showLibrary=libraryVisible;bottomNav.select(libraryVisible?1:0);heading.setText(libraryVisible?"Biblioteca":"Voz local");intro.setText(libraryVisible?"Tus audios y transcripciones, siempre a mano.":"Graba una idea. Guarda una conversación.");
+        homePanel.setVisibility(libraryVisible?View.GONE:View.VISIBLE);libraryPanel.setVisibility(libraryVisible?View.VISIBLE:View.GONE);scroll.post(()->scroll.scrollTo(0,libraryVisible?libraryScroll:homeScroll));Diagnostics.event("section_open",null,"screen",libraryVisible?"library":"home");
+    }
     private void prepareRecording(){
         pendingTitle="";
         if(!new Settings(this).askTitle()){begin();return;}
@@ -129,22 +144,22 @@ public class MainActivity extends Activity {
     }
     private void renderLibrary() {
         if (library == null) return;
-        library.removeAllViews(); count.setText("Tus grabaciones · " + recordings.size());
+        String summary="Listo para capturar tu próxima idea.";int queued=0,failed=0;for(Recording item:recordings){org.json.JSONObject state=FilesStore.state(this,item.id);if(state.optBoolean("requested")){queued++;summary=state.optString("status");}if(state.optBoolean("failed"))failed++;}if(queued>0)summary=queued+" en proceso / espera\\n"+summary;else if(failed>0)summary=failed+" transcripción(es) necesitan atención. Revisa la biblioteca.";else if(!recordings.isEmpty())summary="Última grabación · "+FilesStore.label(this,recordings.get(0).id);processing.setText(summary.replace("\\n","\n"));processing.setTextColor(failed>0&&queued==0?RED:GREEN);library.removeAllViews(); count.setText(recordings.size()+ (recordings.size()==1?" grabación":" grabaciones"));
         int visible=0;
         for (Recording r: recordings) {
             if (!r.title.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT))) continue;
             visible++;
-            LinearLayout card=column(); card.setPadding(dp(16),dp(16),dp(16),dp(10)); card.setBackground(round(Color.WHITE,16));
+            LinearLayout card=column(); card.setPadding(dp(16),dp(16),dp(16),dp(10)); card.setBackground(round(SURFACE,16));
             LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2); cp.topMargin=dp(12); library.addView(card,cp);
             TextView title=text(r.title,18,INK); title.setTypeface(null,Typeface.BOLD); card.addView(title);
             String date=new SimpleDateFormat("dd MMM yyyy · HH:mm",new Locale("es","CL")).format(new Date(r.created));
             TextView detail=text(date+"  /  "+Recording.time(r.duration),13,MUTED); detail.setPadding(0,dp(6),0,dp(10)); card.addView(detail);
-            TextView state=text(FilesStore.label(this,r.id),14,GREEN);state.setPadding(0,0,0,dp(8));card.addView(state);
+            TextView state=text(FilesStore.label(this,r.id),14,GREEN);state.setPadding(0,0,0,dp(8));card.addView(state);String localCopy=FilesStore.state(this,r.id).optString("localStatus");if(!localCopy.isEmpty())card.addView(text(localCopy,13,MUTED));
             LinearLayout actions=new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); card.addView(actions);
             Button play=button("Escuchar",false); play.setContentDescription("Escuchar " + r.title); play.setOnClickListener(v -> play(r)); actions.addView(play,new LinearLayout.LayoutParams(0,-2,1));
             Button more=button("Opciones",false); more.setContentDescription("Opciones de " + r.title); more.setOnClickListener(v -> options(r)); actions.addView(more,new LinearLayout.LayoutParams(0,-2,1));
             boolean transcribed=Transcript.exists(this,r.id);
-            Button transcript=button(transcribed?"Ver transcripción y voces":"Transcribir con voces",false);
+            Button transcript=button(transcribed?"Ver transcripción":"Transcribir audio",false);
             transcript.setOnClickListener(v->{if(transcribed)startActivity(new Intent(this,TranscriptActivity.class).putExtra("id",r.id));else queue(r);});card.addView(transcript);
         }
         if (visible==0) {
@@ -153,13 +168,13 @@ public class MainActivity extends Activity {
         }
     }
     private void options(Recording r) {
-        new AlertDialog.Builder(this).setTitle(r.title).setItems(new String[]{"Cambiar título","Compartir audio","Eliminar grabación","Transcribir / sincronizar de nuevo","Cancelar procesamiento pendiente"},(d,which) -> {
-            if(which==0) rename(r);
+        new AlertDialog.Builder(this).setTitle(r.title).setItems(new String[]{"Cambiar título","Compartir audio","Eliminar grabación","Reintentar transcripción","Cancelar procesamiento pendiente","Recortar una copia"},(d,which) -> {
+            Diagnostics.event("recording_option",r.id,"action",which);if(which==5){startActivity(new Intent(this,ImportActivity.class).putExtra("sourceId",r.id));return;}if(which==0) rename(r);
             else if(which==1) {
                 Uri uri=Uri.parse("content://cl.vozlocal.app.audio/"+r.id+".m4a");
                 Intent share=new Intent(Intent.ACTION_SEND).setType("audio/mp4").putExtra(Intent.EXTRA_STREAM,uri).putExtra(Intent.EXTRA_SUBJECT,r.title).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 share.setClipData(ClipData.newRawUri(r.title,uri)); startActivity(Intent.createChooser(share,"Compartir grabación"));
-            } else if(which==3){queue(r);}else if(which==4){try{Pipeline.cancel(this,r.id);loadLibrary();}catch(Exception e){showError("No se pudo cancelar el trabajo.");}}else new AlertDialog.Builder(this).setTitle("¿Eliminar esta grabación?").setMessage(r.title+"\n\nSe borrarán el audio y la transcripción de este teléfono. Las copias de Drive se conservan. Esta acción no se puede deshacer.")
+            } else if(which==3){queue(r);}else if(which==4){try{Pipeline.cancel(this,r.id);loadLibrary();}catch(Exception e){showError("No se pudo cancelar el trabajo.");}}else new AlertDialog.Builder(this).setTitle("¿Eliminar esta grabación?").setMessage(r.title+"\n\nSe borrarán el audio y la transcripción de este teléfono. Las copias en la carpeta elegida se conservan. Esta acción no se puede deshacer.")
                 .setNegativeButton("Conservar",null).setPositiveButton("Eliminar",(a,b) -> { closePlayer(); if(!r.delete(this)) showError("No se pudo eliminar el audio."); loadLibrary(); }).show();
         }).show();
     }
@@ -169,15 +184,15 @@ public class MainActivity extends Activity {
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Cambiar título").setView(box).setNegativeButton("Cancelar",null).setPositiveButton("Guardar",null).create();
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String title=input.getText().toString().trim(); if(title.isEmpty()) {input.setError("Escribe un título"); return;}
-            String previous=r.title; r.title=title;
+            Diagnostics.event("title_edited",r.id);String previous=r.title; r.title=title;
             try {r.save(this); Pipeline.edited(this,r.id); loadLibrary(); dialog.dismiss();} catch(Exception e){r.title=previous; input.setError("No se pudo guardar el título");}
         })); dialog.show();
     }
     private void queue(Recording r){
-        if(!Transcript.exists(this,r.id) && !new Settings(this).hasKey()){showError("Primero agrega tu clave de OpenAI en Configuración.");return;}
-        try{Pipeline.request(this,r.id);loadLibrary();Toast.makeText(this,"En cola. Se respetarán tus ajustes de conexión y carga.",Toast.LENGTH_LONG).show();}catch(Exception e){showError("No se pudo agregar a la cola.");}
+        if(!Transcript.exists(this,r.id) && !new Settings(this).hasKey()){showError("Primero agrega tu clave de API en Ajustes.");return;}
+        if(Transcript.exists(this,r.id)){showError("Esta grabación ya tiene transcripción. Puedes abrirla o recortar una copia para crear otra.");return;}if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},12);try{Pipeline.request(this,r.id);loadLibrary();Toast.makeText(this,"En cola. Se respetarán tus ajustes de conexión y carga.",Toast.LENGTH_LONG).show();}catch(Exception e){showError("No se pudo agregar a la cola.");}
     }
-    private void play(Recording r) {
+    private void play(Recording r) { Diagnostics.event("playback_open",r.id);
         if(RecorderService.activeId!=null) {showError("Guarda la grabación actual antes de reproducir un audio."); return;}
         closePlayer();
         LinearLayout box=column(); box.setPadding(dp(24),dp(12),dp(24),dp(12));
@@ -210,10 +225,10 @@ public class MainActivity extends Activity {
     private LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);return l;}
     private TextView text(String value,int size,int color){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);t.setLineSpacing(dp(3),1);return t;}
     private GradientDrawable round(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
-    private Button button(String label,boolean primary){Button b=new Button(this);b.setText(label);b.setAllCaps(false);b.setTextSize(16);b.setMinHeight(dp(52));b.setTextColor(primary?Color.WHITE:GREEN);if(primary){b.setBackgroundTintList(ColorStateList.valueOf(GREEN));}else{b.setBackgroundTintList(ColorStateList.valueOf(Color.rgb(237,244,239)));}return b;}
+    private Button button(String label,boolean primary){Button b=new Button(this){@Override public boolean performClick(){Diagnostics.event("ui_action",null,"screen","MainActivity","action",label);return super.performClick();}};b.setText(label);AppTheme.styleButton(b,palette,primary);return b;}
     private class LevelView extends View {
-        final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);float level;
+        final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);final float[] history=new float[27];void sample(float level){System.arraycopy(history,1,history,0,26);history[26]=Math.min(1,(float)Math.sqrt(Math.max(0,level)));invalidate();}
         LevelView(){super(MainActivity.this);setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);}
-        @Override protected void onDraw(Canvas canvas){super.onDraw(canvas);paint.setColor(GREEN);float step=getWidth()/33f;for(int i=0;i<27;i++){float envelope=(float)Math.sin((i+1)*Math.PI/28);float h=dp(4)+level*dp(48)*envelope;float x=step*(i+3);canvas.drawRoundRect(x,getHeight()/2f-h/2,x+dp(3),getHeight()/2f+h/2,dp(2),dp(2),paint);}}
+        @Override protected void onDraw(Canvas canvas){super.onDraw(canvas);paint.setColor(GREEN);float step=getWidth()/33f;for(int i=0;i<27;i++){float h=dp(4)+history[i]*dp(48);float x=step*(i+3);canvas.drawRoundRect(x,getHeight()/2f-h/2,x+dp(3),getHeight()/2f+h/2,dp(2),dp(2),paint);}}
     }
 }

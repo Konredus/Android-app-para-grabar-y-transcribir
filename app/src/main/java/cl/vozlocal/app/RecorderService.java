@@ -26,7 +26,7 @@ public class RecorderService extends Service {
         channel.setSound(null, null); getSystemService(NotificationManager.class).createNotificationChannel(channel);
     }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        String action = intent == null ? "STOP" : intent.getAction();
+        String action = intent == null ? "STOP" : intent.getAction();Diagnostics.event("recorder_action",activeId,"action",action);
         if ("START".equals(action) && recorder == null) startRecording(intent.getStringExtra("title"));
         else if ("PAUSE".equals(action) && recorder != null) togglePause();
         else if ("STOP".equals(action)) { finishRecording(); stopSelf(); }
@@ -57,12 +57,12 @@ public class RecorderService extends Service {
             recorder.setAudioEncodingBitRate(96000); recorder.setAudioSamplingRate(44100); recorder.setAudioChannels(1);
             recorder.setOutputFile(recording.audio(this).getAbsolutePath());
             recorder.setOnErrorListener((r,w,e) -> { error = "El micrófono se interrumpió. Revisa el audio guardado."; finishRecording(); stopSelf(); });
-            recorder.prepare(); recorder.start(); started = SystemClock.elapsedRealtime();
+            recorder.prepare(); recorder.start(); started = SystemClock.elapsedRealtime();Diagnostics.event("recording_started",activeId);
             getSystemService(android.app.job.JobScheduler.class).cancel(Pipeline.JOB_ID);
             wakeLock = getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "VozLocal:Recording");
             wakeLock.acquire();
         } catch (Exception e) {
-            error = "No se pudo iniciar la grabación. Revisa el permiso del micrófono y el espacio disponible.";
+            Diagnostics.event("recorder_failure",activeId,"error_class",e.getClass().getSimpleName());error = "No se pudo iniciar la grabación. Revisa el permiso del micrófono y el espacio disponible.";
             if (recorder != null) { recorder.release(); recorder = null; }
             if (recording != null) recording.audio(this).delete();
             activeId = null; recording = null; stopForeground(STOP_FOREGROUND_REMOVE); stopSelf();

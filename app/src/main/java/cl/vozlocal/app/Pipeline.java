@@ -7,18 +7,15 @@ import org.json.JSONObject;
 final class Pipeline {
     static final int JOB_ID=4102;
     static void request(Context c,String id)throws Exception{
-        if(FilesStore.state(c,id).optBoolean("demo"))throw new HttpApi.UserAction("El ejemplo no se envía a OpenAI ni a Drive.");
-        FilesStore.update(c,id,s -> s.put("requested",true).put("uploadPending",true).put("attempts",0).put("status","En cola · esperando las condiciones configuradas"));
-        schedule(c,true);
+        if(FilesStore.state(c,id).optBoolean("demo"))throw new HttpApi.UserAction("El ejemplo no se envía a la API.");
+        if(Transcript.exists(c,id)){LocalStorage.enqueue(c,id);return;}
+        FilesStore.update(c,id,s -> s.put("requested",true).put("failed",false).put("attempts",0).put("status","En cola · esperando las condiciones configuradas"));
+        Diagnostics.event("job_queued",id);schedule(c,true);
     }
-    static void afterRecording(Context c,String id){try{if(new Settings(c).automatic())request(c,id);}catch(Exception ignored){}}
+    static void afterRecording(Context c,String id){LocalStorage.enqueue(c,id);Diagnostics.event("audio_saved",id);try{if(new Settings(c).automatic())request(c,id);}catch(Exception ignored){}}
     static void edited(Context c,String id)throws Exception{
         if(FilesStore.state(c,id).optBoolean("demo")){FilesStore.version.incrementAndGet();return;}
-        if(Transcript.exists(c,id)){
-            boolean automatic=new Settings(c).automatic() && new Settings(c).driveConnected();
-            FilesStore.update(c,id,s -> {s.put("uploadPending",true).put("status","Cambios guardados · pendiente de sincronizar");if(automatic)s.put("requested",true).put("attempts",0);});
-            schedule(c,false);
-        }
+        LocalStorage.enqueue(c,id);Diagnostics.event("recording_edited",id);
     }
     static boolean pending(Context c){for(Recording r:Recording.list(c))if(FilesStore.state(c,r.id).optBoolean("requested"))return true;return false;}
     static void schedule(Context c,boolean replace){
@@ -36,13 +33,8 @@ final class Pipeline {
             .setRequiresCharging(settings.charging()).setRequiresBatteryNotLow(true)
             .setPersisted(true).setBackoffCriteria(30000,JobInfo.BACKOFF_POLICY_EXPONENTIAL).build();
     }
-    static void connected(Context c)throws Exception{
-        for(Recording r:Recording.list(c))if(FilesStore.state(c,r.id).optBoolean("uploadPending") && !FilesStore.state(c,r.id).optBoolean("demo"))
-            FilesStore.update(c,r.id,s -> s.put("requested",true).put("attempts",0).put("status","En cola para Google Drive"));
-        schedule(c,true);
-    }
     static void cancel(Context c,String id)throws Exception{
-        FilesStore.update(c,id,s -> s.put("requested",false).put("status","Procesamiento cancelado"));
+        Diagnostics.event("job_cancelled",id);FilesStore.update(c,id,s -> s.put("requested",false).put("status","Procesamiento cancelado"));
         c.getSystemService(JobScheduler.class).cancel(JOB_ID);schedule(c,true);
     }
 }
