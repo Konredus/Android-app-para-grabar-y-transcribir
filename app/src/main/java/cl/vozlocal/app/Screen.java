@@ -31,14 +31,12 @@ abstract class Screen extends Activity {
      */
     void shell(String back,int tab){
         int position=scroll==null?savedScroll:scroll.getScrollY();
-        AppTheme.window(this,p,tab>=0?p.surface:p.background);
+        AppTheme.window(this,p,tab>=0?p.surfaceContainer:p.background);
         root=ui.column();root.setBackgroundColor(p.background);
         if(back!=null){
-            bar=ui.row();bar.setPadding(ui.dp(S1),ui.dp(S1),ui.dp(S2),ui.dp(S1));bar.setMinimumHeight(ui.dp(52));
-            LinearLayout backButton=ui.row();backButton.setPadding(ui.dp(S2),ui.dp(S2),ui.dp(S3),ui.dp(S2));backButton.setMinimumHeight(ui.dp(48));
-            backButton.addView(ui.icon(R.drawable.ic_back,p.accent,26));TextView label=ui.text(back,Type.BODY,p.accent);backButton.addView(label);
-            backButton.setBackground(ui.ripple(null,R_CONTROL));backButton.setClickable(true);backButton.setContentDescription("Volver a "+back);backButton.setAccessibilityDelegate(Ui.buttonRole());
-            backButton.setOnClickListener(v->onBackPressed());bar.addView(backButton);bar.addView(ui.flex());
+            // Barra superior de Material: botón de ícono ← (sin texto) a la izquierda y acciones a la derecha.
+            bar=ui.row();bar.setPadding(ui.dp(S1),ui.dp(S2),ui.dp(S1),ui.dp(S1));bar.setMinimumHeight(ui.dp(64));
+            ImageButton backButton=ui.iconButton(R.drawable.ic_arrow_back,"Volver a "+back,p.onSurface,0,48);backButton.setOnClickListener(v->onBackPressed());bar.addView(backButton);bar.addView(ui.flex());
             barActions=ui.row();bar.addView(barActions);root.addView(bar,Ui.fill());
         }
         scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setClipToPadding(false);scroll.setVerticalScrollBarEnabled(false);
@@ -56,8 +54,8 @@ abstract class Screen extends Activity {
     }
     /** Título grande (estilo iOS) + bajada opcional. */
     TextView largeTitle(ViewGroup parent,String title,String subtitle){
-        TextView t=ui.heading(title,Type.LARGE_TITLE);t.setPadding(ui.dp(S1),ui.dp(S2),ui.dp(S1),ui.dp(subtitle==null||subtitle.isEmpty()?S4:S1));parent.addView(t);
-        if(subtitle!=null&&!subtitle.isEmpty()){TextView s=ui.text(subtitle,Type.SUBHEAD,p.muted);s.setPadding(ui.dp(S1),0,ui.dp(S1),ui.dp(S4));parent.addView(s);}
+        TextView t=ui.heading(title,Type.HEADLINE_MEDIUM);t.setPadding(ui.dp(S1),ui.dp(S2),ui.dp(S1),ui.dp(subtitle==null||subtitle.isEmpty()?S4:S1));parent.addView(t);
+        if(subtitle!=null&&!subtitle.isEmpty()){TextView s=ui.text(subtitle,Type.BODY_MEDIUM,p.onSurfaceVariant);s.setPadding(ui.dp(S1),0,ui.dp(S1),ui.dp(S4));parent.addView(s);}
         return t;
     }
     /** Navegación entre pestañas: 0 Grabar, 1 Biblioteca (MainActivity) · 2 Ajustes. */

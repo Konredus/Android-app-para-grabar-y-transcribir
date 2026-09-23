@@ -18,37 +18,38 @@ final class Sheet {
 
     Sheet(Activity activity,Ui ui,String title,String message){
         this.activity=activity;this.ui=ui;dialog=new Dialog(activity);dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        LinearLayout frame=ui.column();GradientDrawable bg=new GradientDrawable();bg.setColor(ui.p.dark?ui.p.surface:ui.p.background);float r=ui.dp(R_SHEET);bg.setCornerRadii(new float[]{r,r,r,r,0,0,0,0});frame.setBackground(bg);
-        View grabber=new View(activity);grabber.setBackground(shape(activity,ui.p.faint,99));grabber.setAlpha(0.6f);LinearLayout.LayoutParams gp=new LinearLayout.LayoutParams(ui.dp(36),ui.dp(5));gp.gravity=Gravity.CENTER_HORIZONTAL;gp.topMargin=ui.dp(S2);frame.addView(grabber,gp);
-        ScrollView scroll=new ScrollView(activity);scroll.setVerticalScrollBarEnabled(false);body=ui.column();body.setPadding(ui.dp(S5),ui.dp(S4),ui.dp(S5),ui.dp(S5));scroll.addView(body);frame.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout frame=ui.column();GradientDrawable bg=new GradientDrawable();bg.setColor(ui.p.surfaceContainerLow);float r=ui.dp(R_SHEET);bg.setCornerRadii(new float[]{r,r,r,r,0,0,0,0});frame.setBackground(bg);
+        View grabber=new View(activity);grabber.setBackground(shape(activity,ui.p.onSurfaceVariant,99));grabber.setAlpha(0.4f);LinearLayout.LayoutParams gp=new LinearLayout.LayoutParams(ui.dp(32),ui.dp(4));gp.gravity=Gravity.CENTER_HORIZONTAL;gp.topMargin=ui.dp(S4);frame.addView(grabber,gp);
+        ScrollView scroll=new ScrollView(activity);scroll.setVerticalScrollBarEnabled(false);body=ui.column();body.setClipToPadding(false);body.setPadding(ui.dp(S6),ui.dp(S5),ui.dp(S6),ui.dp(S5));scroll.addView(body);frame.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         ((LinearLayout.LayoutParams)scroll.getLayoutParams()).height=-2;((LinearLayout.LayoutParams)scroll.getLayoutParams()).weight=0;
-        if(title!=null&&!title.isEmpty()){TextView t=ui.heading(title,Type.TITLE_SMALL);t.setPadding(ui.dp(S1),0,ui.dp(S1),ui.dp(message==null||message.isEmpty()?S3:S2));body.addView(t);}
-        if(message!=null&&!message.isEmpty()){TextView m=ui.text(message,Type.SUBHEAD,ui.p.muted);m.setPadding(ui.dp(S1),0,ui.dp(S1),ui.dp(S4));body.addView(m);}
+        if(title!=null&&!title.isEmpty()){TextView t=ui.heading(title,Type.TITLE_LARGE);t.setPadding(0,0,0,ui.dp(message==null||message.isEmpty()?S3:S2));body.addView(t);}
+        if(message!=null&&!message.isEmpty()){TextView m=ui.text(message,Type.BODY_MEDIUM,ui.p.onSurfaceVariant);m.setPadding(0,0,0,ui.dp(S4));body.addView(m);}
         dialog.setContentView(frame);
         Window w=dialog.getWindow();
-        if(w!=null){w.setBackgroundDrawable(new ColorDrawable(0));w.setLayout(-1,-2);w.setGravity(Gravity.BOTTOM);w.setWindowAnimations(android.R.style.Animation_InputMethod);w.setDimAmount(0.35f);w.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);w.setNavigationBarColor(ui.p.dark?ui.p.surface:ui.p.background);}
+        if(w!=null){w.setBackgroundDrawable(new ColorDrawable(0));w.setLayout(-1,-2);w.setGravity(Gravity.BOTTOM);w.setWindowAnimations(android.R.style.Animation_InputMethod);w.setDimAmount(0.35f);w.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);w.setNavigationBarColor(ui.p.surfaceContainerLow);}
     }
     Sheet add(View v){body.addView(v,Ui.fill());return this;}
 
-    /** Opción de menú con ícono. Las destructivas van en rojo y al final. */
+    /** Opción de menú (lista de Material, sin tarjeta). Íconos neutros; las destructivas van en color error y al final. */
     Sheet action(int icon,String label,boolean destructive,Runnable run){
-        if(list==null){list=ui.group();body.addView(list,Ui.fill());}
-        int color=destructive?ui.p.danger:ui.p.ink;
-        LinearLayout row=ui.row();row.setMinimumHeight(ui.dp(54));row.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),ui.dp(S3));
-        row.addView(ui.icon(icon,destructive?ui.p.danger:ui.p.accent,22));row.addView(ui.space(S3));TextView t=ui.text(label,Type.BODY,color);row.addView(t,new LinearLayout.LayoutParams(0,-2,1));
+        if(list==null){list=ui.column();LinearLayout.LayoutParams lp=Ui.fill();lp.setMargins(-ui.dp(S6),0,-ui.dp(S6),0);body.addView(list,lp);}
+        int color=destructive?ui.p.error:ui.p.onSurface;
+        LinearLayout row=ui.row();row.setMinimumHeight(ui.dp(56));row.setPadding(ui.dp(S6),ui.dp(S3),ui.dp(S6),ui.dp(S3));
+        row.addView(ui.icon(icon,destructive?ui.p.error:ui.p.onSurfaceVariant,24));row.addView(ui.space(S4));TextView t=ui.text(label,Type.BODY_LARGE,color);row.addView(t,new LinearLayout.LayoutParams(0,-2,1));
         row.setBackground(ui.ripple(null,0));row.setClickable(true);row.setFocusable(true);row.setContentDescription(label);row.setAccessibilityDelegate(Ui.buttonRole());
         row.setOnClickListener(v->{Diagnostics.event("ui_action",null,"screen",activity.getClass().getSimpleName(),"action",label);dialog.dismiss();run.run();});
-        if(list.getChildCount()>0)list.addView(ui.separator(S4+22+S3));list.addView(row,Ui.fill());return this;
+        list.addView(row,Ui.fill());return this;
     }
-    /** Opción de selección única con marca de verificación. */
+    /** Opción de selección única con botón de radio (patrón de Material para elegir uno entre varios). */
     Sheet choice(String label,String detail,boolean selected,Runnable run){
-        if(list==null){list=ui.group();body.addView(list,Ui.fill());}
-        LinearLayout row=ui.row();row.setMinimumHeight(ui.dp(54));row.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),ui.dp(S3));
-        LinearLayout texts=ui.column();texts.addView(ui.text(label,Type.BODY,ui.p.ink));if(detail!=null&&!detail.isEmpty()){TextView d=ui.text(detail,Type.FOOTNOTE,ui.p.muted);d.setPadding(0,ui.dp(2),0,0);texts.addView(d);}
-        row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));ImageView check=ui.icon(R.drawable.ic_check,ui.p.accent,22);check.setVisibility(selected?View.VISIBLE:View.INVISIBLE);row.addView(check);
+        if(list==null){list=ui.column();LinearLayout.LayoutParams lp=Ui.fill();lp.setMargins(-ui.dp(S6),0,-ui.dp(S6),0);body.addView(list,lp);}
+        LinearLayout row=ui.row();row.setMinimumHeight(ui.dp(56));row.setPadding(ui.dp(S6),ui.dp(S3),ui.dp(S6),ui.dp(S3));
+        row.addView(ui.icon(selected?R.drawable.ic_radio_on:R.drawable.ic_radio_off,selected?ui.p.primary:ui.p.onSurfaceVariant,24));row.addView(ui.space(S4));
+        LinearLayout texts=ui.column();texts.addView(ui.text(label,Type.BODY_LARGE,ui.p.onSurface));if(detail!=null&&!detail.isEmpty()){TextView d=ui.text(detail,Type.BODY_MEDIUM,ui.p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);texts.addView(d);}
+        row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
         row.setBackground(ui.ripple(null,0));row.setClickable(true);row.setContentDescription(label+(selected?", seleccionado":""));row.setAccessibilityDelegate(Ui.buttonRole());
         row.setOnClickListener(v->{dialog.dismiss();if(!selected)run.run();});
-        if(list.getChildCount()>0)list.addView(ui.separator(S4));list.addView(row,Ui.fill());return this;
+        list.addView(row,Ui.fill());return this;
     }
     private LinearLayout buttons(){if(buttons==null){buttons=ui.column();buttons.setPadding(0,ui.dp(S4),0,0);body.addView(buttons,Ui.fill());}return buttons;}
     /** Botón principal. Si run devuelve false la hoja queda abierta (p. ej. validación). */

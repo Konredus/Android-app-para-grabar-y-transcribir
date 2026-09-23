@@ -40,51 +40,54 @@ public class SettingsActivity extends Screen {
         // Transcripción
         page.addView(ui.section("Transcripción"));LinearLayout api=ui.group();page.addView(api,Ui.fill());
         boolean openai=settings.provider().equals("openai");
-        ui.addRow(api,ui.listRow(R.drawable.ic_globe,0xFF2F5BEA,"Proveedor",null,openai?"OpenAI":"Personalizado",true).onClick(v->providerSheet()));
-        if(openai)ui.addRow(api,ui.listRow(R.drawable.ic_sparkle,0xFF8B3FD9,"Modelo",null,modelName(settings),true).onClick(v->modelSheet()));
-        else ui.addRow(api,ui.listRow(R.drawable.ic_server,0xFF8B3FD9,"Servidor y modelo",settings.prefs.getString("customBase","Sin configurar"),null,true).onClick(v->custom()));
-        ui.addRow(api,ui.listRow(R.drawable.ic_key,0xFFE08A00,"Clave de API",null,settings.hasKey()?"Configurada":"Falta",true).onClick(v->keySheet()));
-        Ui.Row verify=ui.listRow(R.drawable.ic_check_circle,0xFF1C8A4A,"Comprobar conexión",null,null,false);verify.onClick(v->verify(verify));ui.addRow(api,verify);
-        ui.addRow(api,ui.listRow(R.drawable.ic_chat,0xFF0E7490,"Idioma del audio",null,settings.language().equals("es")?"Español":"Automático",true).onClick(v->
+        ui.addRow(api,ui.listRow(R.drawable.ic_globe,"Proveedor",null,openai?"OpenAI":"Personalizado").onClick(v->providerSheet()));
+        if(openai)ui.addRow(api,ui.listRow(R.drawable.ic_sparkle,"Modelo",null,modelName(settings)).onClick(v->modelSheet()));
+        else ui.addRow(api,ui.listRow(R.drawable.ic_server,"Servidor y modelo",settings.prefs.getString("customBase","Sin configurar"),null).onClick(v->custom()));
+        ui.addRow(api,ui.listRow(R.drawable.ic_key,"Clave de API",null,settings.hasKey()?"Configurada":"Falta").onClick(v->keySheet()));
+        Ui.Row verify=ui.listRow(R.drawable.ic_check_circle,"Comprobar conexión",null,null);verify.onClick(v->verify(verify));ui.addRow(api,verify);
+        ui.addRow(api,ui.listRow(R.drawable.ic_chat,"Idioma del audio",null,settings.language().equals("es")?"Español":"Automático").onClick(v->
             sheet("Idioma del audio","Indicar el idioma mejora la precisión.").choice("Español",null,settings.language().equals("es"),()->set("language","es"))
                 .choice("Detección automática","Para audios en otros idiomas o mezclados",!settings.language().equals("es"),()->set("language","")).show()));
         page.addView(ui.footnote(openai?"Solo GPT-4o Diarize separa voces (Persona 1, Persona 2…). El uso se cobra en tu cuenta de OpenAI; la clave se guarda cifrada en este teléfono.":"Tu servidor debe implementar /audio/transcriptions compatible con OpenAI. La clave se guarda cifrada en este teléfono."));
 
         // Automatización
         page.addView(ui.section("Automatización"));LinearLayout auto=ui.group();page.addView(auto,Ui.fill());
-        ui.addRow(auto,ui.switchRow(R.drawable.ic_bolt,0xFFE08A00,"Transcribir automáticamente","Al guardar una grabación o importar un audio",settings.automatic(),on->{toggle("automatic",on);if(on&&Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},101);}));
-        ui.addRow(auto,ui.listRow(R.drawable.ic_wifi,0xFF2F5BEA,"Red para enviar audio",null,settings.wifiOnly()?"Solo Wi-Fi":"Wi-Fi y datos",true).onClick(v->
+        ui.addRow(auto,ui.switchRow(R.drawable.ic_bolt,"Transcribir automáticamente","Al guardar una grabación o importar un audio",settings.automatic(),on->{toggle("automatic",on);if(on&&Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},101);}));
+        ui.addRow(auto,ui.listRow(R.drawable.ic_wifi,"Red para enviar audio",null,settings.wifiOnly()?"Solo Wi-Fi":"Wi-Fi y datos").onClick(v->
             sheet("Red para enviar audio","Los audios pueden pesar varios MB.").choice("Solo Wi-Fi","O cualquier red no medida",settings.wifiOnly(),()->{settings.prefs.edit().putBoolean("wifi",true).apply();changed("wifi");})
                 .choice("Wi-Fi y datos móviles","Empieza antes, usa tu plan de datos",!settings.wifiOnly(),()->{settings.prefs.edit().putBoolean("wifi",false).apply();changed("wifi");}).show()));
-        ui.addRow(auto,ui.switchRow(R.drawable.ic_bolt,0xFF1C8A4A,"Solo mientras carga",null,settings.charging(),on->toggle("charging",on)));
+        ui.addRow(auto,ui.switchRow(R.drawable.ic_battery,"Solo mientras carga",null,settings.charging(),on->toggle("charging",on)));
         page.addView(ui.footnote("Aplica también cuando transcribes a mano. Con batería baja el trabajo espera; Android puede retrasarlo unos minutos."));
 
         // Almacenamiento
         page.addView(ui.section("Copias de tus archivos"));LinearLayout storage=ui.group();page.addView(storage,Ui.fill());
-        folderRow=ui.listRow(R.drawable.ic_folder,0xFF0E7490,"Carpeta de copias",null,"Desactivada",true);folderRow.onClick(v->folderSheet());ui.addRow(storage,folderRow);refreshFolder();
+        folderRow=ui.listRow(R.drawable.ic_folder,"Carpeta de copias",null,"Desactivada");folderRow.onClick(v->folderSheet());ui.addRow(storage,folderRow);refreshFolder();
         page.addView(ui.footnote("Cada grabación se copia con su audio, información y transcripción. Puedes elegir una carpeta del teléfono o de Google Drive (si tienes su app). Borrar en Voz local no borra estas copias."));
 
         // Grabación y apariencia
         page.addView(ui.section("Grabación"));LinearLayout rec=ui.group();page.addView(rec,Ui.fill());
-        ui.addRow(rec,ui.switchRow(R.drawable.ic_title,0xFFE5372B,"Resumen al terminar","Nombrar la grabación y elegir el siguiente paso",settings.askTitle(),on->toggle("askTitle",on)));
+        ui.addRow(rec,ui.switchRow(R.drawable.ic_title,"Resumen al terminar","Nombrar la grabación y elegir el siguiente paso",settings.askTitle(),on->toggle("askTitle",on)));
         String mode=AppTheme.appearance(this);String[] modes={"system","light","dark"},modeNames={"Automático","Claro","Oscuro"};
         page.addView(ui.section("Apariencia"));LinearLayout look=ui.group();page.addView(look,Ui.fill());
-        ui.addRow(look,ui.listRow(R.drawable.ic_palette,0xFF636366,"Tema",null,modeNames[Math.max(0,Arrays.asList(modes).indexOf(mode))],true).onClick(v->{
+        ui.addRow(look,ui.listRow(R.drawable.ic_palette,"Tema",null,modeNames[Math.max(0,Arrays.asList(modes).indexOf(mode))]).onClick(v->{
             Sheet s=sheet("Tema",null);for(int i=0;i<3;i++){int k=i;s.choice(modeNames[i],i==0?"Igual que el teléfono":null,modes[i].equals(mode),()->{settings.prefs.edit().putString("appearance",modes[k]).apply();Diagnostics.event("setting_changed",null,"action","appearance","result",k);recreate();});}s.show();}));
+        if(Build.VERSION.SDK_INT>=31)ui.addRow(look,ui.switchRow(R.drawable.ic_sparkle,"Colores de tu fondo de pantalla","Material You · adapta la app a los colores del sistema",AppTheme.dynamicColor(this),on->{settings.prefs.edit().putBoolean("dynamicColor",on).apply();Diagnostics.event("setting_changed",null,"action","dynamic_color","result",on);page.postDelayed(this::recreate,200);}));
 
         // Ayuda
         page.addView(ui.section("Ayuda y soporte"));LinearLayout help=ui.group();page.addView(help,Ui.fill());
-        ui.addRow(help,ui.listRow(R.drawable.ic_people,0xFF8B3FD9,"Probar edición de voces","Ejemplo sin usar la API",null,true).onClick(v->startActivity(new Intent(this,RecordingActivity.class).putExtra("demo",true))));
-        ui.addRow(help,ui.listRow(R.drawable.ic_lifebuoy,0xFF2F5BEA,"Compartir informe de soporte","Sin claves, títulos, audio ni texto",null,true).onClick(v->report()));
-        Ui.Row clear=ui.listRow(0,0,"Borrar registros de diagnóstico",null,null,false);clear.title.setTextColor(p.danger);clear.onClick(v->confirm("¿Borrar los registros locales?","Las grabaciones y transcripciones se conservan.","Borrar",true,()->{Diagnostics.clear(this);toast("Registros borrados");}));ui.addRow(help,clear);
+        ui.addRow(help,ui.listRow(R.drawable.ic_people,"Probar edición de voces","Ejemplo sin usar la API",null).onClick(v->startActivity(new Intent(this,RecordingActivity.class).putExtra("demo",true))));
+        ui.addRow(help,ui.listRow(R.drawable.ic_lifebuoy,"Compartir informe de soporte","Sin claves, títulos, audio ni texto",null).onClick(v->report()));
+        Ui.Row clear=ui.listRow(R.drawable.ic_trash,"Borrar registros de diagnóstico",null,null);clear.title.setTextColor(p.error);clear.onClick(v->confirm("¿Borrar los registros locales?","Las grabaciones y transcripciones se conservan.","Borrar",true,()->{Diagnostics.clear(this);toast("Registros borrados");}));ui.addRow(help,clear);
         page.addView(ui.footnote("El registro técnico queda solo en este teléfono (máx. ~4 MB, 30 días) y se comparte únicamente si tú lo envías."));
-        TextView version=ui.text("Voz local "+versionName()+" · Software libre · Licencia MIT",Type.FOOTNOTE,p.faint);version.setGravity(Gravity.CENTER);version.setPadding(0,ui.dp(S8),0,0);page.addView(version,Ui.fill());
+        TextView version=ui.text("Voz local "+versionName()+" · Software libre · Licencia MIT",Type.BODY_MEDIUM,p.outline);version.setGravity(Gravity.CENTER);version.setPadding(0,ui.dp(S8),0,0);page.addView(version,Ui.fill());
     }
+    /** Tarjeta de estado: tonal (secondaryContainer) si falta un paso, neutra si todo está listo. */
     private View statusCard(){
         boolean ready=settings.hasKey();LinearLayout card=ui.card();card.setOrientation(LinearLayout.HORIZONTAL);card.setGravity(Gravity.CENTER_VERTICAL);
-        card.addView(ui.tile(ready?R.drawable.ic_check_circle:R.drawable.ic_key,ready?p.success:p.warning,ready?p.successSoft:p.warningSoft,44,24));card.addView(ui.space(S3));
-        LinearLayout t=ui.column();t.addView(ui.text(ready?"Listo para transcribir":"Falta un paso para transcribir",Type.HEADLINE,p.ink));TextView d=ui.text(ready?modelSummary(settings):"Agrega tu clave de API. Grabar funciona igual sin ella.",Type.FOOTNOTE,p.muted);d.setPadding(0,ui.dp(2),0,0);t.addView(d);card.addView(t,new LinearLayout.LayoutParams(0,-2,1));
-        if(!ready){card.setBackground(ui.ripple(shape(this,p.surface,R_CARD),R_CARD));card.setClickable(true);card.setAccessibilityDelegate(Ui.buttonRole());card.setOnClickListener(v->keySheet());card.addView(ui.icon(R.drawable.ic_chevron_right,p.faint,20));}
+        int fg=ready?p.onSurface:p.onSecondaryContainer,fg2=ready?p.onSurfaceVariant:p.onSecondaryContainer;
+        card.addView(ui.tile(ready?R.drawable.ic_check:R.drawable.ic_key,ready?p.onPrimaryContainer:p.onSecondaryContainer,ready?p.primaryContainer:p.surfaceContainerLowest,40,22));card.addView(ui.space(S4));
+        LinearLayout t=ui.column();t.addView(ui.text(ready?"Listo para transcribir":"Falta un paso para transcribir",Type.TITLE_MEDIUM,fg));TextView d=ui.text(ready?modelSummary(settings):"Agrega tu clave de API. Grabar funciona igual sin ella.",Type.BODY_MEDIUM,fg2);d.setPadding(0,ui.dp(2),0,0);t.addView(d);card.addView(t,new LinearLayout.LayoutParams(0,-2,1));
+        if(!ready){card.setBackground(ui.ripple(shape(this,p.secondaryContainer,R_CARD),R_CARD));card.setClickable(true);card.setAccessibilityDelegate(Ui.buttonRole());card.setOnClickListener(v->keySheet());}
         return card;
     }
     private String versionName(){try{return getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception e){return "";}}
@@ -114,12 +117,12 @@ public class SettingsActivity extends Screen {
         row.setEnabled(false);row.setSubtitle("Comprobando…");http=new HttpApi();
         io.execute(()->{String result;boolean ok=false;try{new OpenAiClient(http).verify(settings.config());ok=true;result="El servidor respondió y reconoce el modelo. Esto no prueba todavía la carga de audio, el saldo ni la separación de voces.";}
             catch(Exception e){result=e instanceof HttpApi.UserAction?e.getMessage():"No se pudo conectar. Revisa tu conexión y la URL del servidor.";}
-            String value=result;boolean success=ok;runOnUiThread(()->{if(isDestroyed())return;row.setEnabled(true);row.setSubtitle(success?"Conexión correcta":"Falló la última comprobación");row.subtitle.setTextColor(success?p.success:p.danger);message(success?"Conexión correcta":"No se pudo verificar",value);});});
+            String value=result;boolean success=ok;runOnUiThread(()->{if(isDestroyed())return;row.setEnabled(true);row.setSubtitle(success?"Conexión correcta":"Falló la última comprobación");row.subtitle.setTextColor(success?p.primary:p.error);message(success?"Conexión correcta":"No se pudo verificar",value);});});
     }
     private void custom(){
         LinearLayout box=ui.column();EditText base=ui.labeled(box,"URL base HTTPS","https://proveedor.com/v1");base.setText(settings.prefs.getString("customBase",""));base.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);
         EditText model=ui.labeled(box,"Identificador del modelo","whisper-1");model.setText(settings.prefs.getString("customModel",""));
-        CheckBox voices=new CheckBox(this);voices.setText("Admite diarized_json y chunking_strategy");voices.setTextColor(p.ink);voices.setButtonTintList(android.content.res.ColorStateList.valueOf(p.accent));voices.setChecked(settings.prefs.getBoolean("customSpeakers",false));voices.setPadding(ui.dp(S1),ui.dp(S3),0,ui.dp(S3));box.addView(voices);
+        CheckBox voices=new CheckBox(this);voices.setText("Admite diarized_json y chunking_strategy");voices.setTextColor(p.onSurface);voices.setButtonTintList(android.content.res.ColorStateList.valueOf(p.primary));voices.setChecked(settings.prefs.getBoolean("customSpeakers",false));voices.setPadding(ui.dp(S1),ui.dp(S3),0,ui.dp(S3));box.addView(voices);
         sheet("Servidor compatible","Enviarás audio y tu clave a este servidor. Si cambias la URL, se borra la clave anterior.").add(box)
             .primary("Guardar",Ui.Style.PRIMARY,()->{try{ProviderConfig config=new ProviderConfig("custom",base.getText().toString().trim(),model.getText().toString().trim(),"",voices.isChecked());if(!config.base.equals(settings.prefs.getString("customBase","")))settings.saveKey("");settings.prefs.edit().putString("customBase",config.base).putString("customModel",config.model).putBoolean("customSpeakers",config.speakers).apply();Pipeline.schedule(this,true);render();return true;}catch(Exception e){base.setError("Usa una URL HTTPS sin credenciales ni parámetros y un modelo válido.");return false;}})
             .secondary("Cancelar",null).show();

@@ -8,7 +8,7 @@ Grabadora y transcriptor local para Android 8 o posterior. Versión **0.4.0** (p
 
 ## Qué hace
 
-- Tres pestañas: **Grabar** (botón principal, importar y recientes), **Biblioteca** (búsqueda, filtros por estado, agrupación por fecha) y **Ajustes**. Modo claro y oscuro.
+- Tres pestañas: **Grabar** (botón principal, importar y recientes), **Biblioteca** (búsqueda, filtros por estado, agrupación por fecha) y **Ajustes**. Diseño Material 3 con modo claro, oscuro y colores del fondo de pantalla (Material You, Android 12+).
 - Graba sin internet con un toque, con pausa y servicio de micrófono para continuar con la pantalla bloqueada. Onda en vivo según el volumen real.
 - Importa archivos de grabadoras o usa **Compartir → Voz local** desde WhatsApp/otras apps que compartan audio. Convierte a AAC/M4A con los decodificadores de Android. M4A, MP3, WAV y OGG/Opus dependen del soporte del teléfono y del archivo.
 - Recorte no destructivo: elige inicio y final con dos manijas (o en segundos) y escucha el tramo. Se crea una grabación nueva; el archivo original queda intacto. No es un editor de ondas completo. Mantén abierta la pantalla mientras se prepara el archivo.

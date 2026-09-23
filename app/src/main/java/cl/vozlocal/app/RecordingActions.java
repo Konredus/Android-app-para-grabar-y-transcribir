@@ -22,8 +22,10 @@ final class RecState {
         return new RecState(Kind.NEW,"Sin transcribir","Solo audio");
     }
     static RecState of(Context c,String id){return of(FilesStore.state(c,id),Transcript.exists(c,id));}
-    int fg(Palette p){switch(kind){case DONE:return p.success;case QUEUED:return p.accent;case FAILED:return p.danger;default:return p.muted;}}
-    int bg(Palette p){switch(kind){case DONE:return p.successSoft;case QUEUED:return p.accentSoft;case FAILED:return p.dangerSoft;default:return p.fill;}}
+    int fg(Palette p){switch(kind){case DONE:return p.primary;case QUEUED:return p.primary;case FAILED:return p.error;default:return p.onSurfaceVariant;}}
+    /** Contenedor tonal del estado (fondo de ícono o chip) y su color "on" correspondiente. */
+    int bg(Palette p){switch(kind){case DONE:return p.primaryContainer;case QUEUED:return p.secondaryContainer;case FAILED:return p.errorContainer;default:return p.surfaceContainerHighest;}}
+    int onBg(Palette p){switch(kind){case DONE:return p.onPrimaryContainer;case QUEUED:return p.onSecondaryContainer;case FAILED:return p.onErrorContainer;default:return p.onSurfaceVariant;}}
     int icon(){switch(kind){case DONE:return R.drawable.ic_doc;case QUEUED:return R.drawable.ic_clock;case FAILED:return R.drawable.ic_alert;default:return R.drawable.ic_wave;}}
 }
 

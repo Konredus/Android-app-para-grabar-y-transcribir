@@ -16,7 +16,7 @@ final class RangeView extends View {
     static final long MIN_GAP=500;
 
     RangeView(Context c,AppTheme.Palette p){
-        super(c);track.setColor(p.fill);selected.setColor(p.accent);thumb.setColor(0xFFFFFFFF);border.setStyle(Paint.Style.STROKE);border.setStrokeWidth(dp(2));border.setColor(p.accent);
+        super(c);track.setColor(p.surfaceContainerHighest);selected.setColor(p.primary);thumb.setColor(0xFFFFFFFF);border.setStyle(Paint.Style.STROKE);border.setStrokeWidth(dp(2));border.setColor(p.primary);
         setMinimumHeight((int)dp(48));
     }
     void setListener(Listener l){listener=l;}

@@ -74,31 +74,31 @@ public class MainActivity extends Screen {
     // ================= GRABAR =================
     private void buildHome(){
         LinearLayout header=ui.row();header.setPadding(ui.dp(S1),ui.dp(S2),0,ui.dp(S2));
-        TextView brand=ui.heading("Voz local",Type.TITLE);header.addView(brand);header.addView(ui.flex());
-        readyChip=ui.chip("",p.muted,p.fill);readyChip.setMinHeight(ui.dp(32));readyChip.setOnClickListener(v->startActivity(new Intent(this,SettingsActivity.class)));readyChip.setAccessibilityDelegate(Ui.buttonRole());header.addView(readyChip);
+        TextView brand=ui.heading("Voz local",Type.HEADLINE_SMALL);header.addView(brand);header.addView(ui.flex());
+        readyChip=ui.outlinedChip("",0,0);readyChip.setOnClickListener(v->startActivity(new Intent(this,SettingsActivity.class)));readyChip.setAccessibilityDelegate(Ui.buttonRole());header.addView(readyChip);
         homePanel.addView(header,Ui.fill());
 
         processingCard=ui.card();processingCard.setOrientation(LinearLayout.HORIZONTAL);processingCard.setGravity(Gravity.CENTER_VERTICAL);processingCard.setVisibility(View.GONE);
-        FrameLayout lead=new FrameLayout(this);processingSpinner=new ProgressBar(this,null,android.R.attr.progressBarStyleSmall);processingSpinner.setIndeterminateTintList(ColorStateList.valueOf(p.accent));lead.addView(processingSpinner,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
-        processingIcon=ui.icon(R.drawable.ic_alert,p.danger,22);lead.addView(processingIcon,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));processingCard.addView(lead,new LinearLayout.LayoutParams(ui.dp(28),ui.dp(28)));processingCard.addView(ui.space(S3));
-        LinearLayout ptexts=ui.column();processingTitle=ui.oneLine(ui.text("",Type.HEADLINE,p.ink));processingDetail=ui.oneLine(ui.text("",Type.FOOTNOTE,p.muted));ptexts.addView(processingTitle);ptexts.addView(processingDetail);processingCard.addView(ptexts,new LinearLayout.LayoutParams(0,-2,1));
-        processingCard.addView(ui.icon(R.drawable.ic_chevron_right,p.faint,20));processingCard.setClickable(true);processingCard.setAccessibilityDelegate(Ui.buttonRole());processingCard.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);Ui.pressable(processingCard);
+        FrameLayout lead=new FrameLayout(this);processingSpinner=new ProgressBar(this,null,android.R.attr.progressBarStyleSmall);processingSpinner.setIndeterminateTintList(ColorStateList.valueOf(p.primary));lead.addView(processingSpinner,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
+        processingIcon=ui.icon(R.drawable.ic_alert,p.error,22);lead.addView(processingIcon,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));processingCard.addView(lead,new LinearLayout.LayoutParams(ui.dp(28),ui.dp(28)));processingCard.addView(ui.space(S3));
+        LinearLayout ptexts=ui.column();processingTitle=ui.oneLine(ui.text("",Type.TITLE_MEDIUM,p.onSurface));processingDetail=ui.oneLine(ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant));ptexts.addView(processingTitle);ptexts.addView(processingDetail);processingCard.addView(ptexts,new LinearLayout.LayoutParams(0,-2,1));
+        processingCard.setClickable(true);processingCard.setAccessibilityDelegate(Ui.buttonRole());processingCard.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);Ui.pressable(processingCard);
         homePanel.addView(processingCard,ui.top(S2));
 
         hero=ui.column();hero.setGravity(Gravity.CENTER);hero.setPadding(0,ui.dp(S8),0,ui.dp(S6));
         LinearLayout status=ui.row();status.setGravity(Gravity.CENTER);statusDot=new View(this);statusDot.setBackground(oval(p.record));status.addView(statusDot,new LinearLayout.LayoutParams(ui.dp(8),ui.dp(8)));status.addView(ui.space(S2));
-        statusLabel=ui.text("Listo para grabar",Type.SUBHEAD,p.muted);statusLabel.setTypeface(typeface(Weight.MEDIUM));statusLabel.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);status.addView(statusLabel);hero.addView(status,Ui.wrap());
-        timer=ui.text("00:00",Type.BODY,p.ink);timer.setTextSize(68);timer.setTypeface(typeface(Weight.LIGHT));timer.setLetterSpacing(-0.02f);timer.setFontFeatureSettings("tnum");timer.setGravity(Gravity.CENTER);timer.setPadding(0,ui.dp(S1),0,0);hero.addView(timer,Ui.wrap());
-        titleChip=ui.chip("+ Añadir título",p.accent,p.accentSoft);titleChip.setTextSize(15);titleChip.setMinHeight(ui.dp(36));titleChip.setPadding(ui.dp(14),ui.dp(6),ui.dp(14),ui.dp(6));titleChip.setMaxWidth(ui.dp(280));titleChip.setVisibility(View.INVISIBLE);titleChip.setAccessibilityDelegate(Ui.buttonRole());titleChip.setOnClickListener(v->titleWhileRecording());
+        statusLabel=ui.text("Listo para grabar",Type.BODY_MEDIUM,p.onSurfaceVariant);statusLabel.setTypeface(typeface(Weight.MEDIUM));statusLabel.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);status.addView(statusLabel);hero.addView(status,Ui.wrap());
+        timer=ui.text("00:00",Type.BODY_LARGE,p.onSurface);timer.setTextSize(68);timer.setTypeface(typeface(Weight.LIGHT));timer.setLetterSpacing(-0.02f);timer.setFontFeatureSettings("tnum");timer.setGravity(Gravity.CENTER);timer.setPadding(0,ui.dp(S1),0,0);hero.addView(timer,Ui.wrap());
+        titleChip=ui.chip("+ Añadir título",p.primary,p.primaryContainer);titleChip.setTextSize(15);titleChip.setMinHeight(ui.dp(36));titleChip.setPadding(ui.dp(14),ui.dp(6),ui.dp(14),ui.dp(6));titleChip.setMaxWidth(ui.dp(280));titleChip.setVisibility(View.INVISIBLE);titleChip.setAccessibilityDelegate(Ui.buttonRole());titleChip.setOnClickListener(v->titleWhileRecording());
         hero.addView(titleChip,Ui.wrap());
         wave=new Waveform(this,p);LinearLayout.LayoutParams wl=new LinearLayout.LayoutParams(-1,ui.dp(76));wl.topMargin=ui.dp(S5);wl.bottomMargin=ui.dp(S5);hero.addView(wave,wl);
         LinearLayout controls=ui.row();controls.setGravity(Gravity.CENTER);
-        pause=ui.iconButton(R.drawable.ic_pause,"Pausar",p.ink,p.fill,56);pause.setOnClickListener(v->{Ui.haptic(v);send("PAUSE");});controls.addView(pause);
+        pause=ui.iconButton(R.drawable.ic_pause,"Pausar",p.onSurface,p.surfaceContainerHighest,56);pause.setOnClickListener(v->{Ui.haptic(v);send("PAUSE");});controls.addView(pause);
         controls.addView(ui.space(S6));
         record=new RecordButton(this,p);record.setContentDescription("Grabar");record.setOnClickListener(v->{Ui.haptic(v);if(RecorderService.activeId!=null)send("STOP");else begin();});controls.addView(record,new LinearLayout.LayoutParams(ui.dp(108),ui.dp(108)));
         controls.addView(ui.space(S6));View mirror=new View(this);controls.addView(mirror,new LinearLayout.LayoutParams(ui.dp(56),ui.dp(56)));
         hero.addView(controls,Ui.wrap());
-        hint=ui.text("",Type.FOOTNOTE,p.muted);hint.setGravity(Gravity.CENTER);hint.setPadding(ui.dp(S6),ui.dp(S4),ui.dp(S6),0);hero.addView(hint,Ui.fill());
+        hint=ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant);hint.setGravity(Gravity.CENTER);hint.setPadding(ui.dp(S6),ui.dp(S4),ui.dp(S6),0);hero.addView(hint,Ui.fill());
         homePanel.addView(hero,new LinearLayout.LayoutParams(-1,0,1));
 
         importSection=ui.row();importSection.setGravity(Gravity.TOP);
@@ -107,26 +107,29 @@ public class MainActivity extends Screen {
         importSection.addView(tile(R.drawable.ic_chat,"Desde WhatsApp","Compartir → Voz local",v->whatsappHelp()),new LinearLayout.LayoutParams(0,-2,1));
         homePanel.addView(importSection,Ui.fill());
 
-        recentSection=ui.column();LinearLayout rh=ui.row();rh.setPadding(ui.dp(S1),ui.dp(S6),0,ui.dp(S1));TextView rt=ui.heading("Recientes",Type.HEADLINE);rh.addView(rt);rh.addView(ui.flex());
+        recentSection=ui.column();LinearLayout rh=ui.row();rh.setPadding(ui.dp(S1),ui.dp(S6),0,ui.dp(S1));TextView rt=ui.heading("Recientes",Type.TITLE_MEDIUM);rh.addView(rt);rh.addView(ui.flex());
         Ui.Btn all=ui.button("Ver todo",0,Ui.Style.PLAIN,v->section(true));all.setPadding(ui.dp(S3),0,ui.dp(S1),0);rh.addView(all);recentSection.addView(rh,Ui.fill());
         recentList=ui.group();recentSection.addView(recentList,Ui.fill());recentSection.setVisibility(View.GONE);homePanel.addView(recentSection,Ui.fill());
     }
     private LinearLayout tile(int icon,String title,String subtitle,View.OnClickListener click){
-        LinearLayout t=ui.card();t.setPadding(ui.dp(S4),ui.dp(S4),ui.dp(S4),ui.dp(S4));t.addView(ui.tile(icon,p.accent,p.accentSoft,40,22));
-        TextView a=ui.text(title,Type.HEADLINE,p.ink);a.setPadding(0,ui.dp(S3),0,ui.dp(2));t.addView(a);t.addView(ui.text(subtitle,Type.FOOTNOTE,p.muted));
-        t.setBackground(ui.ripple(shape(this,p.surface,R_CARD),R_CARD));t.setClickable(true);t.setFocusable(true);t.setContentDescription(title+". "+subtitle);t.setAccessibilityDelegate(Ui.buttonRole());
+        LinearLayout t=ui.card();t.setPadding(ui.dp(S4),ui.dp(S4),ui.dp(S4),ui.dp(S4));t.addView(ui.tile(icon,p.primary,p.primaryContainer,40,22));
+        TextView a=ui.text(title,Type.TITLE_MEDIUM,p.onSurface);a.setPadding(0,ui.dp(S3),0,ui.dp(2));t.addView(a);t.addView(ui.text(subtitle,Type.BODY_MEDIUM,p.onSurfaceVariant));
+        t.setBackground(ui.ripple(shape(this,p.card,R_CARD),R_CARD));t.setClickable(true);t.setFocusable(true);t.setContentDescription(title+". "+subtitle);t.setAccessibilityDelegate(Ui.buttonRole());
         t.setOnClickListener(v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action",title);click.onClick(v);});Ui.pressable(t);return t;
     }
     private void whatsappHelp(){
         Sheet s=sheet("Transcribir un audio de WhatsApp",null);
         String[] steps={"Abre el chat y mantén presionado el audio.","Toca Compartir (o ⋮ → Compartir).","Elige Voz local en la lista de apps.","Revisa el título y toca Guardar audio."};
-        for(int i=0;i<steps.length;i++){LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(ui.dp(S1),ui.dp(S2),0,ui.dp(S2));TextView n=ui.text(String.valueOf(i+1),Type.CAPTION,p.onPrimary);n.setGravity(Gravity.CENTER);n.setBackground(oval(p.primaryFill));r.addView(n,new LinearLayout.LayoutParams(ui.dp(24),ui.dp(24)));r.addView(ui.space(S3));r.addView(ui.text(steps[i],Type.CALLOUT,p.ink),new LinearLayout.LayoutParams(0,-2,1));s.add(r);}
-        TextView note=ui.text("También funciona con grabadoras, Telegram y cualquier app que comparta audio.",Type.FOOTNOTE,p.muted);note.setPadding(ui.dp(S1),ui.dp(S3),0,0);s.add(note);
+        for(int i=0;i<steps.length;i++){LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(ui.dp(S1),ui.dp(S2),0,ui.dp(S2));TextView n=ui.text(String.valueOf(i+1),Type.LABEL_MEDIUM,p.onPrimary);n.setGravity(Gravity.CENTER);n.setBackground(oval(p.primary));r.addView(n,new LinearLayout.LayoutParams(ui.dp(24),ui.dp(24)));r.addView(ui.space(S3));r.addView(ui.text(steps[i],Type.BODY_LARGE,p.onSurface),new LinearLayout.LayoutParams(0,-2,1));s.add(r);}
+        TextView note=ui.text("También funciona con grabadoras, Telegram y cualquier app que comparta audio.",Type.BODY_MEDIUM,p.onSurfaceVariant);note.setPadding(ui.dp(S1),ui.dp(S3),0,0);s.add(note);
         s.primary("Entendido",()->{}).show();
     }
     private void refreshReady(){
         Settings settings=new Settings(this);boolean ready=settings.hasKey();
-        readyChip.setText(ready?"● Transcripción lista":"Configurar transcripción");readyChip.setTextColor(ready?p.success:p.warning);readyChip.setBackground(ui.ripple(shape(this,ready?p.successSoft:p.warningSoft,99),99));
+        // Chip de asistencia de Material: con borde si todo está listo; tonal si falta un paso (llama la atención sin gritar).
+        readyChip.setText(ready?"Transcripción lista":"Configurar transcripción");readyChip.setTextColor(ready?p.onSurfaceVariant:p.onSecondaryContainer);
+        readyChip.setBackground(ui.ripple(ready?outline(this,0x00000000,p.outline,R_SMALL,false):shape(this,p.secondaryContainer,R_SMALL),R_SMALL));
+        android.graphics.drawable.Drawable icon=getDrawable(ready?R.drawable.ic_check:R.drawable.ic_key).mutate();icon.setTint(ready?p.primary:p.onSecondaryContainer);icon.setBounds(0,0,ui.dp(18),ui.dp(18));readyChip.setCompoundDrawablesRelative(icon,null,null,null);readyChip.setCompoundDrawablePadding(ui.dp(S2));
         readyChip.setContentDescription(ready?"Transcripción configurada. Abrir ajustes":"Transcripción sin configurar. Abrir ajustes");
     }
     /** Bucle de UI: refleja el estado real del servicio de grabación. */
@@ -138,10 +141,10 @@ public class MainActivity extends Screen {
             boolean animate=!lastState.isEmpty();lastState=state;starting=false;record.setEnabled(true);
             record.setRecording(active,animate);record.setContentDescription(active?"Detener y guardar":"Grabar");
             pause.setVisibility(active?View.VISIBLE:View.INVISIBLE);pause.setImageResource(paused?R.drawable.ic_play:R.drawable.ic_pause);pause.setContentDescription(paused?"Continuar grabación":"Pausar");
-            statusDot.setVisibility(active?View.VISIBLE:View.GONE);statusDot.setBackground(oval(paused?p.warning:p.record));
-            statusLabel.setText(active?(paused?"En pausa":"Grabando"):"Listo para grabar");statusLabel.setTextColor(active?(paused?p.warning:p.record):p.muted);
+            statusDot.setVisibility(active?View.VISIBLE:View.GONE);statusDot.setBackground(oval(paused?p.onSurfaceVariant:p.record));
+            statusLabel.setText(active?(paused?"En pausa":"Grabando"):"Listo para grabar");statusLabel.setTextColor(active?(paused?p.onSurfaceVariant:p.record):p.onSurfaceVariant);
             hint.setText(active?(paused?"Toca ▶ para continuar o ■ para guardar.":"Puedes bloquear el teléfono: la grabación continúa."):"Toca el botón para grabar. Funciona sin internet.");
-            wave.setLive(active);wave.setColors(paused?p.faint:p.record);titleChip.setVisibility(active?View.VISIBLE:View.INVISIBLE);
+            wave.setLive(active);wave.setColors(paused?p.outline:p.record);titleChip.setVisibility(active?View.VISIBLE:View.INVISIBLE);
             focusMode(active);
             nav.badge(0,active);load();
         }
@@ -202,7 +205,7 @@ public class MainActivity extends Screen {
         Sheet s=sheet("Bienvenido a Voz local","Graba o importa audio y transcríbelo con tu propia clave: pagas centavos por uso, sin suscripción.");
         int[] icons={R.drawable.ic_mic_fill,R.drawable.ic_sparkle,R.drawable.ic_folder};
         String[][] rows={{"Graba sin internet","El audio queda en tu teléfono, incluso con la pantalla bloqueada."},{"Transcribe cuando quieras","Con separación de voces: Persona 1, Persona 2… y nombres editables."},{"Tus archivos son tuyos","Copias opcionales en una carpeta del teléfono o de Drive."}};
-        for(int i=0;i<3;i++){LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(0,ui.dp(S2),0,ui.dp(S2));r.addView(ui.tile(icons[i],p.accent,p.accentSoft,40,22));r.addView(ui.space(S3));LinearLayout t=ui.column();t.addView(ui.text(rows[i][0],Type.HEADLINE,p.ink));TextView d=ui.text(rows[i][1],Type.FOOTNOTE,p.muted);d.setPadding(0,ui.dp(2),0,0);t.addView(d);r.addView(t,new LinearLayout.LayoutParams(0,-2,1));s.add(r);}
+        for(int i=0;i<3;i++){LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(0,ui.dp(S2),0,ui.dp(S2));r.addView(ui.tile(icons[i],p.primary,p.primaryContainer,40,22));r.addView(ui.space(S3));LinearLayout t=ui.column();t.addView(ui.text(rows[i][0],Type.TITLE_MEDIUM,p.onSurface));TextView d=ui.text(rows[i][1],Type.BODY_MEDIUM,p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);t.addView(d);r.addView(t,new LinearLayout.LayoutParams(0,-2,1));s.add(r);}
         if(settings.hasKey())s.primary("Empezar",()->{});
         else s.primary("Configurar transcripción",()->startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true))).secondary("Solo grabar por ahora",null);
         s.show();
@@ -211,11 +214,11 @@ public class MainActivity extends Screen {
     // ================= BIBLIOTECA =================
     private void buildLibrary(){
         largeTitle(libraryPanel,"Biblioteca",null);
-        libraryCount=ui.text("",Type.SUBHEAD,p.muted);libraryCount.setPadding(ui.dp(S1),0,0,ui.dp(S3));libraryPanel.addView(libraryCount);
+        libraryCount=ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant);libraryCount.setPadding(ui.dp(S1),0,0,ui.dp(S3));libraryPanel.addView(libraryCount);
         ((LinearLayout.LayoutParams)libraryPanel.getChildAt(0).getLayoutParams()).bottomMargin=0;libraryPanel.getChildAt(0).setPadding(ui.dp(S1),ui.dp(S2),ui.dp(S1),ui.dp(2));
-        LinearLayout box=ui.row();box.setBackground(shape(this,p.fill,R_CONTROL));box.setPadding(ui.dp(S3),0,ui.dp(S1),0);box.addView(ui.icon(R.drawable.ic_search,p.muted,20));
-        search=new EditText(this);search.setSingleLine(true);search.setHint("Buscar por título");search.setContentDescription("Buscar grabaciones por título");search.setTextColor(p.ink);search.setHintTextColor(p.muted);AppTheme.type(search,Type.BODY);search.setBackground(null);search.setPadding(ui.dp(S2),ui.dp(S3),ui.dp(S2),ui.dp(S3));search.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
-        box.addView(search,new LinearLayout.LayoutParams(0,ui.dp(46),1));ImageButton clear=ui.iconButton(R.drawable.ic_close,"Borrar búsqueda",p.muted,0,40);clear.setVisibility(View.GONE);clear.setOnClickListener(v->search.setText(""));box.addView(clear);
+        LinearLayout box=ui.row();box.setBackground(shape(this,p.surfaceContainerHighest,R_CONTROL));box.setPadding(ui.dp(S3),0,ui.dp(S1),0);box.addView(ui.icon(R.drawable.ic_search,p.onSurfaceVariant,20));
+        search=new EditText(this);search.setSingleLine(true);search.setHint("Buscar por título");search.setContentDescription("Buscar grabaciones por título");search.setTextColor(p.onSurface);search.setHintTextColor(p.onSurfaceVariant);AppTheme.type(search,Type.BODY_LARGE);search.setBackground(null);search.setPadding(ui.dp(S2),ui.dp(S3),ui.dp(S2),ui.dp(S3));search.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+        box.addView(search,new LinearLayout.LayoutParams(0,ui.dp(46),1));ImageButton clear=ui.iconButton(R.drawable.ic_close,"Borrar búsqueda",p.onSurfaceVariant,0,40);clear.setVisibility(View.GONE);clear.setOnClickListener(v->search.setText(""));box.addView(clear);
         libraryPanel.addView(box,Ui.fill());
         search.setText(query);search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int c){}public void onTextChanged(CharSequence s,int a,int b,int c){query=s.toString();clear.setVisibility(query.isEmpty()?View.GONE:View.VISIBLE);render();}public void afterTextChanged(Editable e){}});
         HorizontalScrollView hs=new HorizontalScrollView(this);hs.setHorizontalScrollBarEnabled(false);hs.setClipToPadding(false);filters=ui.row();filters.setPadding(0,ui.dp(S3),0,ui.dp(S1));hs.addView(filters);libraryPanel.addView(hs,Ui.fill());
@@ -234,7 +237,7 @@ public class MainActivity extends Screen {
         Item shown=working!=null?working:failed;processingCard.setVisibility(shown==null?View.GONE:View.VISIBLE);
         if(shown!=null){boolean ok=shown==working;processingSpinner.setVisibility(ok?View.VISIBLE:View.GONE);processingIcon.setVisibility(ok?View.GONE:View.VISIBLE);
             processingTitle.setText(ok?(counts[2]>1?"Transcribiendo "+counts[2]+" audios":"Transcribiendo «"+shown.r.title+"»"):(counts[4]>1?counts[4]+" transcripciones necesitan atención":"«"+shown.r.title+"» necesita atención"));
-            processingDetail.setText(shown.status.detail);processingDetail.setTextColor(ok?p.muted:p.danger);processingCard.setBackground(ui.ripple(shape(this,ok?p.surface:p.dangerSoft,R_CARD),R_CARD));
+            processingDetail.setText(shown.status.detail);processingDetail.setTextColor(ok?p.onSurfaceVariant:p.error);processingCard.setBackground(ui.ripple(shape(this,ok?p.card:p.errorContainer,R_CARD),R_CARD));
             String target=shown.r.id;boolean many=ok?counts[2]>1:counts[4]>1;int f=ok?2:4;processingCard.setOnClickListener(v->{if(many){filter=f;section(true);render();}else open(target);});}
         nav.badge(1,counts[2]>0);
         recentList.removeAllViews();for(int i=0;i<Math.min(3,items.size());i++)ui.addRow(recentList,row(items.get(i)));
@@ -255,22 +258,22 @@ public class MainActivity extends Screen {
     }
     private View empty(boolean nothing){
         LinearLayout e=ui.column();e.setGravity(Gravity.CENTER_HORIZONTAL);e.setPadding(ui.dp(S6),ui.dp(S10),ui.dp(S6),ui.dp(S6));
-        e.addView(ui.tile(nothing?R.drawable.ic_mic_fill:R.drawable.ic_search,p.accent,p.accentSoft,64,30));
-        TextView t=ui.text(nothing?"Aún no hay grabaciones":"Sin resultados",Type.TITLE_SMALL,p.ink);t.setPadding(0,ui.dp(S4),0,ui.dp(S1));t.setGravity(Gravity.CENTER);e.addView(t);
-        TextView d=ui.text(nothing?"Graba una idea o importa un audio para empezar.":"Prueba con otra palabra o quita el filtro.",Type.SUBHEAD,p.muted);d.setGravity(Gravity.CENTER);e.addView(d);
+        e.addView(ui.tile(nothing?R.drawable.ic_mic_fill:R.drawable.ic_search,p.primary,p.primaryContainer,64,30));
+        TextView t=ui.text(nothing?"Aún no hay grabaciones":"Sin resultados",Type.TITLE_LARGE,p.onSurface);t.setPadding(0,ui.dp(S4),0,ui.dp(S1));t.setGravity(Gravity.CENTER);e.addView(t);
+        TextView d=ui.text(nothing?"Graba una idea o importa un audio para empezar.":"Prueba con otra palabra o quita el filtro.",Type.BODY_MEDIUM,p.onSurfaceVariant);d.setGravity(Gravity.CENTER);e.addView(d);
         if(nothing){Ui.Btn b=ui.button("Grabar ahora",R.drawable.ic_mic_fill,Ui.Style.TONAL,v->section(false));LinearLayout.LayoutParams lp=Ui.wrap();lp.topMargin=ui.dp(S5);e.addView(b,lp);}
         return e;
     }
     /** Fila de grabación: ícono de estado, título, duración + estado coloreado, y menú. */
     private View row(Item i){
         LinearLayout row=ui.row();row.setPadding(ui.dp(S3),ui.dp(S3),ui.dp(S1),ui.dp(S3));row.setMinimumHeight(ui.dp(68));
-        row.addView(ui.tile(i.status.icon(),i.status.fg(p),i.status.bg(p),44,22));row.addView(ui.space(S3));
-        LinearLayout texts=ui.column();TextView title=ui.oneLine(ui.text(i.r.title,Type.HEADLINE,p.ink));texts.addView(title);
+        row.addView(ui.tile(i.status.icon(),i.status.onBg(p),i.status.bg(p),40,20));row.addView(ui.space(S3));
+        LinearLayout texts=ui.column();TextView title=ui.oneLine(ui.text(i.r.title,Type.TITLE_MEDIUM,p.onSurface));texts.addView(title);
         String when=new SimpleDateFormat(DateUtils.isToday(i.r.created)?"HH:mm":"d MMM · HH:mm",ES).format(new Date(i.r.created));
-        SpannableStringBuilder meta=new SpannableStringBuilder(when+" · "+Recording.time(i.r.duration)+" · ");int start=meta.length();meta.append(i.status.kind==RecState.Kind.QUEUED?i.status.detail:i.status.label);meta.setSpan(new ForegroundColorSpan(i.status.kind==RecState.Kind.NEW?p.muted:i.status.fg(p)),start,meta.length(),0);
-        TextView m=ui.oneLine(ui.text("",Type.FOOTNOTE,p.muted));m.setText(meta);m.setPadding(0,ui.dp(2),0,0);texts.addView(m);
+        SpannableStringBuilder meta=new SpannableStringBuilder(when+" · "+Recording.time(i.r.duration)+" · ");int start=meta.length();meta.append(i.status.kind==RecState.Kind.QUEUED?i.status.detail:i.status.label);meta.setSpan(new ForegroundColorSpan(i.status.kind==RecState.Kind.NEW?p.onSurfaceVariant:i.status.fg(p)),start,meta.length(),0);
+        TextView m=ui.oneLine(ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant));m.setText(meta);m.setPadding(0,ui.dp(2),0,0);texts.addView(m);
         row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
-        ImageButton more=ui.iconButton(R.drawable.ic_more,"Opciones de "+i.r.title,p.muted,0,44);more.setOnClickListener(v->RecordingActions.menu(this,i.r,this::load,null));row.addView(more);
+        ImageButton more=ui.iconButton(R.drawable.ic_more,"Opciones de "+i.r.title,p.onSurfaceVariant,0,44);more.setOnClickListener(v->RecordingActions.menu(this,i.r,this::load,null));row.addView(more);
         row.setBackground(ui.ripple(null,0));row.setClickable(true);row.setFocusable(true);row.setContentDescription(i.r.title+". "+Recording.time(i.r.duration)+". "+i.status.label);row.setAccessibilityDelegate(Ui.buttonRole());
         row.setOnClickListener(v->open(i.r.id));row.setOnLongClickListener(v->{Ui.haptic(v);RecordingActions.menu(this,i.r,this::load,null);return true;});
         return row;

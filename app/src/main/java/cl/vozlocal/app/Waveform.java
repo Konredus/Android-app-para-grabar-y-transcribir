@@ -14,7 +14,7 @@ final class Waveform extends View {
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
     private int active,idle;private boolean live;
 
-    Waveform(Context c,AppTheme.Palette p){super(c);active=p.record;idle=p.faint;setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
+    Waveform(Context c,AppTheme.Palette p){super(c);active=p.record;idle=p.outline;setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
     void setColors(int active){this.active=active;invalidate();}
     void setLive(boolean live){this.live=live;if(!live)java.util.Arrays.fill(history,0);invalidate();}
     /** Convierte la amplitud cruda (0..32767) a una escala perceptual en dB. */
