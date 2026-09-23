@@ -37,7 +37,7 @@ La primera versión de la 0.4 imitaba iOS (cuadrados de colores en Ajustes, "‹
 
 ## 2. Principios
 
-Son 7 reglas para decidir cualquier cambio.
+Son 9 reglas para decidir cualquier cambio.
 
 1. **Una acción principal por pantalla.** Grabar → el botón rojo. Detalle → Transcribir (o leer). Importar → Guardar.
 2. **Mostrar el estado real, nunca inventarlo.** La onda solo se mueve con sonido real; "En proceso" muestra la etapa exacta.
@@ -45,7 +45,9 @@ Son 7 reglas para decidir cualquier cambio.
 4. **Pedir lo mínimo, en el momento justo.** El título después de grabar; la clave recién al transcribir por primera vez.
 5. **Todo error tiene una salida.** Cada mensaje viene con el botón que lo resuelve.
 6. **Consistencia por sistema, no por memoria.** Colores, tipografía, formas y componentes salen de `AppTheme` y `Ui`. Nunca se escribe un color o un tamaño "a mano" en una pantalla.
-7. **Accesible por defecto.** Áreas táctiles de al menos 48 dp, contraste AA (los pares de Material ya lo cumplen), descripciones para lectores de pantalla y estados anunciados.
+7. **Transparencia del proceso.** Si algo tarda, el usuario ve qué está pasando, desde cuándo y por qué espera (red, cargador, batería). Nunca solo un círculo girando.
+8. **La pantalla principal no se desplaza.** Grabar es fija: todo lo esencial cabe en una pantalla y los avisos van en el chip de la cabecera, no en tarjetas que empujan el contenido.
+9. **Accesible por defecto.** Áreas táctiles de al menos 48 dp, contraste AA (los pares de Material ya lo cumplen), descripciones para lectores de pantalla y estados anunciados.
 
 ---
 
@@ -133,7 +135,8 @@ El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bai
 
 - El botón rojo es el elemento más grande y está en la zona del pulgar.
 - **Modo foco** al grabar: importar y recientes se desvanecen **sin dejar de ocupar su lugar**, así el botón de detener no se mueve (se corrigió después de probarlo).
-- El chip de arriba cambia según el estado: tonal ("Configurar transcripción") si falta la clave; con borde ("Transcripción lista") si todo está bien.
+- **Pantalla fija, sin desplazamiento.** Si la pantalla es baja, "Recientes" se oculta sola (`fitHome`) para que el botón de grabar nunca quede apretado.
+- El chip de la cabecera resume el estado con esta prioridad: falta la clave → **Transcribiendo «…»** (con indicador de carga, abre el detalle) → **Revisar transcripción** (error) → Transcripción lista. Antes era una tarjeta aparte que desplazaba toda la vista.
 - Al terminar, una hoja confirma lo guardado, deja nombrarlo y propone el siguiente paso.
 
 ### Biblioteca
@@ -143,11 +146,12 @@ El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bai
 - Tocar una fila abre el detalle; ⋮ o una pulsación larga abren la hoja de opciones.
 
 ### Detalle
-<img src="capturas/06-detalle-transcrito.png" width="200"> <img src="capturas/07-detalle-sin-transcribir.png" width="200">
+<img src="capturas/06-detalle-transcrito.png" width="200"> <img src="capturas/07-detalle-sin-transcribir.png" width="200"> <img src="capturas/13-detalles-proceso.png" width="200">
 
 - Orden: título → estado → escuchar → leer → exportar.
 - Los nombres de los hablantes van en su color; los tiempos van en gris y, al tocarlos, reproducen desde ese punto.
 - Barra fija de salida con acciones neutras: Copiar · Compartir · .txt · **Guardar en…** (sirve para Google Drive).
+- **Detalles del proceso** mientras transcribe: paso actual con contador en vivo, progreso de envío (MB), bloques listos, condiciones reales (Wi-Fi, cargador, batería), botón "Empezar ahora" si Android está demorando y una **bitácora** plegable con la hora y duración de cada paso. Al terminar: "tardó X".
 
 ### Importar
 <img src="capturas/08-importar-recorte.png" width="200">
@@ -215,4 +219,7 @@ adb exec-out screencap -p > captura.png    # captura para comparar
 | 2026-09-23 | Modo foco sin desplazar el botón | Hallado al probar: el botón de detener se movía y el toque fallaba |
 | 2026-09-23 | Pantalla de detalle única | Escuchar y leer el mismo audio sin saltar entre pantallas |
 | 2026-09-23 | **De estilo iOS a Material 3** | Pedido del usuario ("muy colorinche", "algo pensado para Android"). Se logra coherencia con el sistema y el color vuelve a tener significado |
+| 2026-09-23 | Grabar como pantalla fija; el estado va en el chip | El usuario no quiere que un aviso desplace la pantalla principal |
+| 2026-09-23 | Transcripción en servicio en primer plano | Una tarea de fondo se pausa con el teléfono bloqueado (Doze). Con notificación visible sigue funcionando; la tarea diferida queda solo para esperar Wi-Fi o cargador |
+| 2026-09-23 | Espera de respuesta proporcional a la duración (4–20 min) | Con un tope fijo de 4 min, los audios largos con separación de voces se cortaban y se reenviaban (y se cobraban) varias veces |
 | 2026-09-23 | Material You opcional (apagado por defecto) | Se respeta la identidad de marca y se ofrece la integración con el sistema a quien la quiera |

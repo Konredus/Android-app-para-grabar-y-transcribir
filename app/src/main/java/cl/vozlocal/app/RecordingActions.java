@@ -66,7 +66,7 @@ final class RecordingActions {
                 .primary("Configurar ahora",()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("focusKey",true))).secondary("Más tarde",null).show();return;
         }
         if(Build.VERSION.SDK_INT>=33&&s.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)s.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},12);
-        try{Pipeline.request(s,r.id);if(changed!=null)changed.run();Settings settings=new Settings(s);s.toast(settings.wifiOnly()?"En cola · se enviará con Wi-Fi":"En cola · empezará en breve");}
+        try{Pipeline.request(s,r.id);if(changed!=null)changed.run();String blocker=Pipeline.blocker(s);s.toast(blocker==null?"Transcribiendo · sigue aunque bloquees el teléfono":"En cola · "+blocker);}
         catch(Exception e){s.message("No se pudo poner en cola",e instanceof HttpApi.UserAction?e.getMessage():"Vuelve a intentarlo.");}
     }
     static void cancel(Screen s,Recording r,Runnable changed){try{Pipeline.cancel(s,r.id);if(changed!=null)changed.run();}catch(Exception e){s.message("Transcripción","No se pudo cancelar el trabajo.");}}

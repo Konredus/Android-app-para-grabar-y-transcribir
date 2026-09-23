@@ -11,6 +11,11 @@ class HttpApi {
     private volatile HttpURLConnection active;
     String jobId;
     Runnable onUploaded;
+    /** Espera máxima de respuesta. Las transcripciones la ajustan a la duración del audio (un bloque largo puede tardar varios minutos). */
+    volatile int readTimeoutMs=240000;
+    interface Progress{void update(long sent,long total);}
+    /** Progreso de subida del archivo (bytes enviados / total). */
+    volatile Progress onProgress;
     interface Body { long length(); void write(OutputStream out) throws Exception; }
     static class Response {
         String jobId; final int code; final String text, location,requestId;
@@ -26,7 +31,7 @@ class HttpApi {
         if(!"https".equals(target.getProtocol()))throw new SecurityException("Solo HTTPS");
         HttpURLConnection c=(HttpURLConnection)target.openConnection();active=c;
         try{
-            c.setInstanceFollowRedirects(false);c.setConnectTimeout(30000);c.setReadTimeout(240000);c.setRequestMethod(method);
+            c.setInstanceFollowRedirects(false);c.setConnectTimeout(30000);c.setReadTimeout(readTimeoutMs);c.setRequestMethod(method);
             c.setRequestProperty("Authorization","Bearer "+token);
             if(contentType!=null)c.setRequestProperty("Content-Type",contentType);
             if(extra!=null)for(Map.Entry<String,String> entry:extra.entrySet())c.setRequestProperty(entry.getKey(),entry.getValue());
@@ -42,7 +47,7 @@ class HttpApi {
     static Body bytes(byte[] bytes){return new Body(){public long length(){return bytes.length;}public void write(OutputStream out)throws Exception{out.write(bytes);}};}
     static Body json(JSONObject json){return bytes(json.toString().getBytes(StandardCharsets.UTF_8));}
     Body file(File file){return new Body(){public long length(){return file.length();}public void write(OutputStream out)throws Exception{copy(file,out);}};}
-    void copy(File file,OutputStream out)throws Exception{try(InputStream in=new FileInputStream(file)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1){check();out.write(b,0,n);}}}
+    void copy(File file,OutputStream out)throws Exception{long total=file.length(),sent=0;Progress progress=onProgress;try(InputStream in=new FileInputStream(file)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1){check();out.write(b,0,n);sent+=n;if(progress!=null)progress.update(sent,total);}}}
     static void require(Response response,String service)throws Exception{
         if(response.code>=200 && response.code<300)return;
         String code="",type="",param="",reason="Revisa el formato del audio y los parámetros del modelo.";

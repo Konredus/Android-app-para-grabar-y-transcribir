@@ -29,9 +29,9 @@ public class MainActivity extends Screen {
     private boolean showLibrary;private int homeScroll,libraryScroll;
 
     // Grabar
-    private LinearLayout homePanel,hero,importSection,recentSection,recentList,processingCard;
-    private TextView statusLabel,timer,hint,titleChip,readyChip,processingTitle,processingDetail;
-    private View statusDot;private ProgressBar processingSpinner;private ImageView processingIcon;
+    private LinearLayout homePanel,hero,importSection,recentSection,recentList,statusChip;private boolean recentsFit=true;
+    private TextView statusLabel,timer,hint,titleChip,readyChip;private int workingCount,failedCount;private String workingTitle="",workingId,failedId;
+    private View statusDot;private ProgressBar chipSpinner;private ImageView chipIcon;
     private RecordButton record;private Waveform wave;private ImageButton pause;
     private String lastState="";private boolean starting;
 
@@ -50,13 +50,15 @@ public class MainActivity extends Screen {
         if(saved!=null){query=saved.getString("query","");filter=saved.getInt("filter");homeScroll=saved.getInt("homeScroll");libraryScroll=saved.getInt("libraryScroll");}
         showLibrary=saved!=null?saved.getBoolean("library"):getIntent().getBooleanExtra("library",false);
         shell(null,showLibrary?1:0);
-        homePanel=ui.column();page.addView(homePanel,new LinearLayout.LayoutParams(-1,0,1));buildHome();
+        // Grabar es una pantalla FIJA (sin desplazamiento): va fuera del ScrollView y ocupa el alto disponible.
+        homePanel=ui.column();homePanel.setPadding(ui.dp(S4),ui.dp(S2),ui.dp(S4),ui.dp(S3));root.addView(homePanel,0,new LinearLayout.LayoutParams(-1,0,1));buildHome();
+        homePanel.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{if(b-t!=ob-ot){recentsFit=true;v.post(this::fitHome);}});
         libraryPanel=ui.column();page.addView(libraryPanel,Ui.fill());buildLibrary();
         section(showLibrary);
         if(saved==null)welcome();
     }
     @Override void navigate(int tab){if(tab==2)super.navigate(2);else section(tab==1);}
-    @Override protected void onResume(){super.onResume();lastState="";handler.post(tick);load();Pipeline.schedule(this,false);refreshReady();}
+    @Override protected void onResume(){super.onResume();lastState="";handler.post(tick);load();if(!Pipeline.startForeground(this))Pipeline.schedule(this,false);refreshReady();}
     @Override protected void onPause(){handler.removeCallbacks(tick);super.onPause();}
     @Override protected void onDestroy(){handler.removeCallbacksAndMessages(null);disk.shutdown();super.onDestroy();}
     @Override protected void onSaveInstanceState(Bundle out){out.putBoolean("library",showLibrary);out.putString("query",query);out.putInt("filter",filter);if(showLibrary)libraryScroll=scroll.getScrollY();else homeScroll=scroll.getScrollY();out.putInt("homeScroll",homeScroll);out.putInt("libraryScroll",libraryScroll);super.onSaveInstanceState(out);}
@@ -66,7 +68,7 @@ public class MainActivity extends Screen {
     private void section(boolean library){
         if(showLibrary!=library){if(showLibrary)libraryScroll=scroll.getScrollY();else homeScroll=scroll.getScrollY();}
         showLibrary=library;nav.select(library?1:0);
-        homePanel.setVisibility(library?View.GONE:View.VISIBLE);libraryPanel.setVisibility(library?View.VISIBLE:View.GONE);
+        homePanel.setVisibility(library?View.GONE:View.VISIBLE);libraryPanel.setVisibility(library?View.VISIBLE:View.GONE);scroll.setVisibility(library?View.VISIBLE:View.GONE);
         if(library)ui.fadeIn(libraryPanel);
         scroll.post(()->scroll.scrollTo(0,library?libraryScroll:homeScroll));Diagnostics.event("section_open",null,"screen",library?"library":"home");
     }
@@ -75,23 +77,21 @@ public class MainActivity extends Screen {
     private void buildHome(){
         LinearLayout header=ui.row();header.setPadding(ui.dp(S1),ui.dp(S2),0,ui.dp(S2));
         TextView brand=ui.heading("Voz local",Type.HEADLINE_SMALL);header.addView(brand);header.addView(ui.flex());
-        readyChip=ui.outlinedChip("",0,0);readyChip.setOnClickListener(v->startActivity(new Intent(this,SettingsActivity.class)));readyChip.setAccessibilityDelegate(Ui.buttonRole());header.addView(readyChip);
+        // Chip de estado: configuración, transcripción en curso o error. Vive en la cabecera para no desplazar nada.
+        statusChip=ui.row();statusChip.setPadding(ui.dp(S2),ui.dp(6),ui.dp(S3),ui.dp(6));statusChip.setMinimumHeight(ui.dp(32));statusChip.setClickable(true);statusChip.setAccessibilityDelegate(Ui.buttonRole());statusChip.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        chipSpinner=new ProgressBar(this,null,android.R.attr.progressBarStyleSmall);chipSpinner.setIndeterminateTintList(ColorStateList.valueOf(p.onSecondaryContainer));statusChip.addView(chipSpinner,new LinearLayout.LayoutParams(ui.dp(16),ui.dp(16)));
+        chipIcon=ui.icon(R.drawable.ic_check,p.primary,18);statusChip.addView(chipIcon);statusChip.addView(ui.space(S2));
+        readyChip=ui.oneLine(ui.text("",Type.LABEL_LARGE,p.onSurfaceVariant));readyChip.setMaxWidth(ui.dp(210));statusChip.addView(readyChip);
+        header.addView(statusChip);
         homePanel.addView(header,Ui.fill());
 
-        processingCard=ui.card();processingCard.setOrientation(LinearLayout.HORIZONTAL);processingCard.setGravity(Gravity.CENTER_VERTICAL);processingCard.setVisibility(View.GONE);
-        FrameLayout lead=new FrameLayout(this);processingSpinner=new ProgressBar(this,null,android.R.attr.progressBarStyleSmall);processingSpinner.setIndeterminateTintList(ColorStateList.valueOf(p.primary));lead.addView(processingSpinner,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
-        processingIcon=ui.icon(R.drawable.ic_alert,p.error,22);lead.addView(processingIcon,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));processingCard.addView(lead,new LinearLayout.LayoutParams(ui.dp(28),ui.dp(28)));processingCard.addView(ui.space(S3));
-        LinearLayout ptexts=ui.column();processingTitle=ui.oneLine(ui.text("",Type.TITLE_MEDIUM,p.onSurface));processingDetail=ui.oneLine(ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant));ptexts.addView(processingTitle);ptexts.addView(processingDetail);processingCard.addView(ptexts,new LinearLayout.LayoutParams(0,-2,1));
-        processingCard.setClickable(true);processingCard.setAccessibilityDelegate(Ui.buttonRole());processingCard.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);Ui.pressable(processingCard);
-        homePanel.addView(processingCard,ui.top(S2));
-
-        hero=ui.column();hero.setGravity(Gravity.CENTER);hero.setPadding(0,ui.dp(S8),0,ui.dp(S6));
+        hero=ui.column();hero.setGravity(Gravity.CENTER);hero.setPadding(0,ui.dp(S2),0,ui.dp(S4));
         LinearLayout status=ui.row();status.setGravity(Gravity.CENTER);statusDot=new View(this);statusDot.setBackground(oval(p.record));status.addView(statusDot,new LinearLayout.LayoutParams(ui.dp(8),ui.dp(8)));status.addView(ui.space(S2));
         statusLabel=ui.text("Listo para grabar",Type.BODY_MEDIUM,p.onSurfaceVariant);statusLabel.setTypeface(typeface(Weight.MEDIUM));statusLabel.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);status.addView(statusLabel);hero.addView(status,Ui.wrap());
-        timer=ui.text("00:00",Type.BODY_LARGE,p.onSurface);timer.setTextSize(68);timer.setTypeface(typeface(Weight.LIGHT));timer.setLetterSpacing(-0.02f);timer.setFontFeatureSettings("tnum");timer.setGravity(Gravity.CENTER);timer.setPadding(0,ui.dp(S1),0,0);hero.addView(timer,Ui.wrap());
+        timer=ui.text("00:00",Type.BODY_LARGE,p.onSurface);timer.setTextSize(64);timer.setTypeface(typeface(Weight.LIGHT));timer.setLetterSpacing(-0.02f);timer.setFontFeatureSettings("tnum");timer.setGravity(Gravity.CENTER);timer.setPadding(0,ui.dp(S1),0,0);hero.addView(timer,Ui.wrap());
         titleChip=ui.chip("+ Añadir título",p.primary,p.primaryContainer);titleChip.setTextSize(15);titleChip.setMinHeight(ui.dp(36));titleChip.setPadding(ui.dp(14),ui.dp(6),ui.dp(14),ui.dp(6));titleChip.setMaxWidth(ui.dp(280));titleChip.setVisibility(View.INVISIBLE);titleChip.setAccessibilityDelegate(Ui.buttonRole());titleChip.setOnClickListener(v->titleWhileRecording());
         hero.addView(titleChip,Ui.wrap());
-        wave=new Waveform(this,p);LinearLayout.LayoutParams wl=new LinearLayout.LayoutParams(-1,ui.dp(76));wl.topMargin=ui.dp(S5);wl.bottomMargin=ui.dp(S5);hero.addView(wave,wl);
+        wave=new Waveform(this,p);LinearLayout.LayoutParams wl=new LinearLayout.LayoutParams(-1,ui.dp(64));wl.topMargin=ui.dp(S4);wl.bottomMargin=ui.dp(S4);hero.addView(wave,wl);
         LinearLayout controls=ui.row();controls.setGravity(Gravity.CENTER);
         pause=ui.iconButton(R.drawable.ic_pause,"Pausar",p.onSurface,p.surfaceContainerHighest,56);pause.setOnClickListener(v->{Ui.haptic(v);send("PAUSE");});controls.addView(pause);
         controls.addView(ui.space(S6));
@@ -107,7 +107,7 @@ public class MainActivity extends Screen {
         importSection.addView(tile(R.drawable.ic_chat,"Desde WhatsApp","Compartir → Voz local",v->whatsappHelp()),new LinearLayout.LayoutParams(0,-2,1));
         homePanel.addView(importSection,Ui.fill());
 
-        recentSection=ui.column();LinearLayout rh=ui.row();rh.setPadding(ui.dp(S1),ui.dp(S6),0,ui.dp(S1));TextView rt=ui.heading("Recientes",Type.TITLE_MEDIUM);rh.addView(rt);rh.addView(ui.flex());
+        recentSection=ui.column();LinearLayout rh=ui.row();rh.setPadding(ui.dp(S1),ui.dp(S3),0,0);TextView rt=ui.heading("Recientes",Type.TITLE_MEDIUM);rh.addView(rt);rh.addView(ui.flex());
         Ui.Btn all=ui.button("Ver todo",0,Ui.Style.PLAIN,v->section(true));all.setPadding(ui.dp(S3),0,ui.dp(S1),0);rh.addView(all);recentSection.addView(rh,Ui.fill());
         recentList=ui.group();recentSection.addView(recentList,Ui.fill());recentSection.setVisibility(View.GONE);homePanel.addView(recentSection,Ui.fill());
     }
@@ -124,14 +124,26 @@ public class MainActivity extends Screen {
         TextView note=ui.text("También funciona con grabadoras, Telegram y cualquier app que comparta audio.",Type.BODY_MEDIUM,p.onSurfaceVariant);note.setPadding(ui.dp(S1),ui.dp(S3),0,0);s.add(note);
         s.primary("Entendido",()->{}).show();
     }
-    private void refreshReady(){
-        Settings settings=new Settings(this);boolean ready=settings.hasKey();
-        // Chip de asistencia de Material: con borde si todo está listo; tonal si falta un paso (llama la atención sin gritar).
-        readyChip.setText(ready?"Transcripción lista":"Configurar transcripción");readyChip.setTextColor(ready?p.onSurfaceVariant:p.onSecondaryContainer);
-        readyChip.setBackground(ui.ripple(ready?outline(this,0x00000000,p.outline,R_SMALL,false):shape(this,p.secondaryContainer,R_SMALL),R_SMALL));
-        android.graphics.drawable.Drawable icon=getDrawable(ready?R.drawable.ic_check:R.drawable.ic_key).mutate();icon.setTint(ready?p.primary:p.onSecondaryContainer);icon.setBounds(0,0,ui.dp(18),ui.dp(18));readyChip.setCompoundDrawablesRelative(icon,null,null,null);readyChip.setCompoundDrawablePadding(ui.dp(S2));
-        readyChip.setContentDescription(ready?"Transcripción configurada. Abrir ajustes":"Transcripción sin configurar. Abrir ajustes");
+    private void refreshReady(){renderChip();}
+    /** Prioridad: falta la clave > transcribiendo > necesita atención > todo listo. */
+    private void renderChip(){
+        boolean ready=new Settings(this).hasKey();String text;int fg,bg,icon;boolean spin=false,outlined=false;View.OnClickListener click;
+        if(!ready){text="Configurar transcripción";fg=p.onSecondaryContainer;bg=p.secondaryContainer;icon=R.drawable.ic_key;click=v->startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true));}
+        else if(workingCount>0){text=workingCount>1?"Transcribiendo "+workingCount+" audios":"Transcribiendo «"+workingTitle+"»";fg=p.onSecondaryContainer;bg=p.secondaryContainer;icon=0;spin=true;click=v->{if(workingCount>1){filter=2;section(true);render();}else open(workingId);};}
+        else if(failedCount>0){text=failedCount>1?failedCount+" necesitan atención":"Revisar transcripción";fg=p.onErrorContainer;bg=p.errorContainer;icon=R.drawable.ic_alert;click=v->{if(failedCount>1){filter=4;section(true);render();}else open(failedId);};}
+        else{text="Transcripción lista";fg=p.onSurfaceVariant;bg=0;icon=R.drawable.ic_check;outlined=true;click=v->startActivity(new Intent(this,SettingsActivity.class));}
+        readyChip.setText(text);readyChip.setTextColor(fg);chipSpinner.setVisibility(spin?View.VISIBLE:View.GONE);chipIcon.setVisibility(icon==0?View.GONE:View.VISIBLE);
+        if(icon!=0){chipIcon.setImageResource(icon);chipIcon.setImageTintList(ColorStateList.valueOf(outlined?p.primary:fg));}
+        statusChip.setBackground(ui.ripple(outlined?outline(this,0x00000000,p.outline,R_SMALL,false):shape(this,bg,R_SMALL),R_SMALL));
+        statusChip.setOnClickListener(click);statusChip.setContentDescription(text);
     }
+    /** Si la pantalla es baja, se ocultan "Recientes" para que Grabar nunca necesite desplazamiento. */
+    private void fitHome(){
+        if(hero.getWidth()==0||hero.isLayoutRequested()){homePanel.post(this::fitHome);return;}
+        hero.measure(View.MeasureSpec.makeMeasureSpec(hero.getWidth(),View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));
+        if(hero.getHeight()<hero.getMeasuredHeight()&&recentsFit){recentsFit=false;applyRecents();}
+    }
+    private void applyRecents(){boolean recording=RecorderService.activeId!=null;recentSection.setVisibility(items.isEmpty()||!recentsFit?View.GONE:recording?View.INVISIBLE:View.VISIBLE);if(!recording)recentSection.setAlpha(1f);if(recentSection.getVisibility()!=View.GONE)homePanel.post(this::fitHome);}
     /** Bucle de UI: refleja el estado real del servicio de grabación. */
     private void update(){
         boolean active=RecorderService.activeId!=null,paused=RecorderService.paused;
@@ -157,7 +169,7 @@ public class MainActivity extends Screen {
     }
     /** Modo foco al grabar: lo secundario se desvanece pero conserva su espacio, así el botón de detener no se mueve. */
     private void focusMode(boolean on){
-        for(View v:new View[]{importSection,recentSection}){if(v==recentSection&&items.isEmpty()){v.setVisibility(View.GONE);continue;}
+        for(View v:new View[]{importSection,recentSection}){if(v==recentSection&&(items.isEmpty()||!recentsFit)){v.setVisibility(View.GONE);continue;}
             v.animate().cancel();if(on){v.animate().alpha(0f).setDuration(MOTION_BASE).withEndAction(()->v.setVisibility(View.INVISIBLE)).start();}else{v.setVisibility(View.VISIBLE);v.animate().alpha(1f).setDuration(MOTION_BASE).start();}}
     }
     private void titleWhileRecording(){
@@ -234,14 +246,10 @@ public class MainActivity extends Screen {
         int[] counts=new int[5];for(Item i:items)for(int f=0;f<5;f++)if(matches(i,f))counts[f]++;
         // Grabar: tarjeta de procesamiento y recientes
         Item working=null,failed=null;for(Item i:items){if(i.status.kind==RecState.Kind.QUEUED&&working==null)working=i;if(i.status.kind==RecState.Kind.FAILED&&failed==null)failed=i;}
-        Item shown=working!=null?working:failed;processingCard.setVisibility(shown==null?View.GONE:View.VISIBLE);
-        if(shown!=null){boolean ok=shown==working;processingSpinner.setVisibility(ok?View.VISIBLE:View.GONE);processingIcon.setVisibility(ok?View.GONE:View.VISIBLE);
-            processingTitle.setText(ok?(counts[2]>1?"Transcribiendo "+counts[2]+" audios":"Transcribiendo «"+shown.r.title+"»"):(counts[4]>1?counts[4]+" transcripciones necesitan atención":"«"+shown.r.title+"» necesita atención"));
-            processingDetail.setText(shown.status.detail);processingDetail.setTextColor(ok?p.onSurfaceVariant:p.error);processingCard.setBackground(ui.ripple(shape(this,ok?p.card:p.errorContainer,R_CARD),R_CARD));
-            String target=shown.r.id;boolean many=ok?counts[2]>1:counts[4]>1;int f=ok?2:4;processingCard.setOnClickListener(v->{if(many){filter=f;section(true);render();}else open(target);});}
+        workingCount=counts[2];failedCount=counts[4];workingTitle=working==null?"":working.r.title;workingId=working==null?null:working.r.id;failedId=failed==null?null:failed.r.id;renderChip();
         nav.badge(1,counts[2]>0);
-        recentList.removeAllViews();for(int i=0;i<Math.min(3,items.size());i++)ui.addRow(recentList,row(items.get(i)));
-        recentSection.setVisibility(items.isEmpty()?View.GONE:RecorderService.activeId!=null?View.INVISIBLE:View.VISIBLE);
+        recentList.removeAllViews();for(int i=0;i<Math.min(2,items.size());i++)ui.addRow(recentList,row(items.get(i)));
+        applyRecents();
         // Biblioteca
         libraryCount.setText(items.isEmpty()?"Tus audios y transcripciones":items.size()+(items.size()==1?" grabación":" grabaciones")+" · "+counts[1]+(counts[1]==1?" transcrita":" transcritas"));
         filters.removeAllViews();String[] names={"Todas","Transcritas","En proceso","Sin transcribir","Con error"};
