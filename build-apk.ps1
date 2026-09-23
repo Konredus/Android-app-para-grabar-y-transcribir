@@ -12,6 +12,6 @@ try {
     & $gradle --no-daemon assembleDebug lintDebug
     if ($LASTEXITCODE -ne 0) { throw 'La compilación o la revisión de Android falló.' }
     New-Item -ItemType Directory -Force (Join-Path $projectPath 'entrega') | Out-Null
-    Copy-Item -LiteralPath (Join-Path $projectPath 'app/build/outputs/apk/debug/app-debug.apk') -Destination (Join-Path $projectPath 'entrega/Voz-local-0.4.0.apk') -Force
-    Get-FileHash -LiteralPath (Join-Path $projectPath 'entrega/Voz-local-0.4.0.apk') -Algorithm SHA256
+    Copy-Item -LiteralPath (Join-Path $projectPath 'app/build/outputs/apk/debug/app-debug.apk') -Destination (Join-Path $projectPath 'entrega/Voz-local-0.4.1.apk') -Force
+    Get-FileHash -LiteralPath (Join-Path $projectPath 'entrega/Voz-local-0.4.1.apk') -Algorithm SHA256
 } finally { Pop-Location }

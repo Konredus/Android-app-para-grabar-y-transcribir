@@ -192,7 +192,7 @@ El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bai
 ```text
 Abrir-grabadora.cmd                        # doble clic: abre el emulador con ventana y la app
 .\build-apk.ps1                            # compila y copia el APK a entrega/
-adb install -r -g entrega\Voz-local-0.4.0.apk
+adb install -r -g entrega\Voz-local-0.4.1.apk
 adb exec-out screencap -p > captura.png    # captura para comparar
 ```
 

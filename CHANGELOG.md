@@ -1,5 +1,14 @@
 # Historial de versiones
 
+## 0.4.1 — 2026-09-23
+
+Transcripción más confiable y transparente, a partir de la primera prueba real (audio de 8 min que tardó ~15 min).
+
+- Transcripción en **primer plano** con notificación de progreso: sigue con el teléfono bloqueado. La tarea diferida queda para esperar Wi-Fi o cargador.
+- **Detalles del proceso**: paso actual con cronómetro, progreso de envío y de bloques, condiciones reales (red, cargador, batería), "Empezar ahora" y bitácora con horas.
+- La espera de respuesta del proveedor escala con la duración del bloque (antes eran 4 min fijos, lo que provocaba reenvíos y cobros repetidos en audios largos). Entre bloques, la tarea diferida cede el turno para no ser cortada por Android.
+- Pantalla Grabar fija (sin desplazamiento); el estado de transcripción va en el chip de la cabecera.
+
 ## 0.4.0 — 2026-09-23
 
 Rediseño completo de UX/UI. Criterios y decisiones en [docs/diseno/CRITERIOS.md](docs/diseno/CRITERIOS.md).
@@ -13,10 +22,6 @@ Rediseño completo de UX/UI. Criterios y decisiones en [docs/diseno/CRITERIOS.md
 - Importar con selector de tramo de dos manijas.
 - Ajustes como lista agrupada con tarjeta de estado; bienvenida en el primer uso.
 - Ícono adaptativo nuevo e ícono de notificación monocromo.
-- Transcripción en **primer plano** con notificación de progreso: sigue con el teléfono bloqueado. La tarea diferida queda para esperar Wi-Fi o cargador.
-- **Detalles del proceso**: paso actual con cronómetro, progreso de envío y de bloques, condiciones reales (red, cargador, batería), "Empezar ahora" y bitácora con horas.
-- La espera de respuesta del proveedor escala con la duración del bloque (antes eran 4 min fijos, lo que provocaba reenvíos y cobros repetidos en audios largos). Entre bloques, la tarea diferida cede el turno para no ser cortada por Android.
-- Pantalla Grabar fija (sin desplazamiento); el estado de transcripción va en el chip de la cabecera.
 - Correcciones: cierre al importar en Android 8 (API 28), errores de compilación de `setClipData` y CI de GitHub.
 
 ## 0.3.0 — 2026-09-21
