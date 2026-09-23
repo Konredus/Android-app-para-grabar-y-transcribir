@@ -26,7 +26,8 @@ public class PipelineJob extends JobService {
         },"VozLocal-transcribe").start();return true;
     }
     @Override public boolean onStopJob(JobParameters params){
-        HttpApi h=active;if(h!=null){h.cancel();if(h.jobId!=null)Pipeline.log(this,h.jobId,"Android pausó el trabajo (ahorro de energía, red o límite de tiempo) · se reanudará");}
+        HttpApi h=active;boolean byApp=Build.VERSION.SDK_INT>=31&&params.getStopReason()==JobParameters.STOP_REASON_CANCELLED_BY_APP;
+        if(h!=null){h.cancel();if(h.jobId!=null)Pipeline.log(this,h.jobId,byApp?"Continúa en primer plano (sigue aunque bloquees el teléfono)":"Android pausó el trabajo (ahorro de energía, red o límite de tiempo) · se reanudará");}
         getSystemService(NotificationManager.class).cancel(Transcriber.NOTIFICATION);Diagnostics.event("job_interrupted",null);return true;
     }
     static String hash(byte[] data)throws Exception{return android.util.Base64.encodeToString(java.security.MessageDigest.getInstance("SHA-256").digest(data),android.util.Base64.NO_WRAP);}

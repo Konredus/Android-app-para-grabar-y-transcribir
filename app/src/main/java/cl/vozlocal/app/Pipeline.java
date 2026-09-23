@@ -8,10 +8,12 @@ import org.json.*;
 
 final class Pipeline {
     static final int JOB_ID=4102;
-    static void request(Context c,String id)throws Exception{
+    static void request(Context c,String id)throws Exception{request(c,id,new Settings(c).defaultSpeakers());}
+    /** speakers: separar voces en esta grabación (se elige al transcribir). */
+    static void request(Context c,String id,boolean speakers)throws Exception{
         if(FilesStore.state(c,id).optBoolean("demo"))throw new HttpApi.UserAction("El ejemplo no se envía a la API.");
         if(Transcript.exists(c,id)){LocalStorage.enqueue(c,id);return;}
-        FilesStore.update(c,id,s -> s.put("requested",true).put("failed",false).put("attempts",0).put("queuedAt",System.currentTimeMillis()).put("log",new JSONArray()).put("blocksDone",0).put("blocks",0).put("upSent",0).put("upTotal",0).remove("lastError"));
+        FilesStore.update(c,id,s -> s.put("requested",true).put("failed",false).put("attempts",0).put("queuedAt",System.currentTimeMillis()).put("log",new JSONArray()).put("upSent",0).put("upTotal",0).put("speakers",speakers).put("liveChars",0).remove("lastError"));
         Diagnostics.event("job_queued",id);
         String blocker=blocker(c);
         log(c,id,blocker==null?"En cola · empezando":"En cola · "+blocker);

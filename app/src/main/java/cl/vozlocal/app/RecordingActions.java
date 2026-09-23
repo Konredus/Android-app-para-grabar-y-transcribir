@@ -65,8 +65,24 @@ final class RecordingActions {
             s.sheet("Falta tu clave de API","Para transcribir, Voz local usa tu propia cuenta del proveedor (por ejemplo OpenAI). Solo pagas lo que usas.")
                 .primary("Configurar ahora",()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("focusKey",true))).secondary("Más tarde",null).show();return;
         }
+        Settings settings=new Settings(s);
+        if(settings.canSeparate()&&settings.speakersMode().equals("ask")){askSpeakers(s,r,changed,settings);return;}
+        start(s,r,changed,settings.defaultSpeakers());
+    }
+    /** Pregunta si separar voces, con el costo y la velocidad de cada opción para este audio. */
+    static void askSpeakers(Screen s,Recording r,Runnable changed,Settings settings){
+        try{
+            String voices=settings.config(true).model,text=settings.config(false).model;
+            String provider=settings.provider();String costVoices=Pricing.usd(Pricing.estimate(provider,voices,r.duration)),costText=Pricing.usd(Pricing.estimate(provider,text,r.duration));boolean live=provider.equals("openai")&&text.equals("gpt-transcribe");
+            s.sheet("¿Separar voces?","Audio de "+Recording.time(r.duration)+". Puedes cambiar esta pregunta en Ajustes.")
+                .option(R.drawable.ic_people,"Sí, separar voces","Para reuniones y conversaciones: Persona 1, Persona 2… · más lento"+(costVoices.equals("—")?"":" · ≈"+costVoices),()->start(s,r,changed,true))
+                .option(R.drawable.ic_doc,"No, solo el texto","Para dictados y notas · más rápido"+(live?", el texto aparece en vivo":"")+(costText.equals("—")?"":" · ≈"+costText),()->start(s,r,changed,false))
+                .show();
+        }catch(Exception e){start(s,r,changed,settings.defaultSpeakers());}
+    }
+    static void start(Screen s,Recording r,Runnable changed,boolean speakers){
         if(Build.VERSION.SDK_INT>=33&&s.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)s.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},12);
-        try{Pipeline.request(s,r.id);if(changed!=null)changed.run();String blocker=Pipeline.blocker(s);s.toast(blocker==null?"Transcribiendo · sigue aunque bloquees el teléfono":"En cola · "+blocker);}
+        try{Pipeline.request(s,r.id,speakers);if(changed!=null)changed.run();String blocker=Pipeline.blocker(s);s.toast(blocker==null?"Transcribiendo · sigue aunque bloquees el teléfono":"En cola · "+blocker);}
         catch(Exception e){s.message("No se pudo poner en cola",e instanceof HttpApi.UserAction?e.getMessage():"Vuelve a intentarlo.");}
     }
     static void cancel(Screen s,Recording r,Runnable changed){try{Pipeline.cancel(s,r.id);if(changed!=null)changed.run();}catch(Exception e){s.message("Transcripción","No se pudo cancelar el trabajo.");}}

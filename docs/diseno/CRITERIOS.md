@@ -151,6 +151,8 @@ El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bai
 - Orden: título → estado → escuchar → leer → exportar.
 - Los nombres de los hablantes van en su color; los tiempos van en gris y, al tocarlos, reproducen desde ese punto.
 - Barra fija de salida con acciones neutras: Copiar · Compartir · .txt · **Guardar en…** (sirve para Google Drive).
+- **"¿Separar voces?"** al transcribir (configurable: preguntar, siempre, nunca). Cada opción muestra para qué sirve, su velocidad y el costo estimado de ese audio: el usuario decide con información, no a ciegas.
+- **Métricas** en la tarjeta de proceso: tiempo total y restante en vivo, audio procesado, velocidad (× tiempo real), costo estimado hasta ahora y total, tokens, datos enviados y texto recibido. Al terminar, el mismo resumen queda dentro de "Ver detalles del proceso". Los costos se rotulan como estimados con la fecha de la tarifa pública (principio 2: no inventar).
 - **Detalles del proceso** mientras transcribe: paso actual con contador en vivo, progreso de envío (MB), bloques listos, condiciones reales (Wi-Fi, cargador, batería), botón "Empezar ahora" si Android está demorando y una **bitácora** plegable con la hora y duración de cada paso. Al terminar: "tardó X".
 
 ### Importar
@@ -192,7 +194,7 @@ El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bai
 ```text
 Abrir-grabadora.cmd                        # doble clic: abre el emulador con ventana y la app
 .\build-apk.ps1                            # compila y copia el APK a entrega/
-adb install -r -g entrega\Voz-local-0.4.1.apk
+adb install -r -g entrega\Voz-local-0.4.2.apk
 adb exec-out screencap -p > captura.png    # captura para comparar
 ```
 
@@ -222,4 +224,7 @@ adb exec-out screencap -p > captura.png    # captura para comparar
 | 2026-09-23 | Grabar como pantalla fija; el estado va en el chip | El usuario no quiere que un aviso desplace la pantalla principal |
 | 2026-09-23 | Transcripción en servicio en primer plano | Una tarea de fondo se pausa con el teléfono bloqueado (Doze). Con notificación visible sigue funcionando; la tarea diferida queda solo para esperar Wi-Fi o cargador |
 | 2026-09-23 | Espera de respuesta proporcional a la duración (4–20 min) | Con un tope fijo de 4 min, los audios largos con separación de voces se cortaban y se reenviaban (y se cobraban) varias veces |
+| 2026-09-23 | Preguntar "¿Separar voces?" al transcribir | El modelo con voces es más lento y no siempre hace falta (dictados). Mostrar costo y velocidad convierte la decisión en algo informado |
+| 2026-09-23 | Bloques de ~5 min cortados en pausas, 3 en paralelo, con muestras de voz del bloque 1 | Acelera audios largos sin partir frases, y mantiene a cada persona con el mismo nombre en todos los bloques |
+| 2026-09-23 | Compresión a 32 kbps solo con datos móviles | Con Wi-Fi, recomprimir tarda más que lo que ahorra en subida; con datos móviles ahorra ~3× el consumo |
 | 2026-09-23 | Material You opcional (apagado por defecto) | Se respeta la identidad de marca y se ofrece la integración con el sistema a quien la quiera |

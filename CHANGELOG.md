@@ -1,5 +1,16 @@
 # Historial de versiones
 
+## 0.4.2 — 2026-09-23
+
+Transcripción más rápida y con información completa del proceso.
+
+- Modelo nuevo **gpt-transcribe** (predeterminado para texto): más rápido, más económico (US$0,0045/min) y con el texto llegando en vivo (streaming). Usa `languages[]` como exige la API.
+- Pregunta **"¿Separar voces?"** al transcribir, con velocidad y costo estimado de cada opción. En Ajustes: preguntar, siempre o nunca.
+- Separación de voces más rápida: bloques de ~5 min cortados en **pausas** (no a mitad de frase), **3 en paralelo**, con **muestras de voz** del primer bloque para mantener a cada persona con el mismo nombre en todos los bloques. Si el proveedor rechaza las muestras, el bloque se reenvía sin ellas.
+- Con datos móviles, los bloques se comprimen a 32 kbps (~3× menos datos); con Wi-Fi se envían sin recodificar.
+- **Métricas** en vivo: tiempo total y restante, audio procesado, velocidad, costo estimado (hasta ahora y total), tokens, datos enviados y texto recibido. Resumen al terminar dentro de "Ver detalles del proceso".
+- La tarjeta de proceso se actualiza sola cuando cambia una condición (p. ej. al conectar el cargador) y empieza de inmediato.
+
 ## 0.4.1 — 2026-09-23
 
 Transcripción más confiable y transparente, a partir de la primera prueba real (audio de 8 min que tardó ~15 min).

@@ -103,12 +103,12 @@ public class RecordingActivity extends Screen {
         Settings settings=new Settings(this);LinearLayout card=ui.card();card.setPadding(ui.dp(S5),ui.dp(S5),ui.dp(S5),ui.dp(S5));
         card.addView(ui.tile(R.drawable.ic_sparkle,p.primary,p.primaryContainer,44,24));
         TextView h=ui.text("Transcribe este audio",Type.TITLE_LARGE,p.onSurface);h.setPadding(0,ui.dp(S3),0,ui.dp(S1));card.addView(h);
-        card.addView(ui.text(settings.hasKey()?"Se enviará a "+SettingsActivity.modelSummary(settings)+". Suele tardar menos que la duración del audio.":"Agrega tu clave de API para transcribir. Solo pagas lo que usas en tu cuenta del proveedor.",Type.BODY_MEDIUM,p.onSurfaceVariant));
+        card.addView(ui.text(settings.hasKey()?"Proveedor: "+SettingsActivity.modelSummary(settings)+". Al transcribir eliges si separar voces.":"Agrega tu clave de API para transcribir. Solo pagas lo que usas en tu cuenta del proveedor.",Type.BODY_MEDIUM,p.onSurfaceVariant));
         Ui.Btn go=ui.button(settings.hasKey()?"Transcribir":"Configurar transcripción",settings.hasKey()?R.drawable.ic_sparkle:R.drawable.ic_key,Ui.Style.PRIMARY,v->RecordingActions.transcribe(this,recording,this::reload));
         card.addView(go,ui.top(S5));content.addView(card,ui.top(S4));
     }
     // ---------- Proceso en curso: estado actual, progreso, condiciones y bitácora ----------
-    private TextView phaseElapsed,upText;private ProgressBar upBar;private long phaseSince;private LinearLayout conditions;private long conditionsAt;private boolean detailsOpen;
+    private String shownBlocker;private TextView phaseElapsed,upText;private ProgressBar upBar;private long phaseSince;private LinearLayout conditions;private long conditionsAt;private boolean detailsOpen;
     private void showQueued(RecState state){
         JSONObject st=FilesStore.state(this,id);
         LinearLayout card=ui.card();card.setPadding(ui.dp(S5),ui.dp(S5),ui.dp(S5),ui.dp(S4));
@@ -117,6 +117,7 @@ public class RecordingActivity extends Screen {
         TextView d=ui.text(state.detail,Type.BODY_MEDIUM,p.onSurface);d.setPadding(0,ui.dp(2),0,0);d.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);texts.addView(d);
         phaseSince=st.optLong("since",System.currentTimeMillis());phaseElapsed=ui.text("",Type.BODY_SMALL,p.onSurfaceVariant);phaseElapsed.setFontFeatureSettings("tnum");phaseElapsed.setPadding(0,ui.dp(2),0,0);texts.addView(phaseElapsed);
         row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));card.addView(row,Ui.fill());
+        card.addView(stats(st,true),ui.top(S4));
         int blocks=st.optInt("blocks",0),done=st.optInt("blocksDone",0);
         if(blocks>1){TextView b=ui.text("Bloques listos: "+done+" de "+blocks,Type.LABEL_LARGE,p.onSurfaceVariant);b.setPadding(0,ui.dp(S4),0,ui.dp(S1));card.addView(b);card.addView(bar(done*100/blocks),new LinearLayout.LayoutParams(-1,ui.dp(6)));}
         long sent=st.optLong("upSent"),total=st.optLong("upTotal");
@@ -133,23 +134,65 @@ public class RecordingActivity extends Screen {
     private ProgressBar bar(int value){ProgressBar b=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);b.setMax(100);b.setProgress(value);b.setProgressTintList(ColorStateList.valueOf(p.primary));b.setProgressBackgroundTintList(ColorStateList.valueOf(p.secondaryContainer));return b;}
     /** Condiciones reales del teléfono ahora mismo (no un texto fijo): red, cargador y batería. */
     private void renderConditions(){
-        if(conditions==null)return;conditions.removeAllViews();conditionsAt=System.currentTimeMillis();Settings s=new Settings(this);
+        if(conditions==null)return;
+        // Si una condición cambió (p. ej. conectaste el cargador), se redibuja la tarjeta y se intenta empezar ya.
+        String blocker=Pipeline.blocker(this);if(conditionsAt>0&&!java.util.Objects.equals(blocker,shownBlocker)){shownBlocker=blocker;conditionsAt=0;if(blocker==null)Pipeline.startForeground(this);reload();return;}
+        shownBlocker=blocker;conditions.removeAllViews();conditionsAt=System.currentTimeMillis();Settings s=new Settings(this);
         boolean online=Pipeline.network(this)!=null,wifi=Pipeline.unmetered(this);android.os.BatteryManager bm=getSystemService(android.os.BatteryManager.class);boolean charging=bm.isCharging();int level=bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY);
         condition(online&&(!s.wifiOnly()||wifi),!online?"Sin conexión a internet":s.wifiOnly()?(wifi?"Wi-Fi conectado":"Se requiere Wi-Fi · ahora usas datos móviles"):(wifi?"Conectado por Wi-Fi":"Conectado por datos móviles"));
         condition(!s.charging()||charging,s.charging()?(charging?"Cargando":"Se requiere conectar el cargador"):"Cargador no requerido");
         condition(charging||level>15,"Batería "+level+" %"+(charging||level>15?"":" · Android espera a que cargues"));
     }
     private void condition(boolean ok,String text){LinearLayout r=ui.row();r.setPadding(0,ui.dp(3),0,ui.dp(3));r.addView(ui.icon(ok?R.drawable.ic_check_circle:R.drawable.ic_clock,ok?p.primary:p.error,18));r.addView(ui.space(S2));r.addView(ui.text(text,Type.BODY_MEDIUM,ok?p.onSurfaceVariant:p.onSurface));conditions.addView(r);}
-    /** Actualización en vivo (cada 250 ms): cronómetro del paso actual y, cada 3 s, las condiciones. */
+    // ---------- Métricas: tiempo, velocidad, costo estimado, tokens y datos ----------
+    private TextView liveTotal,liveRemaining;private JSONObject liveState;
+    /** Grilla de métricas. live=true: tiempo total y restante se actualizan cada 250 ms. */
+    private View stats(JSONObject st,boolean live){
+        LinearLayout grid=ui.column();grid.setBackground(shape(this,p.surfaceContainerLow,R_CONTROL));grid.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),ui.dp(S3));
+        long now=System.currentTimeMillis(),queued=st.optLong("queuedAt",now),audio=st.optLong("audioMs",recording.duration),doneAudio=st.optLong("doneAudioMs");
+        long elapsed=live?now-queued:st.optLong("doneIn",now-queued);String model=st.optString("model","");
+        List<String[]> cells=new ArrayList<>();
+        cells.add(new String[]{"Tiempo total",Recording.time(elapsed)});
+        if(live)cells.add(new String[]{"Restante (aprox.)",remaining(st)});
+        cells.add(new String[]{"Audio procesado",Recording.time(live?doneAudio:audio)+" de "+Recording.time(audio)});
+        long speedBase=live?doneAudio:audio;if(speedBase>0&&elapsed>0)cells.add(new String[]{"Velocidad",String.format(Locale.ROOT,"%.1f",speedBase/(double)elapsed).replace('.',',')+"× tiempo real"});
+        String provider=st.optString("provider","openai");double spent=Pricing.estimate(provider,model,live?doneAudio:audio),total=Pricing.estimate(provider,model,audio);
+        if(total>=0)cells.add(new String[]{live?"Costo hasta ahora":"Costo estimado",Pricing.usd(spent)+(live?" · total ≈"+Pricing.usd(total):"")});
+        long in=st.optLong("inTokens"),out=st.optLong("outTokens");double secs=st.optDouble("usageSec",0);
+        if(in+out>0)cells.add(new String[]{"Tokens",String.format(Locale.ROOT,"%,d",in+out).replace(',','.')+" ("+String.format(Locale.ROOT,"%,d",in).replace(',','.')+" entrada)"});
+        else if(secs>0)cells.add(new String[]{"Audio facturado",Recording.time((long)(secs*1000))});
+        long sent=st.optLong("bytesSent")+(live?st.optLong("upSent"):0);if(sent>0)cells.add(new String[]{"Datos enviados",String.format(Locale.ROOT,"%.1f MB",sent/1e6).replace('.',',')});
+        int chars=st.optInt("liveChars");if(live&&chars>0)cells.add(new String[]{"Texto recibido",String.format(Locale.ROOT,"%,d",chars).replace(',','.')+" caracteres"});
+        if(st.optInt("attempts")>0)cells.add(new String[]{"Reintentos",String.valueOf(st.optInt("attempts"))});
+        for(int i=0;i<cells.size();i+=2){
+            LinearLayout line=ui.row();line.setGravity(Gravity.TOP);line.setPadding(0,ui.dp(S1),0,ui.dp(S1));
+            for(int k=i;k<Math.min(i+2,cells.size());k++){LinearLayout cell=ui.column();cell.addView(ui.text(cells.get(k)[0],Type.BODY_SMALL,p.onSurfaceVariant));TextView v=ui.text(cells.get(k)[1],Type.TITLE_SMALL,p.onSurface);v.setFontFeatureSettings("tnum");cell.addView(v);line.addView(cell,new LinearLayout.LayoutParams(0,-2,1));
+                if(live&&k==0)liveTotal=v;if(live&&k==1)liveRemaining=v;}
+            if(cells.size()-i==1)line.addView(ui.flex());grid.addView(line,Ui.fill());
+        }
+        if(!model.isEmpty()){TextView m=ui.text("Modelo: "+model+(st.optBoolean("speakers")?" · separa voces":"")+(total>=0?" · tarifa pública al "+Pricing.REVIEWED+", el cobro real puede variar":""),Type.BODY_SMALL,p.onSurfaceVariant);m.setPadding(0,ui.dp(S2),0,0);grid.addView(m);}
+        if(live)liveState=st;return grid;
+    }
+    /** Estimación: promedio por bloque × rondas restantes (bloques de a PARALLEL en paralelo). */
+    private String remaining(JSONObject st){
+        int blocks=st.optInt("blocks"),done=st.optInt("blocksDone"),count=st.optInt("blockCount");long sum=st.optLong("blockMsSum");
+        if(blocks<=0||count==0)return "calculando…";if(done>=blocks)return "casi listo";
+        int left=blocks-done;int rounds=(left+Transcriber.PARALLEL-1)/Transcriber.PARALLEL;long avg=sum/count;
+        long est=Math.max(avg/5,rounds*avg-(System.currentTimeMillis()-st.optLong("since",System.currentTimeMillis())));return "≈ "+Recording.time(est);
+    }
+    /** Actualización en vivo (cada 250 ms): cronómetros y, cada 3 s, las condiciones. */
     private void tickProcess(){
+        if(liveTotal!=null&&liveState!=null&&liveTotal.isAttachedToWindow()){liveTotal.setText(Recording.time(System.currentTimeMillis()-liveState.optLong("queuedAt",System.currentTimeMillis())));if(liveRemaining!=null)liveRemaining.setText(remaining(liveState));}
         if(phaseElapsed==null||!phaseElapsed.isAttachedToWindow())return;
         phaseElapsed.setText("En este paso hace "+Recording.time(System.currentTimeMillis()-phaseSince));
         if(System.currentTimeMillis()-conditionsAt>3000)renderConditions();
     }
     /** Bitácora: cada paso con su hora y cuánto duró. Plegable para no abrumar. */
-    private View timeline(JSONObject st,boolean collapsed){
+    private View timeline(JSONObject st,boolean collapsed){return timeline(st,collapsed,null);}
+    private View timeline(JSONObject st,boolean collapsed,View header){
         JSONArray log=st.optJSONArray("log");LinearLayout box=ui.column();if(log==null||log.length()==0)return box;
         LinearLayout list=ui.column();list.setBackground(shape(this,p.card,R_CARD));list.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),ui.dp(S3));
+        if(header!=null){list.addView(header,Ui.fill());TextView h=ui.text("Bitácora",Type.TITLE_SMALL,p.primary);h.setPadding(0,ui.dp(S4),0,ui.dp(S1));list.addView(h);}
         SimpleDateFormat f=new SimpleDateFormat("HH:mm:ss",Locale.ROOT);
         for(int i=0;i<log.length();i++){JSONObject e=log.optJSONObject(i);if(e==null)continue;long t=e.optLong("t");JSONObject n=i+1<log.length()?log.optJSONObject(i+1):null;long next=n==null?0:n.optLong("t");
             LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(0,ui.dp(S1),0,ui.dp(S1));TextView time=ui.text(f.format(new Date(t)),Type.BODY_SMALL,p.onSurfaceVariant);time.setFontFeatureSettings("tnum");r.addView(time,new LinearLayout.LayoutParams(ui.dp(64),-2));
@@ -196,8 +239,9 @@ public class RecordingActivity extends Screen {
             }
             content.addView(card,Ui.fill());
             JSONObject st=demo?new JSONObject():FilesStore.state(this,id);long took=st.optLong("doneIn");
-            TextView model=ui.footnote((transcript.data.has("model")?"Transcrito con "+transcript.data.optString("model"):"")+(took>0?" · tardó "+Recording.time(took):""));if(!model.getText().toString().isEmpty())content.addView(model);
-            if(!demo)content.addView(timeline(st,true));
+            double cost=Pricing.estimate(transcript.data.optString("provider","openai"),transcript.data.optString("model"),recording.duration);
+            TextView model=ui.footnote((transcript.data.has("model")?"Transcrito con "+transcript.data.optString("model"):"")+(took>0?" · tardó "+Recording.time(took):"")+(cost>=0&&took>0?" · ≈"+Pricing.usd(cost):""));if(!model.getText().toString().isEmpty())content.addView(model);
+            if(!demo&&st.has("log"))content.addView(timeline(st,true,st.has("model")?stats(st,false):null));
             LinearLayout bar=ui.row();bar.setBackground(shape(this,p.card,R_CARD));bar.setPadding(ui.dp(S1),ui.dp(S1),ui.dp(S1),ui.dp(S1));
             bar.addView(ui.action(R.drawable.ic_copy,"Copiar",v->copy()),new LinearLayout.LayoutParams(0,-2,1));
             bar.addView(ui.action(R.drawable.ic_share,"Compartir",v->shareText()),new LinearLayout.LayoutParams(0,-2,1));

@@ -40,6 +40,16 @@ final class Sheet {
         row.setOnClickListener(v->{Diagnostics.event("ui_action",null,"screen",activity.getClass().getSimpleName(),"action",label);dialog.dismiss();run.run();});
         list.addView(row,Ui.fill());return this;
     }
+    /** Opción grande de dos líneas (ícono en círculo tonal + título + explicación), para decisiones importantes. */
+    Sheet option(int icon,String label,String detail,Runnable run){
+        if(list==null){list=ui.column();LinearLayout.LayoutParams lp=Ui.fill();lp.setMargins(-ui.dp(S6),0,-ui.dp(S6),0);body.addView(list,lp);}
+        LinearLayout row=ui.row();row.setMinimumHeight(ui.dp(72));row.setPadding(ui.dp(S6),ui.dp(S3),ui.dp(S6),ui.dp(S3));
+        row.addView(ui.tile(icon,ui.p.onSecondaryContainer,ui.p.secondaryContainer,40,22));row.addView(ui.space(S4));
+        LinearLayout texts=ui.column();texts.addView(ui.text(label,Type.TITLE_MEDIUM,ui.p.onSurface));TextView d=ui.text(detail,Type.BODY_MEDIUM,ui.p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);texts.addView(d);row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
+        row.setBackground(ui.ripple(null,0));row.setClickable(true);row.setFocusable(true);row.setContentDescription(label+". "+detail);row.setAccessibilityDelegate(Ui.buttonRole());
+        row.setOnClickListener(v->{Diagnostics.event("ui_action",null,"screen",activity.getClass().getSimpleName(),"action",label);dialog.dismiss();run.run();});
+        list.addView(row,Ui.fill());return this;
+    }
     /** Opción de selección única con botón de radio (patrón de Material para elegir uno entre varios). */
     Sheet choice(String label,String detail,boolean selected,Runnable run){
         if(list==null){list=ui.column();LinearLayout.LayoutParams lp=Ui.fill();lp.setMargins(-ui.dp(S6),0,-ui.dp(S6),0);body.addView(list,lp);}

@@ -9,7 +9,9 @@ import java.io.File;
 
 /** Device integration test. Run only on a disposable emulator with microphone permission granted. */
 public class RecorderSmokeTest extends Instrumentation {
-    @Override public void onCreate(Bundle args) { super.onCreate(args); start(); }
+    /** {@code -e long false} skips the one-hour import fixture in LongImportChecks. */
+    private boolean longChecks = true;
+    @Override public void onCreate(Bundle args) { super.onCreate(args); longChecks = args == null || !"false".equals(args.getString("long")); start(); }
     private void check(boolean value, String message) { if (!value) throw new AssertionError(message); }
     private void command(Context context, String action) {
         runOnMainSync(() -> {
@@ -17,6 +19,12 @@ public class RecorderSmokeTest extends Instrumentation {
             if (action.equals("START")) context.startForegroundService(intent); else context.startService(intent);
         });
         waitForIdleSync();
+    }
+    /** onStartCommand arrives asynchronously, so waitForIdleSync alone can return before the toggle is applied. */
+    private void waitForPaused(boolean expected) throws InterruptedException {
+        long deadline = SystemClock.elapsedRealtime() + 3000;
+        while (RecorderService.paused != expected && SystemClock.elapsedRealtime() < deadline) Thread.sleep(50);
+        check(RecorderService.paused == expected, "Recorder did not " + (expected ? "pause" : "resume"));
     }
     @Override public void onStart() {
         Bundle report = new Bundle();
@@ -28,9 +36,9 @@ public class RecorderSmokeTest extends Instrumentation {
             check(RecorderService.activeId != null, "Recorder did not start: " + RecorderService.error);
             String id = RecorderService.activeId;
             check(Recording.list(c).stream().noneMatch(r -> r.id.equals(id)), "Active recording exposed in library");
-            command(c, "PAUSE"); long pausedAt = RecorderService.elapsed(); Thread.sleep(700);
+            command(c, "PAUSE"); waitForPaused(true); long pausedAt = RecorderService.elapsed(); Thread.sleep(700);
             check(RecorderService.paused && RecorderService.elapsed() == pausedAt, "Pause counted elapsed time");
-            command(c, "PAUSE"); Thread.sleep(900);
+            command(c, "PAUSE"); waitForPaused(false); Thread.sleep(900);
             check(!RecorderService.paused && RecorderService.elapsed() >= pausedAt + 700, "Resume did not advance timer");
             getUiAutomation().executeShellCommand("input keyevent KEYCODE_HOME").close(); Thread.sleep(600);
             check(RecorderService.activeId != null, "Recording stopped when app went to background");
@@ -64,7 +72,11 @@ public class RecorderSmokeTest extends Instrumentation {
             check(disposable.delete(c) && !disposable.audio(c).exists(), "Deletion failed");
             check("1:01:01".equals(Recording.time(3661000)), "Long duration format failed");
             FeatureChecks.run(c,r);
-            report.putString("stream", "PASS: recorder regression, pre-recording title, Keystore credentials, diarization multipart contract, speaker naming persistence, block speaker isolation, HTTP error classification, valid long-audio splitting. Live API credentials were not used.\n");
+            ExportChecks.run(c,r);
+            long longStarted = SystemClock.elapsedRealtime();
+            if (longChecks) LongImportChecks.run(c,r);
+            String longResult = longChecks ? "one-hour AAC import/crop/cancel, WAV import, interrupted-import recovery (" + (SystemClock.elapsedRealtime() - longStarted) / 1000 + " s)" : "one-hour import checks SKIPPED (-e long false)";
+            report.putString("stream", "PASS: recorder regression, pre-recording title, Keystore credentials, diarization multipart contract, speaker naming persistence, block speaker isolation, HTTP error classification, valid long-audio splitting, TXT export names/content/provider safety, " + longResult + ". Live API credentials were not used.\n");
             finish(Activity.RESULT_OK, report);
         } catch (Throwable error) {
             report.putString("stream", "FAIL: " + android.util.Log.getStackTraceString(error));

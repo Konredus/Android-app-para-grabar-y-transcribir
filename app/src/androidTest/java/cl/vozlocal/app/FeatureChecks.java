@@ -64,5 +64,42 @@ final class FeatureChecks {
         List<AudioParts.Part> parts=AudioParts.prepare(c,r,new HttpApi(),1,1000);double previous=-1;
         assertThat(parts.size()>1,"Large recording split path not exercised");
         for(AudioParts.Part part:parts){assertThat(part.offset>previous && part.file.length()>0,"Audio part missing or out of order");previous=part.offset;try(android.media.MediaMetadataRetriever m=new android.media.MediaMetadataRetriever()){m.setDataSource(part.file.getPath());assertThat(m.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)!=null,"Split M4A invalid");}part.file.delete();}
+        blocksAndModels(c,r,response);
+    }
+    /** 0.4.2: modelo rápido, muestras de voz entre bloques, tramos, pausas y costos. */
+    static void blocksAndModels(Context c,Recording r,JSONObject diarized)throws Exception{
+        // gpt-transcribe: languages[] (no "language"), streaming y sin opciones de voces.
+        HttpApi fast=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra)throws Exception{
+            ByteArrayOutputStream out=new ByteArrayOutputStream();body.write(out);String payload=out.toString("ISO-8859-1");
+            assertThat(payload.contains("name=\"model\"\r\n\r\ngpt-transcribe\r\n"),"Fast model not sent");
+            assertThat(payload.contains("name=\"languages[]\"\r\n\r\nes")&&!payload.contains("name=\"language\""),"gpt-transcribe must use languages[] only");
+            assertThat(payload.contains("name=\"stream\"\r\n\r\ntrue")&&!payload.contains("diarized_json"),"Streaming/diarization options wrong for fast model");
+            return new Response(200,"{\"type\":\"transcript.text.done\",\"text\":\"Hola mundo\",\"usage\":{\"type\":\"tokens\",\"input_tokens\":120,\"output_tokens\":8}}",null);
+        }};
+        JSONObject quick=new OpenAiClient(fast).transcribe(r.audio(c),new ProviderConfig("openai","https://api.openai.com/v1","gpt-transcribe","k",false),"es",null,chars->{});
+        assertThat(quick.getJSONArray("segments").getJSONObject(0).getString("text").equals("Hola mundo")&&quick.getJSONObject("usage").getLong("input_tokens")==120,"Fast model response not parsed");
+        // Diarize con muestras de voz: se envían nombres y data URLs.
+        HttpApi refs=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra)throws Exception{
+            ByteArrayOutputStream out=new ByteArrayOutputStream();body.write(out);String payload=out.toString("ISO-8859-1");
+            assertThat(payload.contains("name=\"known_speaker_names[]\"\r\n\r\nA")&&payload.contains("name=\"known_speaker_references[]\"\r\n\r\ndata:audio/mp4;base64,"),"Speaker references not sent");
+            return new Response(200,diarized.toString(),null);
+        }};
+        new OpenAiClient(refs).transcribe(r.audio(c),new ProviderConfig("openai","https://api.openai.com/v1","gpt-4o-transcribe-diarize","k",true),"es",Collections.singletonList(new String[]{"A","data:audio/mp4;base64,AAAA"}),null);
+        // Bloque 2 reconoce a "A" (muestra de voz) → misma persona que en el bloque 1; "C" es nueva.
+        JSONObject second=new JSONObject("{\"_known\":[\"A\"],\"segments\":[{\"speaker\":\"A\",\"start\":0,\"end\":1,\"text\":\"Sigo yo\"},{\"speaker\":\"C\",\"start\":1,\"end\":2,\"text\":\"Hola\"}]}");
+        Transcript merged=Transcript.fromParts(Arrays.asList(diarized,second),Arrays.asList(0d,300d));
+        assertThat(merged.speakers().size()==3&&merged.segments().getJSONObject(3).getString("speaker").equals("block0:A"),"Known speaker not unified across blocks");
+        // Tramo sin recodificar y búsqueda de pausa dentro del rango.
+        File range=new File(c.getCacheDir(),"test-range.m4a");AudioParts.remuxRange(r.audio(c),range,500,2000,new HttpApi());
+        assertThat(Math.abs(AudioConvert.duration(range)-1500)<400,"Range remux duration wrong");range.delete();
+        long q=AudioParts.quietest(r.audio(c),1500,1000,new HttpApi());assertThat(q>=400&&q<=2600,"Quiet point outside search window");
+        // Costos y selección de modelo según la elección de voces.
+        assertThat(Math.abs(Pricing.estimate("gpt-transcribe",60_000)-0.0045)<1e-9&&Pricing.estimate("custom-model",60_000)<0,"Pricing estimate wrong");
+        assertThat(Pricing.usd(0.0123).equals("US$0,012"),"Currency format wrong");
+        Settings settings=new Settings(c);String provider=settings.provider();
+        try{settings.prefs.edit().putString("provider","openai").remove("openaiTextModel").commit();
+            assertThat(settings.config(false).model.equals("gpt-transcribe")&&!settings.config(false).speakers,"Default text model should be gpt-transcribe");
+            assertThat(settings.config(true).model.equals("gpt-4o-transcribe-diarize")&&settings.config(true).speakers,"Speaker model wrong");
+        }finally{settings.prefs.edit().putString("provider",provider).commit();}
     }
 }

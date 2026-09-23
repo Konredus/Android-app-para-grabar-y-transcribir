@@ -17,15 +17,17 @@ import static cl.vozlocal.app.AppTheme.*;
  * Nada de desplegables ni textos largos en pantalla: la explicación vive en el pie de cada grupo.
  */
 public class SettingsActivity extends Screen {
-    static final String[] MODELS={"gpt-4o-transcribe-diarize","gpt-4o-transcribe","gpt-4o-mini-transcribe","whisper-1"};
-    static final String[] MODEL_NAMES={"GPT-4o Diarize","GPT-4o Transcribe","GPT-4o Mini","Whisper"};
-    static final String[] MODEL_DETAILS={"Separa voces · ideal para conversaciones","Texto de alta calidad, sin separar voces","Más económico, sin separar voces","Modelo clásico, sin separar voces"};
+    /** Modelos para transcribir SIN separar voces. Para separar voces siempre se usa gpt-4o-transcribe-diarize. */
+    static final String[] MODELS={"gpt-transcribe","gpt-4o-transcribe","gpt-4o-mini-transcribe","whisper-1"};
+    static final String[] MODEL_NAMES={"GPT Transcribe","GPT-4o Transcribe","GPT-4o Mini","Whisper"};
+    static final String[] MODEL_DETAILS={"Recomendado · el más nuevo, rápido y con texto en vivo","Alta calidad","El más económico","Modelo clásico"};
+    static final String[] SPEAKER_MODES={"ask","always","never"},SPEAKER_NAMES={"Preguntar cada vez","Siempre","Nunca"};
     private static final int PICK_FOLDER=51;
     private Settings settings;private final ExecutorService io=Executors.newSingleThreadExecutor();private HttpApi http;
     private Ui.Row folderRow;
 
-    static String modelName(Settings s){if(!s.provider().equals("openai"))return s.prefs.getString("customModel","personalizado");int i=Arrays.asList(MODELS).indexOf(s.prefs.getString("openaiModel",MODELS[0]));return MODEL_NAMES[Math.max(0,i)];}
-    static String modelSummary(Settings s){return (s.provider().equals("openai")?"OpenAI":"tu servidor")+" · "+modelName(s);}
+    static String modelName(Settings s){if(!s.provider().equals("openai"))return s.prefs.getString("customModel","personalizado");int i=Arrays.asList(MODELS).indexOf(s.textModel());return i<0?s.textModel():MODEL_NAMES[i];}
+    static String modelSummary(Settings s){if(!s.provider().equals("openai"))return "Tu servidor · "+modelName(s);return "OpenAI · "+modelName(s)+(s.speakersMode().equals("never")?"":" + separación de voces");}
 
     @Override public void onCreate(Bundle state){
         super.onCreate(state);settings=new Settings(this);render();
@@ -41,14 +43,15 @@ public class SettingsActivity extends Screen {
         page.addView(ui.section("Transcripción"));LinearLayout api=ui.group();page.addView(api,Ui.fill());
         boolean openai=settings.provider().equals("openai");
         ui.addRow(api,ui.listRow(R.drawable.ic_globe,"Proveedor",null,openai?"OpenAI":"Personalizado").onClick(v->providerSheet()));
-        if(openai)ui.addRow(api,ui.listRow(R.drawable.ic_sparkle,"Modelo",null,modelName(settings)).onClick(v->modelSheet()));
+        if(openai)ui.addRow(api,ui.listRow(R.drawable.ic_sparkle,"Modelo de texto",null,modelName(settings)).onClick(v->modelSheet()));
+        if(settings.canSeparate())ui.addRow(api,ui.listRow(R.drawable.ic_people,"Separar voces",null,SPEAKER_NAMES[Math.max(0,Arrays.asList(SPEAKER_MODES).indexOf(settings.speakersMode()))]).onClick(v->speakersSheet()));
         else ui.addRow(api,ui.listRow(R.drawable.ic_server,"Servidor y modelo",settings.prefs.getString("customBase","Sin configurar"),null).onClick(v->custom()));
         ui.addRow(api,ui.listRow(R.drawable.ic_key,"Clave de API",null,settings.hasKey()?"Configurada":"Falta").onClick(v->keySheet()));
         Ui.Row verify=ui.listRow(R.drawable.ic_check_circle,"Comprobar conexión",null,null);verify.onClick(v->verify(verify));ui.addRow(api,verify);
         ui.addRow(api,ui.listRow(R.drawable.ic_chat,"Idioma del audio",null,settings.language().equals("es")?"Español":"Automático").onClick(v->
             sheet("Idioma del audio","Indicar el idioma mejora la precisión.").choice("Español",null,settings.language().equals("es"),()->set("language","es"))
                 .choice("Detección automática","Para audios en otros idiomas o mezclados",!settings.language().equals("es"),()->set("language","")).show()));
-        page.addView(ui.footnote(openai?"Solo GPT-4o Diarize separa voces (Persona 1, Persona 2…). El uso se cobra en tu cuenta de OpenAI; la clave se guarda cifrada en este teléfono.":"Tu servidor debe implementar /audio/transcriptions compatible con OpenAI. La clave se guarda cifrada en este teléfono."));
+        page.addView(ui.footnote(openai?"El modelo de texto se usa cuando no separas voces. Para separar voces (Persona 1, Persona 2…) se usa GPT-4o Diarize. El uso se cobra en tu cuenta de OpenAI; la clave se guarda cifrada en este teléfono.":"Tu servidor debe implementar /audio/transcriptions compatible con OpenAI. La clave se guarda cifrada en este teléfono."));
 
         // Automatización
         page.addView(ui.section("Automatización"));LinearLayout auto=ui.group();page.addView(auto,Ui.fill());
@@ -98,8 +101,11 @@ public class SettingsActivity extends Screen {
     private void providerSheet(){boolean openai=settings.provider().equals("openai");
         sheet("Proveedor","Cada proveedor usa su propia clave.").choice("OpenAI","Recomendado · separación de voces",openai,()->set("provider","openai"))
             .choice("Servidor compatible","Cualquier API con /audio/transcriptions",!openai,()->set("provider","custom")).show();}
-    private void modelSheet(){String current=settings.prefs.getString("openaiModel",MODELS[0]);Sheet s=sheet("Modelo","Si un audio falla, probar otro modelo puede ayudar. Las transcripciones guardadas no cambian.");
-        for(int i=0;i<MODELS.length;i++){String m=MODELS[i];s.choice(MODEL_NAMES[i],MODEL_DETAILS[i],m.equals(current),()->set("openaiModel",m));}s.show();}
+    private void modelSheet(){String current=settings.textModel();Sheet s=sheet("Modelo de texto","Se usa cuando no separas voces. Si un audio falla, probar otro modelo puede ayudar.");
+        for(int i=0;i<MODELS.length;i++){String m=MODELS[i];double rate=Pricing.perMinute(m);s.choice(MODEL_NAMES[i],MODEL_DETAILS[i]+(rate>0?" · "+Pricing.usd(rate)+"/min":""),m.equals(current),()->set("openaiTextModel",m));}s.show();}
+    private void speakersSheet(){String current=settings.speakersMode();Sheet s=sheet("Separar voces","Separar voces identifica a cada persona (Persona 1, Persona 2…), pero es más lento.");
+        String[] details={"Te preguntamos al transcribir cada audio","Para reuniones y conversaciones","Solo texto: más rápido y económico"};
+        for(int i=0;i<3;i++){String m=SPEAKER_MODES[i];s.choice(SPEAKER_NAMES[i],details[i]+(i==0?" (la transcripción automática separa voces)":""),m.equals(current),()->set("speakersMode",m));}s.show();}
     private void keySheet(){
         if(settings.hasKey()){sheet("Clave de API","Configurada y cifrada en este teléfono. Nunca aparece en informes.")
             .action(R.drawable.ic_edit,"Reemplazar clave",false,this::keyInput).action(R.drawable.ic_trash,"Eliminar clave",true,()->confirm("¿Eliminar la clave?","Las transcripciones pendientes quedarán en espera hasta que agregues otra.","Eliminar",true,()->{try{settings.saveKey("");getSystemService(JobScheduler.class).cancel(Pipeline.JOB_ID);render();}catch(Exception e){message("Clave","No se pudo eliminar.");}})).show();return;}
