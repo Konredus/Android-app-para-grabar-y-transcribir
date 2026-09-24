@@ -10,7 +10,9 @@ final class AudioConvert {
     interface Progress { void update(String stage,long positionMs,long totalMs); }
     static long duration(File file)throws Exception{try(MediaMetadataRetriever m=new MediaMetadataRetriever()){m.setDataSource(file.getPath());return Long.parseLong(m.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION));}}
     static void convert(File source,File target,long startMs,long endMs,HttpApi cancel)throws Exception{convert(source,target,startMs,endMs,cancel,(s,p,t)->{});}
-    static void convert(File source,File target,long startMs,long endMs,HttpApi cancel,Progress progress)throws Exception{
+    static void convert(File source,File target,long startMs,long endMs,HttpApi cancel,Progress progress)throws Exception{convert(source,target,startMs,endMs,cancel,progress,96000);}
+    /** bitrate: 96 kbps conserva la calidad; 32 kbps basta para voz y reduce ~3× el envío con datos móviles. */
+    static void convert(File source,File target,long startMs,long endMs,HttpApi cancel,Progress progress,int bitrate)throws Exception{
         if(source.getCanonicalFile().equals(target.getCanonicalFile()))throw new IOException("Source must be preserved");
         long length=duration(source);if(startMs<0||endMs-startMs<500||endMs>length+100)throw new IOException("Invalid audio interval");
         MediaExtractor extractor=new MediaExtractor();MediaCodec decoder=null,encoder=null;MediaMuxer muxer=null;boolean muxStarted=false,success=false;
@@ -20,7 +22,7 @@ final class AudioConvert {
             if(track<0)throw new IOException("No audio track");extractor.selectTrack(track);
             // A full AAC recording already has the format we need. Repacking its samples avoids
             // decoding and encoding an hour of audio, and preserves the original sound quality.
-            if("audio/mp4a-latm".equals(sourceFormat.getString(MediaFormat.KEY_MIME))&&startMs==0&&endMs>=length-100){
+            if(bitrate>=96000&&"audio/mp4a-latm".equals(sourceFormat.getString(MediaFormat.KEY_MIME))&&startMs==0&&endMs>=length-100){
                 remux(extractor,sourceFormat,target,length,cancel,progress);success=true;return;
             }
             if(startMs>0)extractor.seekTo(startMs*1000,MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
@@ -35,7 +37,7 @@ final class AudioConvert {
                 if(pending==null&&!decodeEnd){int output=decoder.dequeueOutputBuffer(decoded,1000);
                     if(output==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED){MediaFormat pcm=decoder.getOutputFormat();rate=pcm.getInteger(MediaFormat.KEY_SAMPLE_RATE);channels=pcm.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
                         if(channels<1||channels>2||(pcm.containsKey(MediaFormat.KEY_PCM_ENCODING)&&pcm.getInteger(MediaFormat.KEY_PCM_ENCODING)!=AudioFormat.ENCODING_PCM_16BIT))throw new IOException("Unsupported PCM");
-                        if(encoder!=null)throw new IOException("Audio format changed");MediaFormat aac=MediaFormat.createAudioFormat("audio/mp4a-latm",rate,channels);aac.setInteger(MediaFormat.KEY_AAC_PROFILE,MediaCodecInfo.CodecProfileLevel.AACObjectLC);aac.setInteger(MediaFormat.KEY_BIT_RATE,96000);aac.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE,16384);encoder=MediaCodec.createEncoderByType("audio/mp4a-latm");encoder.configure(aac,null,null,MediaCodec.CONFIGURE_FLAG_ENCODE);encoder.start();
+                        if(encoder!=null)throw new IOException("Audio format changed");MediaFormat aac=MediaFormat.createAudioFormat("audio/mp4a-latm",rate,channels);aac.setInteger(MediaFormat.KEY_AAC_PROFILE,MediaCodecInfo.CodecProfileLevel.AACObjectLC);aac.setInteger(MediaFormat.KEY_BIT_RATE,bitrate);aac.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE,16384);encoder=MediaCodec.createEncoderByType("audio/mp4a-latm");encoder.configure(aac,null,null,MediaCodec.CONFIGURE_FLAG_ENCODE);encoder.start();
                     }else if(output>=0){
                         if(decoded.size>0){if(encoder==null)throw new IOException("Missing PCM format");int frameBytes=channels*2;long begin=Math.max(0,(startMs*1000-decoded.presentationTimeUs)*rate/1_000_000);long finish=Math.min(decoded.size/frameBytes,(endMs*1000-decoded.presentationTimeUs)*rate/1_000_000);
                             if(finish>begin){ByteBuffer pcm=decoder.getOutputBuffer(output);pcm.position(decoded.offset+(int)begin*frameBytes);pending=new byte[(int)(finish-begin)*frameBytes];pcm.get(pending);position=0;}

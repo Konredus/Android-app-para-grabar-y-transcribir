@@ -1,64 +1,163 @@
 package cl.vozlocal.app;
 
-import android.app.*;
+import android.app.job.JobScheduler;
 import android.content.*;
 import android.net.Uri;
 import android.os.*;
+import android.provider.DocumentsContract;
+import android.text.InputType;
 import android.view.*;
 import android.widget.*;
-import android.text.InputType;
+import java.util.Arrays;
 import java.util.concurrent.*;
+import static cl.vozlocal.app.AppTheme.*;
 
+/**
+ * Ajustes como lista agrupada: cada fila muestra su valor actual a la derecha y abre una hoja para cambiarlo.
+ * Nada de desplegables ni textos largos en pantalla: la explicación vive en el pie de cada grupo.
+ */
 public class SettingsActivity extends Screen {
-    private Settings settings;private TextView keyStatus,folderStatus;private Button keyButton;
-    private final ExecutorService io=Executors.newSingleThreadExecutor();private HttpApi http;
-    @Override public void onCreate(Bundle state){super.onCreate(state);settings=new Settings(this);render();}
-    private void render(){
-        setup("Ajustes","Todo se guarda en tu teléfono. El audio solo sale al transcribir con el proveedor que elijas.");
-        LinearLayout appearance=card("Apariencia");
-        String mode=AppTheme.appearance(this);choice(appearance,"Tema",new String[]{"Usar el del teléfono","Claro","Oscuro"},mode.equals("dark")?2:mode.equals("light")?1:0,index->{settings.prefs.edit().putString("appearance",new String[]{"system","light","dark"}[index]).apply();recreate();});
-        help(appearance,"El tema se aplica también a la biblioteca, las transcripciones y los controles de importación.");
-        LinearLayout api=card("Proveedor y modelo");
-        choice(api,"Proveedor",new String[]{"OpenAI","API compatible personalizada"},settings.provider().equals("openai")?0:1,index->{settings.prefs.edit().putString("provider",index==0?"openai":"custom").apply();Pipeline.schedule(this,true);render();});
-        if(settings.provider().equals("openai")){
-            String[] models={"gpt-4o-transcribe-diarize","gpt-4o-transcribe","gpt-4o-mini-transcribe","whisper-1"};int selected=java.util.Arrays.asList(models).indexOf(settings.prefs.getString("openaiModel",models[0]));
-            choice(api,"Modelo",new String[]{"Separar voces · GPT-4o Diarize","Texto · GPT-4o Transcribe","Texto · GPT-4o Mini","Texto · Whisper"},Math.max(0,selected),index->{settings.prefs.edit().putString("openaiModel",models[index]).apply();Pipeline.schedule(this,true);});
-            help(api,"Solo Diarize separa hablantes en esta integración. Cambiar el modelo afecta a los próximos trabajos; las transcripciones guardadas se conservan.");
-        }else{
-            help(api,"Requiere /audio/transcriptions compatible con OpenAI. Una API de chat por sí sola no sirve para transcribir. Cada proveedor puede admitir formatos y funciones diferentes.");
-            Button endpoint=button("Configurar servidor y modelo",false);endpoint.setOnClickListener(v->custom());api.addView(endpoint);
-        }
-        keyStatus=text("",14,GREEN);api.addView(keyStatus);
-        keyButton=button("",false);keyButton.setOnClickListener(v->keyDialog());api.addView(keyButton);
-        Button verify=button("Comprobar conexión",true);verify.setOnClickListener(v->{if(!settings.hasKey()){message("Falta la clave","Configura una clave para este proveedor.");return;}background(verify,()->{new OpenAiClient(http).verify(settings.config());return "El servidor respondió y reconoce el modelo. Esto no prueba todavía la carga de audio, el saldo ni la separación de voces. Algunos servidores compatibles no publican /models y requieren probar con un audio.";});});api.addView(verify);
-        Button remove=button("Eliminar clave",false);remove.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("¿Eliminar la clave de este proveedor?").setNegativeButton("Cancelar",null).setPositiveButton("Eliminar",(d,w)->{try{settings.saveKey("");getSystemService(android.app.job.JobScheduler.class).cancel(Pipeline.JOB_ID);refresh();}catch(Exception e){message("Clave","No se pudo eliminar.");}}).show());api.addView(remove);
-        choice(api,"Idioma",new String[]{"Español","Detección automática"},settings.language().equals("es")?0:1,index->settings.prefs.edit().putString("language",index==0?"es":"").apply());
-        LinearLayout timing=card("Cuándo transcribir");toggle(timing,"Transcribir al guardar o importar","automatic",settings.automatic());
-        choice(timing,"Conexión permitida",new String[]{"Solo Wi-Fi / red no medida","También datos móviles"},settings.wifiOnly()?0:1,index->{settings.prefs.edit().putBoolean("wifi",index==0).apply();Pipeline.schedule(this,true);});
-        toggle(timing,"Solo mientras está cargando","charging",settings.charging());
-        help(timing,"También se aplica al envío manual. Con batería baja el trabajo espera. Android puede retrasar las tareas en segundo plano. El uso de la API se cobra en tu cuenta.");
-        LinearLayout storage=card("Carpeta del teléfono");folderStatus=text("",14,MUTED);storage.addView(folderStatus);
-        Button folder=button("Elegir o crear carpeta",false);folder.setOnClickListener(v->{Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);startActivityForResult(pick,51);});storage.addView(folder);
-        Button copy=button("Actualizar copias de la biblioteca",false);copy.setOnClickListener(v->{for(Recording r:Recording.list(this))LocalStorage.enqueue(this,r.id);message("Copia local","Se actualizará la carpeta elegida. Puedes ver el resultado de cada copia en la biblioteca.");});storage.addView(copy);
-        Button unlink=button("Dejar de copiar a esa carpeta",false);unlink.setOnClickListener(v->{String old=settings.prefs.getString("localTree","");settings.prefs.edit().remove("localTree").apply();if(!old.isEmpty())try{getContentResolver().releasePersistableUriPermission(Uri.parse(old),Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);}catch(Exception ignored){}refresh();});storage.addView(unlink);
-        help(storage,"Elige una carpeta del almacenamiento del dispositivo. Android permite crearla y ponerle nombre. Cada grabación tendrá una subcarpeta con audio, título y transcripción. La app conserva su propia copia: se pierde al desinstalar, pero la carpeta elegida se conserva. Borrar una grabación no borra estas copias.");
-        LinearLayout recording=card("Grabación");toggle(recording,"Preguntar un título antes de grabar","askTitle",settings.askTitle());
-        LinearLayout practice=card("Pruebas y ayuda");help(practice,"Explora una transcripción de ejemplo y cambia los nombres de sus hablantes. No usa tu clave ni consume API.");
-        Button demo=button("Probar edición de hablantes",false);demo.setOnClickListener(v->startActivity(new Intent(this,TranscriptActivity.class).putExtra("demo",true)));practice.addView(demo);
-        LinearLayout dev=card("Diagnóstico y soporte");help(dev,"Registro técnico local: botones, pantallas, etapas, tiempos, códigos de error y reintentos. Máximo aproximado 4 MB; el informe incluye los últimos 30 días disponibles. No contiene claves, títulos, audio ni texto transcrito. No se envía automáticamente.");
-        Button report=button("Compartir informe de soporte",false);report.setOnClickListener(v->{report.setEnabled(false);io.execute(()->{try{Diagnostics.export(this);runOnUiThread(()->{report.setEnabled(true);shareFile("support.txt","Informe de soporte");});}catch(Exception e){runOnUiThread(()->{report.setEnabled(true);message("Informe","No se pudo generar el informe.");});}});});dev.addView(report);
-        Button clear=button("Borrar registros de diagnóstico",false);clear.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("¿Borrar los registros locales?").setNegativeButton("Cancelar",null).setPositiveButton("Borrar",(d,w)->{Diagnostics.clear(this);message("Registros borrados","Las grabaciones se conservan.");}).show());dev.addView(clear);
+    /** Modelos para transcribir SIN separar voces. Para separar voces siempre se usa gpt-4o-transcribe-diarize. */
+    static final String[] MODELS={"gpt-transcribe","gpt-4o-transcribe","gpt-4o-mini-transcribe","whisper-1"};
+    static final String[] MODEL_NAMES={"GPT Transcribe","GPT-4o Transcribe","GPT-4o Mini","Whisper"};
+    static final String[] MODEL_DETAILS={"Recomendado · el más nuevo, rápido y con texto en vivo","Alta calidad","El más económico","Modelo clásico"};
+    static final String[] SPEAKER_MODES={"ask","always","never"},SPEAKER_NAMES={"Preguntar cada vez","Siempre","Nunca"};
+    private static final int PICK_FOLDER=51;
+    private Settings settings;private final ExecutorService io=Executors.newSingleThreadExecutor();private HttpApi http;
+    private Ui.Row folderRow;
 
-        help(page,"Voz local 0.4.0 · Software libre · Licencia MIT");refresh();
+    static String modelName(Settings s){if(!s.provider().equals("openai"))return s.prefs.getString("customModel","personalizado");int i=Arrays.asList(MODELS).indexOf(s.textModel());return i<0?s.textModel():MODEL_NAMES[i];}
+    static String modelSummary(Settings s){if(!s.provider().equals("openai"))return "Tu servidor · "+modelName(s);return "OpenAI · "+modelName(s)+(s.speakersMode().equals("never")?"":" + separación de voces");}
+
+    @Override public void onCreate(Bundle state){
+        super.onCreate(state);settings=new Settings(this);render();
+        if(state==null&&getIntent().getBooleanExtra("focusKey",false)&&!settings.hasKey())page.post(this::keySheet);
     }
-    private void refresh(){keyStatus.setText(settings.hasKey()?"Clave configurada · cifrada en este teléfono":"Sin clave para este proveedor");keyButton.setText(settings.hasKey()?"Cambiar clave":"Ingresar clave de API");String tree=settings.prefs.getString("localTree","");folderStatus.setText(tree.isEmpty()?"Solo almacenamiento privado de la app":"Carpeta: "+android.provider.DocumentsContract.getTreeDocumentId(Uri.parse(tree)));}
-    private void keyDialog(){LinearLayout box=column();box.setPadding(dp(24),dp(8),dp(24),dp(8));EditText input=input(box,"Clave de API","Pega tu clave");input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);input.setSaveEnabled(false);input.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);help(box,"La clave se guarda cifrada. Nunca aparecerá en los informes.");AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Configurar clave").setView(box).setNegativeButton("Cancelar",null).setPositiveButton("Guardar",null).create();dialog.setOnShowListener(d->dialog.getButton(-1).setOnClickListener(v->{try{if(input.length()==0){input.setError("Ingresa una clave");return;}settings.saveKey(input.getText().toString());input.setText("");refresh();dialog.dismiss();}catch(Exception e){input.setError("No se pudo guardar. Comprueba que no haya espacios.");}}));dialog.show();dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);}
-    private void custom(){LinearLayout box=column();box.setPadding(dp(24),0,dp(24),0);EditText base=input(box,"URL base HTTPS","https://proveedor.com/v1");base.setText(settings.prefs.getString("customBase",""));EditText model=input(box,"Identificador del modelo","modelo-de-transcripcion");model.setText(settings.prefs.getString("customModel",""));CheckBox voices=new CheckBox(this);voices.setText("Admite diarized_json y chunking_strategy");voices.setChecked(settings.prefs.getBoolean("customSpeakers",false));box.addView(voices);help(box,"Enviarás audio y tu clave al servidor indicado. Al cambiar de servidor se elimina su clave anterior para que ingreses la correspondiente.");AlertDialog dialog=new AlertDialog.Builder(this).setTitle("API compatible").setView(box).setNegativeButton("Cancelar",null).setPositiveButton("Guardar",null).create();dialog.setOnShowListener(d->dialog.getButton(-1).setOnClickListener(v->{try{ProviderConfig config=new ProviderConfig("custom",base.getText().toString().trim(),model.getText().toString().trim(),"",voices.isChecked());if(!config.base.equals(settings.prefs.getString("customBase","")))settings.saveKey("");settings.prefs.edit().putString("customBase",config.base).putString("customModel",config.model).putBoolean("customSpeakers",config.speakers).apply();Pipeline.schedule(this,true);dialog.dismiss();refresh();}catch(Exception e){base.setError("Usa una URL HTTPS sin credenciales ni parámetros y un modelo válido.");}}));dialog.show();}
-    @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==51&&result==RESULT_OK&&data!=null&&data.getData()!=null){try{Uri tree=data.getData();if((data.getFlags()&Intent.FLAG_GRANT_WRITE_URI_PERMISSION)==0)throw new SecurityException();getContentResolver().takePersistableUriPermission(tree,Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);settings.prefs.edit().putString("localTree",tree.toString()).apply();refresh();for(Recording r:Recording.list(this))LocalStorage.enqueue(this,r.id);}catch(Exception e){message("Carpeta","No se obtuvo permiso de escritura. Elige otra carpeta.");}}}
-    private void toggle(LinearLayout p,String label,String key,boolean initial){Switch s=new Switch(this);s.setText(label);s.setTextColor(INK);s.setTextSize(16);s.setMinHeight(dp(64));s.setChecked(initial);s.setOnCheckedChangeListener((b,on)->{settings.prefs.edit().putBoolean(key,on).apply();if(key.equals("automatic")&&on&&Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},101);Diagnostics.event("setting_changed",null,"action",key,"result",on);Pipeline.schedule(this,true);});p.addView(s);}
-    interface Choice{void select(int index);}
-    private void choice(LinearLayout p,String label,String[] options,int selected,Choice choice){label(p,label);Spinner spinner=new Spinner(this);spinner.setContentDescription(label);spinner.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,options));spinner.setSelection(selected);p.addView(spinner,new LinearLayout.LayoutParams(-1,dp(56)));spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){int previous=selected;public void onNothingSelected(AdapterView<?> a){}public void onItemSelected(AdapterView<?> a,View v,int index,long id){if(index!=previous){previous=index;Diagnostics.event("setting_changed",null,"action",label,"result",index);choice.select(index);}}});}
-    interface Task{String run()throws Exception;}
-    private void background(Button button,Task task){button.setEnabled(false);http=new HttpApi();io.execute(()->{String result;try{result=task.run();}catch(Exception e){result=e instanceof HttpApi.UserAction?e.getMessage():"No se pudo conectar. Revisa la URL y tu conexión.";}String value=result;runOnUiThread(()->{if(!isDestroyed()){button.setEnabled(true);message("Conexión",value);}});});}
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);if(intent.getBooleanExtra("focusKey",false)&&!settings.hasKey())keySheet();}
+    @Override public void onBackPressed(){navigate(0);}
+    private void render(){
+        shell(null,2);largeTitle(page,"Ajustes",null);
+        page.addView(statusCard(),Ui.fill());
+
+        // Transcripción
+        page.addView(ui.section("Transcripción"));LinearLayout api=ui.group();page.addView(api,Ui.fill());
+        boolean openai=settings.provider().equals("openai");
+        ui.addRow(api,ui.listRow(R.drawable.ic_globe,"Proveedor",null,openai?"OpenAI":"Personalizado").onClick(v->providerSheet()));
+        if(openai)ui.addRow(api,ui.listRow(R.drawable.ic_sparkle,"Modelo de texto",null,modelName(settings)).onClick(v->modelSheet()));
+        if(settings.canSeparate())ui.addRow(api,ui.listRow(R.drawable.ic_people,"Separar voces",null,SPEAKER_NAMES[Math.max(0,Arrays.asList(SPEAKER_MODES).indexOf(settings.speakersMode()))]).onClick(v->speakersSheet()));
+        else ui.addRow(api,ui.listRow(R.drawable.ic_server,"Servidor y modelo",settings.prefs.getString("customBase","Sin configurar"),null).onClick(v->custom()));
+        ui.addRow(api,ui.listRow(R.drawable.ic_key,"Clave de API",null,settings.hasKey()?"Configurada":"Falta").onClick(v->keySheet()));
+        Ui.Row verify=ui.listRow(R.drawable.ic_check_circle,"Comprobar conexión",null,null);verify.onClick(v->verify(verify));ui.addRow(api,verify);
+        ui.addRow(api,ui.listRow(R.drawable.ic_chat,"Idioma del audio",null,settings.language().equals("es")?"Español":"Automático").onClick(v->
+            sheet("Idioma del audio","Indicar el idioma mejora la precisión.").choice("Español",null,settings.language().equals("es"),()->set("language","es"))
+                .choice("Detección automática","Para audios en otros idiomas o mezclados",!settings.language().equals("es"),()->set("language","")).show()));
+        page.addView(ui.footnote(openai?"El modelo de texto se usa cuando no separas voces. Para separar voces (Persona 1, Persona 2…) se usa GPT-4o Diarize. El uso se cobra en tu cuenta de OpenAI; la clave se guarda cifrada en este teléfono.":"Tu servidor debe implementar /audio/transcriptions compatible con OpenAI. La clave se guarda cifrada en este teléfono."));
+
+        // Automatización
+        page.addView(ui.section("Automatización"));LinearLayout auto=ui.group();page.addView(auto,Ui.fill());
+        ui.addRow(auto,ui.switchRow(R.drawable.ic_bolt,"Transcribir automáticamente","Al guardar una grabación o importar un audio",settings.automatic(),on->{toggle("automatic",on);if(on&&Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},101);}));
+        ui.addRow(auto,ui.listRow(R.drawable.ic_wifi,"Red para enviar audio",null,settings.wifiOnly()?"Solo Wi-Fi":"Wi-Fi y datos").onClick(v->
+            sheet("Red para enviar audio","Los audios pueden pesar varios MB.").choice("Solo Wi-Fi","O cualquier red no medida",settings.wifiOnly(),()->{settings.prefs.edit().putBoolean("wifi",true).apply();changed("wifi");})
+                .choice("Wi-Fi y datos móviles","Empieza antes, usa tu plan de datos",!settings.wifiOnly(),()->{settings.prefs.edit().putBoolean("wifi",false).apply();changed("wifi");}).show()));
+        ui.addRow(auto,ui.switchRow(R.drawable.ic_battery,"Solo mientras carga",null,settings.charging(),on->toggle("charging",on)));
+        page.addView(ui.footnote("Aplica también cuando transcribes a mano. Con batería baja el trabajo espera; Android puede retrasarlo unos minutos."));
+
+        // Almacenamiento
+        page.addView(ui.section("Copias de tus archivos"));LinearLayout storage=ui.group();page.addView(storage,Ui.fill());
+        folderRow=ui.listRow(R.drawable.ic_folder,"Carpeta de copias",null,"Desactivada");folderRow.onClick(v->folderSheet());ui.addRow(storage,folderRow);refreshFolder();
+        page.addView(ui.footnote("Cada grabación se copia con su audio, información y transcripción. Puedes elegir una carpeta del teléfono o de Google Drive (si tienes su app). Borrar en Voz local no borra estas copias."));
+
+        // Grabación y apariencia
+        page.addView(ui.section("Grabación"));LinearLayout rec=ui.group();page.addView(rec,Ui.fill());
+        ui.addRow(rec,ui.switchRow(R.drawable.ic_title,"Resumen al terminar","Nombrar la grabación y elegir el siguiente paso",settings.askTitle(),on->toggle("askTitle",on)));
+        String mode=AppTheme.appearance(this);String[] modes={"system","light","dark"},modeNames={"Automático","Claro","Oscuro"};
+        page.addView(ui.section("Apariencia"));LinearLayout look=ui.group();page.addView(look,Ui.fill());
+        ui.addRow(look,ui.listRow(R.drawable.ic_palette,"Tema",null,modeNames[Math.max(0,Arrays.asList(modes).indexOf(mode))]).onClick(v->{
+            Sheet s=sheet("Tema",null);for(int i=0;i<3;i++){int k=i;s.choice(modeNames[i],i==0?"Igual que el teléfono":null,modes[i].equals(mode),()->{settings.prefs.edit().putString("appearance",modes[k]).apply();Diagnostics.event("setting_changed",null,"action","appearance","result",k);recreate();});}s.show();}));
+        if(Build.VERSION.SDK_INT>=31)ui.addRow(look,ui.switchRow(R.drawable.ic_sparkle,"Colores de tu fondo de pantalla","Material You · adapta la app a los colores del sistema",AppTheme.dynamicColor(this),on->{settings.prefs.edit().putBoolean("dynamicColor",on).apply();Diagnostics.event("setting_changed",null,"action","dynamic_color","result",on);page.postDelayed(this::recreate,200);}));
+
+        // Ayuda
+        page.addView(ui.section("Ayuda y soporte"));LinearLayout help=ui.group();page.addView(help,Ui.fill());
+        ui.addRow(help,ui.listRow(R.drawable.ic_people,"Probar edición de voces","Ejemplo sin usar la API",null).onClick(v->startActivity(new Intent(this,RecordingActivity.class).putExtra("demo",true))));
+        ui.addRow(help,ui.listRow(R.drawable.ic_lifebuoy,"Compartir informe de soporte","Sin claves, títulos, audio ni texto",null).onClick(v->report()));
+        Ui.Row clear=ui.listRow(R.drawable.ic_trash,"Borrar registros de diagnóstico",null,null);clear.title.setTextColor(p.error);clear.onClick(v->confirm("¿Borrar los registros locales?","Las grabaciones y transcripciones se conservan.","Borrar",true,()->{Diagnostics.clear(this);toast("Registros borrados");}));ui.addRow(help,clear);
+        page.addView(ui.footnote("El registro técnico queda solo en este teléfono (máx. ~4 MB, 30 días) y se comparte únicamente si tú lo envías."));
+        TextView version=ui.text("Voz local "+versionName()+" · Software libre · Licencia MIT",Type.BODY_MEDIUM,p.outline);version.setGravity(Gravity.CENTER);version.setPadding(0,ui.dp(S8),0,0);page.addView(version,Ui.fill());
+    }
+    /** Tarjeta de estado: tonal (secondaryContainer) si falta un paso, neutra si todo está listo. */
+    private View statusCard(){
+        boolean ready=settings.hasKey();LinearLayout card=ui.card();card.setOrientation(LinearLayout.HORIZONTAL);card.setGravity(Gravity.CENTER_VERTICAL);
+        int fg=ready?p.onSurface:p.onSecondaryContainer,fg2=ready?p.onSurfaceVariant:p.onSecondaryContainer;
+        card.addView(ui.tile(ready?R.drawable.ic_check:R.drawable.ic_key,ready?p.onPrimaryContainer:p.onSecondaryContainer,ready?p.primaryContainer:p.surfaceContainerLowest,40,22));card.addView(ui.space(S4));
+        LinearLayout t=ui.column();t.addView(ui.text(ready?"Listo para transcribir":"Falta un paso para transcribir",Type.TITLE_MEDIUM,fg));TextView d=ui.text(ready?modelSummary(settings):"Agrega tu clave de API. Grabar funciona igual sin ella.",Type.BODY_MEDIUM,fg2);d.setPadding(0,ui.dp(2),0,0);t.addView(d);card.addView(t,new LinearLayout.LayoutParams(0,-2,1));
+        if(!ready){card.setBackground(ui.ripple(shape(this,p.secondaryContainer,R_CARD),R_CARD));card.setClickable(true);card.setAccessibilityDelegate(Ui.buttonRole());card.setOnClickListener(v->keySheet());}
+        return card;
+    }
+    private String versionName(){try{return getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception e){return "";}}
+    private void set(String key,String value){settings.prefs.edit().putString(key,value).apply();changed(key);}
+    private void toggle(String key,boolean on){settings.prefs.edit().putBoolean(key,on).apply();Diagnostics.event("setting_changed",null,"action",key,"result",on);Pipeline.schedule(this,true);}
+    private void changed(String key){Diagnostics.event("setting_changed",null,"action",key);Pipeline.schedule(this,true);render();}
+
+    private void providerSheet(){boolean openai=settings.provider().equals("openai");
+        sheet("Proveedor","Cada proveedor usa su propia clave.").choice("OpenAI","Recomendado · separación de voces",openai,()->set("provider","openai"))
+            .choice("Servidor compatible","Cualquier API con /audio/transcriptions",!openai,()->set("provider","custom")).show();}
+    private void modelSheet(){String current=settings.textModel();Sheet s=sheet("Modelo de texto","Se usa cuando no separas voces. Si un audio falla, probar otro modelo puede ayudar.");
+        for(int i=0;i<MODELS.length;i++){String m=MODELS[i];double rate=Pricing.perMinute(m);s.choice(MODEL_NAMES[i],MODEL_DETAILS[i]+(rate>0?" · "+Pricing.usd(rate)+"/min":""),m.equals(current),()->set("openaiTextModel",m));}s.show();}
+    private void speakersSheet(){String current=settings.speakersMode();Sheet s=sheet("Separar voces","Separar voces identifica a cada persona (Persona 1, Persona 2…), pero es más lento.");
+        String[] details={"Te preguntamos al transcribir cada audio","Para reuniones y conversaciones","Solo texto: más rápido y económico"};
+        for(int i=0;i<3;i++){String m=SPEAKER_MODES[i];s.choice(SPEAKER_NAMES[i],details[i]+(i==0?" (la transcripción automática separa voces)":""),m.equals(current),()->set("speakersMode",m));}s.show();}
+    private void keySheet(){
+        if(settings.hasKey()){sheet("Clave de API","Configurada y cifrada en este teléfono. Nunca aparece en informes.")
+            .action(R.drawable.ic_edit,"Reemplazar clave",false,this::keyInput).action(R.drawable.ic_trash,"Eliminar clave",true,()->confirm("¿Eliminar la clave?","Las transcripciones pendientes quedarán en espera hasta que agregues otra.","Eliminar",true,()->{try{settings.saveKey("");getSystemService(JobScheduler.class).cancel(Pipeline.JOB_ID);render();}catch(Exception e){message("Clave","No se pudo eliminar.");}})).show();return;}
+        keyInput();
+    }
+    private void keyInput(){
+        EditText input=ui.field(settings.provider().equals("openai")?"sk-…":"Clave del servidor","Clave de API");input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);input.setSaveEnabled(false);input.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        Sheet s=sheet("Agregar clave de API",settings.provider().equals("openai")?"Créala en platform.openai.com → API keys y pégala aquí. Se guarda cifrada y deja de mostrarse.":"Pega la clave de tu servidor. Se guarda cifrada.").add(input);
+        s.primary("Guardar clave",Ui.Style.PRIMARY,()->{try{if(input.length()==0){input.setError("Pega tu clave");return false;}settings.saveKey(input.getText().toString());input.setText("");Diagnostics.event("setting_changed",null,"action","api_key");Pipeline.schedule(this,true);render();toast("Clave guardada");return true;}catch(Exception e){input.setError("No se pudo guardar. Revisa que no tenga espacios.");return false;}})
+            .secondary("Cancelar",null).secure().show();
+        input.requestFocus();s.dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    }
+    private void verify(Ui.Row row){
+        if(!settings.hasKey()){keySheet();return;}
+        row.setEnabled(false);row.setSubtitle("Comprobando…");http=new HttpApi();
+        io.execute(()->{String result;boolean ok=false;try{new OpenAiClient(http).verify(settings.config());ok=true;result="El servidor respondió y reconoce el modelo. Esto no prueba todavía la carga de audio, el saldo ni la separación de voces.";}
+            catch(Exception e){result=e instanceof HttpApi.UserAction?e.getMessage():"No se pudo conectar. Revisa tu conexión y la URL del servidor.";}
+            String value=result;boolean success=ok;runOnUiThread(()->{if(isDestroyed())return;row.setEnabled(true);row.setSubtitle(success?"Conexión correcta":"Falló la última comprobación");row.subtitle.setTextColor(success?p.primary:p.error);message(success?"Conexión correcta":"No se pudo verificar",value);});});
+    }
+    private void custom(){
+        LinearLayout box=ui.column();EditText base=ui.labeled(box,"URL base HTTPS","https://proveedor.com/v1");base.setText(settings.prefs.getString("customBase",""));base.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);
+        EditText model=ui.labeled(box,"Identificador del modelo","whisper-1");model.setText(settings.prefs.getString("customModel",""));
+        CheckBox voices=new CheckBox(this);voices.setText("Admite diarized_json y chunking_strategy");voices.setTextColor(p.onSurface);voices.setButtonTintList(android.content.res.ColorStateList.valueOf(p.primary));voices.setChecked(settings.prefs.getBoolean("customSpeakers",false));voices.setPadding(ui.dp(S1),ui.dp(S3),0,ui.dp(S3));box.addView(voices);
+        sheet("Servidor compatible","Enviarás audio y tu clave a este servidor. Si cambias la URL, se borra la clave anterior.").add(box)
+            .primary("Guardar",Ui.Style.PRIMARY,()->{try{ProviderConfig config=new ProviderConfig("custom",base.getText().toString().trim(),model.getText().toString().trim(),"",voices.isChecked());if(!config.base.equals(settings.prefs.getString("customBase","")))settings.saveKey("");settings.prefs.edit().putString("customBase",config.base).putString("customModel",config.model).putBoolean("customSpeakers",config.speakers).apply();Pipeline.schedule(this,true);render();return true;}catch(Exception e){base.setError("Usa una URL HTTPS sin credenciales ni parámetros y un modelo válido.");return false;}})
+            .secondary("Cancelar",null).show();
+    }
+    private void folderSheet(){
+        boolean has=!settings.prefs.getString("localTree","").isEmpty();
+        Sheet s=sheet("Carpeta de copias",has?"Las grabaciones se copian automáticamente a esta carpeta.":"Elige o crea una carpeta. En el selector, abre el menú ☰ para ver Google Drive u otras ubicaciones.");
+        s.action(R.drawable.ic_folder,has?"Cambiar carpeta":"Elegir carpeta",false,()->{try{startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),PICK_FOLDER);}catch(ActivityNotFoundException e){message("Carpeta","Este teléfono no permite elegir carpetas.");}});
+        if(has){s.action(R.drawable.ic_refresh,"Actualizar todas las copias",false,()->{for(Recording r:Recording.list(this))LocalStorage.enqueue(this,r.id);toast("Actualizando copias…");});
+            s.action(R.drawable.ic_close,"Dejar de copiar",true,()->{String old=settings.prefs.getString("localTree","");settings.prefs.edit().remove("localTree").apply();try{getContentResolver().releasePersistableUriPermission(Uri.parse(old),Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);}catch(Exception ignored){}refreshFolder();});}
+        s.show();
+    }
+    /** Muestra el nombre real de la carpeta (y si es Drive) en vez del identificador interno. */
+    private void refreshFolder(){
+        String tree=settings.prefs.getString("localTree","");if(tree.isEmpty()){folderRow.setValue("Desactivada");return;}
+        folderRow.setValue("…");io.execute(()->{String name="Carpeta elegida";Uri uri=Uri.parse(tree);
+            try(android.database.Cursor c=getContentResolver().query(DocumentsContract.buildDocumentUriUsingTree(uri,DocumentsContract.getTreeDocumentId(uri)),new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst()&&c.getString(0)!=null)name=c.getString(0);}catch(Exception ignored){}
+            String authority=uri.getAuthority()==null?"":uri.getAuthority();String label=(authority.contains("google.android.apps.docs")?"Drive · ":"")+name;
+            runOnUiThread(()->{if(!isDestroyed())folderRow.setValue(label);});});
+    }
+    private void report(){toast("Preparando informe…");io.execute(()->{try{Diagnostics.export(this);runOnUiThread(()->shareFile("support.txt","Informe de soporte"));}catch(Exception e){runOnUiThread(()->message("Informe","No se pudo generar el informe."));}});}
+    @Override protected void onActivityResult(int request,int result,Intent data){
+        super.onActivityResult(request,result,data);
+        if(request==PICK_FOLDER&&result==RESULT_OK&&data!=null&&data.getData()!=null){
+            try{Uri tree=data.getData();if((data.getFlags()&Intent.FLAG_GRANT_WRITE_URI_PERMISSION)==0)throw new SecurityException();getContentResolver().takePersistableUriPermission(tree,Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                settings.prefs.edit().putString("localTree",tree.toString()).apply();Diagnostics.event("setting_changed",null,"action","local_tree","result",tree.getAuthority()!=null&&tree.getAuthority().contains("google.android.apps.docs")?"drive":"device");refreshFolder();
+                for(Recording r:Recording.list(this))LocalStorage.enqueue(this,r.id);toast("Carpeta guardada · copiando grabaciones");}
+            catch(Exception e){message("Carpeta","No se obtuvo permiso de escritura. Elige otra carpeta.");}
+        }
+    }
     @Override protected void onDestroy(){if(http!=null)http.cancel();io.shutdown();super.onDestroy();}
 }

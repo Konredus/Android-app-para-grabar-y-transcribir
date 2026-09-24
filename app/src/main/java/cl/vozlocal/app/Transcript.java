@@ -45,12 +45,15 @@ final class Transcript {
         JSONArray segments=new JSONArray();
         for(int p=0;p<parts.size();p++){
             JSONObject response=parts.get(p); JSONArray source=response.optJSONArray("segments");
+            // Personas reconocidas con muestras de voz del bloque 1: se unifican con su etiqueta de ese bloque.
+            Set<String> known=new HashSet<>();JSONArray names=response.optJSONArray("_known");if(names!=null)for(int k=0;k<names.length();k++)known.add(names.optString(k));
             if(source==null)throw new java.io.IOException("OpenAI no devolvió los segmentos de hablantes esperados.");
             for(int i=0;i<source.length();i++){
                 JSONObject segment=source.getJSONObject(i);
                 if(!segment.has("speaker") || !segment.has("start") || !segment.has("end") || !segment.has("text"))throw new java.io.IOException("La transcripción recibida está incompleta.");
                 String speaker=segment.isNull("speaker")?"unknown":segment.getString("speaker");
-                segments.put(new JSONObject().put("speaker",parts.size()>1?"block"+p+":"+speaker:speaker)
+                String id=parts.size()<=1?speaker:(p>0&&known.contains(speaker)?"block0:"+speaker:"block"+p+":"+speaker);
+                segments.put(new JSONObject().put("speaker",id)
                     .put("start",segment.getDouble("start")+offsets.get(p)).put("end",segment.getDouble("end")+offsets.get(p)).put("text",segment.getString("text")));
             }
         }

@@ -11,6 +11,19 @@ class HttpApi {
     private volatile HttpURLConnection active;
     String jobId;
     Runnable onUploaded;
+    /** Espera máxima de respuesta. Las transcripciones la ajustan a la duración del audio (un bloque largo puede tardar varios minutos). */
+    volatile int readTimeoutMs=240000;
+    interface Progress{void update(long sent,long total);}
+    /** Progreso de subida del archivo (bytes enviados / total). */
+    volatile Progress onProgress;
+    /** Eventos de una respuesta en streaming (text/event-stream): cada línea "data:" como JSON. */
+    interface Events{void event(JSONObject event)throws Exception;}
+    volatile Events onEvent;
+    /** Conexiones hijas (bloques en paralelo): cancelar la madre cancela todas. */
+    private final HttpApi parent;private final java.util.List<HttpApi> children=new java.util.concurrent.CopyOnWriteArrayList<>();
+    HttpApi(){parent=null;}
+    private HttpApi(HttpApi parent){this.parent=parent;this.jobId=parent.jobId;this.readTimeoutMs=parent.readTimeoutMs;}
+    HttpApi child(){HttpApi c=new HttpApi(this);children.add(c);if(cancelled)c.cancelled=true;return c;}
     interface Body { long length(); void write(OutputStream out) throws Exception; }
     static class Response {
         String jobId; final int code; final String text, location,requestId;
@@ -19,19 +32,28 @@ class HttpApi {
         JSONObject json() throws Exception { return text.isEmpty()?new JSONObject():new JSONObject(text); }
     }
     static class UserAction extends Exception { UserAction(String message){super(message);} }
-    void cancel(){cancelled=true;HttpURLConnection connection=active;if(connection!=null)connection.disconnect();}
-    void check() throws InterruptedIOException {if(cancelled || Thread.currentThread().isInterrupted())throw new InterruptedIOException("Trabajo pausado");}
+    void cancel(){cancelled=true;HttpURLConnection connection=active;if(connection!=null)connection.disconnect();for(HttpApi c:children)c.cancel();}
+    void check() throws InterruptedIOException {if(cancelled || (parent!=null&&parent.cancelled) || Thread.currentThread().isInterrupted())throw new InterruptedIOException("Trabajo pausado");}
     Response request(String method,String url,String token,String contentType,Body body,Map<String,String> extra) throws Exception {
         check(); URL target=new URL(url);long started=System.currentTimeMillis();Diagnostics.event("http_start",jobId,"bytes",body==null?0:body.length());
         if(!"https".equals(target.getProtocol()))throw new SecurityException("Solo HTTPS");
         HttpURLConnection c=(HttpURLConnection)target.openConnection();active=c;
         try{
-            c.setInstanceFollowRedirects(false);c.setConnectTimeout(30000);c.setReadTimeout(240000);c.setRequestMethod(method);
+            c.setInstanceFollowRedirects(false);c.setConnectTimeout(30000);c.setReadTimeout(readTimeoutMs);c.setRequestMethod(method);
             c.setRequestProperty("Authorization","Bearer "+token);
             if(contentType!=null)c.setRequestProperty("Content-Type",contentType);
             if(extra!=null)for(Map.Entry<String,String> entry:extra.entrySet())c.setRequestProperty(entry.getKey(),entry.getValue());
             if(body!=null){c.setDoOutput(true);c.setFixedLengthStreamingMode(body.length());try(OutputStream out=c.getOutputStream()){body.write(out);}if(onUploaded!=null)onUploaded.run();}
             check();int code=c.getResponseCode();String location=c.getHeaderField("Location");
+            String type=c.getContentType();Events events=onEvent;
+            if(code<400&&events!=null&&type!=null&&type.contains("event-stream")){
+                // Streaming: el texto llega por partes; se guarda solo el evento final (texto completo + uso).
+                JSONObject done=null;
+                try(BufferedReader reader=new BufferedReader(new InputStreamReader(c.getInputStream(),StandardCharsets.UTF_8))){String line;while((line=reader.readLine())!=null){check();if(!line.startsWith("data:"))continue;String data=line.substring(5).trim();if(data.isEmpty()||data.equals("[DONE]"))continue;JSONObject event=new JSONObject(data);events.event(event);if(event.optString("type").endsWith(".done"))done=event;}}
+                if(done==null)throw new IOException("La respuesta en streaming terminó sin el evento final");
+                String requestId=c.getHeaderField("x-request-id");Diagnostics.event("http_end",jobId,"http",code,"request_id",safeToken(requestId),"elapsed_ms",System.currentTimeMillis()-started);
+                Response response=new Response(code,done.toString(),location,requestId);response.jobId=jobId;return response;
+            }
             InputStream raw=code>=400?c.getErrorStream():c.getInputStream(); ByteArrayOutputStream bytes=new ByteArrayOutputStream();
             if(raw!=null)try(InputStream in=raw){byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1){check();if(bytes.size()+n>8*1024*1024)throw new IOException("Respuesta demasiado grande");bytes.write(buffer,0,n);}}
             String requestId=c.getHeaderField("x-request-id");Diagnostics.event("http_end",jobId,"http",code,"request_id",safeToken(requestId),"elapsed_ms",System.currentTimeMillis()-started);
@@ -42,7 +64,7 @@ class HttpApi {
     static Body bytes(byte[] bytes){return new Body(){public long length(){return bytes.length;}public void write(OutputStream out)throws Exception{out.write(bytes);}};}
     static Body json(JSONObject json){return bytes(json.toString().getBytes(StandardCharsets.UTF_8));}
     Body file(File file){return new Body(){public long length(){return file.length();}public void write(OutputStream out)throws Exception{copy(file,out);}};}
-    void copy(File file,OutputStream out)throws Exception{try(InputStream in=new FileInputStream(file)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1){check();out.write(b,0,n);}}}
+    void copy(File file,OutputStream out)throws Exception{long total=file.length(),sent=0;Progress progress=onProgress;try(InputStream in=new FileInputStream(file)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1){check();out.write(b,0,n);sent+=n;if(progress!=null)progress.update(sent,total);}}}
     static void require(Response response,String service)throws Exception{
         if(response.code>=200 && response.code<300)return;
         String code="",type="",param="",reason="Revisa el formato del audio y los parámetros del modelo.";

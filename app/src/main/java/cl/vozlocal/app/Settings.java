@@ -18,9 +18,19 @@ final class Settings {
     String provider(){return prefs.getString("provider","openai");}
     String prefix(){return provider().equals("openai")?"":"custom_";}
     boolean hasKey() { return prefs.contains(prefix()+"keyEncrypted"); }
-    ProviderConfig config()throws Exception{
-        boolean openai=provider().equals("openai");String model=prefs.getString(openai?"openaiModel":"customModel",openai?"gpt-4o-transcribe-diarize":"whisper-1");
-        return new ProviderConfig(provider(),openai?"https://api.openai.com/v1":prefs.getString("customBase","https://example.com/v1"),model,apiKey(),openai?model.equals("gpt-4o-transcribe-diarize"):prefs.getBoolean("customSpeakers",false));
+    /** "ask" (preguntar cada vez), "always" o "never". */
+    String speakersMode(){return prefs.getString("speakersMode","ask");}
+    /** Modelo para transcribir sin separar voces (OpenAI). */
+    String textModel(){return prefs.getString("openaiTextModel","gpt-transcribe");}
+    /** ¿El proveedor configurado puede separar voces? */
+    boolean canSeparate(){return provider().equals("openai")||prefs.getBoolean("customSpeakers",false);}
+    /** Elección por defecto cuando no se puede preguntar (p. ej. transcripción automática). */
+    boolean defaultSpeakers(){return canSeparate()&&!speakersMode().equals("never");}
+    ProviderConfig config()throws Exception{return config(defaultSpeakers());}
+    ProviderConfig config(boolean speakers)throws Exception{
+        boolean openai=provider().equals("openai");
+        if(openai)return new ProviderConfig("openai","https://api.openai.com/v1",speakers?"gpt-4o-transcribe-diarize":textModel(),apiKey(),speakers);
+        return new ProviderConfig(provider(),prefs.getString("customBase","https://example.com/v1"),prefs.getString("customModel","whisper-1"),apiKey(),speakers&&prefs.getBoolean("customSpeakers",false));
     }
     private static synchronized javax.crypto.SecretKey key() throws Exception {
         KeyStore store = KeyStore.getInstance("AndroidKeyStore"); store.load(null);
