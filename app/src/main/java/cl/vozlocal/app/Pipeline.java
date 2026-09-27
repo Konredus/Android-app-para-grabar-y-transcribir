@@ -64,12 +64,14 @@ final class Pipeline {
     }
     static Network network(Context c){ConnectivityManager cm=c.getSystemService(ConnectivityManager.class);Network n=cm.getActiveNetwork();NetworkCapabilities caps=n==null?null:cm.getNetworkCapabilities(n);return caps!=null&&caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)?n:null;}
     static boolean unmetered(Context c){ConnectivityManager cm=c.getSystemService(ConnectivityManager.class);Network n=cm.getActiveNetwork();NetworkCapabilities caps=n==null?null:cm.getNetworkCapabilities(n);return caps!=null&&caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED);}
-    /** Bitácora visible del proceso: cada paso con su hora (máx. 60 entradas). También actualiza el estado actual. */
+    /** "wifi", "mobile" o "none", para el registro técnico. */
+    static String networkName(Context c){return network(c)==null?"none":unmetered(c)?"wifi":"mobile";}
+    /** Bitácora visible del proceso: cada paso con su hora (máx. 80 entradas). También actualiza el estado actual. Una línea idéntica a la anterior no se repite. */
     static void log(Context c,String id,String message){
-        try{FilesStore.update(c,id,s->{JSONArray log=s.optJSONArray("log");if(log==null)log=new JSONArray();log.put(new JSONObject().put("t",System.currentTimeMillis()).put("m",message));while(log.length()>60)log.remove(0);s.put("log",log).put("status",message).put("since",System.currentTimeMillis());});}catch(Exception ignored){}
+        try{FilesStore.update(c,id,s->{JSONArray log=s.optJSONArray("log");if(log==null)log=new JSONArray();JSONObject last=log.length()>0?log.optJSONObject(log.length()-1):null;if(last!=null&&message.equals(last.optString("m"))){s.put("since",System.currentTimeMillis());return;}log.put(new JSONObject().put("t",System.currentTimeMillis()).put("m",message));while(log.length()>80)log.remove(0);s.put("log",log).put("status",message).put("since",System.currentTimeMillis());});}catch(Exception ignored){}
     }
     static void cancel(Context c,String id)throws Exception{
-        Diagnostics.event("job_cancelled",id);FilesStore.update(c,id,s -> s.put("requested",false));log(c,id,"Transcripción cancelada");
+        Diagnostics.event("job_cancelled",id);FilesStore.update(c,id,s -> s.put("requested",false));log(c,id,"Transcripción cancelada");AudioParts.clearBlocks(c,id);
         HttpApi active=TranscribeService.current;if(active!=null&&id.equals(active.jobId))active.cancel();
         c.getSystemService(JobScheduler.class).cancel(JOB_ID);schedule(c,true);
     }

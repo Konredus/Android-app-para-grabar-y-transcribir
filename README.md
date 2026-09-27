@@ -1,6 +1,6 @@
 # Voz local para Android
 
-Grabadora y transcriptor local para Android 8 o posterior. Versión **0.4.2** (preliminar), licencia MIT.
+Grabadora y transcriptor local para Android 8 o posterior. Versión **0.4.3** (preliminar), licencia MIT.
 
 [Descargar APKs](https://github.com/Konredus/Android-app-para-grabar-y-transcribir/releases) · [Historial](CHANGELOG.md) · [Criterios de diseño](docs/diseno/CRITERIOS.md)
 
@@ -47,7 +47,7 @@ No se promete compatibilidad universal con APIs de chat. Claude u otro proveedor
 
 Los parámetros siguen la [documentación de transcripción de OpenAI](https://developers.openai.com/api/docs/guides/speech-to-text). La transcripción envía audio al proveedor elegido y puede generar cargos en tu cuenta. La grabación y la importación son locales.
 
-Al transcribir eliges si separar voces. Los audios de más de 12 minutos se dividen en bloques (~5 min con voces, ~8 min sin voces) cortados en pausas y enviados de a 3 en paralelo. Con separación de voces, el primer bloque aporta muestras de voz (máx. 4 personas) para reconocer a las mismas personas en los demás; si alguien no coincide, puede aparecer con otra etiqueta y basta con darle el mismo nombre. Con datos móviles, los bloques se comprimen a 32 kbps para ahorrar datos. Los modelos de texto no proporcionan tiempos precisos por intervención; se muestra el comienzo del bloque. Revisa ruido, solapamientos y límites de bloques.
+Al transcribir eliges si separar voces. Los audios de más de 12 minutos se dividen en bloques (~5 min con voces, ~8 min sin voces) cortados en pausas y enviados de a 3 en paralelo. Con separación de voces, el primer bloque aporta muestras de voz (máx. 4 personas) para reconocer a las mismas personas en los demás; si alguien no coincide, puede aparecer con otra etiqueta y basta con darle el mismo nombre. Los bloques se copian sin recodificar y se conservan entre intentos, así un reintento continúa donde quedó. Los modelos de texto no proporcionan tiempos precisos por intervención; se muestra el comienzo del bloque. Revisa ruido, solapamientos y límites de bloques.
 
 Se reutilizan bloques completados con el mismo proveedor/modelo/idioma. Un cambio de configuración invalida esos resultados parciales. Una interrupción después del envío pero antes de guardar la respuesta puede repetir el bloque y su cargo. No se reemplazan transcripciones completas ni nombres ya editados al reintentar.
 

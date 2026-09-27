@@ -58,7 +58,7 @@ class HttpApi {
             if(raw!=null)try(InputStream in=raw){byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1){check();if(bytes.size()+n>8*1024*1024)throw new IOException("Respuesta demasiado grande");bytes.write(buffer,0,n);}}
             String requestId=c.getHeaderField("x-request-id");Diagnostics.event("http_end",jobId,"http",code,"request_id",safeToken(requestId),"elapsed_ms",System.currentTimeMillis()-started);
             Response response=new Response(code,bytes.toString(StandardCharsets.UTF_8.name()),location,requestId);response.jobId=jobId;return response;
-        }catch(Exception e){Diagnostics.event("http_failure",jobId,"error_class",e.getClass().getSimpleName(),"elapsed_ms",System.currentTimeMillis()-started);throw e;
+        }catch(Exception e){Diagnostics.event("http_failure",jobId,"error_class",e.getClass().getSimpleName(),"elapsed_ms",System.currentTimeMillis()-started,"reason",safeReason(e));throw e;
         }finally{c.disconnect();active=null;}
     }
     static Body bytes(byte[] bytes){return new Body(){public long length(){return bytes.length;}public void write(OutputStream out)throws Exception{out.write(bytes);}};}
@@ -82,5 +82,7 @@ class HttpApi {
         if(response.code==408 || response.code==429 || response.code>=500)throw new IOException(service+" no está disponible temporalmente ("+response.code+").");
         throw new UserAction(service+" · HTTP "+response.code+". "+reason+(code.isEmpty()?"":" Código: "+code)+(param.isEmpty()?"":" Parámetro: "+param)+(response.requestId.isEmpty()?"":" · Ref: "+response.requestId));
     }
+    /** Mensaje técnico de la excepción, solo letras y signos simples (sin URLs, números de puerto ni datos). */
+    static String safeReason(Exception e){String m=e.getMessage();if(m==null)return "";m=m.replaceAll("https?://[^ ]+","").replaceAll("[^A-Za-z ._:-]","").trim();return m.length()>80?m.substring(0,80):m;}
     static String safeToken(String value){return value!=null && value.matches("[A-Za-z0-9_.:/-]{1,120}")?value:"";}
 }

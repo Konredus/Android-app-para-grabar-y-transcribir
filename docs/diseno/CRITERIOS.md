@@ -194,7 +194,7 @@ El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bai
 ```text
 Abrir-grabadora.cmd                        # doble clic: abre el emulador con ventana y la app
 .\build-apk.ps1                            # compila y copia el APK a entrega/
-adb install -r -g entrega\Voz-local-0.4.2.apk
+adb install -r -g entrega\Voz-local-0.4.3.apk
 adb exec-out screencap -p > captura.png    # captura para comparar
 ```
 
@@ -227,4 +227,7 @@ adb exec-out screencap -p > captura.png    # captura para comparar
 | 2026-09-23 | Preguntar "¿Separar voces?" al transcribir | El modelo con voces es más lento y no siempre hace falta (dictados). Mostrar costo y velocidad convierte la decisión en algo informado |
 | 2026-09-23 | Bloques de ~5 min cortados en pausas, 3 en paralelo, con muestras de voz del bloque 1 | Acelera audios largos sin partir frases, y mantiene a cada persona con el mismo nombre en todos los bloques |
 | 2026-09-23 | Compresión a 32 kbps solo con datos móviles | Con Wi-Fi, recomprimir tarda más que lo que ahorra en subida; con datos móviles ahorra ~3× el consumo |
+| 2026-09-27 | **Se elimina la compresión** y los bloques se guardan entre intentos | En un teléfono real la recompresión falló (`CodecException`) y, al repetirse desde cero en cada reanudación, un audio de 32 min tardó 7 h. Menos "optimización", más confiabilidad |
+| 2026-09-27 | Reintentos dentro del servicio en primer plano | Con la app cerrada, Android 12+ no deja volver a primer plano: el reintento debe ocurrir antes de soltarlo |
+| 2026-09-27 | Confirmar antes de cancelar; fecha ISO delante del nombre | Pedidos del usuario: evitar cancelar por error y que los archivos se ordenen solos por fecha |
 | 2026-09-23 | Material You opcional (apagado por defecto) | Se respeta la identidad de marca y se ofrece la integración con el sistema a quien la quiera |

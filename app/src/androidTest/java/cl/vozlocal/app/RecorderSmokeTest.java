@@ -29,6 +29,8 @@ public class RecorderSmokeTest extends Instrumentation {
     @Override public void onStart() {
         Bundle report = new Bundle();
         Context c = getTargetContext();
+        Settings prefixSettings = new Settings(c); boolean prefix = prefixSettings.datePrefix();
+        prefixSettings.prefs.edit().putBoolean("datePrefix", false).commit();
         try {
             Activity activity = startActivitySync(new Intent(c, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             waitForIdleSync(); Thread.sleep(700);
@@ -81,6 +83,6 @@ public class RecorderSmokeTest extends Instrumentation {
         } catch (Throwable error) {
             report.putString("stream", "FAIL: " + android.util.Log.getStackTraceString(error));
             finish(Activity.RESULT_CANCELED, report);
-        }
+        } finally { prefixSettings.prefs.edit().putBoolean("datePrefix", prefix).commit(); }
     }
 }

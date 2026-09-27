@@ -22,9 +22,9 @@ public class SettingsActivity extends Screen {
     static final String[] MODEL_NAMES={"GPT Transcribe","GPT-4o Transcribe","GPT-4o Mini","Whisper"};
     static final String[] MODEL_DETAILS={"Recomendado · el más nuevo, rápido y con texto en vivo","Alta calidad","El más económico","Modelo clásico"};
     static final String[] SPEAKER_MODES={"ask","always","never"},SPEAKER_NAMES={"Preguntar cada vez","Siempre","Nunca"};
-    private static final int PICK_FOLDER=51;
+    private static final int PICK_FOLDER=51,PICK_SAVE=52;
     private Settings settings;private final ExecutorService io=Executors.newSingleThreadExecutor();private HttpApi http;
-    private Ui.Row folderRow;
+    private Ui.Row folderRow,saveRow;
 
     static String modelName(Settings s){if(!s.provider().equals("openai"))return s.prefs.getString("customModel","personalizado");int i=Arrays.asList(MODELS).indexOf(s.textModel());return i<0?s.textModel():MODEL_NAMES[i];}
     static String modelSummary(Settings s){if(!s.provider().equals("openai"))return "Tu servidor · "+modelName(s);return "OpenAI · "+modelName(s)+(s.speakersMode().equals("never")?"":" + separación de voces");}
@@ -64,11 +64,14 @@ public class SettingsActivity extends Screen {
 
         // Almacenamiento
         page.addView(ui.section("Copias de tus archivos"));LinearLayout storage=ui.group();page.addView(storage,Ui.fill());
+        saveRow=ui.listRow(R.drawable.ic_save,"Guardado rápido",null,settings.prefs.getString("saveTreeName","Sin elegir"));saveRow.onClick(v->saveSheet());ui.addRow(storage,saveRow);
         folderRow=ui.listRow(R.drawable.ic_folder,"Carpeta de copias",null,"Desactivada");folderRow.onClick(v->folderSheet());ui.addRow(storage,folderRow);refreshFolder();
-        page.addView(ui.footnote("Cada grabación se copia con su audio, información y transcripción. Puedes elegir una carpeta del teléfono o de Google Drive (si tienes su app). Borrar en Voz local no borra estas copias."));
+        page.addView(ui.footnote("Guardado rápido: la carpeta donde el botón de cada transcripción guarda el .txt con un toque (por ejemplo, tu Inbox de Drive). Carpeta de copias: cada grabación se copia con su audio, información y transcripción. Puedes elegir una carpeta del teléfono o de Google Drive (si tienes su app). Borrar en Voz local no borra estas copias."));
 
         // Grabación y apariencia
         page.addView(ui.section("Grabación"));LinearLayout rec=ui.group();page.addView(rec,Ui.fill());
+        ui.addRow(rec,ui.switchRow(R.drawable.ic_calendar,"Fecha delante del nombre","Ej.: "+Recording.isoDate(System.currentTimeMillis())+" Reunión",settings.datePrefix(),on->{settings.prefs.edit().putBoolean("datePrefix",on).apply();Diagnostics.event("setting_changed",null,"action","date_prefix","result",on);if(on)offerDatesForExisting();}));
+        if(settings.datePrefix())ui.addRow(rec,ui.listRow(R.drawable.ic_edit,"Agregar fecha a las existentes","Para las grabaciones anteriores a esta opción",null).onClick(v->offerDatesForExisting()));
         ui.addRow(rec,ui.switchRow(R.drawable.ic_title,"Resumen al terminar","Nombrar la grabación y elegir el siguiente paso",settings.askTitle(),on->toggle("askTitle",on)));
         String mode=AppTheme.appearance(this);String[] modes={"system","light","dark"},modeNames={"Automático","Claro","Oscuro"};
         page.addView(ui.section("Apariencia"));LinearLayout look=ui.group();page.addView(look,Ui.fill());
@@ -141,6 +144,21 @@ public class SettingsActivity extends Screen {
             s.action(R.drawable.ic_close,"Dejar de copiar",true,()->{String old=settings.prefs.getString("localTree","");settings.prefs.edit().remove("localTree").apply();try{getContentResolver().releasePersistableUriPermission(Uri.parse(old),Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);}catch(Exception ignored){}refreshFolder();});}
         s.show();
     }
+    /** Aplica la fecha a los nombres de las grabaciones que ya existen (se pregunta primero). */
+    private void offerDatesForExisting(){
+        confirm("¿Agregar la fecha a tus grabaciones actuales?","Las nuevas la llevarán siempre. Esto la agrega también a las que ya tienes (las que ya empiezan con fecha no cambian).","Agregar a todas",false,()->io.execute(()->{int n=0;
+            for(Recording r:Recording.list(this)){String before=r.title;try{r.save(this);if(!before.equals(r.title)){Pipeline.edited(this,r.id);n++;}}catch(Exception ignored){}}
+            int changed=n;runOnUiThread(()->toast(changed==1?"1 nombre actualizado":changed+" nombres actualizados"));}));
+    }
+    private void saveSheet(){
+        boolean has=!settings.prefs.getString("saveTree","").isEmpty();
+        Sheet s=sheet("Guardado rápido",has?"El botón de cada transcripción guarda en «"+settings.prefs.getString("saveTreeName","")+"».":"Elige la carpeta donde quieres dejar siempre tus transcripciones. En el selector abre el menú ☰ y elige Drive para usar una carpeta de Google Drive.");
+        s.action(R.drawable.ic_folder,has?"Cambiar carpeta":"Elegir carpeta",false,()->{try{Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);String last=settings.prefs.getString("lastSaveUri","");if(!last.isEmpty())pick.putExtra(DocumentsContract.EXTRA_INITIAL_URI,Uri.parse(last));startActivityForResult(pick,PICK_SAVE);}catch(ActivityNotFoundException e){message("Guardado rápido","Este teléfono no permite elegir carpetas.");}});
+        if(has)s.action(R.drawable.ic_close,"Quitar guardado rápido",true,()->{settings.prefs.edit().remove("saveTree").remove("saveTreeName").apply();saveRow.setValue("Sin elegir");});
+        s.show();
+    }
+    /** Nombre visible de una carpeta elegida con el selector de Android. */
+    private String folderName(Uri uri){String name="Carpeta elegida";try(android.database.Cursor c=getContentResolver().query(DocumentsContract.buildDocumentUriUsingTree(uri,DocumentsContract.getTreeDocumentId(uri)),new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst()&&c.getString(0)!=null)name=c.getString(0);}catch(Exception ignored){}return name;}
     /** Muestra el nombre real de la carpeta (y si es Drive) en vez del identificador interno. */
     private void refreshFolder(){
         String tree=settings.prefs.getString("localTree","");if(tree.isEmpty()){folderRow.setValue("Desactivada");return;}
@@ -152,6 +170,12 @@ public class SettingsActivity extends Screen {
     private void report(){toast("Preparando informe…");io.execute(()->{try{Diagnostics.export(this);runOnUiThread(()->shareFile("support.txt","Informe de soporte"));}catch(Exception e){runOnUiThread(()->message("Informe","No se pudo generar el informe."));}});}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        if(request==PICK_SAVE&&result==RESULT_OK&&data!=null&&data.getData()!=null){
+            Uri tree=data.getData();
+            try{getContentResolver().takePersistableUriPermission(tree,Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                io.execute(()->{String name=folderName(tree);settings.prefs.edit().putString("saveTree",tree.toString()).putString("saveTreeName",name).apply();Diagnostics.event("setting_changed",null,"action","save_tree","result",tree.getAuthority()!=null&&tree.getAuthority().contains("google.android.apps.docs")?"drive":"device");runOnUiThread(()->{if(!isDestroyed()){saveRow.setValue(name);toast("Guardado rápido en "+name);}});});}
+            catch(Exception e){message("Guardado rápido","No se obtuvo permiso de escritura en esa carpeta. Elige otra.");}
+        }
         if(request==PICK_FOLDER&&result==RESULT_OK&&data!=null&&data.getData()!=null){
             try{Uri tree=data.getData();if((data.getFlags()&Intent.FLAG_GRANT_WRITE_URI_PERMISSION)==0)throw new SecurityException();getContentResolver().takePersistableUriPermission(tree,Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                 settings.prefs.edit().putString("localTree",tree.toString()).apply();Diagnostics.event("setting_changed",null,"action","local_tree","result",tree.getAuthority()!=null&&tree.getAuthority().contains("google.android.apps.docs")?"drive":"device");refreshFolder();

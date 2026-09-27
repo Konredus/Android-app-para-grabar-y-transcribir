@@ -1,8 +1,14 @@
-# Pendientes para la próxima versión (0.4.3)
+# Pendientes para la próxima versión
 
 > Lista de mejoras acordadas con el usuario. Al implementar una, muévela al CHANGELOG y, si es una decisión de diseño, regístrala en `diseno/CRITERIOS.md`.
 
-## Pedidas por el usuario (2026-09-23)
+## Hechas en la 0.4.3
+- ✅ Confirmar antes de cancelar una transcripción.
+- ✅ Fecha delante del nombre (`2026-09-27 Nombre`), activada por defecto, con opción para aplicarla a las grabaciones existentes.
+- ✅ "OpenAI está transcribiendo" en la bitácora.
+- ✅ Guardado rápido en una carpeta fija (p. ej. Drive/0-Inbox).
+
+## Detalle de lo pedido (2026-09-23, ya implementado)
 
 ### 1. Confirmar antes de cancelar una transcripción
 - **Problema:** en el detalle de una grabación en proceso, "Cancelar transcripción" queda justo encima de "Ver detalles del proceso". Da miedo tocarlo sin querer y perder el trabajo.
@@ -25,7 +31,6 @@
 - **Ubicación en Ajustes:** sección "Grabación", interruptor "Agregar la fecha al nombre" con el ejemplo `2026-09-23 Reunión` como texto de apoyo.
 
 ## Propuestas pendientes de confirmar
-- Decir **"OpenAI está transcribiendo el bloque X"** en vez de "esperando respuesta del proveedor" cuando el proveedor es OpenAI (se entiende mejor dónde está la demora).
 - Agregar una sección **"Lecciones"** en `diseno/CRITERIOS.md` con los aprendizajes de las iteraciones 0.3 → 0.4.2.
 - Publicar las versiones en **GitHub Releases** (hoy la última publicada es la 0.2.0).
 
@@ -33,3 +38,9 @@
 - Tiempo por bloque ("Bloque X de 10 listo · tardó Y") y tiempo total, para saber si el paralelo aceleró de verdad y si conviene cambiar el tamaño de los bloques o cuántos se envían a la vez.
 - Si OpenAI aceptó las muestras de voz o se reenvió sin ellas (queda en la bitácora).
 - "Buscando pausas" tardó 32 s en un audio de 51 min: evaluar acotar la búsqueda (menos margen alrededor de cada corte) para que sea más rápida.
+
+## Ideas para después de la 0.4.3
+- Guardar automáticamente en la carpeta de guardado rápido al terminar cada transcripción (sin tocar nada).
+- Opción de formato Markdown (.md) para el guardado, compatible con un "segundo cerebro" (Obsidian).
+- Ofrecer en Ajustes quitar la optimización de batería para Voz local (el informe ya muestra si está activa).
+- Evaluar los trabajos iniciados por el usuario de Android 14+ ("user-initiated data transfer") para seguir con la app cerrada sin depender de la tarea de fondo.

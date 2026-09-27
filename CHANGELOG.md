@@ -1,5 +1,19 @@
 # Historial de versiones
 
+## 0.4.3 — 2026-09-27
+
+Corrige el caso de un audio de 32 min que tardó más de 7 h (OpenAI lo transcribió en 5 min; el resto se perdió en la preparación y en reintentos en segundo plano).
+
+- **Sin recompresión:** los bloques se copian sin recodificar (rápido y sin depender de los códecs del teléfono). La compresión con datos móviles de la 0.4.2 fallaba en algunos teléfonos (`CodecException`) y alargaba la preparación.
+- **La preparación no se repite:** los cortes y los bloques se guardan entre intentos; un reintento continúa donde quedó.
+- **Reintentos dentro del servicio en primer plano** (20 s, 1 min, 2 min, 5 min; espera la red si se cae) en vez de pasar a una tarea de fondo que Android frena con la app cerrada. Al abrir la app, el trabajo pasa a primer plano aunque una tarea de fondo lo esté haciendo.
+- Si con la app cerrada Android solo permite la tarea de fondo, una notificación sugiere abrir la app para acelerar.
+- **Guardado rápido:** en Ajustes eliges una carpeta (p. ej. Drive/0-Inbox) y cada transcripción tiene un botón que guarda el .txt allí con un toque. "Guardar en…" abre en la última carpeta usada.
+- **Fecha delante del nombre** (`2026-09-27 Nombre`), activada por defecto, sin duplicar; opción para aplicarla a las grabaciones existentes.
+- **Confirmación antes de cancelar** una transcripción; el botón queda en color de error y separado de "Ver detalles del proceso".
+- Bitácora más clara: "OpenAI está transcribiendo", motivo por el que Android pausa la tarea de fondo, sin líneas repetidas.
+- **Informe de soporte ampliado:** incluye las bitácoras de las últimas 5 transcripciones, teléfono, estado de optimización de batería y restricción de segundo plano; el registro técnico agrega red (wifi/datos), quién ejecuta (primer plano/fondo), motivo de las pausas de Android y mensaje técnico de los fallos de red.
+
 ## 0.4.2 — 2026-09-23
 
 Transcripción más rápida y con información completa del proceso.
