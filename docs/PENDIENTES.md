@@ -30,6 +30,19 @@
   - Preguntar al usuario si quiere aplicarlo a las grabaciones que ya existen, por ejemplo con un botón "Aplicar a todas" en Ajustes.
 - **Ubicación en Ajustes:** sección "Grabación", interruptor "Agregar la fecha al nombre" con el ejemplo `2026-09-23 Reunión` como texto de apoyo.
 
+## Para la próxima versión (pedido 2026-09-28)
+
+### Descartar grabaciones accidentales de menos de 3 segundos
+- **Problema:** si se escapa el dedo, queda guardada una grabación de 1–2 s que no sirve y ensucia Inicio y Biblioteca.
+- **Qué hacer:**
+  - Al detener, si la grabación dura menos de 3 s, no guardarla: borrar el archivo y avisar con un toast "Grabación muy corta, no se guardó".
+  - No pedir confirmación: es un error, no una decisión.
+- **Detalles a definir al implementarlo:**
+  - Contar solo el tiempo grabado, sin las pausas.
+  - Ofrecer "Deshacer" en el aviso durante unos segundos, por si era intencional.
+  - Las importaciones no se filtran, solo las grabaciones hechas en la app.
+  - Actualizar `RecorderSmokeTest`, que hoy graba pocos segundos, para que su grabación dure más de 3 s.
+
 ## Propuestas pendientes de confirmar
 - Agregar una sección **"Lecciones"** en `diseno/CRITERIOS.md` con los aprendizajes de las iteraciones 0.3 → 0.4.2.
 - Publicar las versiones en **GitHub Releases** (hoy la última publicada es la 0.2.0).
