@@ -128,8 +128,10 @@ public class RecordingActivity extends Screen {
         String blocker=Pipeline.blocker(this);
         if(!TranscribeService.running&&blocker==null)card.addView(ui.button("Empezar ahora",R.drawable.ic_play,Ui.Style.TONAL,v->{if(Pipeline.startForeground(this))toast("Transcribiendo en primer plano");else message("Empezar ahora","Android no permitió empezar todavía. Se hará automáticamente.");}),ui.top(S4));
         TextView note=ui.text(TranscribeService.running?"Sigue funcionando con el teléfono bloqueado. Verás el avance en la notificación.":"Esperando las condiciones configuradas. Puedes salir de la app.",Type.BODY_SMALL,p.onSurfaceVariant);note.setPadding(0,ui.dp(S3),0,0);card.addView(note);
-        card.addView(ui.button("Cancelar transcripción",0,Ui.Style.PLAIN,v->RecordingActions.cancel(this,recording,this::reload)),ui.top(S2));
-        content.addView(card,ui.top(S4));content.addView(timeline(st,true));
+        // Acción destructiva: color de error y separada de "Ver detalles del proceso"; pide confirmación.
+        Ui.Btn stop=ui.button("Cancelar transcripción",R.drawable.ic_close,Ui.Style.PLAIN,v->RecordingActions.cancel(this,recording,this::reload));stop.label.setTextColor(p.error);stop.glyph.setImageTintList(ColorStateList.valueOf(p.error));
+        card.addView(stop,ui.top(S3));
+        content.addView(card,ui.top(S4));View details=timeline(st,true);((LinearLayout)details).setPadding(0,ui.dp(S4),0,0);content.addView(details);
     }
     private ProgressBar bar(int value){ProgressBar b=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);b.setMax(100);b.setProgress(value);b.setProgressTintList(ColorStateList.valueOf(p.primary));b.setProgressBackgroundTintList(ColorStateList.valueOf(p.secondaryContainer));return b;}
     /** Condiciones reales del teléfono ahora mismo (no un texto fijo): red, cargador y batería. */
@@ -246,7 +248,12 @@ public class RecordingActivity extends Screen {
             bar.addView(ui.action(R.drawable.ic_copy,"Copiar",v->copy()),new LinearLayout.LayoutParams(0,-2,1));
             bar.addView(ui.action(R.drawable.ic_share,"Compartir",v->shareText()),new LinearLayout.LayoutParams(0,-2,1));
             bar.addView(ui.action(R.drawable.ic_doc,"Archivo .txt",v->shareTxt()),new LinearLayout.LayoutParams(0,-2,1));
-            if(!demo)bar.addView(ui.action(R.drawable.ic_save,"Guardar en…",v->saveAs()),new LinearLayout.LayoutParams(0,-2,1));
+            if(!demo){
+                // Guardado rápido: un toque guarda en la carpeta elegida en Ajustes (p. ej. Drive/0-Inbox).
+                Settings st2=new Settings(this);String quick=st2.prefs.getString("saveTree","");
+                if(!quick.isEmpty()){String name=st2.prefs.getString("saveTreeName","Carpeta");LinearLayout q=ui.action(R.drawable.ic_save,shortLabel(name),v->quickSave());q.setContentDescription("Guardar en "+name);bar.addView(q,new LinearLayout.LayoutParams(0,-2,1));}
+                bar.addView(ui.action(R.drawable.ic_folder,quick.isEmpty()?"Guardar en…":"Otra carpeta",v->saveAs()),new LinearLayout.LayoutParams(0,-2,1));
+            }
             bottom.addView(bar,Ui.fill());bottom.setVisibility(View.VISIBLE);
         }catch(Exception e){content.addView(ui.text("No se pudo leer la transcripción.",Type.BODY_LARGE,p.error));}
     }
@@ -258,10 +265,22 @@ public class RecordingActivity extends Screen {
     private void shareText(){try{startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT,recording.title).putExtra(Intent.EXTRA_TEXT,exportText()),"Compartir transcripción"));}catch(Exception e){message("Compartir","No se pudo compartir el texto.");}}
     private void shareTxt(){try{exportText();Uri uri=TranscriptExport.create(this,recording,transcript);startActivity(Intent.createChooser(TranscriptExport.shareIntent(uri),"Compartir archivo .txt"));}catch(Exception e){message("Archivo","No se pudo crear el archivo.");}}
     /** Guardar en cualquier ubicación, incluida Google Drive si su app está instalada (sin iniciar sesión en Voz local). */
-    private void saveAs(){try{startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("text/plain").putExtra(Intent.EXTRA_TITLE,TranscriptExport.filename(recording.title)),SAVE_AS);}catch(ActivityNotFoundException e){message("Guardar en…","Este teléfono no tiene un selector de archivos disponible.");}}
+    private static String shortLabel(String name){return name.length()>12?name.substring(0,11)+"…":name;}
+    /** Guarda el .txt directo en la carpeta de guardado rápido, sin abrir el selector. */
+    private void quickSave(){
+        Settings s=new Settings(this);String tree=s.prefs.getString("saveTree","");String name=s.prefs.getString("saveTreeName","la carpeta");if(tree.isEmpty()){saveAs();return;}
+        new Thread(()->{try{Uri t=Uri.parse(tree);Uri dir=android.provider.DocumentsContract.buildDocumentUriUsingTree(t,android.provider.DocumentsContract.getTreeDocumentId(t));
+                Uri doc=android.provider.DocumentsContract.createDocument(getContentResolver(),dir,"text/plain",TranscriptExport.filename(recording.title));if(doc==null)throw new java.io.IOException();
+                LocalStorage.writeText(this,doc,exportText());Diagnostics.event("transcript_quick_saved",id);runOnUiThread(()->toast("Guardado en "+name));}
+            catch(Exception e){Diagnostics.event("transcript_quick_save_failed",id,"error_class",e.getClass().getSimpleName());runOnUiThread(()->sheet("No se pudo guardar en "+name,"Puede que Android haya retirado el permiso a esa carpeta. Elígela de nuevo en Ajustes o usa \"Otra carpeta\".").primary("Ir a Ajustes",()->startActivity(new Intent(this,SettingsActivity.class))).secondary("Otra carpeta",this::saveAs).show());}}).start();
+    }
+    private void saveAs(){try{Intent pick=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("text/plain").putExtra(Intent.EXTRA_TITLE,TranscriptExport.filename(recording.title));
+        // Abre directamente donde guardaste la última vez (p. ej. tu carpeta Inbox de Drive).
+        String last=new Settings(this).prefs.getString("lastSaveUri","");if(!last.isEmpty())pick.putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI,Uri.parse(last));
+        startActivityForResult(pick,SAVE_AS);}catch(ActivityNotFoundException e){message("Guardar en…","Este teléfono no tiene un selector de archivos disponible.");}}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
-        if(request==SAVE_AS&&result==RESULT_OK&&data!=null&&data.getData()!=null){Uri target=data.getData();
+        if(request==SAVE_AS&&result==RESULT_OK&&data!=null&&data.getData()!=null){Uri target=data.getData();new Settings(this).prefs.edit().putString("lastSaveUri",target.toString()).apply();
             new Thread(()->{try{LocalStorage.writeText(this,target,exportText());Diagnostics.event("transcript_saved_as",id);runOnUiThread(()->toast("Transcripción guardada"));}
                 catch(Exception e){Diagnostics.event("transcript_save_as_failed",id,"error_class",e.getClass().getSimpleName());runOnUiThread(()->message("Guardar en…","No se pudo escribir el archivo en esa ubicación. Prueba otra carpeta."));}}).start();}
     }

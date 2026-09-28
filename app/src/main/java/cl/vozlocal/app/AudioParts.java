@@ -21,30 +21,43 @@ final class AudioParts {
     /** Hasta esta duración se envía un solo bloque (bajo el límite de 1400 s del modelo con voces). */
     static final long SINGLE_MAX_MS=12*60_000;
 
-    static List<Part> plan(Context c,Recording r,HttpApi http,long targetMs,boolean compress,Log log)throws Exception{
+    /** Carpeta persistente de bloques: sobreviven a reinicios, así un reintento no repite la preparación. */
+    static File blockDir(Context c,String id){File d=new File(c.getFilesDir(),"blocks/"+id);d.mkdirs();return d;}
+    static void clearBlocks(Context c,String id){File d=new File(c.getFilesDir(),"blocks/"+id);File[] files=d.listFiles();if(files!=null)for(File f:files)f.delete();d.delete();}
+
+    /**
+     * Divide en bloques cortados en pausas. Nunca recodifica (solo copia tramos AAC): es rápido y no depende
+     * de los códecs del teléfono. cached: cortes ya calculados en un intento anterior (se reutilizan).
+     * Devuelve los bloques; los cortes usados quedan en cutsOut.
+     */
+    static List<Part> plan(Context c,Recording r,HttpApi http,long targetMs,JSONArray cached,List<Long> cutsOut,Log log)throws Exception{
         File source=r.audio(c);long total=r.duration>0?r.duration:AudioConvert.duration(source);
-        List<Long> cuts=new ArrayList<>();cuts.add(0L);
-        if(total>SINGLE_MAX_MS||source.length()>20_000_000){
-            if(log!=null)log.line("Buscando pausas para cortar sin partir frases");
-            for(long t=targetMs;t<total-targetMs*0.4;t+=targetMs){
-                long q=quietest(source,t,15_000,http);long last=cuts.get(cuts.size()-1);
-                if(q>last+30_000&&q<total-20_000)cuts.add(q);
+        List<Long> cuts=new ArrayList<>();
+        if(cached!=null&&cached.length()>=2){for(int i=0;i<cached.length();i++)cuts.add(cached.getLong(i));if(log!=null)log.line("Cortes reutilizados del intento anterior ("+(cuts.size()-1)+" bloques)");}
+        else{
+            cuts.add(0L);
+            if(total>SINGLE_MAX_MS||source.length()>20_000_000){
+                if(log!=null)log.line("Buscando pausas para cortar sin partir frases");
+                for(long t=targetMs;t<total-targetMs*0.4;t+=targetMs){
+                    long q=quietest(source,t,10_000,http);long last=cuts.get(cuts.size()-1);
+                    if(q>last+30_000&&q<total-20_000)cuts.add(q);
+                }
             }
+            cuts.add(total);
+            // Resguardo de tamaño (25 MB por envío): si un tramo pesaría más de 20 MB se divide por la mitad.
+            double bytesPerMs=source.length()/(double)Math.max(1,total);
+            for(int i=0;i+1<cuts.size();i++){long a=cuts.get(i),b=cuts.get(i+1);if((b-a)*bytesPerMs>20_000_000){cuts.add(i+1,a+(b-a)/2);i--;}}
         }
-        cuts.add(total);
-        // Resguardo de tamaño (25 MB por envío): si un tramo pesaría más de 20 MB se divide por la mitad.
-        double bytesPerMs=source.length()/(double)Math.max(1,total);
-        for(int i=0;i+1<cuts.size();i++){long a=cuts.get(i),b=cuts.get(i+1);if(!compress&&(b-a)*bytesPerMs>20_000_000){cuts.add(i+1,a+(b-a)/2);i--;}}
-        if(cuts.size()==2&&!compress)return Collections.singletonList(new Part(source,0,total));
-        List<Part> parts=new ArrayList<>();
-        try{
-            for(int i=0;i+1<cuts.size();i++){
-                http.check();long a=cuts.get(i),b=cuts.get(i+1);File file=new File(c.getCacheDir(),r.id+"-block-"+i+".m4a");
-                if(compress)AudioConvert.convert(source,file,a,b,http,(s,p,t)->{},32000);else remuxRange(source,file,a,b,http);
-                parts.add(new Part(file,a/1000d,b-a));
-            }
-            return parts;
-        }catch(Exception e){for(Part part:parts)part.file.delete();throw e;}
+        cutsOut.clear();cutsOut.addAll(cuts);
+        if(cuts.size()==2)return Collections.singletonList(new Part(source,0,total));
+        List<Part> parts=new ArrayList<>();File dir=blockDir(c,r.id);
+        for(int i=0;i+1<cuts.size();i++){
+            http.check();long a=cuts.get(i),b=cuts.get(i+1);File file=new File(dir,"block-"+i+".m4a");
+            // Se escribe a un temporal y se renombra: si Android corta a la mitad, no queda un bloque dañado.
+            if(!file.exists()||file.length()==0){File tmp=new File(dir,"block-"+i+".tmp");remuxRange(source,tmp,a,b,http);if(!tmp.renameTo(file))throw new IOException("No se pudo guardar el bloque");}
+            parts.add(new Part(file,a/1000d,b-a));
+        }
+        return parts;
     }
 
     /** Copia un tramo sin recodificar (AAC → AAC). Si el origen no es AAC, se recodifica. */

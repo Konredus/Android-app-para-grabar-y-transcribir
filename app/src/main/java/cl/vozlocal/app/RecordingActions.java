@@ -85,7 +85,12 @@ final class RecordingActions {
         try{Pipeline.request(s,r.id,speakers);if(changed!=null)changed.run();String blocker=Pipeline.blocker(s);s.toast(blocker==null?"Transcribiendo · sigue aunque bloquees el teléfono":"En cola · "+blocker);}
         catch(Exception e){s.message("No se pudo poner en cola",e instanceof HttpApi.UserAction?e.getMessage():"Vuelve a intentarlo.");}
     }
-    static void cancel(Screen s,Recording r,Runnable changed){try{Pipeline.cancel(s,r.id);if(changed!=null)changed.run();}catch(Exception e){s.message("Transcripción","No se pudo cancelar el trabajo.");}}
+    /** Cancelar pierde el trabajo en curso: siempre se confirma (pedido del usuario, 0.4.3). */
+    static void cancel(Screen s,Recording r,Runnable changed){
+        s.sheet("¿Cancelar la transcripción?","Se detiene el envío a OpenAI. Los bloques ya listos no se vuelven a cobrar si la reanudas más tarde con la misma opción de voces.")
+            .primary("Cancelar transcripción",Ui.Style.DESTRUCTIVE,()->{try{Pipeline.cancel(s,r.id);if(changed!=null)changed.run();}catch(Exception e){s.message("Transcripción","No se pudo cancelar el trabajo.");}return true;})
+            .secondary("Seguir transcribiendo",null).show();
+    }
     static void delete(Screen s,Recording r,Runnable before,Runnable after){
         s.confirm("¿Eliminar «"+r.title+"»?","Se borrarán el audio y la transcripción de este teléfono. Las copias en tu carpeta elegida se conservan. No se puede deshacer.","Eliminar",true,()->{
             if(before!=null)before.run();if(!r.delete(s))s.message("Eliminar","No se pudo eliminar el audio.");else{Diagnostics.event("recording_deleted",r.id);if(after!=null)after.run();}

@@ -47,7 +47,7 @@ final class Transcriber {
                     String reason=describe(e);
                     FilesStore.update(c,r.id,s->s.put("attempts",attempts).put("requested",again).put("failed",!again).put("lastError",reason));
                     Pipeline.log(c,r.id,"Intento "+attempts+" de 5 falló: "+reason+(again?" · se reintentará (los bloques ya listos no se vuelven a enviar)":" · pulsa Reintentar"));
-                    Diagnostics.event("job_retry",r.id,"count",attempts,"error_class",e.getClass().getSimpleName());
+                    Diagnostics.event("job_retry",r.id,"count",attempts,"error_class",e.getClass().getSimpleName(),"reason",HttpApi.safeReason(e),"net",Pipeline.networkName(c));
                 }
             }
             retry|=Pipeline.pending(c);
@@ -70,16 +70,21 @@ final class Transcriber {
         JSONObject initial=FilesStore.state(c,r.id);boolean wantSpeakers=initial.has("speakers")?initial.optBoolean("speakers"):settings.defaultSpeakers();
         if(!Transcript.exists(c,r.id)){
             ProviderConfig config=settings.config(wantSpeakers);if(config.key.isEmpty())throw new HttpApi.UserAction("Agrega una clave de API en Ajustes y pulsa Reintentar.");
-            long target=config.speakers?BLOCK_SPEAKERS_MS:BLOCK_TEXT_MS;boolean compress=!Pipeline.unmetered(c);
+            long target=config.speakers?BLOCK_SPEAKERS_MS:BLOCK_TEXT_MS;
             String profile=config.fingerprint()+settings.language()+"|v2|"+target;
             if(!profile.equals(FilesStore.state(c,r.id).optString("profile"))){
                 java.io.File[] checkpoints=Recording.directory(c).listFiles((dir,name)->name.startsWith(r.id+".part")&&name.endsWith(".json"));if(checkpoints!=null)for(java.io.File file:checkpoints)file.delete();
-                FilesStore.update(c,r.id,s->s.put("profile",profile).put("blocksDone",0).put("doneAudioMs",0).put("bytesSent",0).put("inTokens",0).put("outTokens",0).put("usageSec",0).put("blockMsSum",0).put("blockCount",0));
+                AudioParts.clearBlocks(c,r.id);
+                FilesStore.update(c,r.id,s->s.put("profile",profile).remove("cuts"));
+                FilesStore.update(c,r.id,s->s.put("blocksDone",0).put("doneAudioMs",0).put("bytesSent",0).put("inTokens",0).put("outTokens",0).put("usageSec",0).put("blockMsSum",0).put("blockCount",0));
             }
             FilesStore.update(c,r.id,s->s.put("model",config.model).put("speakers",config.speakers).put("audioMs",r.duration).put("provider",config.provider));
-            Diagnostics.event("job_start",r.id,"provider",config.provider,"model",config.model,"bytes",r.audio(c).length(),"duration_ms",r.duration);
-            stage(r,"Preparando audio"+(compress?" · comprimido para ahorrar datos móviles":""),-1);
-            List<AudioParts.Part> parts=AudioParts.plan(c,r,http,target,compress,line->Pipeline.log(c,r.id,line));
+            Diagnostics.event("job_start",r.id,"provider",config.provider,"model",config.model,"bytes",r.audio(c).length(),"duration_ms",r.duration,"net",Pipeline.networkName(c),"runner",budgetMs>0?"job":"fgs");
+            stage(r,"Preparando audio",-1);long prepStart=System.currentTimeMillis();
+            List<Long> cuts=new ArrayList<>();
+            List<AudioParts.Part> parts=AudioParts.plan(c,r,http,target,FilesStore.state(c,r.id).optJSONArray("cuts"),cuts,line->Pipeline.log(c,r.id,line));
+            JSONArray savedCuts=new JSONArray();for(Long cut:cuts)savedCuts.put(cut);FilesStore.update(c,r.id,s->s.put("cuts",savedCuts));
+            Diagnostics.event("prepare_done",r.id,"parts",parts.size(),"elapsed_ms",System.currentTimeMillis()-prepStart);
             int n=parts.size();FilesStore.update(c,r.id,s->s.put("blocks",n));
             if(n>1)Pipeline.log(c,r.id,"Audio de "+Recording.time(r.duration)+" dividido en "+n+" bloques de ~"+(target/60000)+" min, cortados en pausas · se envían de a "+PARALLEL+" en paralelo");
             JSONObject[] responses=new JSONObject[n];
@@ -100,7 +105,9 @@ final class Transcriber {
                     if(first!=null)throw first;
                 }finally{pool.shutdownNow();}
                 check(r);Transcript transcript=Transcript.fromParts(Arrays.asList(responses),offsets(parts));transcript.data.put("provider",config.provider).put("model",config.model);transcript.save(c,r.id);
-            }finally{http.onUploaded=null;http.onProgress=null;for(AudioParts.Part part:parts)if(!part.file.equals(r.audio(c)))part.file.delete();}
+            }finally{http.onUploaded=null;http.onProgress=null;}
+            // Los bloques se conservan entre intentos; se borran solo con la transcripción ya guardada.
+            AudioParts.clearBlocks(c,r.id);
         }
         check(r);long queued=FilesStore.state(c,r.id).optLong("queuedAt",start);long total=System.currentTimeMillis()-queued;
         FilesStore.update(c,r.id,s->s.put("requested",false).put("failed",false).put("attempts",0).put("doneIn",total).put("upSent",0).put("upTotal",0).put("doneAudioMs",r.duration));
@@ -121,7 +128,7 @@ final class Transcriber {
         long blockStart=System.currentTimeMillis();
         stage(r,"Enviando "+label,0);
         h.onProgress=(sent,total)->progress(r,i,sent,total,label);
-        h.onUploaded=()->{uploads.remove(i);publishUploads(r);Pipeline.log(c,r.id,(n>1?"Bloque "+(i+1)+" enviado":"Audio enviado")+" · esperando respuesta del proveedor");};
+        h.onUploaded=()->{uploads.remove(i);publishUploads(r);Pipeline.log(c,r.id,(n>1?"Bloque "+(i+1)+" enviado":"Audio enviado")+(config.provider.equals("openai")?" · OpenAI está transcribiendo":" · el servidor está transcribiendo"));};
         OpenAiClient.Delta delta=chars->liveText(r,i,chars);
         JSONObject response;
         try{response=new OpenAiClient(h).transcribe(part.file,config,settings.language(),refs,delta);}

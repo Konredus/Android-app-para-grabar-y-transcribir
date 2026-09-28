@@ -18,6 +18,8 @@ final class Settings {
     String provider(){return prefs.getString("provider","openai");}
     String prefix(){return provider().equals("openai")?"":"custom_";}
     boolean hasKey() { return prefs.contains(prefix()+"keyEncrypted"); }
+    /** Agregar la fecha (2026-09-27) delante de cada nombre. Activado por defecto (pedido del usuario, 0.4.3). */
+    boolean datePrefix(){return prefs.getBoolean("datePrefix",true);}
     /** "ask" (preguntar cada vez), "always" o "never". */
     String speakersMode(){return prefs.getString("speakersMode","ask");}
     /** Modelo para transcribir sin separar voces (OpenAI). */

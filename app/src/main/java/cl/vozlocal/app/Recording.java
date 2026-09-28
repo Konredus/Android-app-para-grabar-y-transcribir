@@ -18,7 +18,17 @@ final class Recording {
     static File directory(Context c) { File d = new File(c.getFilesDir(), "recordings"); d.mkdirs(); return d; }
     File audio(Context c) { return new File(directory(c), id + ".m4a"); }
     static String defaultTitle(long time) { return "Grabación " + new SimpleDateFormat("dd MMM · HH:mm", new Locale("es", "CL")).format(new Date(time)); }
+    /** Fecha ISO de la grabación (año-mes-día): ordena solos los archivos en cualquier carpeta. */
+    static String isoDate(long time) { return new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(new Date(time)); }
+    /** "2026-09-27 Nombre". No duplica si el nombre ya empieza con una fecha; el título por defecto queda "2026-09-27 Grabación 16:00". */
+    static String withDate(String title, long created) {
+        String t = title == null ? "" : title.trim();
+        if (t.matches("^\\d{4}-\\d{2}-\\d{2}( .*)?$")) return t;
+        if (t.isEmpty() || t.equals(defaultTitle(created))) return isoDate(created) + " Grabación " + new SimpleDateFormat("HH:mm", Locale.ROOT).format(new Date(created));
+        return isoDate(created) + " " + t;
+    }
     void save(Context c) throws Exception {
+        if (new Settings(c).datePrefix()) title = withDate(title, created);
         JSONObject j = new JSONObject().put("id", id).put("title", title).put("created", created).put("duration", duration);
         android.util.AtomicFile f = new android.util.AtomicFile(new File(directory(c), id + ".json"));
         FileOutputStream out = null;
@@ -49,6 +59,7 @@ final class Recording {
     }
     boolean delete(Context c) {
         try { Pipeline.cancel(c,id); } catch(Exception ignored) { }
+        AudioParts.clearBlocks(c,id);
         synchronized(FilesStore.LOCK) {
             if (!audio(c).delete()) return false;
             File[] files=directory(c).listFiles((dir,name)->name.startsWith(id+"."));

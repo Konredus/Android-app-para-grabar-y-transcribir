@@ -93,6 +93,11 @@ final class FeatureChecks {
         File range=new File(c.getCacheDir(),"test-range.m4a");AudioParts.remuxRange(r.audio(c),range,500,2000,new HttpApi());
         assertThat(Math.abs(AudioConvert.duration(range)-1500)<400,"Range remux duration wrong");range.delete();
         long q=AudioParts.quietest(r.audio(c),1500,1000,new HttpApi());assertThat(q>=400&&q<=2600,"Quiet point outside search window");
+        // Fecha delante del nombre (0.4.3).
+        long when=new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm",java.util.Locale.ROOT).parse("2026-09-27 16:05").getTime();
+        assertThat(Recording.withDate("Reunión",when).equals("2026-09-27 Reunión"),"Date prefix missing");
+        assertThat(Recording.withDate("2026-09-20 Ya fechada",when).equals("2026-09-20 Ya fechada"),"Date prefix duplicated");
+        assertThat(Recording.withDate(Recording.defaultTitle(when),when).equals("2026-09-27 Grabación 16:05"),"Default title with date wrong");
         // Costos y selección de modelo según la elección de voces.
         assertThat(Math.abs(Pricing.estimate("gpt-transcribe",60_000)-0.0045)<1e-9&&Pricing.estimate("custom-model",60_000)<0,"Pricing estimate wrong");
         assertThat(Pricing.usd(0.0123).equals("US$0,012"),"Currency format wrong");
