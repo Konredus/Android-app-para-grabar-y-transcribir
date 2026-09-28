@@ -14,6 +14,10 @@ public class RecorderService extends Service {
     /** Última grabación guardada; la pantalla de inicio la consume para ofrecer los siguientes pasos. */
     static volatile String lastSavedId;
     static volatile String activeTitle;
+    /** Duración mínima de una grabación; por debajo se descarta como toque accidental. */
+    static final long MIN_MS = 3000;
+    /** Aviso breve para la pantalla de inicio (p. ej. grabación descartada por corta). */
+    static volatile String notice;
     private static volatile long accumulated, started;
     private MediaRecorder recorder;
     private Recording recording;
@@ -85,7 +89,12 @@ public class RecorderService extends Service {
         try { recorder.stop(); valid = true; }
         catch (RuntimeException e) { error = "La grabación fue demasiado corta o se interrumpió. No se pudo guardar."; }
         finally { recorder.release(); recorder = null; if (wakeLock != null && wakeLock.isHeld()) wakeLock.release(); }
-        if (recording != null) {
+        // Un toque accidental (menos de 3 s) no se guarda ni se envía a transcribir: es un error, no una grabación.
+        if (valid && recording != null && duration < MIN_MS) {
+            valid = false; recording.audio(this).delete(); notice = "Grabación muy corta (menos de 3 s) · no se guardó";
+            Diagnostics.event("recording_discarded", recording.id, "duration_ms", duration);
+        }
+        else if (recording != null) {
             if (valid) { recording.duration = duration; try { recording.save(this); } catch (Exception e) { error = "El audio se guardó, pero no su título. Aparecerá como audio recuperado."; } }
             else recording.audio(this).delete();
         }

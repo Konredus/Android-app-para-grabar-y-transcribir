@@ -144,6 +144,10 @@ public class RecordingActivity extends Screen {
         condition(online&&(!s.wifiOnly()||wifi),!online?"Sin conexión a internet":s.wifiOnly()?(wifi?"Wi-Fi conectado":"Se requiere Wi-Fi · ahora usas datos móviles"):(wifi?"Conectado por Wi-Fi":"Conectado por datos móviles"));
         condition(!s.charging()||charging,s.charging()?(charging?"Cargando":"Se requiere conectar el cargador"):"Cargador no requerido");
         condition(charging||level>15,"Batería "+level+" %"+(charging||level>15?"":" · Android espera a que cargues"));
+        // Con la optimización activa, algunos teléfonos congelan la app con la pantalla bloqueada y cortan la conexión.
+        boolean free=Battery.unrestricted(this);
+        condition(free,free?"Puede trabajar con la pantalla bloqueada":"Android optimiza la batería de Voz local · puede cortar la transcripción al bloquear");
+        if(!free){Ui.Btn allow=ui.button("Permitir en segundo plano",R.drawable.ic_battery,Ui.Style.TONAL,v->RecordingActions.allowBackground(this));conditions.addView(allow,ui.top(S2));}
     }
     private void condition(boolean ok,String text){LinearLayout r=ui.row();r.setPadding(0,ui.dp(3),0,ui.dp(3));r.addView(ui.icon(ok?R.drawable.ic_check_circle:R.drawable.ic_clock,ok?p.primary:p.error,18));r.addView(ui.space(S2));r.addView(ui.text(text,Type.BODY_MEDIUM,ok?p.onSurfaceVariant:p.onSurface));conditions.addView(r);}
     // ---------- Métricas: tiempo, velocidad, costo estimado, tokens y datos ----------
@@ -165,7 +169,7 @@ public class RecordingActivity extends Screen {
         else if(secs>0)cells.add(new String[]{"Audio facturado",Recording.time((long)(secs*1000))});
         long sent=st.optLong("bytesSent")+(live?st.optLong("upSent"):0);if(sent>0)cells.add(new String[]{"Datos enviados",String.format(Locale.ROOT,"%.1f MB",sent/1e6).replace('.',',')});
         int chars=st.optInt("liveChars");if(live&&chars>0)cells.add(new String[]{"Texto recibido",String.format(Locale.ROOT,"%,d",chars).replace(',','.')+" caracteres"});
-        if(st.optInt("attempts")>0)cells.add(new String[]{"Reintentos",String.valueOf(st.optInt("attempts"))});
+        int retries=st.optInt("retries",st.optInt("attempts"));if(retries>0)cells.add(new String[]{"Reintentos",retries+(st.optInt("cuts")>0?" · "+st.optInt("cuts")+" por el teléfono":"")});
         for(int i=0;i<cells.size();i+=2){
             LinearLayout line=ui.row();line.setGravity(Gravity.TOP);line.setPadding(0,ui.dp(S1),0,ui.dp(S1));
             for(int k=i;k<Math.min(i+2,cells.size());k++){LinearLayout cell=ui.column();cell.addView(ui.text(cells.get(k)[0],Type.BODY_SMALL,p.onSurfaceVariant));TextView v=ui.text(cells.get(k)[1],Type.TITLE_SMALL,p.onSurface);v.setFontFeatureSettings("tnum");cell.addView(v);line.addView(cell,new LinearLayout.LayoutParams(0,-2,1));

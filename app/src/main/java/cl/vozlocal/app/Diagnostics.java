@@ -18,7 +18,7 @@ final class Diagnostics {
         Context context=app;
         IO.execute(()->{try{
             JSONObject row=new JSONObject().put("time",System.currentTimeMillis()).put("event",event).put("version",version).put("job",job==null?"":job);
-            for(int i=0;i+1<fields.length;i+=2){String key=String.valueOf(fields[i]);if(Arrays.asList("stage","provider","model","http","request_id","code","type","param","elapsed_ms","bytes","duration_ms","part","parts","action","screen","result","error_class","count","runner","net","reason").contains(key))row.put(key,fields[i+1]);}
+            for(int i=0;i+1<fields.length;i+=2){String key=String.valueOf(fields[i]);if(Arrays.asList("stage","provider","model","http","request_id","code","type","param","elapsed_ms","bytes","duration_ms","part","parts","action","screen","result","error_class","count","runner","net","reason","local","display","idle","battery").contains(key))row.put(key,fields[i+1]);}
             File dir=new File(context.getFilesDir(),"diagnostics");dir.mkdirs();File file=new File(dir,"events.jsonl"),old=new File(dir,"events.previous.jsonl");
             if(file.length()>2*1024*1024){old.delete();file.renameTo(old);}
             if(old.exists() && old.lastModified()<System.currentTimeMillis()-30L*86400000)old.delete();
@@ -42,8 +42,7 @@ final class Diagnostics {
     /** Datos del teléfono que afectan el trabajo en segundo plano (sin datos personales). */
     private static String device(Context c){
         StringBuilder d=new StringBuilder("Teléfono: "+Build.MANUFACTURER+" "+Build.MODEL+"\n");
-        try{android.os.PowerManager pm=c.getSystemService(android.os.PowerManager.class);d.append("Optimización de batería para Voz local: ").append(pm.isIgnoringBatteryOptimizations(c.getPackageName())?"desactivada (sin restricciones)":"activada (Android puede frenar el trabajo de fondo)").append("\n");}catch(Exception ignored){}
-        try{android.app.ActivityManager am=c.getSystemService(android.app.ActivityManager.class);if(Build.VERSION.SDK_INT>=28)d.append("Segundo plano restringido: ").append(am.isBackgroundRestricted()?"sí":"no").append("\n");}catch(Exception ignored){}
+        try{android.os.PowerManager pm=c.getSystemService(android.os.PowerManager.class);d.append("Optimización de batería para Voz local: ").append(pm.isIgnoringBatteryOptimizations(c.getPackageName())?"desactivada (sin restricciones)":"activada (Android puede frenar el trabajo de fondo)").append("\n");}catch(Exception ignored){}        try{android.app.ActivityManager am=c.getSystemService(android.app.ActivityManager.class);if(Build.VERSION.SDK_INT>=28)d.append("Segundo plano restringido: ").append(am.isBackgroundRestricted()?"sí":"no").append("\n");}catch(Exception ignored){}
         try{d.append("Red al generar el informe: ").append(Pipeline.networkName(c)).append("\n");}catch(Exception ignored){}
         return d.toString();
     }
@@ -57,7 +56,7 @@ final class Diagnostics {
         for(Object[] item:found.subList(0,Math.min(5,found.size()))){
             Recording r=(Recording)item[1];JSONObject st=(JSONObject)item[2];org.json.JSONArray log=(org.json.JSONArray)item[3];
             out.append("\n· Grabación ").append(r.id,0,8).append(" · audio ").append(Recording.time(r.duration)).append(" · modelo ").append(st.optString("model","?")).append(" · voces ").append(st.optBoolean("speakers")?"sí":"no")
-               .append(" · bloques ").append(st.optInt("blocksDone")).append('/').append(st.optInt("blocks")).append(" · intentos ").append(st.optInt("attempts")).append(" · estado ").append(st.optBoolean("requested")?"en proceso":st.optBoolean("failed")?"error":"terminado").append("\n");
+               .append(" · bloques ").append(st.optInt("blocksDone")).append('/').append(st.optInt("blocks")).append(" · reintentos ").append(st.optInt("retries",st.optInt("attempts"))).append(" (cortes del teléfono ").append(st.optInt("cuts")).append(')').append(" · estado ").append(st.optBoolean("requested")?"en proceso":st.optBoolean("failed")?"error":"terminado").append("\n");
             if(st.has("doneIn"))out.append("  tiempo total ").append(Recording.time(st.optLong("doneIn"))).append("\n");
             for(int i=0;i<log.length();i++){JSONObject e=log.optJSONObject(i);if(e!=null)out.append("  ").append(f.format(new Date(e.optLong("t")))).append("  ").append(e.optString("m")).append("\n");}
         }

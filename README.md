@@ -1,6 +1,6 @@
 # Voz local para Android
 
-Grabadora y transcriptor local para Android 8 o posterior. Versión **0.4.3** (preliminar), licencia MIT.
+Grabadora y transcriptor local para Android 8 o posterior. Versión **0.4.4** (preliminar), licencia MIT.
 
 [Descargar APKs](https://github.com/Konredus/Android-app-para-grabar-y-transcribir/releases) · [Historial](CHANGELOG.md) · [Criterios de diseño](docs/diseno/CRITERIOS.md)
 

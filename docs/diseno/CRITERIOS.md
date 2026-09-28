@@ -231,3 +231,6 @@ adb exec-out screencap -p > captura.png    # captura para comparar
 | 2026-09-27 | Reintentos dentro del servicio en primer plano | Con la app cerrada, Android 12+ no deja volver a primer plano: el reintento debe ocurrir antes de soltarlo |
 | 2026-09-27 | Confirmar antes de cancelar; fecha ISO delante del nombre | Pedidos del usuario: evitar cancelar por error y que los archivos se ordenen solos por fecha |
 | 2026-09-23 | Material You opcional (apagado por defecto) | Se respeta la identidad de marca y se ofrece la integración con el sistema a quien la quiera |
+| 2026-09-28 | Mostrar el estado de la batería como una **condición más** de la tarjeta de proceso, con un botón para permitirlo | El problema aparece justo ahí (la transcripción no avanza con el teléfono bloqueado); explicarlo en contexto funciona mejor que un aviso al abrir la app |
+| 2026-09-28 | Los cortes del propio teléfono no cuentan como intentos fallidos | No son culpa del proveedor; contarlos agotaba los 5 intentos y mostraba "falló" cuando bastaba con reintentar |
+| 2026-09-28 | Descartar grabaciones de menos de 3 s sin preguntar | Un toque accidental no es una decisión: pedir confirmación agrega fricción y además se enviaba (y cobraba) a OpenAI |

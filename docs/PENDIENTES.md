@@ -30,7 +30,17 @@
   - Preguntar al usuario si quiere aplicarlo a las grabaciones que ya existen, por ejemplo con un botón "Aplicar a todas" en Ajustes.
 - **Ubicación en Ajustes:** sección "Grabación", interruptor "Agregar la fecha al nombre" con el ejemplo `2026-09-23 Reunión` como texto de apoyo.
 
-## Para la próxima versión (pedido 2026-09-28)
+## Hechas en la 0.4.4
+- ✅ Descartar grabaciones de menos de 3 s (sin "Deshacer" por ahora: el aviso solo informa).
+- ✅ Permiso de batería en la tarjeta de proceso y en Ajustes, con la ruta por marca (vivo, Xiaomi, Samsung, Huawei, OPPO).
+- ✅ Vigilante de conexión, los cortes del teléfono no gastan intentos, reintento al encender la pantalla y Wi-Fi despierto.
+- ✅ Informe: "reintentos (cortes del teléfono)" y eventos con pantalla/reposo/batería.
+
+## Pendiente de revisar
+- Importar un audio largo y tocar "Volver" durante la conversión: en la 0.4.2 cancelaba la importación (`InterruptedIOException`). Verificar si sigue pasando.
+- "Deshacer" en el aviso de grabación corta, si alguna vez se descarta algo intencional.
+
+## Detalle del pedido (2026-09-28, ya implementado)
 
 ### Descartar grabaciones accidentales de menos de 3 segundos
 - **Problema:** si se escapa el dedo, queda guardada una grabación de 1–2 s que no sirve y ensucia Inicio y Biblioteca.
