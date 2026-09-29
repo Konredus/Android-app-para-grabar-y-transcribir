@@ -72,6 +72,16 @@ final class Sheet {
     Sheet secondary(String label,Runnable run){Ui.Btn b=ui.button(label,0,Ui.Style.PLAIN,v->{dialog.dismiss();if(run!=null)run.run();});LinearLayout.LayoutParams lp=Ui.fill();lp.topMargin=ui.dp(S1);buttons().addView(b,lp);return this;}
     Sheet onDismiss(Runnable run){dialog.setOnDismissListener(d->run.run());return this;}
     Sheet secure(){if(dialog.getWindow()!=null)dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);return this;}
-    Sheet show(){if(!activity.isFinishing()&&!activity.isDestroyed())dialog.show();return this;}
+    Sheet show(){if(!activity.isFinishing()&&!activity.isDestroyed()){dialog.show();settle();}return this;}
+    /**
+     * Mientras la hoja sube, su contenido se asienta con un resorte leve (Material 3 Expressive): parte 24 dp más abajo
+     * y aparece con la curva emphasized. Con «Quitar animaciones» se muestra quieta.
+     */
+    private void settle(){
+        if(!AppTheme.motion())return;
+        body.setAlpha(0f);body.setTranslationY(ui.dp(S6));
+        body.animate().translationY(0f).setStartDelay(0).setDuration(SPATIAL.duration).setInterpolator(SPATIAL).start();
+        body.animate().alpha(1f).setStartDelay(0).setDuration(MOTION_BASE).setInterpolator(EMPHASIZED_DECELERATE).start();
+    }
     void dismiss(){dialog.dismiss();}
 }
