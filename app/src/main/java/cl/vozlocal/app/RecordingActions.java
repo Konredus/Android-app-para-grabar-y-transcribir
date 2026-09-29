@@ -213,12 +213,17 @@ final class RecordingActions {
         try{
             String voices=settings.config(true).model,text=settings.config(false).model;
             String provider=settings.provider();String costVoices=Pricing.usd(Pricing.estimate(provider,voices,r.duration)),costText=Pricing.usd(Pricing.estimate(provider,text,r.duration));boolean live=provider.equals("openai")&&text.equals("gpt-transcribe");
-            boolean mine=provider.equals("openai")&&Voices.has(s);
+            // Voces conocidas que van en este audio (hasta 4, la tuya primero): se dice a quién reconoce desde el inicio.
+            List<Voices.Voice> known=provider.equals("openai")?Voices.selected(s):Collections.emptyList();
+            boolean onlyMe=known.size()==1&&known.get(0).me;
+            String who=known.isEmpty()?"Para reuniones y conversaciones: Persona 1, Persona 2…"
+                :onlyMe?"Te reconoce como "+known.get(0).name+" desde el inicio; las demás, Persona 2…"
+                :(known.get(0).me?"Te reconoce ":"Reconoce ")+Voices.people(known)+"; las demás, Persona "+(known.size()+1)+"…";
             Sheet sheet=s.sheet("¿Separar voces?","Audio de "+Ui.humanDuration(r.duration)+". Puedes cambiar esta pregunta en Ajustes.")
-                .option(R.drawable.ic_people,mine?"Sí, separar voces · con Mi voz":"Sí, separar voces",(mine?"Te reconoce como "+Voices.name(s)+" desde el inicio; las demás, Persona 2…":"Para reuniones y conversaciones: Persona 1, Persona 2…")+" · más lento"+(costVoices.equals("—")?"":" · ≈ "+costVoices),()->start(s,r,changed,true))
+                .option(R.drawable.ic_people,known.isEmpty()?"Sí, separar voces":onlyMe?"Sí, separar voces · con Mi voz":"Sí, separar voces · con voces conocidas",who+" · más lento"+(costVoices.equals("—")?"":" · ≈ "+costVoices),()->start(s,r,changed,true))
                 .option(R.drawable.ic_doc,"No, solo el texto","Para dictados y notas · más rápido"+(live?", el texto aparece en vivo":"")+(costText.equals("—")?"":" · ≈ "+costText),()->start(s,r,changed,false));
             // Sin "Mi voz", la separación se equivoca más al inicio: se sugiere grabarla (una sola vez).
-            if(provider.equals("openai")&&!mine)sheet.action(R.drawable.ic_mic_fill,"Grabar mi voz para que me reconozca",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true)));
+            if(provider.equals("openai")&&!Voices.has(s))sheet.action(R.drawable.ic_mic_fill,"Grabar mi voz para que me reconozca",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true)));
             sheet.show();
         }catch(Exception e){start(s,r,changed,settings.defaultSpeakers());}
     }

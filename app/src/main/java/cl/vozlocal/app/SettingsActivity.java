@@ -10,16 +10,17 @@ import android.text.InputType;
 import android.view.*;
 import android.widget.*;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.*;
 import static cl.vozlocal.app.AppTheme.*;
 
 /**
- * Ajustes en el orden de tu recorrido (0.6.0): «Tu flujo» (0-Inbox, nota, automatización, Mi voz) → servicio de
+ * Ajustes en el orden de tu recorrido (0.6.0): «Tu flujo» (0-Inbox, nota, automatización, voces conocidas) → servicio de
  * transcripción → energía y red → copias → apariencia → ayuda. Cada fila muestra su valor a la derecha y a lo más
  * una línea de apoyo; las explicaciones largas viven en «Más información». Ver docs/diseno/PROPUESTA-0.6.md (#3).
  *
- * Extras del intent: focusKey (pedir la clave si falta), voice (grabar «Mi voz» y volver), back (Atrás vuelve a
+ * Extras del intent: focusKey (pedir la clave si falta), voice (grabar tu voz, o ver las voces conocidas, y volver), back (Atrás vuelve a
  * la pantalla anterior), inbox (elegir la carpeta de guardado rápido y volver) y noteAi (abrir «IA de la nota»).
  */
 public class SettingsActivity extends Screen {
@@ -51,11 +52,11 @@ public class SettingsActivity extends Screen {
     private void openFrom(Intent intent){
         if(isFinishing())return;
         if(intent.getBooleanExtra("focusKey",false)&&!settings.hasKey())keySheet();
-        else if(intent.getBooleanExtra("voice",false)&&voiceRow!=null)voiceSheet();
+        else if(intent.getBooleanExtra("voice",false)&&voiceRow!=null){if(Voices.has(this))voiceSheet();else myVoiceSheet();}
         else if(intent.getBooleanExtra("inbox",false))saveSheet();
         else if(intent.getBooleanExtra("noteAi",false))noteAiSheet();
     }
-    /** Abierta desde otra pantalla para un paso puntual (Mi voz, carpeta rápida): Atrás (o terminar) vuelve ahí, no a Inicio. */
+    /** Abierta desde otra pantalla para un paso puntual (grabar tu voz, carpeta rápida): Atrás (o terminar) vuelve ahí, no a Inicio. */
     private boolean voiceFlow,returnOnBack,inboxFlow;
     @Override public void onBackPressed(){if(voiceFlow||returnOnBack||inboxFlow){finish();return;}navigate(0);}
 
@@ -79,11 +80,11 @@ public class SettingsActivity extends Screen {
         ui.addRow(flow,ui.switchRow(R.drawable.ic_calendar,"Fecha delante del nombre","Ej.: "+Recording.isoDate(System.currentTimeMillis())+" Reunión",settings.datePrefix(),on->{settings.prefs.edit().putBoolean("datePrefix",on).apply();Diagnostics.event("setting_changed",null,"action","date_prefix","result",on);showRow(dates,on);if(on)offerDatesForExisting();}));
         ui.addRow(flow,dates);showRow(dates,settings.datePrefix());
         voiceRow=null;
-        if(openai&&settings.canSeparate()){voiceRow=ui.listRow(R.drawable.ic_mic_fill,"Mi voz","Para que te reconozca al separar voces",voiceValue());voiceRow.onClick(v->voiceSheet());ui.addRow(flow,voiceRow);}
+        if(openai&&settings.canSeparate()){voiceRow=ui.listRow(R.drawable.ic_voice,"Voces conocidas","Para reconocer a cada persona al separar voces",voiceValue());voiceRow.onClick(v->voiceSheet());ui.addRow(flow,voiceRow);}
         page.addView(more("Guarda la nota o el texto con un toque desde cada grabación.","Tu flujo",
             "Guardado rápido: la carpeta donde el botón de cada grabación deja la nota (.md) o el texto (.txt), por ejemplo tu 0-Inbox de Google Drive. Si después corriges voces o nombres, «Actualizar» reemplaza el mismo archivo, sin crear copias.\n\n"
             +"Nota para tu segundo cerebro: una IA arma un resumen con decisiones, tareas y frases clave a partir del texto de la transcripción (no se vuelve a enviar el audio). Automática, se arma al terminar cada transcripción; si la apagas, la pides con un toque desde la grabación. Revísala antes de guardarla: puede tener errores.\n\n"
-            +"Mi voz: una muestra de 10 s para que la app te reconozca con tu nombre al separar voces."));
+            +"Voces conocidas: muestras de 10 s de tu voz y de las personas con que más hablas, para que la app reconozca a cada una con su nombre al separar voces. Se usan hasta "+Transcriber.MAX_KNOWN+" por audio. También puedes guardar la voz de alguien desde una grabación: toca su nombre y «Guardar la voz de…»."));
 
         // 2. Servicio de transcripción: quién transcribe y con qué clave. El resultado de la comprobación queda en su fila.
         page.addView(ui.section("Servicio de transcripción"));LinearLayout api=ui.group();page.addView(api,Ui.fill());
@@ -360,40 +361,139 @@ public class SettingsActivity extends Screen {
     }
     @Override protected void onDestroy(){if(http!=null)http.cancel();io.shutdown();stopVoice(false);releaseVoicePlayer();super.onDestroy();}
 
-    // ---------- Mi voz ----------
+    // ---------- Voces conocidas ----------
     private static final int MIC_FOR_VOICE=62;
-    private android.media.MediaRecorder voiceRecorder;private java.io.File voiceTmp;private long voiceStarted;private android.media.MediaPlayer voicePlayer;
-    private final Handler voiceTimer=new Handler(Looper.getMainLooper());private String pendingVoiceName;private Sheet voiceRecording;
+    private android.media.MediaRecorder voiceRecorder;private java.io.File voiceTmp;private long voiceStarted;private android.media.MediaPlayer voicePlayer;private Runnable voiceEnded;
+    private final Handler voiceTimer=new Handler(Looper.getMainLooper());private Sheet voiceRecording;
+    /** De quién es la muestra que se graba: tu voz (me), una voz guardada (id: se reemplaza su muestra) o una nueva (id null). */
+    private static final class VoiceTake{final String name,id;final boolean me;VoiceTake(String name,String id,boolean me){this.name=name;this.id=id;this.me=me;}}
+    private VoiceTake voiceTake,pendingVoice;
     /** Al salir de la pantalla Android silencia el micrófono: la toma se descarta en vez de guardar una muestra muda. */
-    @Override protected void onStop(){if(voiceRecorder!=null){stopVoice(false);if(voiceRecording!=null)voiceRecording.dismiss();toast("Grabación de tu voz interrumpida · vuelve a intentarlo");}super.onStop();}
-    private String voiceValue(){return Voices.has(this)?"Grabada · "+Voices.name(this):"Sin grabar";}
-    /** Muestra de la voz del usuario: se envía en todos los bloques al separar voces para reconocerlo desde el inicio. */
+    @Override protected void onStop(){if(voiceRecorder!=null){stopVoice(false);if(voiceRecording!=null)voiceRecording.dismiss();toast("Grabación de la voz interrumpida · vuelve a intentarlo");}releaseVoicePlayer();super.onStop();}
+    /** «Konrad (tú) · Fran», o «Ninguna». */
+    private String voiceValue(){StringBuilder b=new StringBuilder();for(Voices.Voice v:Voices.list(this))b.append(b.length()==0?"":" · ").append(v.label());return b.length()==0?"Ninguna":b.toString();}
+    private void refreshVoices(){if(voiceRow!=null)voiceRow.setValue(voiceValue());}
+    /**
+     * Voces conocidas: tu voz y las de las personas con que más hablas. Al separar voces van como muestra en todo el
+     * audio (hasta 4 por audio, la tuya primero) para reconocer a cada persona desde el inicio. Tocar una abre sus opciones.
+     */
     private void voiceSheet(){
-        boolean has=Voices.has(this);
-        Sheet s=sheet("Mi voz","Graba 10 segundos leyendo en voz alta. Al separar voces, tu voz va como muestra en todo el audio para que la app te reconozca desde el inicio y ponga tu nombre. Queda en este teléfono y se envía a OpenAI solo junto con los audios que transcribes.");
-        EditText name=ui.field("Tu nombre (p. ej. Konrad)","Tu nombre");name.setSingleLine(true);name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(40)});
-        name.setText(settings.prefs.getString("myVoiceName",""));s.add(name);
-        if(has){
-            s.action(R.drawable.ic_play,"Escuchar mi muestra",false,this::playVoice);
-            s.action(R.drawable.ic_mic_fill,"Grabar de nuevo",false,()->recordVoice(name.getText().toString()));
-            s.action(R.drawable.ic_trash,"Borrar mi voz",true,()->confirm("¿Borrar tu voz?","Al separar voces ya no se usará tu muestra.","Borrar",true,()->{Voices.delete(this);if(voiceRow!=null)voiceRow.setValue(voiceValue());toast("Muestra borrada");}));
-            s.primary("Guardar nombre",Ui.Style.PRIMARY,()->{String n=name.getText().toString().trim();if(n.isEmpty()){name.setError("Escribe tu nombre");return false;}Voices.setName(this,n);if(voiceRow!=null)voiceRow.setValue(voiceValue());return true;});
-        }else s.primary("Grabar mi voz",Ui.Style.PRIMARY,()->{String n=name.getText().toString().trim();if(n.isEmpty()){name.setError("Escribe tu nombre");return false;}recordVoice(n);return true;});
+        List<Voices.Voice> all=Voices.list(this);
+        Sheet s=sheet("Voces conocidas",all.isEmpty()
+            ?"Graba 10 segundos de tu voz y de las personas con que más hablas. Al separar voces, estas muestras van en todo el audio para reconocer a cada una desde el inicio y ponerle su nombre."
+            :"Al separar voces, estas muestras van en todo el audio para reconocer a cada persona desde el inicio y ponerle su nombre.");
+        for(int i=0;i<all.size();i++)voiceItem(s,all.get(i),i);
+        int used=Voices.used(this).size();
+        TextView note=ui.text("Se usan hasta "+Transcriber.MAX_KNOWN+" voces por audio"+(used>Transcriber.MAX_KNOWN?": tienes "+used+" activas, así que van tu voz y las primeras por nombre.":".")
+            +" Quedan en este teléfono y se envían a OpenAI solo junto con los audios que transcribes.",Type.BODY_SMALL,p.onSurfaceVariant);
+        note.setPadding(0,ui.dp(all.isEmpty()?0:S3),0,ui.dp(S2));s.add(note);
+        if(!Voices.has(this))s.action(R.drawable.ic_mic_fill,"Grabar mi voz",false,this::myVoiceSheet);
+        s.action(R.drawable.ic_person,"Agregar otra voz",false,this::addVoiceSheet);
+        s.secondary("Cerrar",null).show();
+    }
+    /** Fila de una voz: su color e inicial, su nombre (con «tú» si es la tuya) y si se usa al transcribir. No registra nombres en el diagnóstico. */
+    private void voiceItem(Sheet s,Voices.Voice v,int index){
+        LinearLayout row=ui.row();row.setMinimumHeight(ui.dp(64));row.setPadding(ui.dp(S6),ui.dp(S2),ui.dp(S6),ui.dp(S2));
+        TextView avatar=ui.text(NameVoices.initial(v.name),Type.TITLE_MEDIUM,p.surface);avatar.setGravity(Gravity.CENTER);avatar.setBackground(oval(p.speaker(index)));
+        avatar.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);if(!v.use)avatar.setAlpha(0.38f);
+        row.addView(avatar,new LinearLayout.LayoutParams(ui.dp(40),ui.dp(40)));row.addView(ui.space(S4));
+        LinearLayout texts=ui.column();LinearLayout top=ui.row();
+        TextView name=ui.oneLine(ui.text(v.name,Type.BODY_LARGE,p.onSurface));name.setMaxWidth(ui.dp(200));top.addView(name,Ui.wrap());
+        if(v.me){TextView tag=ui.chip("tú",p.onSecondaryContainer,p.secondaryContainer);tag.setPadding(ui.dp(S2),ui.dp(2),ui.dp(S2),ui.dp(2));LinearLayout.LayoutParams tp=Ui.wrap();tp.setMarginStart(ui.dp(S2));top.addView(tag,tp);}
+        texts.addView(top);
+        String status=v.use?"Se usa al transcribir":"No se usa";TextView st=ui.text(status,Type.BODY_MEDIUM,p.onSurfaceVariant);st.setPadding(0,ui.dp(2),0,0);texts.addView(st);
+        row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
+        row.setBackground(ui.ripple(null,0));row.setClickable(true);row.setFocusable(true);row.setAccessibilityDelegate(Ui.buttonRole());
+        row.setContentDescription(v.name+(v.me?", tu voz":"")+". "+status+". Ver opciones");
+        row.setOnClickListener(x->{s.dismiss();voiceDetail(v.id);});
+        LinearLayout.LayoutParams lp=Ui.fill();lp.setMargins(-ui.dp(S6),0,-ui.dp(S6),0);s.body.addView(row,lp);
+    }
+    /** Opciones de una voz: escuchar, usarla o no al transcribir, cambiar nombre, grabar de nuevo y eliminar. */
+    private void voiceDetail(String id){
+        Voices.Voice v=Voices.get(this,id);if(v==null){voiceSheet();return;}
+        String when=savedOn(v.createdAt);
+        Sheet s=sheet(v.name,v.me?"Tu voz · "+when:Character.toUpperCase(when.charAt(0))+when.substring(1));
+        Ui.Btn listen=ui.button("Escuchar",R.drawable.ic_play,Ui.Style.TONAL,null);
+        listen.setOnClickListener(x->{
+            if(voicePlayer!=null){releaseVoicePlayer();return;}
+            if(playVoice(v.id,()->{listen.setText("Escuchar");listen.setIcon(R.drawable.ic_play);})){listen.setText("Detener");listen.setIcon(R.drawable.ic_stop);}
+        });
+        LinearLayout.LayoutParams lp=Ui.wrap();lp.bottomMargin=ui.dp(S2);s.body.addView(listen,lp);
+        Ui.SwitchRow[] use={null};
+        use[0]=ui.switchRow(R.drawable.ic_voice,"Usar al transcribir",useText(v.use),v.use,on->{
+            if(!Voices.setUse(this,v.id,on)){toast("No se pudo guardar el cambio");return;}
+            use[0].setSubtitle(useText(on));refreshVoices();});
+        use[0].setPadding(ui.dp(S6),ui.dp(S3),ui.dp(S6),ui.dp(S3));LinearLayout.LayoutParams up=Ui.fill();up.setMargins(-ui.dp(S6),0,-ui.dp(S6),0);s.body.addView(use[0],up);
+        s.action(R.drawable.ic_edit,"Cambiar nombre",false,()->renameVoice(v.id));
+        s.action(R.drawable.ic_mic_fill,"Grabar de nuevo",false,()->recordVoice(new VoiceTake(v.name,v.id,v.me)));
+        s.action(R.drawable.ic_trash,"Eliminar",true,()->confirm(v.me?"¿Eliminar tu voz?":"¿Eliminar la voz de «"+v.name+"»?",
+            (v.me?"Al separar voces ya no se usará tu muestra.":"Ya no se reconocerá en tus próximos audios.")+" Las transcripciones que ya tienes no cambian.","Eliminar",true,()->{
+                Voices.remove(this,v.id);refreshVoices();toast(v.me?"Tu voz se eliminó":"Voz eliminada");voiceSheet();}));
+        s.onDismiss(this::releaseVoicePlayer);
+        s.show();
+    }
+    private static String useText(boolean on){return on?"Va como muestra al separar voces":"Queda guardada, pero no se envía";}
+    /** «guardada el 29 de septiembre» (con el año si no es este). */
+    private static String savedOn(long at){
+        if(at<=0)return "guardada en este teléfono";
+        java.util.Calendar now=java.util.Calendar.getInstance(),then=java.util.Calendar.getInstance();then.setTimeInMillis(at);
+        String pattern=now.get(java.util.Calendar.YEAR)==then.get(java.util.Calendar.YEAR)?"d 'de' MMMM":"d 'de' MMMM 'de' yyyy";
+        return "guardada el "+new java.text.SimpleDateFormat(pattern,CL).format(new java.util.Date(at));
+    }
+    private EditText nameField(String hint,String description,String value){
+        EditText f=ui.field(hint,description);f.setSingleLine(true);f.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(40)});
+        f.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS);if(value!=null)f.setText(value);return f;
+    }
+    private void renameVoice(String id){
+        Voices.Voice v=Voices.get(this,id);if(v==null){voiceSheet();return;}
+        EditText name=nameField(v.me?"Tu nombre":"Su nombre",v.me?"Tu nombre":"Nombre de la persona",v.name);
+        Sheet s=sheet("Cambiar nombre",v.me?"Así aparecerás al separar voces.":"Así aparecerá al separar voces.").add(name);
+        s.primary("Guardar",Ui.Style.PRIMARY,()->{
+            String n=Voices.clean(name.getText().toString());if(n.isEmpty()){name.setError("Escribe un nombre");return false;}
+            Voices.Voice same=Voices.findByName(this,n);if(same!=null&&!same.id.equals(v.id)){name.setError("Ya tienes una voz con ese nombre");return false;}
+            if(!Voices.rename(this,v.id,n)){name.setError("No se pudo guardar. Vuelve a intentarlo.");return false;}
+            refreshVoices();toast("Nombre guardado");page.post(this::voiceSheet);return true;});
         s.secondary("Cancelar",null).show();
     }
-    private void recordVoice(String who){
-        String n=who==null?"":who.trim();if(!n.isEmpty())Voices.setName(this,n);
-        if(RecorderService.activeId!=null){message("Mi voz","Termina la grabación en curso antes de grabar tu muestra.");return;}
-        if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){pendingVoiceName=n;requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},MIC_FOR_VOICE);return;}
-        TextView status=ui.text("Toca Grabar y lee el texto con tu voz normal.",Type.BODY_MEDIUM,p.onSurfaceVariant);status.setFontFeatureSettings("tnum");status.setPadding(0,ui.dp(S3),0,0);status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        TextView script=ui.text("«Hola, soy "+Voices.name(this)+". Estoy grabando mi voz para que Voz local me reconozca en mis conversaciones y reuniones. Hoy es un buen día para ordenar ideas.»",Type.BODY_LARGE,p.onSurface);
-        Sheet s=sheet("Lee en voz alta",null);s.add(script);s.add(status);voiceRecording=s;
+    /** Grabar tu voz: tu nombre y 10 s leyendo en voz alta. */
+    private void myVoiceSheet(){
+        Sheet s=sheet("Grabar mi voz","Graba 10 segundos leyendo en voz alta. Al separar voces, tu voz va como muestra en todo el audio para que la app te reconozca desde el inicio y ponga tu nombre. Queda en este teléfono y se envía a OpenAI solo junto con los audios que transcribes.");
+        EditText name=nameField("Tu nombre (p. ej. Konrad)","Tu nombre",settings.prefs.getString("myVoiceName",""));s.add(name);
+        s.primary("Grabar mi voz",Ui.Style.PRIMARY,()->{
+            String n=Voices.clean(name.getText().toString());if(n.isEmpty()){name.setError("Escribe tu nombre");return false;}
+            Voices.Voice same=Voices.findByName(this,n);if(same!=null&&!same.me){name.setError("Ya tienes guardada otra voz con ese nombre");return false;}
+            Voices.setName(this,n);recordVoice(new VoiceTake(n,Voices.has(this)?Voices.ME_ID:null,true));return true;});
+        s.secondary("Cancelar",null).show();
+    }
+    /** Agregar la voz de otra persona: su nombre y 10 s leyendo en voz alta (también se puede guardar desde una grabación). */
+    private void addVoiceSheet(){
+        Sheet s=sheet("Agregar otra voz","Para reconocer a alguien con quien hablas seguido. Pásale el teléfono para que lea 10 segundos en voz alta. También puedes guardarla desde una grabación: toca su nombre y elige «Guardar la voz de…».");
+        EditText name=nameField("Su nombre (p. ej. Fran)","Nombre de la persona","");s.add(name);
+        s.primary("Grabar su voz",Ui.Style.PRIMARY,()->{
+            String n=Voices.clean(name.getText().toString());if(n.isEmpty()){name.setError("Escribe su nombre");return false;}
+            Voices.Voice same=Voices.findByName(this,n);
+            if(same!=null){page.post(()->confirm("¿Reemplazar la voz guardada de "+same.name+"?","Grabarás una muestra nueva en lugar de la anterior.","Reemplazar",false,()->recordVoice(new VoiceTake(same.name,same.id,same.me))));return true;}
+            recordVoice(new VoiceTake(n,null,false));return true;});
+        s.secondary("Cancelar",null).show();
+    }
+    /** Hoja de grabación de 10 s con un texto para leer (dirigido a quien habla). Cerrarla guarda; «Cancelar» descarta. */
+    private void recordVoice(VoiceTake t){
+        if(t==null)return;
+        if(RecorderService.activeId!=null){message("Voces conocidas","Termina la grabación en curso antes de grabar una voz.");return;}
+        if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){pendingVoice=t;requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},MIC_FOR_VOICE);return;}
+        releaseVoicePlayer();
+        String who=t.name==null||t.name.trim().isEmpty()?(t.me?Voices.name(this):"esa persona"):t.name.trim();
+        TextView status=ui.text(t.me?"Toca Grabar y lee el texto con tu voz normal.":"Toca Grabar y pásale el teléfono a "+who+" para que lea con su voz normal.",Type.BODY_MEDIUM,p.onSurfaceVariant);
+        status.setFontFeatureSettings("tnum");status.setPadding(0,ui.dp(S3),0,0);status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        TextView script=ui.text(t.me?"«Hola, soy "+who+". Estoy grabando mi voz para que Voz local me reconozca en mis conversaciones y reuniones. Hoy es un buen día para ordenar ideas.»"
+            :"«Hola, soy "+who+". Estoy grabando mi voz para que Voz local me reconozca en las conversaciones y reuniones. Hoy es un buen día para ordenar ideas.»",Type.BODY_LARGE,p.onSurface);
+        Sheet s=sheet(t.me?"Lee en voz alta":"Que "+who+" lea en voz alta",null);s.add(script);s.add(status);voiceRecording=s;
         Ui.Btn go=ui.button("Grabar",R.drawable.ic_mic_fill,Ui.Style.RECORD,null);LinearLayout.LayoutParams lp=Ui.fill();lp.topMargin=ui.dp(S4);s.body.addView(go,lp);
         go.setOnClickListener(v->{
             if(voiceRecorder==null){
-                if(startVoice()){go.setText("Detener y guardar");Ui.haptic(go,Ui.Haptic.CONFIRM);
+                if(startVoice()){voiceTake=t;go.setText("Detener y guardar");Ui.haptic(go,Ui.Haptic.CONFIRM);
                     voiceTimer.post(new Runnable(){public void run(){long ms=android.os.SystemClock.elapsedRealtime()-voiceStarted;status.setText("Grabando · "+(ms/1000)+" s de "+(Voices.MAX_MS/1000));if(ms>=Voices.MAX_MS){s.dismiss();return;}voiceTimer.postDelayed(this,250);}});}
-                else{s.dismiss();message("Mi voz","No se pudo usar el micrófono. Revisa el permiso y vuelve a intentarlo.");}
+                else{s.dismiss();message("Voces conocidas","No se pudo usar el micrófono. Revisa el permiso y vuelve a intentarlo.");}
             }else s.dismiss();
         });
         // Cerrar la hoja guarda lo grabado; "Cancelar" lo descarta (la marca se pone antes de cerrar).
@@ -402,33 +502,40 @@ public class SettingsActivity extends Screen {
         s.onDismiss(()->stopVoice(!cancel[0])).show();
     }
     private boolean startVoice(){
-        try{voiceTmp=new java.io.File(getCacheDir(),"my-voice.m4a");voiceTmp.delete();
+        try{voiceTmp=new java.io.File(getCacheDir(),"voice-take.m4a");voiceTmp.delete();
             voiceRecorder=Build.VERSION.SDK_INT>=31?new android.media.MediaRecorder(this):new android.media.MediaRecorder();
             voiceRecorder.setAudioSource(android.media.MediaRecorder.AudioSource.MIC);voiceRecorder.setOutputFormat(android.media.MediaRecorder.OutputFormat.MPEG_4);voiceRecorder.setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC);
             voiceRecorder.setAudioEncodingBitRate(96000);voiceRecorder.setAudioSamplingRate(44100);voiceRecorder.setAudioChannels(1);voiceRecorder.setOutputFile(voiceTmp.getAbsolutePath());
             voiceRecorder.prepare();voiceRecorder.start();voiceStarted=android.os.SystemClock.elapsedRealtime();return true;
         }catch(Exception e){if(voiceRecorder!=null){voiceRecorder.release();voiceRecorder=null;}Diagnostics.event("recorder_failure",null,"action","my_voice","error_class",e.getClass().getSimpleName());return false;}
     }
-    /** Detiene la muestra; si keep, la guarda (mínimo 3 s). */
+    /** Detiene la muestra; si keep, la guarda (mínimo 3 s): una voz nueva o la nueva muestra de una voz guardada. */
     private void stopVoice(boolean keep){
         voiceTimer.removeCallbacksAndMessages(null);if(voiceRecorder==null)return;
         long ms=android.os.SystemClock.elapsedRealtime()-voiceStarted;boolean ok=false;
         try{voiceRecorder.stop();ok=true;}catch(RuntimeException ignored){}finally{voiceRecorder.release();voiceRecorder=null;}
-        if(!keep||isFinishing()){if(voiceTmp!=null)voiceTmp.delete();return;}
-        if(!ok||ms<Voices.MIN_MS){if(voiceTmp!=null)voiceTmp.delete();message("Mi voz","La muestra quedó muy corta. Graba al menos 3 segundos.");return;}
-        java.io.File target=Voices.file(this);
-        if(voiceTmp.renameTo(target)){if(voiceRow!=null)voiceRow.setValue(voiceValue());Diagnostics.event("setting_changed",null,"action","my_voice","result","recorded");
-            if(voiceFlow){toast("Tu voz quedó guardada · toca Transcribir");finish();}else toast("Tu voz quedó guardada");}
-        else message("Mi voz","No se pudo guardar la muestra. Vuelve a intentarlo.");
+        VoiceTake t=voiceTake;voiceTake=null;
+        if(!keep||isFinishing()||t==null){if(voiceTmp!=null)voiceTmp.delete();return;}
+        if(!ok||ms<Voices.MIN_MS){if(voiceTmp!=null)voiceTmp.delete();message("Voces conocidas","La muestra quedó muy corta. Graba al menos 3 segundos.");return;}
+        try{
+            String name;
+            if(t.id!=null&&Voices.get(this,t.id)!=null){Voices.replaceAudio(this,t.id,voiceTmp);name=t.name;}
+            else name=Voices.add(this,t.name,voiceTmp,t.me).name;
+            refreshVoices();
+            String done=t.me?"Tu voz quedó guardada":"Voz de "+name+" guardada";
+            if(voiceFlow){toast(done+" · toca Transcribir");finish();}else{toast(done);page.post(this::voiceSheet);}
+        }catch(Exception e){if(voiceTmp!=null)voiceTmp.delete();message("Voces conocidas","No se pudo guardar la muestra. Vuelve a intentarlo.");}
     }
-    private void playVoice(){
+    /** Reproduce una muestra; ended corre al terminar o al detenerla. */
+    private boolean playVoice(String id,Runnable ended){
         releaseVoicePlayer();
-        try{voicePlayer=new android.media.MediaPlayer();voicePlayer.setDataSource(Voices.file(this).getAbsolutePath());voicePlayer.setOnCompletionListener(mp->releaseVoicePlayer());voicePlayer.prepare();voicePlayer.start();}
-        catch(Exception e){releaseVoicePlayer();message("Mi voz","No se pudo reproducir la muestra.");}
+        try{voicePlayer=new android.media.MediaPlayer();voicePlayer.setDataSource(Voices.file(this,id).getAbsolutePath());voicePlayer.setOnCompletionListener(mp->releaseVoicePlayer());voicePlayer.prepare();voicePlayer.start();voiceEnded=ended;return true;}
+        catch(Exception e){releaseVoicePlayer();message("Voces conocidas","No se pudo reproducir la muestra.");return false;}
     }
-    private void releaseVoicePlayer(){if(voicePlayer!=null){voicePlayer.release();voicePlayer=null;}}
+    private void releaseVoicePlayer(){if(voicePlayer!=null){try{voicePlayer.release();}catch(Exception ignored){}voicePlayer=null;}Runnable r=voiceEnded;voiceEnded=null;if(r!=null)r.run();}
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){
         super.onRequestPermissionsResult(request,permissions,results);
-        if(request==MIC_FOR_VOICE){if(results.length>0&&results[0]==android.content.pm.PackageManager.PERMISSION_GRANTED)recordVoice(pendingVoiceName);else message("Mi voz","Sin permiso de micrófono no se puede grabar tu muestra.");}
+        if(request==MIC_FOR_VOICE){VoiceTake t=pendingVoice;pendingVoice=null;
+            if(results.length>0&&results[0]==android.content.pm.PackageManager.PERMISSION_GRANTED)recordVoice(t);else message("Voces conocidas","Sin permiso de micrófono no se puede grabar la muestra.");}
     }
 }
