@@ -52,6 +52,9 @@ final class RetranscribeSheet {
         if(!new Settings(s).hasKey()){RecordingActions.missingKey(s);return;}
         if(RecState.of(s,r.id).kind==RecState.Kind.QUEUED){s.message("Volver a transcribir","Esta grabación ya se está transcribiendo. Cuando termine, podrás elegir otra alternativa.");return;}
         if(!Transcript.exists(s,r.id)){RecordingActions.transcribe(s,r,changed);return;}
+        // Con una versión anterior sin elegir, otra transcripción la reemplazaría sin preguntar (solo se guarda una):
+        // primero se elige con cuál quedarse y después se ofrecen las alternativas.
+        if(Retranscribe.hasPrevious(s,r.id)){offerKeep(s,r,changed,true,kept->show(s,r,changed));return;}
         Ui ui=s.ui;Palette p=s.p;
         boolean paid=new Settings(s).provider().equals("openai");
         Sheet sheet=s.sheet("¿Cómo quieres volver a transcribir?","Audio de "+Ui.humanDuration(r.duration)+". "+(paid?"Se cobra de nuevo el audio completo.":"Se envía de nuevo el audio completo.")+" Tu versión actual se guarda por si prefieres volver.");
@@ -132,18 +135,30 @@ final class RetranscribeSheet {
     }
 
     /** «Nueva versión lista»: quedarse con la nueva o volver a la anterior, con una comparación simple de las dos. */
-    static void offerKeep(Screen s,Recording r,Runnable changed){
-        if(r==null||!Retranscribe.hasPrevious(s,r.id)||!Transcript.exists(s,r.id))return;
+    static Sheet offerKeep(Screen s,Recording r,Runnable changed){return offerKeep(s,r,changed,false,null);}
+    /**
+     * beforeAgain: se abre porque pediste volver a transcribir con una versión aún sin elegir (se pide elegir antes).
+     * then: lo que sigue después de elegir (true = te quedaste con la nueva). No corre si cierras la hoja o la elección
+     * falla. Devuelve la hoja abierta, o null si no hay nada que elegir.
+     */
+    static Sheet offerKeep(Screen s,Recording r,Runnable changed,boolean beforeAgain,java.util.function.Consumer<Boolean> then){
+        if(r==null||!Retranscribe.hasPrevious(s,r.id)||!Transcript.exists(s,r.id))return null;
         String compare=compare(s,r.id);
-        Sheet sheet=s.sheet("Nueva versión lista",(compare.isEmpty()?"":compare+"\n\n")+"Revisa la nueva y elige con cuál te quedas. Mientras no elijas, la anterior sigue guardada.");
+        String why=beforeAgain?"Antes de volver a transcribir, elige con cuál te quedas: solo se puede guardar una versión anterior a la vez."
+            :"Revisa la nueva y elige con cuál te quedas. Mientras no elijas, la anterior sigue guardada.";
+        Sheet sheet=s.sheet(beforeAgain?"Antes, elige una versión":"Nueva versión lista",(compare.isEmpty()?"":compare+"\n\n")+why);
         sheet.primary("Quedarme con la nueva",()->{
-            try{Retranscribe.keepNew(s,r.id);Diagnostics.event("retranscribe_kept",r.id,"choice","new");Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);s.toast("Te quedaste con la nueva versión");}
+            boolean chosen=false;
+            try{Retranscribe.keepNew(s,r.id);chosen=!Retranscribe.hasPrevious(s,r.id);Diagnostics.event("retranscribe_kept",r.id,"choice","new");Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);s.toast("Te quedaste con la nueva versión");}
             catch(Exception e){s.message("Nueva versión","No se pudo borrar la versión anterior. La nueva ya está en uso.");}
             if(changed!=null)changed.run();
+            if(chosen&&then!=null)then.accept(true);
         });
-        sheet.secondary("Volver a la anterior",()->RecordingActions.restorePrevious(s,r,changed));
+        sheet.secondary("Volver a la anterior",()->{RecordingActions.restorePrevious(s,r,changed);if(then!=null&&!Retranscribe.hasPrevious(s,r.id))then.accept(false);});
+        if(beforeAgain)sheet.secondary("Cancelar",null);
         sheet.show();
-        Diagnostics.event("retranscribe_offer",r.id);
+        Diagnostics.event("retranscribe_offer",r.id,"source",beforeAgain?"retranscribe":"ready");
+        return sheet;
     }
     /** «Ahora: 3 voces (Konrad, Fran, Persona 3) · Antes: 2 voces (…)», si ambas versiones se pueden leer. */
     static String compare(Context c,String id){
