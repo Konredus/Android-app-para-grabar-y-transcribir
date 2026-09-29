@@ -15,7 +15,8 @@ import static cl.vozlocal.app.AppTheme.*;
  * 0.6.0:
  * - Sin una importación activa, se abre directo el selector de archivos (un audio preparado hace más de 30 min y no
  *   guardado se descarta: el original sigue intacto en el teléfono).
- * - Salir de la pantalla NO cancela: ImportService sigue trabajando y al volver se ve el avance.
+ *   Los 30 min se cuentan desde que saliste del formulario; el aviso «Audio listo para guardar» siempre lo retoma.
+ * - Salir de la pantalla NO cancela: ImportService sigue trabajando, avisa al terminar y al volver se ve el avance.
  * - Guardar muestra una barra de avance determinada; el título llega sin la extensión del archivo.
  * - La ayuda «Desde WhatsApp» vive aquí (antes era una tarjeta del inicio).
  */
@@ -24,6 +25,8 @@ public class ImportActivity extends Screen {
     private LinearLayout pickerSection,progressPanel,form;private RangeView range;private boolean syncing;
     private final Handler handler=new Handler(Looper.getMainLooper());private android.media.MediaPlayer preview;private String boundId="";private boolean visible;
     private final Runnable poll=new Runnable(){public void run(){if(!visible)return;render();handler.postDelayed(this,250);}};
+    /** Importar está a la vista (hilo principal): ImportService no avisa «Audio listo» si ya se ve el formulario. */
+    static boolean inFront;
 
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);shell("Grabar",-1);largeTitle(page,"Importar audio","Audios de WhatsApp, grabadoras y notas de voz.");
@@ -77,7 +80,9 @@ public class ImportActivity extends Screen {
         if(new Settings(this).automatic()&&new Settings(this).hasKey()){TextView n=ui.text("Se transcribirá automáticamente al guardar.",Type.BODY_MEDIUM,p.onSurfaceVariant);n.setGravity(Gravity.CENTER);n.setPadding(0,ui.dp(S2),0,0);bottom.addView(n,Ui.fill());}
 
         if(saved!=null){boundId=saved.getString("boundId","");title.setText(saved.getString("title",""));start.setText(saved.getString("from","0"));end.setText(saved.getString("to",""));}
-        ImportSession existing=ImportService.session(this);if(existing!=null&&(existing.cancelled||existing.done||(saved==null&&existing.stale()))){ImportService.dismiss(this);existing=null;}
+        // Desde el aviso «Audio listo para guardar» («resume») la copia se retoma aunque hayan pasado más de 30 min.
+        boolean resume=getIntent().getBooleanExtra("resume",false);
+        ImportSession existing=ImportService.session(this);if(existing!=null&&(existing.cancelled||existing.done||(saved==null&&!resume&&existing.stale()))){ImportService.dismiss(this);existing=null;}
         if(saved==null){
             Uri uri=getIntent().getParcelableExtra(Intent.EXTRA_STREAM);String id=getIntent().getStringExtra("sourceId");
             // Un audio compartido o «Recortar una copia» reemplaza un archivo viejo que quedó cargado; nunca interrumpe uno en curso.
@@ -121,8 +126,9 @@ public class ImportActivity extends Screen {
     private void confirmCancel(){confirm("¿Cancelar la importación?","Se elimina solo la copia temporal. Tu archivo original se conserva.","Cancelar importación",true,()->{ImportService.cancel(this);render();});}
     /** Volver no cancela: la importación sigue en segundo plano (con su notificación). */
     @Override public void onBackPressed(){release();ImportSession s=ImportService.session(this);if(s!=null&&s.busy&&!s.cancelled)toast("La importación sigue en segundo plano. Te aviso al terminar.");super.onBackPressed();}
-    @Override protected void onResume(){super.onResume();visible=true;handler.post(poll);}
-    @Override protected void onPause(){visible=false;handler.removeCallbacks(poll);release();super.onPause();}
+    @Override protected void onResume(){super.onResume();visible=true;inFront=true;handler.post(poll);}
+    /** Al salir con un audio listo sin guardar, los 30 min antes de ofrecer otro archivo se cuentan desde aquí. */
+    @Override protected void onPause(){visible=false;inFront=false;handler.removeCallbacks(poll);release();ImportSession s=ImportService.session(this);if(s!=null)s.touch();super.onPause();}
     @Override protected void onSaveInstanceState(Bundle out){out.putString("boundId",boundId);out.putString("title",title.getText().toString());out.putString("from",start.getText().toString());out.putString("to",end.getText().toString());super.onSaveInstanceState(out);}
     private void release(){if(preview!=null){preview.release();preview=null;}}
 }

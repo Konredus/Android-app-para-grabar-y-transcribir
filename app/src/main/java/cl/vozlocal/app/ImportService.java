@@ -15,7 +15,8 @@ public class ImportService extends Service {
     private final AtomicBoolean running=new AtomicBoolean();private PowerManager.WakeLock wake;private long notified;
     static synchronized ImportSession session(Context c){if(!loaded){current=ImportSession.restore(c);loaded=true;}return current;}
     static boolean hasWork(Context c){ImportSession s=session(c);return s!=null&&!s.done&&!s.cancelled&&(s.busy||s.ready);}
-    static synchronized void dismiss(Context c){ImportSession s=session(c);if(s!=null&&!s.busy){s.clean();current=null;}}
+    /** Descarta la copia preparada; su aviso «listo»/«pendiente» ya no lleva a nada, así que también se quita. */
+    static synchronized void dismiss(Context c){ImportSession s=session(c);if(s!=null&&!s.busy){if(!s.done)try{c.getSystemService(NotificationManager.class).cancel(NOTIFICATION);}catch(RuntimeException ignored){}s.clean();current=null;}}
     static synchronized void load(Context c,Uri uri,String localId){ImportSession prior=session(c);if(prior!=null&&prior.busy)return;if(prior!=null)prior.clean();ImportSession s=new ImportSession(c);current=s;s.busy=true;s.persist();Intent intent=new Intent(c,ImportService.class).setAction("LOAD").putExtra("sourceId",localId);if(uri!=null){intent.setData(uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);intent.setClipData(ClipData.newRawUri("Audio",uri));}start(c,intent,s);}
     static synchronized void save(Context c,String title,long from,long to){ImportSession s=session(c);if(s==null||s.busy||!s.ready||s.done)return;s.name=title;s.from=from;s.to=to;s.busy=true;s.error="";s.stage="Preparando audio";s.position=0;s.total=to-from;s.bytesProgress=false;s.persist();start(c,new Intent(c,ImportService.class).setAction("CONVERT"),s);}
     private static void start(Context c,Intent intent,ImportSession s){try{c.startForegroundService(intent);}catch(RuntimeException e){s.busy=false;s.error="Android no pudo iniciar la preparación. Abre la app e inténtalo otra vez.";s.persist();Diagnostics.event("import_start_failed",s.id,"error_class",e.getClass().getSimpleName());}}
@@ -31,7 +32,10 @@ public class ImportService extends Service {
         new Thread(()->{long started=SystemClock.elapsedRealtime();try{
             if("LOAD".equals(intent.getAction()))read(s,intent.getData(),intent.getStringExtra("sourceId"));else convert(s);
         }catch(Exception e){s.error=s.cancelled?"Importación cancelada. El original se conserva.":s.ready?"No se pudo preparar el audio. Puedes volver a intentarlo o probar un tramo más corto.":"No se pudo leer el archivo. Revisa su formato, el espacio disponible y que dure al menos un segundo.";Diagnostics.event(s.cancelled?"import_cancelled":"import_failed",s.id,"error_class",e.getClass().getSimpleName(),"elapsed_ms",SystemClock.elapsedRealtime()-started);s.encoded.delete();if(!s.ready)s.source.delete();
-        }finally{new Handler(Looper.getMainLooper()).post(()->{s.openStream=null;running.set(false);if(wake!=null&&wake.isHeld())wake.release();stopForeground(STOP_FOREGROUND_REMOVE);s.busy=false;if(s.cancelled)s.clean();else s.persist();if(!s.cancelled&&(s.done||!s.error.isEmpty()))try{getSystemService(NotificationManager.class).notify(NOTIFICATION,notification(s,true));}catch(SecurityException ignored){}stopSelf(startId);});}},"Voz-import").start();
+        }finally{new Handler(Looper.getMainLooper()).post(()->{s.openStream=null;running.set(false);if(wake!=null&&wake.isHeld())wake.release();stopForeground(STOP_FOREGROUND_REMOVE);s.busy=false;if(s.cancelled)s.clean();else s.persist();
+            // Aviso final (el de avance se quitó con stopForeground): guardado, pendiente o —tras copiar— listo para guardar.
+            // «Listo» solo si no estás mirando la pantalla de Importar (ahí ya se ve el formulario).
+            if(!s.cancelled&&(s.done||!s.error.isEmpty()||(s.ready&&!ImportActivity.inFront)))try{getSystemService(NotificationManager.class).notify(NOTIFICATION,notification(s,true));}catch(SecurityException ignored){}stopSelf(startId);});}},"Voz-import").start();
         return START_NOT_STICKY;
     }
     private void read(ImportSession s,Uri uri,String localId)throws Exception{
@@ -54,9 +58,11 @@ public class ImportService extends Service {
     }
     private void publish(ImportSession s){long now=SystemClock.elapsedRealtime();if(now-notified<300)return;notified=now;try{getSystemService(NotificationManager.class).notify(NOTIFICATION,notification(s,false));}catch(SecurityException ignored){}}
     private Notification notification(ImportSession s,boolean finished){
-        Intent open=s.done?new Intent(this,MainActivity.class).putExtra("library",true):new Intent(this,ImportActivity.class);open.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        // «resume»: llegar desde el aviso retoma la copia preparada aunque hayan pasado más de 30 min (no se descarta).
+        Intent open=s.done?new Intent(this,MainActivity.class).putExtra("library",true):new Intent(this,ImportActivity.class).putExtra("resume",true);open.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent launch=PendingIntent.getActivity(this,14,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        Notification.Builder b=new Notification.Builder(this,"importing").setSmallIcon(R.drawable.ic_notification).setContentTitle(finished?(s.done?"Audio guardado":"Importación pendiente"):s.stage).setContentText(finished?(s.done?"Disponible en Biblioteca":s.error):progressText(s)).setContentIntent(launch).setOnlyAlertOnce(true).setOngoing(!finished).setAutoCancel(finished);
+        boolean pending=!s.error.isEmpty();
+        Notification.Builder b=new Notification.Builder(this,"importing").setSmallIcon(R.drawable.ic_notification).setContentTitle(finished?(s.done?"Audio guardado":pending?"Importación pendiente":"Audio listo para guardar"):s.stage).setContentText(finished?(s.done?"Disponible en Biblioteca":pending?s.error:"Toca para ponerle título y guardarlo"):progressText(s)).setContentIntent(launch).setOnlyAlertOnce(true).setOngoing(!finished).setAutoCancel(finished);
         if(!finished){b.setProgress(100,percent(s),s.total<=0);PendingIntent stop=PendingIntent.getService(this,15,new Intent(this,ImportService.class).setAction("CANCEL"),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);b.addAction(new Notification.Action.Builder(null,"Cancelar",stop).build());}return b.build();
     }
     static String friendlyStage(String stage){return stage!=null&&stage.startsWith("Verificando")?"Casi listo":"Guardando audio";}

@@ -37,6 +37,8 @@ final class ImportSession {
     /** Un audio preparado que quedó sin guardar hace más de 30 min: al volver a Importar se ofrece elegir otro (el original sigue intacto). */
     static final long STALE_MS=30*60_000L;
     boolean stale(){return ready&&!busy&&!done&&error.isEmpty()&&System.currentTimeMillis()-source.lastModified()>STALE_MS;}
+    /** Se acaba de mirar el formulario: los 30 min se cuentan desde ahora (no desde que terminó la copia). */
+    void touch(){if(ready&&!busy&&!done&&source.exists())source.setLastModified(System.currentTimeMillis());}
     void cancel(){cancelled=true;cancel.cancel();Closeable stream=openStream;if(stream!=null)try{stream.close();}catch(Exception ignored){}}
     void clean(){source.delete();encoded.delete();stateFile(app).delete();}
 }
