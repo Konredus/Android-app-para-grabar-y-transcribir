@@ -86,6 +86,7 @@ public class RecorderSmokeTest extends Instrumentation {
             MediaChecks.run(c,r);
             UiChecks.run(c,r);
             IntegrationChecks.run(c,r);
+            VoicesChecks.run(c,r);
             long longStarted = SystemClock.elapsedRealtime();
             if (longChecks) LongImportChecks.run(c,r);
             String longResult = longChecks ? "one-hour AAC import/crop/cancel, WAV import, interrupted-import recovery (" + (SystemClock.elapsedRealtime() - longStarted) / 1000 + " s)" : "one-hour import checks SKIPPED (-e long false)";

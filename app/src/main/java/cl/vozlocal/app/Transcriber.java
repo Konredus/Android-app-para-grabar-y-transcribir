@@ -142,12 +142,15 @@ final class Transcriber {
             // «Separar voces sin cortar el audio»: un solo envío, sin uniones donde las voces se crucen.
             boolean single=mode==Retranscribe.Mode.SINGLE&&config.speakers&&Retranscribe.fitsSingle(audioMs,bytes);
             long target=single?audioMs:config.speakers?speakerBlockMs(audioMs,bytes):BLOCK_TEXT_MS;
-            // "Mi voz" va como voz conocida en todos los bloques (también el primero). Si cambia la muestra, no se reutilizan bloques ya transcritos.
-            String[] mine=config.speakers&&config.provider.equals("openai")?Voices.reference(c):null;
+            // Voces conocidas («Mi voz» y las demás guardadas) van en todos los bloques (también el primero), la tuya primero y
+            // a lo más MAX_KNOWN. Si cambia alguna muestra, no se reutilizan bloques ya transcritos.
+            List<String[]> saved=config.speakers&&config.provider.equals("openai")?Voices.references(c):Collections.emptyList();
+            // Nombre de cada voz conocida (voz destino → nombre), para no sacarle otra muestra en la segunda pasada.
+            Map<String,String> savedNames=new LinkedHashMap<>();for(String[] ref:saved){String name=Voices.nameFor(c,ref[2]);savedNames.put(ref[2],name==null?"":name);}
             // «Segunda pasada con tus correcciones»: muestras de la versión anterior (solo OpenAI acepta voces conocidas).
             JSONArray fixed=mode==Retranscribe.Mode.CORRECTIONS&&config.speakers&&config.provider.equals("openai")?initial.optJSONArray("fixedRefs"):null;
             int attempt=initial.optInt("attempt",0);
-            String profile=profile(config.fingerprint()+settings.language()+"|v3|"+target+"|"+(mine==null?"none":Voices.fingerprint(c)),attempt,mode);
+            String profile=profile(config.fingerprint()+settings.language()+"|v3|"+target+"|"+(saved.isEmpty()?"none":Voices.fingerprint(c)),attempt,mode);
             if(!profile.equals(FilesStore.state(c,r.id).optString("profile"))){
                 Retranscribe.clearCheckpoints(c,r.id);
                 AudioParts.clearBlocks(c,r.id);
@@ -166,14 +169,17 @@ final class Transcriber {
             if(n>1)Pipeline.log(c,r.id,"Audio de "+Recording.time(r.duration)+" dividido en "+n+" partes de ~"+(target/60000)+" min, cortadas en pausas · se envían de a "+PARALLEL+" en paralelo");
             JSONObject[] responses=new JSONObject[n];
             try{
-                List<String[]> own=mine==null?null:Collections.singletonList(mine);
-                if(mine!=null)Pipeline.log(c,r.id,"Tu voz («"+Voices.name(c)+"») va como muestra en "+(n>1?"todas las partes":"el envío")+" para reconocerte desde el inicio");
+                List<String[]> own=saved.isEmpty()?null:saved;
+                if(!saved.isEmpty()){
+                    List<String> who=new ArrayList<>();for(String[] ref:saved)who.add(ref[3]);int active=Voices.used(c).size();
+                    Pipeline.log(c,r.id,"Voces conocidas: "+String.join(", ",who)+" · se reconocen desde el inicio"+(active>saved.size()?" (van "+saved.size()+" de tus "+active+": el máximo por audio)":""));
+                }
                 List<String[]> references=own;int from=0;String fresh=null;
-                List<String[]> corrections=fixed==null?Collections.emptyList():fixedReferences(r,fixed,mine!=null);
+                List<String[]> corrections=fixed==null?Collections.emptyList():fixedReferences(r,fixed,savedNames);
                 if(!corrections.isEmpty()){
                     // Las voces reconocidas vuelven con su id anterior; las nuevas llevan un prefijo para no chocar con esos ids.
                     fresh="pass"+attempt+":";
-                    references=new ArrayList<>();if(mine!=null)references.add(mine);references.addAll(corrections);
+                    references=new ArrayList<>(saved);references.addAll(corrections);
                     LinkedHashSet<String> people=new LinkedHashSet<>();for(String[] ref:corrections)people.add(ref[3]);
                     Pipeline.log(c,r.id,"Segunda pasada: muestras de "+String.join(", ",people)+" (de tus correcciones) van en "+(n>1?"todas las partes":"el envío")+" desde el inicio");
                 }else{
@@ -182,13 +188,14 @@ final class Transcriber {
                         // La parte 1 va sola: de ella salen las muestras de voz para las demás.
                         responses[0]=block(r,config,settings,parts,0,own,null);from=1;
                         check(r);
-                        // Si la parte 1 ya reconoció al usuario con "Mi voz", no hace falta muestra automática de él.
-                        Set<String> exclude=new HashSet<>();if(mine!=null)exclude.add(Voices.MINE);
-                        List<String[]> auto=AudioParts.references(c,r,responses[0],http,MAX_KNOWN-(mine==null?0:1),exclude);
-                        references=new ArrayList<>();if(mine!=null)references.add(mine);references.addAll(auto);
+                        // Las voces conocidas que la parte 1 ya reconoció (con su nombre enviado) no necesitan muestra automática;
+                        // las automáticas usan los lugares que quedan.
+                        Set<String> exclude=new HashSet<>();for(String[] ref:saved)exclude.add(ref[0]);
+                        List<String[]> auto=AudioParts.references(c,r,responses[0],http,MAX_KNOWN-saved.size(),exclude);
+                        references=new ArrayList<>(saved);references.addAll(auto);
                         if(!auto.isEmpty()){StringBuilder which=new StringBuilder();for(String[] ref:auto)which.append(which.length()==0?"":", ").append(ref[3]);
                             Pipeline.log(c,r.id,"Muestras de voz de la parte 1: "+which+" · se usan para reconocer a las mismas personas en las demás partes");}
-                        else if(mine==null)Pipeline.log(c,r.id,"La parte 1 no tiene tramos limpios para muestras de voz · cada parte separa voces por su cuenta");
+                        else if(saved.isEmpty())Pipeline.log(c,r.id,"La parte 1 no tiene tramos limpios para muestras de voz · cada parte separa voces por su cuenta");
                     }
                 }
                 if(budgetMs>0&&from<n&&System.currentTimeMillis()-started>budgetMs&&!allDone(r,from,n))throw new Yield();
@@ -201,7 +208,7 @@ final class Transcriber {
                 }finally{pool.shutdownNow();}
                 check(r);Transcript transcript=Transcript.fromParts(Arrays.asList(responses),offsets(parts));transcript.data.put("provider",config.provider).put("model",config.model);
                 if(mode!=null)transcript.data.put("pass",mode.name());
-                if(mine!=null&&transcript.speakers().containsKey(Voices.ME))transcript.data.getJSONObject("names").put(Voices.ME,Voices.name(c));
+                prefillVoices(c,transcript);
                 if(!corrections.isEmpty())prefill(transcript,fixed);
                 boolean note=settings.noteAuto()&&transcript.hasText()&&canNote();
                 // Se guarda solo si nadie canceló entretanto: cancelar una repetición devuelve la versión anterior.
@@ -245,13 +252,18 @@ final class Transcriber {
 
     // ---------- Segunda pasada con tus correcciones ----------
     /** Nombres enviados para las muestras de la segunda pasada: {nombre enviado, voz destino, nombre visible, índice en fixedRefs}. */
-    static List<String[]> fixedPlan(JSONArray fixed,boolean mine){
+    static List<String[]> fixedPlan(JSONArray fixed,boolean mine){Map<String,String> saved=mine?Collections.singletonMap(Voices.ME,""):Collections.<String,String>emptyMap();return fixedPlan(fixed,saved);}
+    /**
+     * saved: voces conocidas que ya van en el envío (voz destino → nombre). Cada una ocupa un lugar y no se le saca otra
+     * muestra: ni a su propio id ("voice:me", "voice:<id>") ni a una voz que el usuario nombró igual.
+     */
+    static List<String[]> fixedPlan(JSONArray fixed,Map<String,String> saved){
         List<String[]> out=new ArrayList<>();if(fixed==null)return out;
-        Map<String,Integer> person=new HashMap<>(),taken=new HashMap<>();int limit=MAX_KNOWN-(mine?1:0);
+        Map<String,Integer> person=new HashMap<>(),taken=new HashMap<>();int limit=MAX_KNOWN-(saved==null?0:saved.size());
         for(int i=0;i<fixed.length()&&out.size()<limit;i++){
             JSONObject f=fixed.optJSONObject(i);if(f==null)continue;String id=f.optString("id");
-            // Con "Mi voz", la voz del usuario ya va con su propia muestra.
-            if(id.isEmpty()||(mine&&id.equals(Voices.ME))||f.optDouble("end",0)-f.optDouble("start",0)<1)continue;
+            // Las voces conocidas («Mi voz» y las demás guardadas) ya van con su propia muestra.
+            if(id.isEmpty()||isSaved(saved,id,f.optString("name"))||f.optDouble("end",0)-f.optDouble("start",0)<1)continue;
             Integer p=person.get(id);if(p==null){p=person.size()+1;person.put(id,p);}
             int k=taken.merge(id,1,Integer::sum);String name=f.optString("name").trim();
             // Nombres únicos ("voz_1", "voz_1b"): no chocan con las letras que el modelo da a las voces que no reconoce.
@@ -259,10 +271,17 @@ final class Transcriber {
         }
         return out;
     }
+    /** ¿Esta voz ya va como voz conocida? (por su id o porque el usuario le puso el mismo nombre). */
+    static boolean isSaved(Map<String,String> saved,String id,String name){
+        if(saved==null||saved.isEmpty())return false;if(saved.containsKey(id))return true;
+        String n=name==null?"":name.trim();if(n.isEmpty())return false;
+        for(String s:saved.values())if(s!=null&&!s.trim().isEmpty()&&s.trim().equalsIgnoreCase(n))return true;
+        return false;
+    }
     /** Recorta del audio original cada muestra: {nombre enviado, data URL, voz destino (id anterior), nombre visible}. */
-    private List<String[]> fixedReferences(Recording r,JSONArray fixed,boolean mine){
+    private List<String[]> fixedReferences(Recording r,JSONArray fixed,Map<String,String> saved){
         List<String[]> refs=new ArrayList<>();
-        for(String[] plan:fixedPlan(fixed,mine)){
+        for(String[] plan:fixedPlan(fixed,saved)){
             JSONObject f=fixed.optJSONObject(Integer.parseInt(plan[3]));java.io.File file=new java.io.File(c.getCacheDir(),r.id+"-fixed-"+refs.size()+".m4a");
             try{
                 AudioConvert.convert(r.audio(c),file,(long)(f.optDouble("start")*1000),(long)(f.optDouble("end")*1000),http);byte[] data=java.nio.file.Files.readAllBytes(file.toPath());
@@ -270,6 +289,14 @@ final class Transcriber {
             }catch(Exception ignored){}finally{file.delete();}
         }
         return refs;
+    }
+    /** Las voces conocidas que el modelo reconoció ("voice:me", "voice:<id>") llegan con su nombre guardado. */
+    static void prefillVoices(Context c,Transcript t)throws Exception{
+        JSONObject names=t.data.optJSONObject("names");if(names==null){names=new JSONObject();t.data.put("names",names);}
+        for(String id:t.speakers().keySet()){
+            if(!id.startsWith(Voices.TARGET)||!names.optString(id,"").trim().isEmpty())continue;
+            String name=Voices.nameFor(c,id);if(name!=null&&!name.trim().isEmpty())names.put(id,name.trim());
+        }
     }
     /** Las voces reconocidas en la segunda pasada vuelven con el nombre que el usuario les había puesto. */
     static void prefill(Transcript t,JSONArray fixed)throws Exception{

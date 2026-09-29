@@ -993,8 +993,35 @@ public class RecordingActivity extends Screen {
         if(names.size()>1)s.action(R.drawable.ic_merge,"Es la misma persona que…",false,()->mergeSheet(key));
         boolean only=key.equals(onlySpeaker);s.action(R.drawable.ic_filter,only?"Ver todas las intervenciones":"Ver solo sus intervenciones",false,()->{onlySpeaker=only?null:key;reload(true);});
         s.action(R.drawable.ic_voice,"Nombrar todas las voces",false,this::openNameVoices);
+        // Guardar su voz para reconocerla en los próximos audios: con un nombre puesto por el usuario, si aún no es una voz
+        // conocida y hay un tramo limpio (sin otra voz encima) de 3 s o más.
+        double[] clean=!demo&&transcript.diarized()&&!key.startsWith(Voices.TARGET)&&!name.equals(transcript.defaultLabel(key))&&!name.trim().isEmpty()
+            &&new Settings(this).provider().equals("openai")&&recording.audio(this).isFile()?NameVoices.sample(segs,key):null;
+        if(clean!=null&&(clean[1]-clean[0])*1000>=Voices.MIN_MS)s.action(R.drawable.ic_mic_fill,"Guardar la voz de "+name,false,()->saveVoice(name,clean));
         s.show();
     }catch(Exception e){message("Transcripción","No se pudo abrir esta voz.");}}
+    /** Guarda el tramo limpio de esta voz como voz conocida (si ya hay una con ese nombre, pregunta antes de reemplazarla). */
+    private void saveVoice(String name,double[] range){
+        Voices.Voice same=Voices.findByName(this,name);
+        if(same==null){cutVoice(name,range,null);return;}
+        confirm("¿Reemplazar la voz guardada de "+same.name+"?","Se usará este tramo de "+Math.round(Math.min(range[1]-range[0],Voices.MAX_MS/1000d))+" s en lugar de la muestra anterior.","Reemplazar",false,()->cutVoice(name,range,same.id));
+    }
+    /** Recorta el tramo del audio original en segundo plano (máx. 9,5 s) y lo guarda en la biblioteca de voces. */
+    private void cutVoice(String name,double[] range,String replaceId){
+        Context app=getApplicationContext();Recording r=recording;long from=(long)(range[0]*1000),to=Math.min((long)(range[1]*1000),from+Voices.MAX_MS);
+        new Thread(()->{java.io.File tmp=new java.io.File(app.getCacheDir(),"voice-cut-"+System.nanoTime()+".m4a");boolean ok=false;
+            try{
+                AudioConvert.convert(r.audio(app),tmp,from,to,new HttpApi());
+                if(replaceId!=null&&Voices.get(app,replaceId)!=null)Voices.replaceAudio(app,replaceId,tmp);else Voices.add(app,name,tmp,false);
+                ok=true;Diagnostics.event("voice_saved",r.id,"result",replaceId!=null?"replaced":"added","duration_ms",to-from);
+            }catch(Exception e){Diagnostics.event("voice_saved",r.id,"result","failed","error_class",e.getClass().getSimpleName());}
+            finally{tmp.delete();}
+            boolean saved=ok;
+            runOnUiThread(()->{if(isDestroyed())return;
+                if(saved){Ui.haptic(content,Ui.Haptic.CONFIRM);toast("Voz de "+name+" guardada · la reconocerá en tus próximos audios");}
+                else message("Guardar la voz","No se pudo recortar la voz de "+name+" de este audio. Vuelve a intentarlo.");});
+        },"voice").start();
+    }
     private void mergeSheet(String x){try{
         Map<String,String> names=transcript.speakers();String nx=names.get(x);
         Sheet s=sheet("¿Con quién unir a "+nx+"?","Sus intervenciones pasan a esa persona. Puedes deshacerlo.");
