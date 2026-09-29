@@ -2,6 +2,7 @@ package cl.vozlocal.app;
 
 import android.app.job.JobScheduler;
 import android.content.*;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.*;
 import android.provider.DocumentsContract;
@@ -9,12 +10,17 @@ import android.text.InputType;
 import android.view.*;
 import android.widget.*;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.concurrent.*;
 import static cl.vozlocal.app.AppTheme.*;
 
 /**
- * Ajustes como lista agrupada: cada fila muestra su valor actual a la derecha y abre una hoja para cambiarlo.
- * Nada de desplegables ni textos largos en pantalla: la explicación vive en el pie de cada grupo.
+ * Ajustes en el orden de tu recorrido (0.6.0): «Tu flujo» (0-Inbox, nota, automatización, Mi voz) → servicio de
+ * transcripción → energía y red → copias → apariencia → ayuda. Cada fila muestra su valor a la derecha y a lo más
+ * una línea de apoyo; las explicaciones largas viven en «Más información». Ver docs/diseno/PROPUESTA-0.6.md (#3).
+ *
+ * Extras del intent: focusKey (pedir la clave si falta), voice (grabar «Mi voz» y volver), back (Atrás vuelve a
+ * la pantalla anterior), inbox (elegir la carpeta de guardado rápido y volver) y noteAi (abrir «IA de la nota»).
  */
 public class SettingsActivity extends Screen {
     /** Modelos para transcribir SIN separar voces. Para separar voces siempre se usa gpt-4o-transcribe-diarize. */
@@ -23,8 +29,10 @@ public class SettingsActivity extends Screen {
     static final String[] MODEL_DETAILS={"Recomendado · el más nuevo, rápido y con texto en vivo","Alta calidad","El más económico","Modelo clásico"};
     static final String[] SPEAKER_MODES={"ask","always","never"},SPEAKER_NAMES={"Preguntar cada vez","Siempre","Nunca"};
     private static final int PICK_FOLDER=51,PICK_SAVE=52;
+    private static final Locale CL=new Locale("es","CL");
     private Settings settings;private final ExecutorService io=Executors.newSingleThreadExecutor();private HttpApi http;
-    private Ui.Row folderRow,saveRow,batteryRow,voiceRow;
+    private Ui.Row folderRow,saveRow,batteryRow,voiceRow,verifyRow;
+    private boolean verifying;
     private String batteryValue(){return Battery.unrestricted(this)?"Puede transcribir":"Batería optimizada";}
     /** Al volver del permiso del sistema, se refleja el nuevo estado. */
     @Override protected void onResume(){super.onResume();if(batteryRow!=null)batteryRow.setValue(batteryValue());}
@@ -33,83 +41,186 @@ public class SettingsActivity extends Screen {
     static String modelSummary(Settings s){if(!s.provider().equals("openai"))return "Tu servidor · "+modelName(s);return "OpenAI · "+modelName(s)+(s.speakersMode().equals("never")?"":" + separación de voces");}
 
     @Override public void onCreate(Bundle state){
-        super.onCreate(state);settings=new Settings(this);render();
-        if(state==null&&getIntent().getBooleanExtra("focusKey",false)&&!settings.hasKey())page.post(this::keySheet);
-        voiceFlow=getIntent().getBooleanExtra("voice",false);returnOnBack=getIntent().getBooleanExtra("back",false);
-        if(state==null&&voiceFlow&&voiceRow!=null)page.post(this::voiceSheet);
+        super.onCreate(state);settings=new Settings(this);
+        Intent in=getIntent();voiceFlow=in.getBooleanExtra("voice",false);returnOnBack=in.getBooleanExtra("back",false);inboxFlow=in.getBooleanExtra("inbox",false);
+        render();
+        if(state==null)page.post(()->openFrom(in));
     }
-    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);if(intent.getBooleanExtra("focusKey",false)&&!settings.hasKey())keySheet();if(intent.getBooleanExtra("voice",false)){voiceFlow=true;if(voiceRow!=null)voiceSheet();}}
-    /** Abierta desde "¿Separar voces?" para grabar "Mi voz": Atrás (o terminar) vuelve a la grabación, no a Inicio. */
-    private boolean voiceFlow,returnOnBack;
-    @Override public void onBackPressed(){if(voiceFlow||returnOnBack){finish();return;}navigate(0);}
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);if(intent.getBooleanExtra("voice",false))voiceFlow=true;if(intent.getBooleanExtra("inbox",false))inboxFlow=true;openFrom(intent);}
+    /** Abre directo la hoja que pidió otra pantalla (p. ej. «Elegir carpeta rápida» desde una grabación). */
+    private void openFrom(Intent intent){
+        if(isFinishing())return;
+        if(intent.getBooleanExtra("focusKey",false)&&!settings.hasKey())keySheet();
+        else if(intent.getBooleanExtra("voice",false)&&voiceRow!=null)voiceSheet();
+        else if(intent.getBooleanExtra("inbox",false))saveSheet();
+        else if(intent.getBooleanExtra("noteAi",false))noteAiSheet();
+    }
+    /** Abierta desde otra pantalla para un paso puntual (Mi voz, carpeta rápida): Atrás (o terminar) vuelve ahí, no a Inicio. */
+    private boolean voiceFlow,returnOnBack,inboxFlow;
+    @Override public void onBackPressed(){if(voiceFlow||returnOnBack||inboxFlow){finish();return;}navigate(0);}
+
     private void render(){
         shell(null,2);largeTitle(page,"Ajustes",null);
         page.addView(statusCard(),Ui.fill());
-
-        // Transcripción
-        page.addView(ui.section("Transcripción"));LinearLayout api=ui.group();page.addView(api,Ui.fill());
         boolean openai=settings.provider().equals("openai");
-        ui.addRow(api,ui.listRow(R.drawable.ic_globe,"Proveedor",null,openai?"OpenAI":"Personalizado").onClick(v->providerSheet()));
-        if(openai)ui.addRow(api,ui.listRow(R.drawable.ic_sparkle,"Modelo de texto",null,modelName(settings)).onClick(v->modelSheet()));
+
+        // 1. Tu flujo: lo que pasa con cada grabación, de principio a fin.
+        page.addView(ui.section("Tu flujo"));LinearLayout flow=ui.group();page.addView(flow,Ui.fill());
+        saveRow=ui.listRow(R.drawable.ic_save,"Guardado rápido","Donde guarda el botón de cada grabación",inboxValue());saveRow.onClick(v->saveSheet());ui.addRow(flow,saveRow);
+        View[] note={null};
+        note[0]=ui.switchRow(R.drawable.ic_doc,"Nota para tu segundo cerebro",noteSubtitle(settings.noteAuto()),settings.noteAuto(),on->{
+            settings.prefs.edit().putBoolean("noteAuto",on).apply();Diagnostics.event("setting_changed",null,"action","note_auto","result",on);
+            subtitle(note[0],noteSubtitle(on));if(on&&!noteReady())page.post(this::noteMissingKey);});
+        ui.addRow(flow,note[0]);
+        Ui.Row noteAi=ui.listRow(R.drawable.ic_sparkle,"IA de la nota",noteReady()?null:noteMissing(),noteAiValue());noteAi.onClick(v->noteAiSheet());ui.addRow(flow,noteAi);
+        ui.addRow(flow,ui.switchRow(R.drawable.ic_bolt,"Transcribir automáticamente","Al guardar una grabación o importar un audio",settings.automatic(),on->{toggle("automatic",on);if(on&&Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},101);}));
+        ui.addRow(flow,ui.switchRow(R.drawable.ic_title,"Resumen al terminar","Nombrar la grabación y elegir el siguiente paso",settings.askTitle(),on->toggle("askTitle",on)));
+        Ui.Row dates=ui.listRow(R.drawable.ic_edit,"Agregar fecha a las existentes","Para las grabaciones anteriores a esta opción",null);dates.onClick(v->offerDatesForExisting());
+        ui.addRow(flow,ui.switchRow(R.drawable.ic_calendar,"Fecha delante del nombre","Ej.: "+Recording.isoDate(System.currentTimeMillis())+" Reunión",settings.datePrefix(),on->{settings.prefs.edit().putBoolean("datePrefix",on).apply();Diagnostics.event("setting_changed",null,"action","date_prefix","result",on);showRow(dates,on);if(on)offerDatesForExisting();}));
+        ui.addRow(flow,dates);showRow(dates,settings.datePrefix());
+        voiceRow=null;
+        if(openai&&settings.canSeparate()){voiceRow=ui.listRow(R.drawable.ic_mic_fill,"Mi voz","Para que te reconozca al separar voces",voiceValue());voiceRow.onClick(v->voiceSheet());ui.addRow(flow,voiceRow);}
+        page.addView(more("Guarda la nota o el texto con un toque desde cada grabación.","Tu flujo",
+            "Guardado rápido: la carpeta donde el botón de cada grabación deja la nota (.md) o el texto (.txt), por ejemplo tu 0-Inbox de Google Drive. Si después corriges voces o nombres, «Actualizar» reemplaza el mismo archivo, sin crear copias.\n\n"
+            +"Nota para tu segundo cerebro: una IA arma un resumen con decisiones, tareas y frases clave a partir del texto de la transcripción (no se vuelve a enviar el audio). Automática, se arma al terminar cada transcripción; si la apagas, la pides con un toque desde la grabación. Revísala antes de guardarla: puede tener errores.\n\n"
+            +"Mi voz: una muestra de 10 s para que la app te reconozca con tu nombre al separar voces."));
+
+        // 2. Servicio de transcripción: quién transcribe y con qué clave. El resultado de la comprobación queda en su fila.
+        page.addView(ui.section("Servicio de transcripción"));LinearLayout api=ui.group();page.addView(api,Ui.fill());
+        ui.addRow(api,ui.listRow(R.drawable.ic_globe,"Proveedor",null,openai?"OpenAI":"Tu servidor").onClick(v->providerSheet()));
+        if(openai)ui.addRow(api,ui.listRow(R.drawable.ic_wave,"Modelo de texto",null,modelName(settings)).onClick(v->modelSheet()));
+        else{Ui.Row server=ui.listRow(R.drawable.ic_server,"Servidor y modelo",settings.prefs.getString("customBase","Sin configurar"),null);ui.oneLine(server.subtitle);ui.addRow(api,server.onClick(v->custom()));}
         if(settings.canSeparate())ui.addRow(api,ui.listRow(R.drawable.ic_people,"Separar voces",null,SPEAKER_NAMES[Math.max(0,Arrays.asList(SPEAKER_MODES).indexOf(settings.speakersMode()))]).onClick(v->speakersSheet()));
-        if(openai&&settings.canSeparate()){voiceRow=ui.listRow(R.drawable.ic_mic_fill,"Mi voz","Para que te reconozca al separar voces",voiceValue());voiceRow.onClick(v->voiceSheet());ui.addRow(api,voiceRow);}
-        else ui.addRow(api,ui.listRow(R.drawable.ic_server,"Servidor y modelo",settings.prefs.getString("customBase","Sin configurar"),null).onClick(v->custom()));
         ui.addRow(api,ui.listRow(R.drawable.ic_key,"Clave de API",null,settings.hasKey()?"Configurada":"Falta").onClick(v->keySheet()));
-        Ui.Row verify=ui.listRow(R.drawable.ic_check_circle,"Comprobar conexión",null,null);verify.onClick(v->verify(verify));ui.addRow(api,verify);
+        verifyRow=ui.listRow(R.drawable.ic_check_circle,"Comprobar conexión",verifyText(),null);verifyRow.subtitle.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);verifyRow.onClick(v->verify());ui.addRow(api,verifyRow);paintVerify();
         ui.addRow(api,ui.listRow(R.drawable.ic_chat,"Idioma del audio",null,settings.language().equals("es")?"Español":"Automático").onClick(v->
             sheet("Idioma del audio","Indicar el idioma mejora la precisión.").choice("Español",null,settings.language().equals("es"),()->set("language","es"))
                 .choice("Detección automática","Para audios en otros idiomas o mezclados",!settings.language().equals("es"),()->set("language","")).show()));
-        page.addView(ui.footnote(openai?"El modelo de texto se usa cuando no separas voces. Para separar voces (Persona 1, Persona 2…) se usa GPT-4o Diarize. El uso se cobra en tu cuenta de OpenAI; la clave se guarda cifrada en este teléfono.":"Tu servidor debe implementar /audio/transcriptions compatible con OpenAI. La clave se guarda cifrada en este teléfono."));
+        page.addView(openai
+            ?more("El uso se cobra en tu cuenta de OpenAI. Tu clave queda cifrada en este teléfono.","Servicio de transcripción","El modelo de texto se usa cuando no separas voces. Para separar voces (Persona 1, Persona 2…) se usa GPT-4o Diarize.\n\nEl uso se cobra en tu cuenta de OpenAI: pagas solo lo que transcribes, sin suscripción.\n\nLa clave se guarda cifrada en este teléfono y nunca aparece en los informes de soporte.\n\n«Comprobar conexión» confirma que la clave funciona y que el modelo existe. No prueba todavía la carga de audio, el saldo ni la separación de voces.")
+            :more("Tu servidor debe ser compatible con OpenAI. Tu clave queda cifrada en este teléfono.","Servicio de transcripción","Tu servidor debe implementar /audio/transcriptions igual que OpenAI. Si además admite diarized_json y chunking_strategy, puede separar voces.\n\nLa clave se guarda cifrada en este teléfono y nunca aparece en los informes de soporte. Si cambias la URL, se borra la clave anterior."));
 
-        // Automatización
-        page.addView(ui.section("Automatización"));LinearLayout auto=ui.group();page.addView(auto,Ui.fill());
-        ui.addRow(auto,ui.switchRow(R.drawable.ic_bolt,"Transcribir automáticamente","Al guardar una grabación o importar un audio",settings.automatic(),on->{toggle("automatic",on);if(on&&Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},101);}));
-        ui.addRow(auto,ui.listRow(R.drawable.ic_wifi,"Red para enviar audio",null,settings.wifiOnly()?"Solo Wi-Fi":"Wi-Fi y datos").onClick(v->
+        // 3. Energía y red: cuándo se envía el audio.
+        page.addView(ui.section("Energía y red"));LinearLayout energy=ui.group();page.addView(energy,Ui.fill());
+        ui.addRow(energy,ui.listRow(R.drawable.ic_wifi,"Red para enviar audio",null,settings.wifiOnly()?"Solo Wi-Fi":"Wi-Fi y datos").onClick(v->
             sheet("Red para enviar audio","Los audios pueden pesar varios MB.").choice("Solo Wi-Fi","O cualquier red no medida",settings.wifiOnly(),()->{settings.prefs.edit().putBoolean("wifi",true).apply();changed("wifi");})
                 .choice("Wi-Fi y datos móviles","Empieza antes, usa tu plan de datos",!settings.wifiOnly(),()->{settings.prefs.edit().putBoolean("wifi",false).apply();changed("wifi");}).show()));
-        ui.addRow(auto,ui.switchRow(R.drawable.ic_battery,"Solo mientras carga",null,settings.charging(),on->toggle("charging",on)));
-        batteryRow=ui.listRow(R.drawable.ic_battery,"Con la pantalla bloqueada",null,batteryValue());batteryRow.onClick(v->RecordingActions.allowBackground(this));ui.addRow(auto,batteryRow);
-        page.addView(ui.footnote("Aplica también cuando transcribes a mano. Con batería baja el trabajo espera; Android puede retrasarlo unos minutos. Para que transcriba con el teléfono bloqueado, permite a Voz local usar batería en segundo plano."));
+        ui.addRow(energy,ui.switchRow(R.drawable.ic_battery,"Solo mientras carga",null,settings.charging(),on->toggle("charging",on)));
+        batteryRow=ui.listRow(R.drawable.ic_battery,"Con la pantalla bloqueada",null,batteryValue());batteryRow.onClick(v->RecordingActions.allowBackground(this));ui.addRow(energy,batteryRow);
+        page.addView(more("Aplica también cuando transcribes a mano.","Energía y red","Con batería baja, el trabajo espera. Android puede retrasarlo unos minutos.\n\nPara que transcriba con el teléfono bloqueado, permite a Voz local usar batería en segundo plano («Con la pantalla bloqueada»). Solo la usa mientras transcribe."));
 
-        // Almacenamiento
-        page.addView(ui.section("Copias de tus archivos"));LinearLayout storage=ui.group();page.addView(storage,Ui.fill());
-        saveRow=ui.listRow(R.drawable.ic_save,"Guardado rápido",null,settings.prefs.getString("saveTreeName","Sin elegir"));saveRow.onClick(v->saveSheet());ui.addRow(storage,saveRow);
+        // 4. Copias
+        page.addView(ui.section("Copias"));LinearLayout storage=ui.group();page.addView(storage,Ui.fill());
         folderRow=ui.listRow(R.drawable.ic_folder,"Carpeta de copias",null,"Desactivada");folderRow.onClick(v->folderSheet());ui.addRow(storage,folderRow);refreshFolder();
-        page.addView(ui.footnote("Guardado rápido: la carpeta donde el botón de cada transcripción guarda el .txt con un toque (por ejemplo, tu Inbox de Drive). Carpeta de copias: cada grabación se copia con su audio, información y transcripción. Puedes elegir una carpeta del teléfono o de Google Drive (si tienes su app). Borrar en Voz local no borra estas copias."));
+        page.addView(more("Cada grabación se copia con su audio y su texto.","Carpeta de copias","Cada grabación se copia a esa carpeta con su audio, su información y su transcripción, y la copia se actualiza sola.\n\nPuedes elegir una carpeta del teléfono o de Google Drive (si tienes su app): en el selector, abre el menú ☰.\n\nBorrar una grabación en Voz local no borra sus copias."));
 
-        // Grabación y apariencia
-        page.addView(ui.section("Grabación"));LinearLayout rec=ui.group();page.addView(rec,Ui.fill());
-        ui.addRow(rec,ui.switchRow(R.drawable.ic_calendar,"Fecha delante del nombre","Ej.: "+Recording.isoDate(System.currentTimeMillis())+" Reunión",settings.datePrefix(),on->{settings.prefs.edit().putBoolean("datePrefix",on).apply();Diagnostics.event("setting_changed",null,"action","date_prefix","result",on);if(on)offerDatesForExisting();}));
-        if(settings.datePrefix())ui.addRow(rec,ui.listRow(R.drawable.ic_edit,"Agregar fecha a las existentes","Para las grabaciones anteriores a esta opción",null).onClick(v->offerDatesForExisting()));
-        ui.addRow(rec,ui.switchRow(R.drawable.ic_title,"Resumen al terminar","Nombrar la grabación y elegir el siguiente paso",settings.askTitle(),on->toggle("askTitle",on)));
+        // 5. Apariencia
         String mode=AppTheme.appearance(this);String[] modes={"system","light","dark"},modeNames={"Automático","Claro","Oscuro"};
         page.addView(ui.section("Apariencia"));LinearLayout look=ui.group();page.addView(look,Ui.fill());
         ui.addRow(look,ui.listRow(R.drawable.ic_palette,"Tema",null,modeNames[Math.max(0,Arrays.asList(modes).indexOf(mode))]).onClick(v->{
             Sheet s=sheet("Tema",null);for(int i=0;i<3;i++){int k=i;s.choice(modeNames[i],i==0?"Igual que el teléfono":null,modes[i].equals(mode),()->{settings.prefs.edit().putString("appearance",modes[k]).apply();Diagnostics.event("setting_changed",null,"action","appearance","result",k);recreate();});}s.show();}));
-        if(Build.VERSION.SDK_INT>=31)ui.addRow(look,ui.switchRow(R.drawable.ic_sparkle,"Colores de tu fondo de pantalla","Material You · adapta la app a los colores del sistema",AppTheme.dynamicColor(this),on->{settings.prefs.edit().putBoolean("dynamicColor",on).apply();Diagnostics.event("setting_changed",null,"action","dynamic_color","result",on);page.postDelayed(this::recreate,200);}));
+        if(Build.VERSION.SDK_INT>=31){
+            View dynamic=ui.switchRow(R.drawable.ic_sparkle,"Colores de tu fondo de pantalla","Adapta la app a los colores de tu teléfono",AppTheme.dynamicColor(this),on->{settings.prefs.edit().putBoolean("dynamicColor",on).apply();Diagnostics.event("setting_changed",null,"action","dynamic_color","result",on);page.postDelayed(this::recreate,200);});
+            if(dynamic instanceof Ui.Row&&((Ui.Row)dynamic).subtitle.getParent() instanceof ViewGroup)((ViewGroup)((Ui.Row)dynamic).subtitle.getParent()).addView(palettePreview());
+            ui.addRow(look,dynamic);
+        }
 
-        // Ayuda
+        // 6. Ayuda y soporte
         page.addView(ui.section("Ayuda y soporte"));LinearLayout help=ui.group();page.addView(help,Ui.fill());
-        ui.addRow(help,ui.listRow(R.drawable.ic_people,"Probar edición de voces","Ejemplo sin usar la API",null).onClick(v->startActivity(new Intent(this,RecordingActivity.class).putExtra("demo",true))));
+        String version=versionName();
+        ui.addRow(help,ui.listRow(R.drawable.ic_info,"Novedades y versiones",null,version).onClick(v->Novedades.showAll(this)));
+        ui.addRow(help,ui.listRow(R.drawable.ic_people,"Probar edición de voces","Un ejemplo que no usa tu clave",null).onClick(v->startActivity(new Intent(this,RecordingActivity.class).putExtra("demo",true))));
         ui.addRow(help,ui.listRow(R.drawable.ic_lifebuoy,"Compartir informe de soporte","Sin claves, títulos, audio ni texto",null).onClick(v->report()));
-        Ui.Row clear=ui.listRow(R.drawable.ic_trash,"Borrar registros de diagnóstico",null,null);clear.title.setTextColor(p.error);clear.onClick(v->confirm("¿Borrar los registros locales?","Las grabaciones y transcripciones se conservan.","Borrar",true,()->{Diagnostics.clear(this);toast("Registros borrados");}));ui.addRow(help,clear);
+        ui.addRow(help,ui.listRow(R.drawable.ic_trash,"Borrar registros de diagnóstico",null,null).onClick(v->confirm("¿Borrar los registros locales?","Las grabaciones y transcripciones se conservan.","Borrar",true,()->{Diagnostics.clear(this);toast("Registros borrados");})));
         page.addView(ui.footnote("El registro técnico queda solo en este teléfono (máx. ~4 MB, 30 días) y se comparte únicamente si tú lo envías."));
-        TextView version=ui.text("Voz local "+versionName()+" · Software libre · Licencia MIT",Type.BODY_MEDIUM,p.outline);version.setGravity(Gravity.CENTER);version.setPadding(0,ui.dp(S8),0,0);page.addView(version,Ui.fill());
+        TextView footer=ui.text("Voz local "+version+" · Software libre · Licencia MIT",Type.BODY_MEDIUM,p.outline);footer.setGravity(Gravity.CENTER);footer.setPadding(0,ui.dp(S8),0,0);page.addView(footer,Ui.fill());
     }
-    /** Tarjeta de estado: tonal (secondaryContainer) si falta un paso, neutra si todo está listo. */
+
+    /** Tarjeta de estado: responde «¿está funcionando?». Tonal si falta un paso o falló la última comprobación; neutra si todo está listo. */
     private View statusCard(){
-        boolean ready=settings.hasKey();LinearLayout card=ui.card();card.setOrientation(LinearLayout.HORIZONTAL);card.setGravity(Gravity.CENTER_VERTICAL);
+        boolean hasKey=settings.hasKey(),failed=hasKey&&verifyFailed(),ready=hasKey&&!failed;
+        LinearLayout card=ui.card();card.setOrientation(LinearLayout.HORIZONTAL);card.setGravity(Gravity.CENTER_VERTICAL);
         int fg=ready?p.onSurface:p.onSecondaryContainer,fg2=ready?p.onSurfaceVariant:p.onSecondaryContainer;
-        card.addView(ui.tile(ready?R.drawable.ic_check:R.drawable.ic_key,ready?p.onPrimaryContainer:p.onSecondaryContainer,ready?p.primaryContainer:p.surfaceContainerLowest,40,22));card.addView(ui.space(S4));
-        LinearLayout t=ui.column();t.addView(ui.text(ready?"Listo para transcribir":"Falta un paso para transcribir",Type.TITLE_MEDIUM,fg));TextView d=ui.text(ready?modelSummary(settings):"Agrega tu clave de API. Grabar funciona igual sin ella.",Type.BODY_MEDIUM,fg2);d.setPadding(0,ui.dp(2),0,0);t.addView(d);card.addView(t,new LinearLayout.LayoutParams(0,-2,1));
-        if(!ready){card.setBackground(ui.ripple(shape(this,p.secondaryContainer,R_CARD),R_CARD));card.setClickable(true);card.setAccessibilityDelegate(Ui.buttonRole());card.setOnClickListener(v->keySheet());}
+        int icon=ready?R.drawable.ic_check:failed?R.drawable.ic_alert:R.drawable.ic_key;
+        card.addView(ui.tile(icon,ready?p.onPrimaryContainer:p.onSecondaryContainer,ready?p.primaryContainer:p.surfaceContainerLowest,40,22));card.addView(ui.space(S4));
+        String title=ready?"Listo para transcribir":failed?"No se pudo conectar":"Falta un paso para transcribir";
+        String detail=ready?modelSummary(settings):failed?"Toca para ver qué pasó y reintentar":"Agrega tu clave de API. Grabar funciona igual sin ella.";
+        LinearLayout t=ui.column();t.addView(ui.text(title,Type.TITLE_MEDIUM,fg));TextView d=ui.text(detail,Type.BODY_MEDIUM,fg2);d.setPadding(0,ui.dp(2),0,0);t.addView(d);card.addView(t,new LinearLayout.LayoutParams(0,-2,1));
+        if(!ready){card.setBackground(ui.ripple(shape(this,p.secondaryContainer,R_CARD),R_CARD));card.setClickable(true);card.setAccessibilityDelegate(Ui.buttonRole());card.setContentDescription(title+". "+detail);
+            card.setOnClickListener(v->{if(failed)verifyError(settings.prefs.getString("verifyMsg",""));else keySheet();});}
         return card;
     }
-    private String versionName(){try{return getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception e){return "";}}
+    private String versionName(){String v=Novedades.versionName(this);if(!v.isEmpty())return v;try{return getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception e){return "";}}
     private void set(String key,String value){settings.prefs.edit().putString(key,value).apply();changed(key);}
     private void toggle(String key,boolean on){settings.prefs.edit().putBoolean(key,on).apply();Diagnostics.event("setting_changed",null,"action",key,"result",on);Pipeline.schedule(this,true);}
     private void changed(String key){Diagnostics.event("setting_changed",null,"action",key);Pipeline.schedule(this,true);render();}
+    private static void subtitle(View row,String text){if(row instanceof Ui.Row)((Ui.Row)row).setSubtitle(text==null?"":text);}
+    /** Muestra u oculta una fila de grupo junto con su divisor. */
+    private static void showRow(View row,boolean visible){
+        int v=visible?View.VISIBLE:View.GONE;row.setVisibility(v);
+        if(row.getParent() instanceof ViewGroup){ViewGroup g=(ViewGroup)row.getParent();int i=g.indexOfChild(row);if(i>0)g.getChildAt(i-1).setVisibility(v);}
+    }
+    /** Pie corto de un grupo + «Más información», que abre la explicación completa en una hoja. */
+    private View more(String text,String title,String detail){
+        LinearLayout box=ui.column();box.addView(ui.footnote(text));
+        Ui.Btn b=ui.button("Más información",0,Ui.Style.PLAIN,v->message(title,detail));b.setMinimumHeight(ui.dp(48));b.setContentDescription("Más información: "+title);
+        LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginStart(ui.dp(S1));box.addView(b,lp);return box;
+    }
+    /** Vista previa en vivo de los colores que Android sacaría de tu fondo de pantalla. */
+    private View palettePreview(){
+        LinearLayout r=ui.row();r.setPadding(0,ui.dp(S2),0,0);r.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        try{Palette sys=new Palette(this,p.dark,true);
+            for(int color:new int[]{sys.primary,sys.primaryContainer,sys.secondaryContainer,sys.surfaceContainerHighest}){
+                View dot=new View(this);GradientDrawable o=oval(color);o.setStroke(Math.max(1,ui.dp(1)),p.outlineVariant);dot.setBackground(o);
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(ui.dp(16),ui.dp(16));lp.setMarginEnd(ui.dp(S1));r.addView(dot,lp);}
+        }catch(Exception e){r.setVisibility(View.GONE);}
+        return r;
+    }
 
+    // ---------- Guardado rápido (0-Inbox) ----------
+    private String inboxValue(){return settings.inboxTree().isEmpty()?"Sin elegir":settings.prefs.getString("saveTreeName","Carpeta elegida");}
+
+    // ---------- Nota para tu segundo cerebro ----------
+    private boolean claude(){return settings.noteProvider().equals("anthropic");}
+    private static String noteSubtitle(boolean auto){return auto?"Se arma sola al terminar cada transcripción":"Con un toque, desde cada grabación";}
+    private boolean noteReady(){try{return Notes.canGenerate(this);}catch(Throwable t){return true;}}
+    private String noteMissing(){if(claude())return "Falta la clave de Anthropic";return settings.provider().equals("openai")?"Falta la clave de OpenAI":"Con tu servidor, elige Claude";}
+    private String noteAiValue(){String m=settings.noteModel();return (claude()?"Claude":"OpenAI")+(m.isEmpty()?"":" · "+m);}
+    /** La nota quedó activada pero su IA no tiene clave: se ofrece la salida justa. */
+    private void noteMissingKey(){if(claude())anthropicKeyInput();else noteAiSheet();}
+    private void noteAiSheet(){
+        boolean claude=claude(),openaiReady=settings.provider().equals("openai")&&settings.hasKey(),hasClaudeKey=settings.hasAnthropicKey();
+        String openaiDetail=openaiReady?"Usa tu clave de OpenAI, sin configurar nada más":settings.provider().equals("openai")?"Usa tu clave de OpenAI · aún no la agregas":"Solo si transcribes con OpenAI";
+        Sheet s=sheet("IA de la nota","Arma el resumen, las decisiones y las tareas con el texto de la transcripción. No se vuelve a enviar el audio, así que cuesta poco.");
+        s.choice("OpenAI",openaiDetail,!claude,()->setNoteProvider("openai"));
+        s.choice("Claude (Anthropic)","Mejor redacción en español · "+(hasClaudeKey?"clave configurada":"requiere tu clave de Anthropic"),claude,()->{setNoteProvider("anthropic");if(!settings.hasAnthropicKey())anthropicKeyInput();});
+        s.action(R.drawable.ic_edit,"Modelo: "+(settings.noteModel().isEmpty()?"el recomendado":settings.noteModel()),false,this::noteModelSheet);
+        if(claude||hasClaudeKey)s.action(R.drawable.ic_key,hasClaudeKey?"Clave de Anthropic":"Agregar clave de Anthropic",false,this::anthropicKeySheet);
+        s.show();
+    }
+    /** Cambiar de IA borra el modelo elegido a mano: el de una no sirve para la otra. */
+    private void setNoteProvider(String provider){settings.prefs.edit().putString("noteProvider",provider).remove("noteModel").apply();Diagnostics.event("setting_changed",null,"action","note_provider","result",provider);render();}
+    private void noteModelSheet(){
+        EditText model=ui.field("Vacío = el recomendado","Modelo de la nota");model.setText(settings.noteModel());model.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        Sheet s=sheet("Modelo de la nota","Déjalo vacío para usar el recomendado de "+(claude()?"Claude":"OpenAI")+". Escribe otro solo si conoces su nombre exacto.").add(model);
+        s.primary("Guardar",Ui.Style.PRIMARY,()->{String m=model.getText().toString().trim();
+            if(!m.isEmpty()&&!m.matches("[A-Za-z0-9_.:/-]{1,120}")){model.setError("Usa solo letras, números, puntos y guiones");return false;}
+            settings.prefs.edit().putString("noteModel",m).apply();Diagnostics.event("setting_changed",null,"action","note_model","result",m.isEmpty()?"default":"custom");render();return true;});
+        if(!settings.noteModel().isEmpty())s.secondary("Usar el recomendado",()->{settings.prefs.edit().remove("noteModel").apply();Diagnostics.event("setting_changed",null,"action","note_model","result","default");render();});
+        s.secondary("Cancelar",null).show();
+    }
+    private void anthropicKeySheet(){
+        if(settings.hasAnthropicKey()){sheet("Clave de Anthropic","Configurada y cifrada en este teléfono. Se usa solo para armar la nota y nunca aparece en informes.")
+            .action(R.drawable.ic_edit,"Reemplazar clave",false,this::anthropicKeyInput)
+            .action(R.drawable.ic_trash,"Eliminar clave",true,()->confirm("¿Eliminar la clave de Anthropic?","Sin clave, Claude no podrá armar tus notas. Puedes volver a OpenAI en «IA de la nota».","Eliminar",true,()->{try{settings.saveAnthropicKey("");Diagnostics.event("setting_changed",null,"action","anthropic_key","result","deleted");render();}catch(Exception e){message("Clave","No se pudo eliminar.");}})).show();return;}
+        anthropicKeyInput();
+    }
+    private void anthropicKeyInput(){
+        secretInput("Agregar clave de Anthropic","Créala en console.anthropic.com → API Keys y pégala aquí. Se usa solo para armar la nota con Claude: se envía el texto de la transcripción, no el audio. Se guarda cifrada y deja de mostrarse.","sk-ant-…","Clave de Anthropic",
+            settings::saveAnthropicKey,()->{Diagnostics.event("setting_changed",null,"action","anthropic_key");render();});
+    }
+
+    // ---------- Servicio de transcripción ----------
     private void providerSheet(){boolean openai=settings.provider().equals("openai");
         sheet("Proveedor","Cada proveedor usa su propia clave.").choice("OpenAI","Recomendado · separación de voces",openai,()->set("provider","openai"))
             .choice("Servidor compatible","Cualquier API con /audio/transcriptions",!openai,()->set("provider","custom")).show();}
@@ -123,28 +234,83 @@ public class SettingsActivity extends Screen {
             .action(R.drawable.ic_edit,"Reemplazar clave",false,this::keyInput).action(R.drawable.ic_trash,"Eliminar clave",true,()->confirm("¿Eliminar la clave?","Las transcripciones pendientes quedarán en espera hasta que agregues otra.","Eliminar",true,()->{try{settings.saveKey("");getSystemService(JobScheduler.class).cancel(Pipeline.JOB_ID);render();}catch(Exception e){message("Clave","No se pudo eliminar.");}})).show();return;}
         keyInput();
     }
+    /** Al guardar la clave se comprueba sola: el resultado queda en la fila, sin otro aviso que cerrar. */
     private void keyInput(){
-        EditText input=ui.field(settings.provider().equals("openai")?"sk-…":"Clave del servidor","Clave de API");input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);input.setSaveEnabled(false);input.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
-        Sheet s=sheet("Agregar clave de API",settings.provider().equals("openai")?"Créala en platform.openai.com → API keys y pégala aquí. Se guarda cifrada y deja de mostrarse.":"Pega la clave de tu servidor. Se guarda cifrada.").add(input);
-        s.primary("Guardar clave",Ui.Style.PRIMARY,()->{try{if(input.length()==0){input.setError("Pega tu clave");return false;}settings.saveKey(input.getText().toString());input.setText("");Diagnostics.event("setting_changed",null,"action","api_key");Pipeline.schedule(this,true);render();toast("Clave guardada");return true;}catch(Exception e){input.setError("No se pudo guardar. Revisa que no tenga espacios.");return false;}})
-            .secondary("Cancelar",null).secure().show();
-        input.requestFocus();s.dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        boolean openai=settings.provider().equals("openai");
+        secretInput("Agregar clave de API",openai?"Créala en platform.openai.com → API keys y pégala aquí. Se guarda cifrada y deja de mostrarse.":"Pega la clave de tu servidor. Se guarda cifrada.",openai?"sk-…":"Clave del servidor","Clave de API",
+            settings::saveKey,()->{Diagnostics.event("setting_changed",null,"action","api_key");Pipeline.schedule(this,true);render();page.post(this::verify);});
     }
-    private void verify(Ui.Row row){
+    interface Secret{void save(String value)throws Exception;}
+    /** Hoja segura para pegar una clave: campo oculto, sin autocompletar ni capturas de pantalla. */
+    private void secretInput(String title,String message,String hint,String description,Secret secret,Runnable saved){
+        EditText input=ui.field(hint,description);input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);input.setSaveEnabled(false);input.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        Sheet s=sheet(title,message).add(input);
+        s.primary("Guardar clave",Ui.Style.PRIMARY,()->{try{if(input.length()==0){input.setError("Pega tu clave");return false;}secret.save(input.getText().toString());input.setText("");saved.run();toast("Clave guardada");return true;}catch(Exception e){input.setError("No se pudo guardar. Revisa que no tenga espacios.");return false;}})
+            .secondary("Cancelar",null).secure().show();
+        input.requestFocus();if(s.dialog.getWindow()!=null)s.dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    }
+
+    // ---------- Comprobar conexión (resultado en la misma fila, guardado en prefs) ----------
+    /** A qué configuración corresponde la última comprobación: si cambias proveedor, modelo o clave, deja de valer. */
+    private String verifyTarget(){
+        String provider=settings.provider();
+        String what=provider.equals("openai")?settings.textModel()+"|"+settings.defaultSpeakers():settings.prefs.getString("customBase","")+"|"+settings.prefs.getString("customModel","")+"|"+settings.prefs.getBoolean("customSpeakers",false);
+        return provider+"|"+what+"|"+settings.prefs.getString(settings.prefix()+"keyEncrypted","").hashCode();
+    }
+    private boolean verifyValid(){return settings.prefs.getLong("verifyAt",0)>0&&verifyTarget().equals(settings.prefs.getString("verifyFor",""));}
+    private boolean verifyFailed(){return verifyValid()&&!settings.prefs.getBoolean("verifyOk",true);}
+    private String verifyText(){
+        if(verifying)return "Comprobando…";
+        if(!settings.hasKey())return "Primero agrega tu clave";
+        if(!verifyValid())return "Confirma que tu clave funciona";
+        long at=settings.prefs.getLong("verifyAt",0);
+        if(settings.prefs.getBoolean("verifyOk",false))return "✓ Conectado · "+seconds(settings.prefs.getLong("verifyMs",0))+" · "+ago(at);
+        return "No se pudo conectar · "+ago(at);
+    }
+    private void paintVerify(){if(verifyRow==null)return;verifyRow.setSubtitle(verifyText());verifyRow.subtitle.setTextColor(!verifying&&verifyFailed()?p.error:p.onSurfaceVariant);verifyRow.setEnabled(!verifying);}
+    private void verify(){
         if(!settings.hasKey()){keySheet();return;}
-        row.setEnabled(false);row.setSubtitle("Comprobando…");http=new HttpApi();
-        io.execute(()->{String result;boolean ok=false;try{new OpenAiClient(http).verify(settings.config());ok=true;result="El servidor respondió y reconoce el modelo. Esto no prueba todavía la carga de audio, el saldo ni la separación de voces.";}
-            catch(Exception e){result=e instanceof HttpApi.UserAction?e.getMessage():"No se pudo conectar. Revisa tu conexión y la URL del servidor.";}
-            String value=result;boolean success=ok;runOnUiThread(()->{if(isDestroyed())return;row.setEnabled(true);row.setSubtitle(success?"Conexión correcta":"Falló la última comprobación");row.subtitle.setTextColor(success?p.primary:p.error);message(success?"Conexión correcta":"No se pudo verificar",value);});});
+        if(verifying)return;
+        verifying=true;paintVerify();
+        if(http!=null)http.cancel();HttpApi call=new HttpApi();http=call;String target=verifyTarget();boolean openai=settings.provider().equals("openai");
+        io.execute(()->{String reason=null;long started=SystemClock.elapsedRealtime();
+            try{new OpenAiClient(call).verify(settings.config());}
+            catch(Exception e){reason=e instanceof HttpApi.UserAction?e.getMessage():openai?"No se pudo conectar. Revisa tu conexión a internet.":"No se pudo conectar. Revisa tu conexión y la URL del servidor.";}
+            if(call.cancelled)return; // se salió de Ajustes: no se guarda un fallo que no fue
+            long ms=SystemClock.elapsedRealtime()-started;boolean ok=reason==null;String why=reason;
+            settings.prefs.edit().putLong("verifyAt",System.currentTimeMillis()).putBoolean("verifyOk",ok).putLong("verifyMs",ms).putString("verifyFor",target).putString("verifyMsg",ok?"":why).apply();
+            Diagnostics.event("setting_changed",null,"action","verify","result",ok,"elapsed_ms",ms);
+            runOnUiThread(()->{verifying=false;if(isDestroyed()||isFinishing())return;render();
+                if(verifyRow!=null){Ui.haptic(verifyRow,ok?Ui.Haptic.CONFIRM:Ui.Haptic.REJECT);verifyRow.announceForAccessibility(ok?"Conectado":"No se pudo conectar");}
+                if(!ok)verifyError(why);});
+        });
+    }
+    /** Los errores siguen explicándose, con su salida: revisar la clave o reintentar. */
+    private void verifyError(String reason){
+        String why=reason==null||reason.isEmpty()?"Revisa tu conexión y vuelve a intentarlo.":reason;
+        Sheet s=sheet("No se pudo conectar",why);
+        if(why.toLowerCase(CL).contains("clave"))s.primary("Revisar la clave",this::keySheet);else s.primary("Reintentar",this::verify);
+        s.secondary("Cerrar",null).show();
+    }
+    /** «0,9 s». */
+    static String seconds(long ms){return String.format(CL,"%.1f s",ms/1000.0);}
+    /** «recién», «hace 5 min», «hace 2 h», «ayer», «hace 3 días». */
+    static String ago(long at){
+        long min=Math.max(0,System.currentTimeMillis()-at)/60000;
+        if(min<1)return "recién";if(min<60)return "hace "+min+" min";
+        long h=min/60;if(h<24)return "hace "+h+" h";
+        long d=h/24;return d==1?"ayer":"hace "+d+" días";
     }
     private void custom(){
         LinearLayout box=ui.column();EditText base=ui.labeled(box,"URL base HTTPS","https://proveedor.com/v1");base.setText(settings.prefs.getString("customBase",""));base.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);
         EditText model=ui.labeled(box,"Identificador del modelo","whisper-1");model.setText(settings.prefs.getString("customModel",""));
-        CheckBox voices=new CheckBox(this);voices.setText("Admite diarized_json y chunking_strategy");voices.setTextColor(p.onSurface);voices.setButtonTintList(android.content.res.ColorStateList.valueOf(p.primary));voices.setChecked(settings.prefs.getBoolean("customSpeakers",false));voices.setPadding(ui.dp(S1),ui.dp(S3),0,ui.dp(S3));box.addView(voices);
+        CheckBox voices=new CheckBox(this);voices.setText("Admite diarized_json y chunking_strategy");voices.setTextColor(p.onSurface);voices.setButtonTintList(android.content.res.ColorStateList.valueOf(p.primary));voices.setChecked(settings.prefs.getBoolean("customSpeakers",false));voices.setPadding(ui.dp(S1),ui.dp(S3),0,ui.dp(S3));voices.setMinHeight(ui.dp(48));box.addView(voices);
         sheet("Servidor compatible","Enviarás audio y tu clave a este servidor. Si cambias la URL, se borra la clave anterior.").add(box)
             .primary("Guardar",Ui.Style.PRIMARY,()->{try{ProviderConfig config=new ProviderConfig("custom",base.getText().toString().trim(),model.getText().toString().trim(),"",voices.isChecked());if(!config.base.equals(settings.prefs.getString("customBase","")))settings.saveKey("");settings.prefs.edit().putString("customBase",config.base).putString("customModel",config.model).putBoolean("customSpeakers",config.speakers).apply();Pipeline.schedule(this,true);render();return true;}catch(Exception e){base.setError("Usa una URL HTTPS sin credenciales ni parámetros y un modelo válido.");return false;}})
             .secondary("Cancelar",null).show();
     }
+
+    // ---------- Carpetas ----------
     private void folderSheet(){
         boolean has=!settings.prefs.getString("localTree","").isEmpty();
         Sheet s=sheet("Carpeta de copias",has?"Las grabaciones se copian automáticamente a esta carpeta.":"Elige o crea una carpeta. En el selector, abre el menú ☰ para ver Google Drive u otras ubicaciones.");
@@ -160,10 +326,10 @@ public class SettingsActivity extends Screen {
             int changed=n;runOnUiThread(()->toast(changed==1?"1 nombre actualizado":changed+" nombres actualizados"));}));
     }
     private void saveSheet(){
-        boolean has=!settings.prefs.getString("saveTree","").isEmpty();
-        Sheet s=sheet("Guardado rápido",has?"El botón de cada transcripción guarda en «"+settings.prefs.getString("saveTreeName","")+"».":"Elige la carpeta donde quieres dejar siempre tus transcripciones. En el selector abre el menú ☰ y elige Drive para usar una carpeta de Google Drive.");
+        boolean has=!settings.inboxTree().isEmpty();
+        Sheet s=sheet("Guardado rápido",has?"El botón de cada grabación guarda la nota (.md) o el texto (.txt) en «"+settings.prefs.getString("saveTreeName","")+"». Si corriges algo después, reemplaza el mismo archivo.":"Elige la carpeta donde quieres dejar siempre tus notas y transcripciones, por ejemplo tu 0-Inbox. En el selector abre el menú ☰ y elige Drive para usar una carpeta de Google Drive.");
         s.action(R.drawable.ic_folder,has?"Cambiar carpeta":"Elegir carpeta",false,()->{try{Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);String last=settings.prefs.getString("lastSaveUri","");if(!last.isEmpty())pick.putExtra(DocumentsContract.EXTRA_INITIAL_URI,Uri.parse(last));startActivityForResult(pick,PICK_SAVE);}catch(ActivityNotFoundException e){message("Guardado rápido","Este teléfono no permite elegir carpetas.");}});
-        if(has)s.action(R.drawable.ic_close,"Quitar guardado rápido",true,()->{settings.prefs.edit().remove("saveTree").remove("saveTreeName").apply();saveRow.setValue("Sin elegir");});
+        if(has)s.action(R.drawable.ic_close,"Quitar guardado rápido",true,()->{settings.prefs.edit().remove("saveTree").remove("saveTreeName").apply();if(saveRow!=null)saveRow.setValue("Sin elegir");});
         s.show();
     }
     /** Nombre visible de una carpeta elegida con el selector de Android. */
@@ -171,10 +337,9 @@ public class SettingsActivity extends Screen {
     /** Muestra el nombre real de la carpeta (y si es Drive) en vez del identificador interno. */
     private void refreshFolder(){
         String tree=settings.prefs.getString("localTree","");if(tree.isEmpty()){folderRow.setValue("Desactivada");return;}
-        folderRow.setValue("…");io.execute(()->{String name="Carpeta elegida";Uri uri=Uri.parse(tree);
-            try(android.database.Cursor c=getContentResolver().query(DocumentsContract.buildDocumentUriUsingTree(uri,DocumentsContract.getTreeDocumentId(uri)),new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst()&&c.getString(0)!=null)name=c.getString(0);}catch(Exception ignored){}
+        folderRow.setValue("…");Ui.Row row=folderRow;io.execute(()->{Uri uri=Uri.parse(tree);String name=folderName(uri);
             String authority=uri.getAuthority()==null?"":uri.getAuthority();String label=(authority.contains("google.android.apps.docs")?"Drive · ":"")+name;
-            runOnUiThread(()->{if(!isDestroyed())folderRow.setValue(label);});});
+            runOnUiThread(()->{if(!isDestroyed())row.setValue(label);});});
     }
     private void report(){toast("Preparando informe…");io.execute(()->{try{Diagnostics.export(this);runOnUiThread(()->shareFile("support.txt","Informe de soporte"));}catch(Exception e){runOnUiThread(()->message("Informe","No se pudo generar el informe."));}});}
     @Override protected void onActivityResult(int request,int result,Intent data){
@@ -182,7 +347,8 @@ public class SettingsActivity extends Screen {
         if(request==PICK_SAVE&&result==RESULT_OK&&data!=null&&data.getData()!=null){
             Uri tree=data.getData();
             try{getContentResolver().takePersistableUriPermission(tree,Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-                io.execute(()->{String name=folderName(tree);settings.prefs.edit().putString("saveTree",tree.toString()).putString("saveTreeName",name).apply();Diagnostics.event("setting_changed",null,"action","save_tree","result",tree.getAuthority()!=null&&tree.getAuthority().contains("google.android.apps.docs")?"drive":"device");runOnUiThread(()->{if(!isDestroyed()){saveRow.setValue(name);toast("Guardado rápido en "+name);}});});}
+                io.execute(()->{String name=folderName(tree);settings.prefs.edit().putString("saveTree",tree.toString()).putString("saveTreeName",name).apply();Diagnostics.event("setting_changed",null,"action","save_tree","result",tree.getAuthority()!=null&&tree.getAuthority().contains("google.android.apps.docs")?"drive":"device");
+                    runOnUiThread(()->{if(isDestroyed())return;if(saveRow!=null)saveRow.setValue(name);toast("Guardado rápido en "+name);if(inboxFlow)finish();});});}
             catch(Exception e){message("Guardado rápido","No se obtuvo permiso de escritura en esa carpeta. Elige otra.");}
         }
         if(request==PICK_FOLDER&&result==RESULT_OK&&data!=null&&data.getData()!=null){
@@ -210,8 +376,8 @@ public class SettingsActivity extends Screen {
         if(has){
             s.action(R.drawable.ic_play,"Escuchar mi muestra",false,this::playVoice);
             s.action(R.drawable.ic_mic_fill,"Grabar de nuevo",false,()->recordVoice(name.getText().toString()));
-            s.action(R.drawable.ic_trash,"Borrar mi voz",true,()->confirm("¿Borrar tu voz?","Al separar voces ya no se usará tu muestra.","Borrar",true,()->{Voices.delete(this);voiceRow.setValue(voiceValue());toast("Muestra borrada");}));
-            s.primary("Guardar nombre",Ui.Style.PRIMARY,()->{String n=name.getText().toString().trim();if(n.isEmpty()){name.setError("Escribe tu nombre");return false;}Voices.setName(this,n);voiceRow.setValue(voiceValue());return true;});
+            s.action(R.drawable.ic_trash,"Borrar mi voz",true,()->confirm("¿Borrar tu voz?","Al separar voces ya no se usará tu muestra.","Borrar",true,()->{Voices.delete(this);if(voiceRow!=null)voiceRow.setValue(voiceValue());toast("Muestra borrada");}));
+            s.primary("Guardar nombre",Ui.Style.PRIMARY,()->{String n=name.getText().toString().trim();if(n.isEmpty()){name.setError("Escribe tu nombre");return false;}Voices.setName(this,n);if(voiceRow!=null)voiceRow.setValue(voiceValue());return true;});
         }else s.primary("Grabar mi voz",Ui.Style.PRIMARY,()->{String n=name.getText().toString().trim();if(n.isEmpty()){name.setError("Escribe tu nombre");return false;}recordVoice(n);return true;});
         s.secondary("Cancelar",null).show();
     }
@@ -225,7 +391,7 @@ public class SettingsActivity extends Screen {
         Ui.Btn go=ui.button("Grabar",R.drawable.ic_mic_fill,Ui.Style.RECORD,null);LinearLayout.LayoutParams lp=Ui.fill();lp.topMargin=ui.dp(S4);s.body.addView(go,lp);
         go.setOnClickListener(v->{
             if(voiceRecorder==null){
-                if(startVoice()){go.setText("Detener y guardar");
+                if(startVoice()){go.setText("Detener y guardar");Ui.haptic(go,Ui.Haptic.CONFIRM);
                     voiceTimer.post(new Runnable(){public void run(){long ms=android.os.SystemClock.elapsedRealtime()-voiceStarted;status.setText("Grabando · "+(ms/1000)+" s de "+(Voices.MAX_MS/1000));if(ms>=Voices.MAX_MS){s.dismiss();return;}voiceTimer.postDelayed(this,250);}});}
                 else{s.dismiss();message("Mi voz","No se pudo usar el micrófono. Revisa el permiso y vuelve a intentarlo.");}
             }else s.dismiss();
