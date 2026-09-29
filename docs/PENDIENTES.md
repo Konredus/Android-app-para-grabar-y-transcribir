@@ -81,6 +81,31 @@ Para cada opción:
 - mostrar el costo estimado;
 - registrar en la bitácora qué alternativa se usó (para aprender cuál funciona mejor).
 
+### Nota lista para tu segundo cerebro (elegida 2026-09-29)
+- **Qué hace:** al terminar cada transcripción, la app arma una nota en Markdown compatible con Obsidian. La nota lleva:
+  - resumen (5 líneas);
+  - decisiones;
+  - tareas (qué, quién, para cuándo);
+  - frases clave con su hora;
+  - etiquetas;
+  - al final, la transcripción completa.
+- **Dónde queda:** se guarda sola en la carpeta de guardado rápido (0-Inbox) o con un toque, según una opción en Ajustes («Guardar la nota automáticamente»).
+- **Formato:** frontmatter con fecha, duración, personas y enlace al audio si hay carpeta de copias. Nombre `2026-09-29 Título.md`.
+- **Con qué IA:**
+  - por defecto, con la clave de OpenAI que ya existe (sin configurar nada nuevo);
+  - opcional, Claude (mejor redacción y matiz en español chileno; requiere una clave de Anthropic).
+  - Mostrar el costo estimado, que es bajo porque es solo texto.
+- **En pantalla:** una tarjeta «Resumen» arriba de la transcripción, con tareas marcables y el botón «Guardar nota».
+- **Lo que no hace:** consultas tipo chat sobre todos los audios. El usuario ya las hace con otra IA sobre su segundo cerebro.
+
+### Marcar momentos mientras grabas (elegida 2026-09-29)
+- **Botón ★:** mientras se graba, deja una marca con la hora exacta (con vibración corta como confirmación). También funciona desde la notificación de grabación, con el teléfono bloqueado.
+- **Después:**
+  - las marcas aparecen en el reproductor (puntos en la barra) y en la transcripción (intervención resaltada);
+  - un toque salta a cada momento;
+  - la nota del segundo cerebro las destaca en «Momentos marcados».
+- **Opcional:** escribir o dictar una palabra para la marca («precio», «idea»).
+
 ### Novedades de cada versión (pedido 2026-09-29)
 - **Al abrir la app después de actualizar,** aparece una hoja «Novedades de la 0.x.x»:
   - 3 a 5 puntos en lenguaje simple (qué cambió para el usuario, no detalles técnicos);
