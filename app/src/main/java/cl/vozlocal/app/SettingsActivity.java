@@ -75,7 +75,7 @@ public class SettingsActivity extends Screen {
         ui.addRow(flow,note[0]);
         Ui.Row noteAi=ui.listRow(R.drawable.ic_sparkle,"IA de la nota",noteReady()?null:noteMissing(),noteAiValue());noteAi.onClick(v->noteAiSheet());ui.addRow(flow,noteAi);
         ui.addRow(flow,ui.switchRow(R.drawable.ic_bolt,"Transcribir automáticamente","Al guardar una grabación o importar un audio",settings.automatic(),on->{toggle("automatic",on);if(on&&Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},101);}));
-        ui.addRow(flow,ui.switchRow(R.drawable.ic_title,"Resumen al terminar","Nombrar la grabación y elegir el siguiente paso",settings.askTitle(),on->toggle("askTitle",on)));
+        ui.addRow(flow,ui.switchRow(R.drawable.ic_title,"Nombrar al terminar de grabar","Una hoja para poner el título y seguir",settings.askTitle(),on->toggle("askTitle",on)));
         Ui.Row dates=ui.listRow(R.drawable.ic_edit,"Agregar fecha a las existentes","Para las grabaciones anteriores a esta opción",null);dates.onClick(v->offerDatesForExisting());
         ui.addRow(flow,ui.switchRow(R.drawable.ic_calendar,"Fecha delante del nombre","Ej.: "+Recording.isoDate(System.currentTimeMillis())+" Reunión",settings.datePrefix(),on->{settings.prefs.edit().putBoolean("datePrefix",on).apply();Diagnostics.event("setting_changed",null,"action","date_prefix","result",on);showRow(dates,on);if(on)offerDatesForExisting();}));
         ui.addRow(flow,dates);showRow(dates,settings.datePrefix());

@@ -29,6 +29,7 @@ Rediseño de la experiencia basado en el uso real: 999 acciones registradas, una
   - filas con el comienzo del texto, quién habla, la duración en palabras y «✓ En 0-Inbox» o «Por guardar»;
   - anillo de avance, «Reintentar» en la misma fila y un punto «nuevo»;
   - filtros Por guardar / En proceso / Sin transcribir / Con error.
+- **Voces conocidas:** la biblioteca guarda tu voz y la de otras personas (p. ej. la Fran), grabadas en Ajustes o con «Guardar la voz de X» desde una transcripción. Hasta 4 se envían en cada audio, así cada persona aparece con su nombre desde el inicio. Se pueden escuchar, renombrar, volver a grabar, apagar o eliminar.
 - **Nombrar voces en una sola pasada:** cada voz con ▶ para escucharla, su frase, su % y nombres sugeridos. Si dos llevan el mismo nombre, se unen.
 - **Ajustes reordenados:**
   - «Tu flujo» primero: 0-Inbox, nota e IA de la nota, automático, fecha y voces;

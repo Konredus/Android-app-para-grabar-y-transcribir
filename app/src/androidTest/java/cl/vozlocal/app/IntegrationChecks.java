@@ -22,6 +22,10 @@ final class IntegrationChecks {
         check(Novedades.parse("[{\"version\":\"0.4.1\",\"items\":[\"a\"]},{\"version\":\"0.6.0\",\"items\":[\"b\"]}]").get(0).version.equals("0.6.0"),"Novedades not sorted newest first");
         check(Novedades.date("2026-09-29").equals("29 de septiembre de 2026"),"Novedades date wrong");
         check(!Novedades.current(c).isEmpty(),"Current version has no novedades (assets/novedades.json)");
+        // Diagnóstico sin datos personales: nombres y títulos en etiquetas de botones se ocultan.
+        check(Diagnostics.safeAction("Guardar la voz de Fran").equals("Guardar la voz de …"),"Name leaked into diagnostics");
+        check(Diagnostics.safeAction("Opciones de 2026-09-28 Tareas pendientes").equals("Opciones de … pendientes"),"Title leaked into diagnostics");
+        check(Diagnostics.safeAction("Ver detalles del proceso").equals("Ver detalles del proceso"),"Plain label altered");
         // Importar: título sin extensión y nombres de WhatsApp legibles.
         check(ImportSession.titleFrom("Reunión.m4a").equals("Reunión"),"Import title keeps extension");
         check(ImportSession.titleFrom("PTT-20260929-WA0003.opus").startsWith("Audio de WhatsApp"),"WhatsApp title not friendly");

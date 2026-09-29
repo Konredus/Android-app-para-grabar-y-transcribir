@@ -697,8 +697,8 @@ public class RecordingActivity extends Screen {
     /** Chip de 36 dp visibles dentro de un área táctil de 48 dp. */
     private Drawable chipBackground(GradientDrawable fill){int v=ui.dp(6);return new RippleDrawable(ColorStateList.valueOf(p.ripple),new InsetDrawable(fill,0,v,0,v),new InsetDrawable(shape(this,0xFF000000,R_SMALL),0,v,0,v));}
     private TextView chip(String text,int icon,int fg,int bg,boolean outlined){
-        TextView t=ui.oneLine(ui.text(text,Type.LABEL_LARGE,fg));t.setGravity(Gravity.CENTER_VERTICAL);t.setMinHeight(ui.dp(48));t.setPadding(ui.dp(icon!=0?S2:S3),0,ui.dp(S3),0);
-        t.setBackground(chipBackground(outlined?outline(this,0x00000000,p.outline,R_SMALL,false):shape(this,bg,R_SMALL)));
+        TextView t=ui.oneLine(ui.text(text,Type.LABEL_LARGE,fg));t.setGravity(Gravity.CENTER_VERTICAL);t.setMinHeight(ui.dp(48));
+        t.setBackground(chipBackground(outlined?outline(this,0x00000000,p.outline,R_SMALL,false):shape(this,bg,R_SMALL)));t.setPadding(ui.dp(icon!=0?S2:S3),0,ui.dp(S3),0); // después del fondo: un fondo con márgenes reemplaza el padding
         if(icon!=0){Drawable d=getDrawable(icon).mutate();d.setTint(outlined?p.primary:fg);d.setBounds(0,0,ui.dp(18),ui.dp(18));t.setCompoundDrawablesRelative(d,null,null,null);t.setCompoundDrawablePadding(ui.dp(S2));}
         t.setAccessibilityDelegate(Ui.buttonRole());Ui.pressable(t);return t;
     }
