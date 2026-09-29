@@ -7,21 +7,24 @@ import android.view.View;
 
 /**
  * Selector de tramo con dos manijas (inicio / final) para recortar un audio sin escribir segundos.
+ * Manijas en el color de acción, con un halo mientras se arrastran; todo sale de los roles de AppTheme (modo oscuro incluido).
  * Los campos numéricos de la pantalla siguen disponibles para ajuste preciso y lectores de pantalla.
  */
 final class RangeView extends View {
     interface Listener{void changed(long from,long to);}
-    private final Paint track=new Paint(Paint.ANTI_ALIAS_FLAG),selected=new Paint(Paint.ANTI_ALIAS_FLAG),thumb=new Paint(Paint.ANTI_ALIAS_FLAG),border=new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint track=new Paint(Paint.ANTI_ALIAS_FLAG),selected=new Paint(Paint.ANTI_ALIAS_FLAG),thumb=new Paint(Paint.ANTI_ALIAS_FLAG),border=new Paint(Paint.ANTI_ALIAS_FLAG),halo=new Paint(Paint.ANTI_ALIAS_FLAG);
     private long duration=1,from,to=1;private int dragging=-1;private Listener listener;
     static final long MIN_GAP=500;
 
     RangeView(Context c,AppTheme.Palette p){
-        super(c);track.setColor(p.surfaceContainerHighest);selected.setColor(p.primary);thumb.setColor(0xFFFFFFFF);border.setStyle(Paint.Style.STROKE);border.setStrokeWidth(dp(2));border.setColor(p.primary);
+        super(c);track.setColor(p.surfaceContainerHighest);selected.setColor(p.primary);thumb.setColor(p.primary);
+        border.setStyle(Paint.Style.STROKE);border.setStrokeWidth(dp(2.5f));border.setColor(p.card);
+        halo.setColor(p.primary);halo.setAlpha(0x33);
         setMinimumHeight((int)dp(48));
     }
     void setListener(Listener l){listener=l;}
     void set(long duration,long from,long to){this.duration=Math.max(1,duration);this.from=clamp(from,0,this.duration);this.to=clamp(to,this.from,this.duration);describe();invalidate();}
-    private float pad(){return dp(14);}
+    private float pad(){return dp(16);}
     private float x(long ms){return pad()+(getWidth()-2*pad())*ms/(float)duration;}
     private long ms(float x){return clamp((long)((x-pad())/(getWidth()-2*pad())*duration),0,duration);}
     private static long clamp(long v,long lo,long hi){return Math.max(lo,Math.min(hi,v));}
@@ -29,15 +32,15 @@ final class RangeView extends View {
         float mid=getHeight()/2f,h=dp(6);
         canvas.drawRoundRect(pad(),mid-h/2,getWidth()-pad(),mid+h/2,h/2,h/2,track);
         canvas.drawRoundRect(x(from),mid-h/2,x(to),mid+h/2,h/2,h/2,selected);
-        drawThumb(canvas,x(from),mid);drawThumb(canvas,x(to),mid);
+        drawThumb(canvas,x(from),mid,dragging==0);drawThumb(canvas,x(to),mid,dragging==1);
     }
-    private void drawThumb(Canvas canvas,float cx,float cy){canvas.drawCircle(cx,cy,dp(12),thumb);canvas.drawCircle(cx,cy,dp(12),border);}
+    private void drawThumb(Canvas canvas,float cx,float cy,boolean active){if(active)canvas.drawCircle(cx,cy,dp(20),halo);canvas.drawCircle(cx,cy,dp(11),thumb);canvas.drawCircle(cx,cy,dp(11),border);}
     @Override public boolean onTouchEvent(MotionEvent e){
         float ex=e.getX();
         switch(e.getActionMasked()){
             case MotionEvent.ACTION_DOWN:dragging=Math.abs(ex-x(from))<=Math.abs(ex-x(to))?0:1;if(from==to)dragging=ex<x(from)?0:1;getParent().requestDisallowInterceptTouchEvent(true);move(ex);return true;
             case MotionEvent.ACTION_MOVE:move(ex);return true;
-            case MotionEvent.ACTION_UP:case MotionEvent.ACTION_CANCEL:dragging=-1;performClick();return true;
+            case MotionEvent.ACTION_UP:case MotionEvent.ACTION_CANCEL:dragging=-1;invalidate();performClick();return true;
         }
         return super.onTouchEvent(e);
     }

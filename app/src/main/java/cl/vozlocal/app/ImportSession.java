@@ -19,6 +19,24 @@ final class ImportSession {
         if(s.done){s.source.delete();return s;}if(s.ready){s.stage="Audio listo para continuar";if(state.optBoolean("busy"))s.error="La preparación se interrumpió. Tu copia está a salvo; puedes volver a guardarla.";return s;}
         s.source.delete();stateFile(c).delete();return null;
     }catch(Exception ignored){return null;}}
+    /**
+     * Título legible a partir del nombre del archivo: sin la extensión («.m4a», «.opus»…) y, para las notas de voz de
+     * WhatsApp («PTT-20260929-WA0003»), «Audio de WhatsApp 29 sept».
+     */
+    static String titleFrom(String file){
+        String t=file==null?"":file.trim().replaceFirst("\\.[A-Za-z0-9]{1,5}$","").trim();
+        java.util.regex.Matcher m=java.util.regex.Pattern.compile("^(?:PTT|AUD)-(\\d{8})-WA\\d+$",java.util.regex.Pattern.CASE_INSENSITIVE).matcher(t);
+        if(m.matches()){
+            try{java.text.SimpleDateFormat in=new java.text.SimpleDateFormat("yyyyMMdd",java.util.Locale.ROOT);in.setLenient(false);
+                t="Audio de WhatsApp "+new java.text.SimpleDateFormat("d MMM",new java.util.Locale("es","CL")).format(in.parse(m.group(1)));}
+            catch(Exception e){t="Audio de WhatsApp";}
+        }
+        if(t.isEmpty())t="Audio importado";
+        return t.length()>120?t.substring(0,120).trim():t;
+    }
+    /** Un audio preparado que quedó sin guardar hace más de 30 min: al volver a Importar se ofrece elegir otro (el original sigue intacto). */
+    static final long STALE_MS=30*60_000L;
+    boolean stale(){return ready&&!busy&&!done&&error.isEmpty()&&System.currentTimeMillis()-source.lastModified()>STALE_MS;}
     void cancel(){cancelled=true;cancel.cancel();Closeable stream=openStream;if(stream!=null)try{stream.close();}catch(Exception ignored){}}
     void clean(){source.delete();encoded.delete();stateFile(app).delete();}
 }
