@@ -13,7 +13,7 @@ final class Pipeline {
     static void request(Context c,String id,boolean speakers)throws Exception{
         if(FilesStore.state(c,id).optBoolean("demo"))throw new HttpApi.UserAction("El ejemplo no se envía a la API.");
         if(Transcript.exists(c,id)){LocalStorage.enqueue(c,id);return;}
-        FilesStore.update(c,id,s -> s.put("requested",true).put("failed",false).put("attempts",0).put("queuedAt",System.currentTimeMillis()).put("log",new JSONArray()).put("upSent",0).put("upTotal",0).put("speakers",speakers).put("liveChars",0).remove("lastError"));
+        FilesStore.update(c,id,s -> s.put("requested",true).put("failed",false).put("attempts",0).put("retries",0).put("cuts",0).put("queuedAt",System.currentTimeMillis()).put("log",new JSONArray()).put("upSent",0).put("upTotal",0).put("speakers",speakers).put("liveChars",0).remove("lastError"));
         Diagnostics.event("job_queued",id);
         String blocker=blocker(c);
         log(c,id,blocker==null?"En cola · empezando":"En cola · "+blocker);

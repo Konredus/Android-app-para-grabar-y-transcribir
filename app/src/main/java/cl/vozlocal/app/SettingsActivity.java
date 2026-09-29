@@ -24,7 +24,10 @@ public class SettingsActivity extends Screen {
     static final String[] SPEAKER_MODES={"ask","always","never"},SPEAKER_NAMES={"Preguntar cada vez","Siempre","Nunca"};
     private static final int PICK_FOLDER=51,PICK_SAVE=52;
     private Settings settings;private final ExecutorService io=Executors.newSingleThreadExecutor();private HttpApi http;
-    private Ui.Row folderRow,saveRow;
+    private Ui.Row folderRow,saveRow,batteryRow;
+    private String batteryValue(){return Battery.unrestricted(this)?"Puede transcribir":"Batería optimizada";}
+    /** Al volver del permiso del sistema, se refleja el nuevo estado. */
+    @Override protected void onResume(){super.onResume();if(batteryRow!=null)batteryRow.setValue(batteryValue());}
 
     static String modelName(Settings s){if(!s.provider().equals("openai"))return s.prefs.getString("customModel","personalizado");int i=Arrays.asList(MODELS).indexOf(s.textModel());return i<0?s.textModel():MODEL_NAMES[i];}
     static String modelSummary(Settings s){if(!s.provider().equals("openai"))return "Tu servidor · "+modelName(s);return "OpenAI · "+modelName(s)+(s.speakersMode().equals("never")?"":" + separación de voces");}
@@ -60,7 +63,8 @@ public class SettingsActivity extends Screen {
             sheet("Red para enviar audio","Los audios pueden pesar varios MB.").choice("Solo Wi-Fi","O cualquier red no medida",settings.wifiOnly(),()->{settings.prefs.edit().putBoolean("wifi",true).apply();changed("wifi");})
                 .choice("Wi-Fi y datos móviles","Empieza antes, usa tu plan de datos",!settings.wifiOnly(),()->{settings.prefs.edit().putBoolean("wifi",false).apply();changed("wifi");}).show()));
         ui.addRow(auto,ui.switchRow(R.drawable.ic_battery,"Solo mientras carga",null,settings.charging(),on->toggle("charging",on)));
-        page.addView(ui.footnote("Aplica también cuando transcribes a mano. Con batería baja el trabajo espera; Android puede retrasarlo unos minutos."));
+        batteryRow=ui.listRow(R.drawable.ic_battery,"Con la pantalla bloqueada",null,batteryValue());batteryRow.onClick(v->RecordingActions.allowBackground(this));ui.addRow(auto,batteryRow);
+        page.addView(ui.footnote("Aplica también cuando transcribes a mano. Con batería baja el trabajo espera; Android puede retrasarlo unos minutos. Para que transcriba con el teléfono bloqueado, permite a Voz local usar batería en segundo plano."));
 
         // Almacenamiento
         page.addView(ui.section("Copias de tus archivos"));LinearLayout storage=ui.group();page.addView(storage,Ui.fill());

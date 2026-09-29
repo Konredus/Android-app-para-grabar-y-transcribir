@@ -86,6 +86,14 @@ final class RecordingActions {
         catch(Exception e){s.message("No se pudo poner en cola",e instanceof HttpApi.UserAction?e.getMessage():"Vuelve a intentarlo.");}
     }
     /** Cancelar pierde el trabajo en curso: siempre se confirma (pedido del usuario, 0.4.3). */
+    /** Explica por qué conviene quitar la optimización de batería y abre el permiso del sistema. */
+    static void allowBackground(Screen s){
+        String hint=Battery.makerHint();
+        Sheet sheet=s.sheet("Trabajar con la pantalla bloqueada","Con la optimización de batería activa, Android puede congelar Voz local al bloquear el teléfono y cortar el envío a OpenAI. Solo gasta batería mientras transcribe."+(hint.isEmpty()?"":"\n\n"+hint))
+            .primary("Permitir",()->{Diagnostics.event("ui_action",null,"action","battery_request");Battery.request(s);});
+        if(!hint.isEmpty())sheet.secondary("Abrir ajustes de la app",()->Battery.appSettings(s));
+        sheet.secondary("Ahora no",null).show();
+    }
     static void cancel(Screen s,Recording r,Runnable changed){
         s.sheet("¿Cancelar la transcripción?","Se detiene el envío a OpenAI. Los bloques ya listos no se vuelven a cobrar si la reanudas más tarde con la misma opción de voces.")
             .primary("Cancelar transcripción",Ui.Style.DESTRUCTIVE,()->{try{Pipeline.cancel(s,r.id);if(changed!=null)changed.run();}catch(Exception e){s.message("Transcripción","No se pudo cancelar el trabajo.");}return true;})

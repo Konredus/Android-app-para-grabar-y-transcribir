@@ -98,6 +98,11 @@ final class FeatureChecks {
         assertThat(Recording.withDate("Reunión",when).equals("2026-09-27 Reunión"),"Date prefix missing");
         assertThat(Recording.withDate("2026-09-20 Ya fechada",when).equals("2026-09-20 Ya fechada"),"Date prefix duplicated");
         assertThat(Recording.withDate(Recording.defaultTitle(when),when).equals("2026-09-27 Grabación 16:05"),"Default title with date wrong");
+        // Cortes del propio teléfono (0.4.4): se reconocen y no gastan intentos; el vigilante usa un tope realista.
+        assertThat(Transcriber.localCut(new java.net.SocketException("Software caused connection abort")),"Local abort not detected");
+        assertThat(Transcriber.localCut(new java.io.IOException("x",new HttpApi.Stalled("sin respuesta"))),"Stalled cause not detected");
+        assertThat(!Transcriber.localCut(new java.net.SocketTimeoutException("timeout"))&&!Transcriber.localCut(new java.net.UnknownHostException("api")),"Provider/network failure misread as local cut");
+        assertThat(Transcriber.responseLimit(130_000)==190_000&&Transcriber.responseLimit(30_000)==180_000&&Transcriber.responseLimit(60*60_000)==20*60_000,"Response limit wrong");
         // Costos y selección de modelo según la elección de voces.
         assertThat(Math.abs(Pricing.estimate("gpt-transcribe",60_000)-0.0045)<1e-9&&Pricing.estimate("custom-model",60_000)<0,"Pricing estimate wrong");
         assertThat(Pricing.usd(0.0123).equals("US$0,012"),"Currency format wrong");

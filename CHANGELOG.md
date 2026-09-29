@@ -1,5 +1,19 @@
 # Historial de versiones
 
+## 0.4.4 — 2026-09-28
+
+Transcripción confiable con la pantalla bloqueada, a partir del informe de un vivo V2318 (audio de 2 min que tardó 1 h: el teléfono cortó la conexión tres veces y congeló la app hasta 36 min).
+
+- **Permiso de batería:** en la tarjeta de la transcripción y en Ajustes ("Con la pantalla bloqueada") se ve si Android optimiza la batería de Voz local, con un botón que abre el permiso del sistema y la ruta exacta para vivo, Xiaomi, Samsung, Huawei y OPPO.
+- **Vigilante de conexión:** si el envío deja de avanzar 90 s, o la respuesta tarda más que la duración del audio más 1 min (mín. 3, máx. 20), se corta y se reintenta. Mide con un reloj que sigue contando aunque Android congele la app, así que no queda colgado media hora.
+- **Los cortes del teléfono no gastan intentos** ("Software caused connection abort" o el vigilante): se reintentan a los 15 s sin avanzar la escala de esperas (hasta 12 cortes).
+- **Reintento inmediato al encender la pantalla** o desbloquear, en vez de esperar la cuenta completa.
+- **Wi-Fi despierto** durante la transcripción (bloqueo de Wi-Fi, como las apps de música).
+- **Grabaciones de menos de 3 s se descartan** (toque accidental): no se guardan ni se envían a transcribir; aparece un aviso breve.
+- Bitácora: "El teléfono cortó la conexión…", "Android tuvo la app congelada X min" y "Pantalla encendida · se reintenta ahora". El registro técnico agrega pantalla, reposo profundo y estado de la batería en cada fallo.
+- Informe de soporte: "reintentos (cortes del teléfono)" en vez de "intentos", que volvía a 0 al terminar.
+- Nota: el permiso `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` no está permitido en Google Play para esta categoría de app; Voz local se instala desde el APK.
+
 ## 0.4.3 — 2026-09-27
 
 Corrige el caso de un audio de 32 min que tardó más de 7 h (OpenAI lo transcribió en 5 min; el resto se perdió en la preparación y en reintentos en segundo plano).

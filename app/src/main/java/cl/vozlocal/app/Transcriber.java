@@ -23,6 +23,17 @@ final class Transcriber {
     /** La tarea diferida cede el turno antes de este tiempo para que Android no la corte a mitad de un envío. */
     static final long JOB_BUDGET_MS=6*60*1000;
     static final class Yield extends Exception{Yield(){super("Pausa corta");}}
+    /** Cortes del propio teléfono que se reintentan sin gastar intentos; pasado este número sí cuentan. */
+    static final int MAX_LOCAL_CUTS=12;
+    /** Vigilante de conexiones: mide con elapsedRealtime, que avanza aunque Android congele la app. */
+    private static final ScheduledExecutorService WATCHDOG=Executors.newSingleThreadScheduledExecutor(r->{Thread t=new Thread(r,"VozLocal-watchdog");t.setDaemon(true);return t;});
+    /** Sin avance del envío durante este tiempo, se corta y se reintenta. */
+    static final long UPLOAD_STALL_MS=90_000;
+    /** Espera máxima de la respuesta tras el envío: lo que dura el audio más 1 min (mín. 3, máx. 20). OpenAI suele tardar la mitad. */
+    static long responseLimit(long partMs){return Math.min(20*60_000L,Math.max(3*60_000L,partMs+60_000L));}
+    /** En la última ronda hubo un corte del propio teléfono (el servicio reintenta pronto, sin esperas largas). */
+    volatile boolean sawLocalCut;
+    private volatile long frozenLoggedAt;
 
     private final Context c;private final HttpApi http;private final long budgetMs;private final long started=System.currentTimeMillis();
     private final Map<Integer,long[]> uploads=new ConcurrentHashMap<>();private volatile long lastProgress;
@@ -43,11 +54,18 @@ final class Transcriber {
                 catch(Exception e){
                     if(http.cancelled)break;
                     if(!r.audio(c).exists()||!FilesStore.state(c,r.id).optBoolean("requested"))continue;
-                    int attempts=FilesStore.state(c,r.id).optInt("attempts",0)+1;boolean again=attempts<5;retry|=again;
+                    JSONObject st=FilesStore.state(c,r.id);int cuts=st.optInt("cuts",0)+(localCut(e)?1:0);
+                    // Un corte hecho por el propio teléfono (pantalla bloqueada, ahorro de batería) no es culpa del proveedor:
+                    // no gasta uno de los 5 intentos, salvo que se repita demasiado.
+                    boolean local=localCut(e)&&cuts<=MAX_LOCAL_CUTS;sawLocalCut|=local;
+                    int attempts=st.optInt("attempts",0)+(local?0:1);boolean again=attempts<5;retry|=again;
                     String reason=describe(e);
-                    FilesStore.update(c,r.id,s->s.put("attempts",attempts).put("requested",again).put("failed",!again).put("lastError",reason));
-                    Pipeline.log(c,r.id,"Intento "+attempts+" de 5 falló: "+reason+(again?" · se reintentará (los bloques ya listos no se vuelven a enviar)":" · pulsa Reintentar"));
-                    Diagnostics.event("job_retry",r.id,"count",attempts,"error_class",e.getClass().getSimpleName(),"reason",HttpApi.safeReason(e),"net",Pipeline.networkName(c));
+                    FilesStore.update(c,r.id,s->s.put("attempts",attempts).put("retries",s.optInt("retries")+1).put("cuts",cuts).put("requested",again).put("failed",!again).put("lastError",reason));
+                    String hint=local&&!Battery.unrestricted(c)?" · para evitarlo, permite a Voz local usar batería en segundo plano":"";
+                    Pipeline.log(c,r.id,local?"El teléfono cortó la conexión ("+reason+") · se reintenta sin gastar un intento"+hint
+                        :"Intento "+attempts+" de 5 falló: "+reason+(again?" · se reintentará (los bloques ya listos no se vuelven a enviar)":" · pulsa Reintentar"));
+                    Diagnostics.event("job_retry",r.id,"count",attempts,"error_class",e.getClass().getSimpleName(),"reason",HttpApi.safeReason(e),"net",Pipeline.networkName(c),
+                        "local",local,"display",Battery.screenOn(c)?"on":"off","idle",Battery.idle(c),"battery",Battery.unrestricted(c)?"unrestricted":"optimized");
                 }
             }
             retry|=Pipeline.pending(c);
@@ -56,11 +74,21 @@ final class Transcriber {
     }
     /** Traduce fallos técnicos a una causa comprensible. */
     private String describe(Exception e){
+        if(e instanceof HttpApi.Stalled)return e.getMessage();
+        if(localCut(e))return "pantalla bloqueada o ahorro de batería";
         if(e instanceof java.net.SocketTimeoutException)return "el proveedor no respondió a tiempo (el intento pudo cobrarse)";
         if(e instanceof java.net.UnknownHostException||e instanceof java.net.ConnectException)return "sin conexión con el servidor";
         if(e instanceof javax.net.ssl.SSLException)return "la conexión segura se interrumpió";
         if(e instanceof java.io.InterruptedIOException)return "Android pausó el trabajo";
         String m=e.getMessage();return m!=null&&m.length()<160?m:"error de red ("+e.getClass().getSimpleName()+")";
+    }
+    /** Conexión cortada por el propio teléfono ("Software caused connection abort") o por el vigilante tras una congelación. */
+    static boolean localCut(Throwable e){
+        for(Throwable t=e;t!=null;t=t.getCause()){
+            if(t instanceof HttpApi.Stalled)return true;
+            String m=t.getMessage();if(t instanceof java.net.SocketException&&m!=null&&m.toLowerCase(Locale.ROOT).contains("abort"))return true;
+        }
+        return false;
     }
     private void check(Recording r)throws Exception{http.check();if(!r.audio(c).exists()||!FilesStore.state(c,r.id).optBoolean("requested"))throw new java.io.InterruptedIOException("Cancelado");}
     private void stage(Recording r,String status,int percent){Pipeline.log(c,r.id,status);notice(status,true,percent);}
@@ -128,15 +156,28 @@ final class Transcriber {
         long blockStart=System.currentTimeMillis();
         stage(r,"Enviando "+label,0);
         h.onProgress=(sent,total)->progress(r,i,sent,total,label);
-        h.onUploaded=()->{uploads.remove(i);publishUploads(r);Pipeline.log(c,r.id,(n>1?"Bloque "+(i+1)+" enviado":"Audio enviado")+(config.provider.equals("openai")?" · OpenAI está transcribiendo":" · el servidor está transcribiendo"));};
+        java.util.concurrent.atomic.AtomicBoolean uploaded=new java.util.concurrent.atomic.AtomicBoolean();long limit=responseLimit(partMs);
+        h.onUploaded=()->{uploaded.set(true);uploads.remove(i);publishUploads(r);Pipeline.log(c,r.id,(n>1?"Bloque "+(i+1)+" enviado":"Audio enviado")+(config.provider.equals("openai")?" · OpenAI está transcribiendo":" · el servidor está transcribiendo"));};
         OpenAiClient.Delta delta=chars->liveText(r,i,chars);
         JSONObject response;
-        try{response=new OpenAiClient(h).transcribe(part.file,config,settings.language(),refs,delta);}
-        catch(HttpApi.UserAction e){
-            if(refs==null||refs.isEmpty()||!String.valueOf(e.getMessage()).contains("known_speaker"))throw e;
-            Pipeline.log(c,r.id,"El proveedor rechazó las muestras de voz · se reenvía el "+label+" sin ellas");
-            response=new OpenAiClient(h).transcribe(part.file,config,settings.language(),null,delta);refs=null;
-        }
+        // Vigilante: si el envío deja de avanzar o la respuesta tarda mucho más de lo normal (p. ej. el teléfono congeló
+        // la app con la pantalla bloqueada), corta y reintenta en vez de quedar colgado media hora.
+        long[] lastTick={android.os.SystemClock.elapsedRealtime()};
+        ScheduledFuture<?> guard=WATCHDOG.scheduleWithFixedDelay(()->{
+            long now=android.os.SystemClock.elapsedRealtime(),gap=now-lastTick[0];lastTick[0]=now;
+            if(gap>30_000&&now-frozenLoggedAt>30_000){frozenLoggedAt=now;Pipeline.log(c,r.id,"Android tuvo la app congelada "+Recording.time(gap)+" (ahorro de batería con la pantalla bloqueada)");Diagnostics.event("app_frozen",r.id,"elapsed_ms",gap,"display",Battery.screenOn(c)?"on":"off","battery",Battery.unrestricted(c)?"unrestricted":"optimized");}
+            if(h.lastActivity==0)return;long idle=now-h.lastActivity;
+            if(!uploaded.get()&&idle>UPLOAD_STALL_MS)h.abortStalled("el envío dejó de avanzar");
+            else if(uploaded.get()&&idle>limit)h.abortStalled("sin respuesta en "+Recording.time(idle)+", lo normal es menos de "+Recording.time(limit));
+        },5,5,TimeUnit.SECONDS);
+        try{
+            try{response=new OpenAiClient(h).transcribe(part.file,config,settings.language(),refs,delta);}
+            catch(HttpApi.UserAction e){
+                if(refs==null||refs.isEmpty()||!String.valueOf(e.getMessage()).contains("known_speaker"))throw e;
+                Pipeline.log(c,r.id,"El proveedor rechazó las muestras de voz · se reenvía el "+label+" sin ellas");
+                uploaded.set(false);response=new OpenAiClient(h).transcribe(part.file,config,settings.language(),null,delta);refs=null;
+            }
+        }finally{guard.cancel(false);}
         check(r);
         if(refs!=null&&!refs.isEmpty()){JSONArray known=new JSONArray();for(String[] ref:refs)known.put(ref[0]);response.put("_known",known);}
         synchronized(FilesStore.LOCK){if(r.audio(c).exists())FilesStore.write(checkpoint,response);}

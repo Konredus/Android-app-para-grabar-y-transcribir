@@ -34,7 +34,7 @@ public class RecorderSmokeTest extends Instrumentation {
         try {
             Activity activity = startActivitySync(new Intent(c, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             waitForIdleSync(); Thread.sleep(700);
-            command(c, "START"); Thread.sleep(1500);
+            command(c, "START"); Thread.sleep(3000);
             check(RecorderService.activeId != null, "Recorder did not start: " + RecorderService.error);
             String id = RecorderService.activeId;
             check(Recording.list(c).stream().noneMatch(r -> r.id.equals(id)), "Active recording exposed in library");
@@ -73,6 +73,12 @@ public class RecorderSmokeTest extends Instrumentation {
             java.nio.file.Files.copy(r.audio(c).toPath(), disposable.audio(c).toPath()); disposable.save(c);
             check(disposable.delete(c) && !disposable.audio(c).exists(), "Deletion failed");
             check("1:01:01".equals(Recording.time(3661000)), "Long duration format failed");
+            // Un toque accidental (menos de 3 s) se descarta sin dejar archivo ni grabación.
+            command(c, "START"); long shortDeadline=System.currentTimeMillis()+10000;while(RecorderService.activeId==null&&System.currentTimeMillis()<shortDeadline)Thread.sleep(50);
+            String shortId = RecorderService.activeId; Thread.sleep(800);
+            command(c, "STOP"); stopDeadline=System.currentTimeMillis()+20000;while(RecorderService.activeId!=null&&System.currentTimeMillis()<stopDeadline)Thread.sleep(100);
+            check(shortId != null && Recording.list(c).stream().noneMatch(item -> item.id.equals(shortId)), "Short recording was kept");
+            check(!new File(Recording.directory(c), shortId + ".m4a").exists(), "Short recording audio left behind");
             FeatureChecks.run(c,r);
             ExportChecks.run(c,r);
             long longStarted = SystemClock.elapsedRealtime();

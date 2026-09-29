@@ -19,6 +19,15 @@ class HttpApi {
     /** Eventos de una respuesta en streaming (text/event-stream): cada línea "data:" como JSON. */
     interface Events{void event(JSONObject event)throws Exception;}
     volatile Events onEvent;
+    /** Última señal de avance (SystemClock.elapsedRealtime, que sigue contando con la app congelada o el teléfono dormido). */
+    volatile long lastActivity;
+    /** Motivo si el vigilante cortó la conexión por falta de avance; null si no. */
+    volatile String stalled;
+    /** Conexión cortada por el vigilante: el intento se repite sin contarse como fallo del proveedor. */
+    static class Stalled extends IOException{Stalled(String m){super(m);}}
+    /** Corta la conexión activa sin cancelar el trabajo (a diferencia de cancel()). */
+    void abortStalled(String why){stalled=why;HttpURLConnection connection=active;if(connection!=null)connection.disconnect();}
+    private void touch(){lastActivity=android.os.SystemClock.elapsedRealtime();}
     /** Conexiones hijas (bloques en paralelo): cancelar la madre cancela todas. */
     private final HttpApi parent;private final java.util.List<HttpApi> children=new java.util.concurrent.CopyOnWriteArrayList<>();
     HttpApi(){parent=null;}
@@ -37,19 +46,19 @@ class HttpApi {
     Response request(String method,String url,String token,String contentType,Body body,Map<String,String> extra) throws Exception {
         check(); URL target=new URL(url);long started=System.currentTimeMillis();Diagnostics.event("http_start",jobId,"bytes",body==null?0:body.length());
         if(!"https".equals(target.getProtocol()))throw new SecurityException("Solo HTTPS");
-        HttpURLConnection c=(HttpURLConnection)target.openConnection();active=c;
+        HttpURLConnection c=(HttpURLConnection)target.openConnection();active=c;stalled=null;touch();
         try{
             c.setInstanceFollowRedirects(false);c.setConnectTimeout(30000);c.setReadTimeout(readTimeoutMs);c.setRequestMethod(method);
             c.setRequestProperty("Authorization","Bearer "+token);
             if(contentType!=null)c.setRequestProperty("Content-Type",contentType);
             if(extra!=null)for(Map.Entry<String,String> entry:extra.entrySet())c.setRequestProperty(entry.getKey(),entry.getValue());
-            if(body!=null){c.setDoOutput(true);c.setFixedLengthStreamingMode(body.length());try(OutputStream out=c.getOutputStream()){body.write(out);}if(onUploaded!=null)onUploaded.run();}
+            if(body!=null){c.setDoOutput(true);c.setFixedLengthStreamingMode(body.length());try(OutputStream out=c.getOutputStream()){body.write(out);}touch();if(onUploaded!=null)onUploaded.run();}
             check();int code=c.getResponseCode();String location=c.getHeaderField("Location");
             String type=c.getContentType();Events events=onEvent;
             if(code<400&&events!=null&&type!=null&&type.contains("event-stream")){
                 // Streaming: el texto llega por partes; se guarda solo el evento final (texto completo + uso).
                 JSONObject done=null;
-                try(BufferedReader reader=new BufferedReader(new InputStreamReader(c.getInputStream(),StandardCharsets.UTF_8))){String line;while((line=reader.readLine())!=null){check();if(!line.startsWith("data:"))continue;String data=line.substring(5).trim();if(data.isEmpty()||data.equals("[DONE]"))continue;JSONObject event=new JSONObject(data);events.event(event);if(event.optString("type").endsWith(".done"))done=event;}}
+                try(BufferedReader reader=new BufferedReader(new InputStreamReader(c.getInputStream(),StandardCharsets.UTF_8))){String line;while((line=reader.readLine())!=null){check();touch();if(!line.startsWith("data:"))continue;String data=line.substring(5).trim();if(data.isEmpty()||data.equals("[DONE]"))continue;JSONObject event=new JSONObject(data);events.event(event);if(event.optString("type").endsWith(".done"))done=event;}}
                 if(done==null)throw new IOException("La respuesta en streaming terminó sin el evento final");
                 String requestId=c.getHeaderField("x-request-id");Diagnostics.event("http_end",jobId,"http",code,"request_id",safeToken(requestId),"elapsed_ms",System.currentTimeMillis()-started);
                 Response response=new Response(code,done.toString(),location,requestId);response.jobId=jobId;return response;
@@ -58,13 +67,15 @@ class HttpApi {
             if(raw!=null)try(InputStream in=raw){byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1){check();if(bytes.size()+n>8*1024*1024)throw new IOException("Respuesta demasiado grande");bytes.write(buffer,0,n);}}
             String requestId=c.getHeaderField("x-request-id");Diagnostics.event("http_end",jobId,"http",code,"request_id",safeToken(requestId),"elapsed_ms",System.currentTimeMillis()-started);
             Response response=new Response(code,bytes.toString(StandardCharsets.UTF_8.name()),location,requestId);response.jobId=jobId;return response;
-        }catch(Exception e){Diagnostics.event("http_failure",jobId,"error_class",e.getClass().getSimpleName(),"elapsed_ms",System.currentTimeMillis()-started,"reason",safeReason(e));throw e;
+        }catch(Exception e){
+            String why=stalled;if(why!=null&&!(e instanceof Stalled)){Stalled s=new Stalled(why);s.initCause(e);e=s;}
+            Diagnostics.event("http_failure",jobId,"error_class",e.getClass().getSimpleName(),"elapsed_ms",System.currentTimeMillis()-started,"reason",safeReason(e));throw e;
         }finally{c.disconnect();active=null;}
     }
     static Body bytes(byte[] bytes){return new Body(){public long length(){return bytes.length;}public void write(OutputStream out)throws Exception{out.write(bytes);}};}
     static Body json(JSONObject json){return bytes(json.toString().getBytes(StandardCharsets.UTF_8));}
     Body file(File file){return new Body(){public long length(){return file.length();}public void write(OutputStream out)throws Exception{copy(file,out);}};}
-    void copy(File file,OutputStream out)throws Exception{long total=file.length(),sent=0;Progress progress=onProgress;try(InputStream in=new FileInputStream(file)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1){check();out.write(b,0,n);sent+=n;if(progress!=null)progress.update(sent,total);}}}
+    void copy(File file,OutputStream out)throws Exception{long total=file.length(),sent=0;Progress progress=onProgress;try(InputStream in=new FileInputStream(file)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1){check();out.write(b,0,n);sent+=n;touch();if(progress!=null)progress.update(sent,total);}}}
     static void require(Response response,String service)throws Exception{
         if(response.code>=200 && response.code<300)return;
         String code="",type="",param="",reason="Revisa el formato del audio y los parámetros del modelo.";

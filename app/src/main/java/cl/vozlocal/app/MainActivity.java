@@ -164,6 +164,7 @@ public class MainActivity extends Screen {
             float level=paused?0:Waveform.normalize(RecorderService.amplitude());wave.push(level);record.setLevel(level);
             if(paused)statusDot.setAlpha(1f);else statusDot.setAlpha((SystemClock.uptimeMillis()/600)%2==0?1f:0.25f);}
         if(RecorderService.error!=null){String m=RecorderService.error;RecorderService.error=null;starting=false;record.setEnabled(true);message("Grabación",m);}
+        if(RecorderService.notice!=null&&!active){String m=RecorderService.notice;RecorderService.notice=null;toast(m);}
         String saved=RecorderService.lastSavedId;if(saved!=null&&!active){RecorderService.lastSavedId=null;afterSave(saved);}
         int version=FilesStore.version.get();if(dataVersion!=version){dataVersion=version;load();}
     }
