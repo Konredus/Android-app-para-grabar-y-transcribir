@@ -64,7 +64,7 @@ final class Notes {
     static boolean exists(Context c,String id){return FilesStore.file(c,id,".note.json").isFile();}
     static JSONObject load(Context c,String id){try{return exists(c,id)?FilesStore.read(FilesStore.file(c,id,".note.json")):null;}catch(Exception e){return null;}}
     /** ¿Hay clave para el proveedor elegido? (OpenAI usa la misma clave de transcribir). */
-    static boolean canGenerate(Context c){Settings s=new Settings(c);return s.noteProvider().equals("anthropic")?s.hasAnthropicKey():s.provider().equals("openai")&&s.hasKey();}
+    static boolean canGenerate(Context c){Settings s=new Settings(c);return s.noteProvider().equals("anthropic")?s.hasAnthropicKey():s.hasOpenAiKey();}
     /** "openai" o "anthropic". */
     static String provider(Settings s){return "anthropic".equals(s.noteProvider())?"anthropic":"openai";}
     static String defaultModel(String provider){return "anthropic".equals(provider)?ANTHROPIC_MODEL:OPENAI_MODEL;}
@@ -102,7 +102,7 @@ final class Notes {
     /** Arma y guarda la nota (bloquea: se llama desde el trabajo de transcripción o un hilo de fondo). */
     static void generate(Context c,Recording r,HttpApi http)throws Exception{
         Settings s=new Settings(c);String provider=provider(s);String key="";
-        try{key="anthropic".equals(provider)?s.anthropicKey():(s.provider().equals("openai")?s.apiKey():"");}catch(Exception ignored){}
+        try{key="anthropic".equals(provider)?s.anthropicKey():s.openAiKey();}catch(Exception ignored){}
         if(key==null||key.isEmpty()){
             String why="anthropic".equals(provider)?"Falta tu clave de Claude para armar la nota. Agrégala en Ajustes.":"La nota usa tu clave de OpenAI. Configúrala en Ajustes.";
             failed(c,r.id,why);throw new HttpApi.UserAction(why);

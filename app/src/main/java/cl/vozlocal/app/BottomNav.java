@@ -16,6 +16,8 @@ final class BottomNav extends LinearLayout {
     interface Listener{void select(int destination);}
     static final String[] TITLES={"Grabar","Biblioteca","Ajustes"};
     private static final int[] ICONS={R.drawable.ic_tab_record,R.drawable.ic_tab_library,R.drawable.ic_tab_settings};
+    /** Pestaña activa: ícono relleno (Material 3); inactivas: contorno. */
+    private static final int[] ICONS_ON={R.drawable.ic_tab_record_fill,R.drawable.ic_tab_library_fill,R.drawable.ic_tab_settings_fill};
     private final LinearLayout[] items=new LinearLayout[3];
     private final TextView[] labels=new TextView[3];
     private final ImageView[] icons=new ImageView[3];
@@ -45,7 +47,7 @@ final class BottomNav extends LinearLayout {
     void select(int selected){
         this.selected=selected;
         for(int i=0;i<items.length;i++){
-            boolean active=i==selected;items[i].setSelected(active);
+            boolean active=i==selected;items[i].setSelected(active);icons[i].setImageResource(active?ICONS_ON[i]:ICONS[i]);
             icons[i].setImageTintList(ColorStateList.valueOf(active?palette.onSecondaryContainer:palette.onSurfaceVariant));
             labels[i].setTextColor(active?palette.onSurface:palette.onSurfaceVariant);labels[i].setTypeface(typeface(active?Weight.BOLD:Weight.MEDIUM));
             pills[i].setBackground(new android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(palette.ripple),active?shape(getContext(),palette.secondaryContainer,R_FULL):null,shape(getContext(),0xFF000000,R_FULL)));

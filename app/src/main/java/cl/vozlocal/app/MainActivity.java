@@ -364,7 +364,7 @@ public class MainActivity extends Screen {
     /** ★ Marcar: el servicio guarda el momento (también funciona desde la notificación). at = ms de la grabación si se tomó antes. */
     private void markMoment(View v,String label,long at){
         if(RecorderService.activeId==null)return;Ui.haptic(v,Ui.Haptic.CONFIRM);
-        Intent intent=new Intent(this,RecorderService.class).setAction("MARK");if(label!=null)intent.putExtra("label",label);if(at>=0)intent.putExtra("at",at);
+        Intent intent=new Intent(this,RecorderService.class).setAction("MARK");if(label!=null)intent.putExtra("label",label);if(at>=0)intent.putExtra("t",at);
         try{startService(intent);}catch(RuntimeException e){toast("No se pudo marcar el momento.");}
     }
     private void markWithWord(View v){
@@ -460,7 +460,7 @@ public class MainActivity extends Screen {
                 Next.Step step=i.next!=null?i.next.step:derivedStep(i);String next=i.next!=null?i.next.label:null;String folder=folderName();
                 switch(step){
                     case REVIEW:{int n=i.meta==null?0:i.meta.names.size();icon=R.drawable.ic_people;fg=p.onPrimaryContainer;bg=p.primaryContainer;status=dur+" · Lista · "+(n>1?n+" voces por revisar":"voces por revisar");label=next!=null?next:"Revisar voces";actionIcon=R.drawable.ic_people;style=Ui.Style.PRIMARY;action=v->startActivity(new Intent(this,RecordingActivity.class).putExtra("id",r.id).putExtra("names",true));break;}
-                    case SAVE:icon=R.drawable.ic_save;fg=p.onPrimaryContainer;bg=p.primaryContainer;status=dur+" · Lista · por guardar";label=next!=null?next:"Guardar en "+folder;actionIcon=R.drawable.ic_save;style=Ui.Style.PRIMARY;action=v->saveInbox(r);break;
+                    case SAVE:icon=R.drawable.ic_inbox;fg=p.onPrimaryContainer;bg=p.primaryContainer;status=dur+" · Lista · por guardar";label=next!=null?next:"Guardar en "+folder;actionIcon=R.drawable.ic_save;style=Ui.Style.PRIMARY;action=v->saveInbox(r);break;
                     case UPDATE:icon=R.drawable.ic_refresh;fg=p.onPrimaryContainer;bg=p.primaryContainer;status=dur+" · Hay cambios sin guardar";label=next!=null?next:"Actualizar en "+folder;actionIcon=R.drawable.ic_refresh;style=Ui.Style.PRIMARY;action=v->saveInbox(r);break;
                     case CHOOSE_FOLDER:status=dur+" · Transcripción lista";label=next!=null?next:"Elegir carpeta rápida";actionIcon=R.drawable.ic_folder;style=Ui.Style.TONAL;action=v->startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true).putExtra("inbox",true));break;
                     default:status=dur+" · ✓ "+(step==Next.Step.SAVED&&next!=null?next:"Transcripción lista");label="Abrir";actionIcon=R.drawable.ic_doc;style=Ui.Style.TONAL;action=v->open(r.id);

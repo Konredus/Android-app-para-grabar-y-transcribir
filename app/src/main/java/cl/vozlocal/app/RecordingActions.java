@@ -40,7 +40,7 @@ final class Next {
         if(needsReview(c,r.id))return new Next(Step.REVIEW,"Revisar voces",R.drawable.ic_people);
         if(!Inbox.configured(c))return new Next(Step.CHOOSE_FOLDER,"Elegir carpeta rápida",R.drawable.ic_folder);
         String folder=shortName(Inbox.folderName(c));long at=Inbox.savedAt(c,r.id);
-        if(at==0)return new Next(Step.SAVE,"Guardar en "+folder,R.drawable.ic_save);
+        if(at==0)return new Next(Step.SAVE,"Guardar en "+folder,R.drawable.ic_inbox);
         if(Inbox.outdated(c,r.id))return new Next(Step.UPDATE,"Actualizar en "+folder,R.drawable.ic_refresh);
         return new Next(Step.SAVED,"En "+folder+" · "+when(at),R.drawable.ic_check);
     }
@@ -105,7 +105,7 @@ final class RecordingActions {
         }
         if(transcribed&&!queued){
             if(Inbox.configured(s)){String folder=Next.shortName(Inbox.folderName(s));long at=Inbox.savedAt(s,r.id);
-                sheet.action(R.drawable.ic_save,(at==0?"Guardar en ":Inbox.outdated(s,r.id)?"Actualizar en ":"Guardar de nuevo en ")+folder,false,()->saveToInbox(s,r,changed));}
+                sheet.action(R.drawable.ic_inbox,(at==0?"Guardar en ":Inbox.outdated(s,r.id)?"Actualizar en ":"Guardar de nuevo en ")+folder,false,()->saveToInbox(s,r,changed));}
             sheet.action(R.drawable.ic_refresh,"Volver a transcribir…",false,()->RetranscribeSheet.show(s,r,changed));
             if(Retranscribe.hasPrevious(s,r.id))sheet.action(R.drawable.ic_replay,"Elegir versión: nueva o anterior…",false,()->RetranscribeSheet.offerKeep(s,r,changed));
         }

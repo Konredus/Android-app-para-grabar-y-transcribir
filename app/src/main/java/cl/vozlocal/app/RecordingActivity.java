@@ -69,7 +69,7 @@ public class RecordingActivity extends Screen {
         handler.postDelayed(this,250);}};
 
     @Override public void onCreate(Bundle state){
-        super.onCreate(state);demo=getIntent().getBooleanExtra("demo",false);id=getIntent().getStringExtra("id");prefs=getSharedPreferences("detail",MODE_PRIVATE);
+        super.onCreate(state);demo=getIntent().getBooleanExtra("demo",false);id=getIntent().getStringExtra("id");prefs=getSharedPreferences("detail",MODE_PRIVATE);if(!demo&&id!=null)Transcriber.clearDone(this,id);
         if(state!=null){intentHandled=true;offeredKeep=state.getBoolean("offeredKeep");markedOpened=state.getBoolean("markedOpened");correctionOpened=state.getBoolean("correcting");onlySpeaker=state.getString("onlySpeaker");}
         shell(demo?"Ajustes":"Biblioteca",-1);
         try{
@@ -990,9 +990,9 @@ public class RecordingActivity extends Screen {
         Sheet s=sheet(name,count+(count==1?" frase":" frases")+" · "+Recording.time((long)(talk*1000))+" en total · desde "+Recording.time((long)(Math.max(0,firstAt)*1000)));
         if(bestLen>0)listenButton(s,"Escuchar una muestra",bestFrom,bestTo);
         s.action(R.drawable.ic_edit,"Cambiar nombre",false,()->renameOne(key));
-        if(names.size()>1)s.action(R.drawable.ic_people,"Es la misma persona que…",false,()->mergeSheet(key));
-        boolean only=key.equals(onlySpeaker);s.action(R.drawable.ic_search,only?"Ver todas las intervenciones":"Ver solo sus intervenciones",false,()->{onlySpeaker=only?null:key;reload(true);});
-        s.action(R.drawable.ic_people,"Nombrar todas las voces",false,this::openNameVoices);
+        if(names.size()>1)s.action(R.drawable.ic_merge,"Es la misma persona que…",false,()->mergeSheet(key));
+        boolean only=key.equals(onlySpeaker);s.action(R.drawable.ic_filter,only?"Ver todas las intervenciones":"Ver solo sus intervenciones",false,()->{onlySpeaker=only?null:key;reload(true);});
+        s.action(R.drawable.ic_voice,"Nombrar todas las voces",false,this::openNameVoices);
         s.show();
     }catch(Exception e){message("Transcripción","No se pudo abrir esta voz.");}}
     private void mergeSheet(String x){try{
@@ -1127,4 +1127,6 @@ public class RecordingActivity extends Screen {
             return super.performAccessibilityAction(action,args);
         }
     }
+    /** Abierta desde la notificación «lista» (sin nada debajo): Atrás lleva a la Biblioteca en vez de salir de la app. */
+    @Override public void onBackPressed(){if(isTaskRoot()&&!demo){startActivity(new Intent(this,MainActivity.class).putExtra("library",true));finish();return;}super.onBackPressed();}
 }

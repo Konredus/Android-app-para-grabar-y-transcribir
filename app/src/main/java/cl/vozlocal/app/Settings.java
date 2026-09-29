@@ -41,6 +41,9 @@ final class Settings {
     String noteProvider(){return prefs.getString("noteProvider","openai");}
     /** Modelo de la nota; vacío = el recomendado del proveedor (ver Notes). */
     String noteModel(){return prefs.getString("noteModel","");}
+    /** Clave de OpenAI aunque se transcriba con un servidor propio (la usa la nota). */
+    boolean hasOpenAiKey(){return prefs.contains("keyEncrypted");}
+    String openAiKey()throws Exception{return hasOpenAiKey()?decrypt(""):"";}
     boolean hasAnthropicKey(){return prefs.contains("anthropic_keyEncrypted");}
     String anthropicKey()throws Exception{return hasAnthropicKey()?decrypt("anthropic_"):"";}
     void saveAnthropicKey(String value)throws Exception{encrypt("anthropic_",value);}

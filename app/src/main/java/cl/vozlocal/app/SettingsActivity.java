@@ -66,7 +66,7 @@ public class SettingsActivity extends Screen {
 
         // 1. Tu flujo: lo que pasa con cada grabación, de principio a fin.
         page.addView(ui.section("Tu flujo"));LinearLayout flow=ui.group();page.addView(flow,Ui.fill());
-        saveRow=ui.listRow(R.drawable.ic_save,"Guardado rápido","Donde guarda el botón de cada grabación",inboxValue());saveRow.onClick(v->saveSheet());ui.addRow(flow,saveRow);
+        saveRow=ui.listRow(R.drawable.ic_inbox,"Guardado rápido","Donde guarda el botón de cada grabación",inboxValue());saveRow.onClick(v->saveSheet());ui.addRow(flow,saveRow);
         View[] note={null};
         note[0]=ui.switchRow(R.drawable.ic_doc,"Nota para tu segundo cerebro",noteSubtitle(settings.noteAuto()),settings.noteAuto(),on->{
             settings.prefs.edit().putBoolean("noteAuto",on).apply();Diagnostics.event("setting_changed",null,"action","note_auto","result",on);
@@ -92,8 +92,8 @@ public class SettingsActivity extends Screen {
         else{Ui.Row server=ui.listRow(R.drawable.ic_server,"Servidor y modelo",settings.prefs.getString("customBase","Sin configurar"),null);ui.oneLine(server.subtitle);ui.addRow(api,server.onClick(v->custom()));}
         if(settings.canSeparate())ui.addRow(api,ui.listRow(R.drawable.ic_people,"Separar voces",null,SPEAKER_NAMES[Math.max(0,Arrays.asList(SPEAKER_MODES).indexOf(settings.speakersMode()))]).onClick(v->speakersSheet()));
         ui.addRow(api,ui.listRow(R.drawable.ic_key,"Clave de API",null,settings.hasKey()?"Configurada":"Falta").onClick(v->keySheet()));
-        verifyRow=ui.listRow(R.drawable.ic_check_circle,"Comprobar conexión",verifyText(),null);verifyRow.subtitle.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);verifyRow.onClick(v->verify());ui.addRow(api,verifyRow);paintVerify();
-        ui.addRow(api,ui.listRow(R.drawable.ic_chat,"Idioma del audio",null,settings.language().equals("es")?"Español":"Automático").onClick(v->
+        verifyRow=ui.listRow(R.drawable.ic_network_check,"Comprobar conexión",verifyText(),null);verifyRow.subtitle.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);verifyRow.onClick(v->verify());ui.addRow(api,verifyRow);paintVerify();
+        ui.addRow(api,ui.listRow(R.drawable.ic_translate,"Idioma del audio",null,settings.language().equals("es")?"Español":"Automático").onClick(v->
             sheet("Idioma del audio","Indicar el idioma mejora la precisión.").choice("Español",null,settings.language().equals("es"),()->set("language","es"))
                 .choice("Detección automática","Para audios en otros idiomas o mezclados",!settings.language().equals("es"),()->set("language","")).show()));
         page.addView(openai
