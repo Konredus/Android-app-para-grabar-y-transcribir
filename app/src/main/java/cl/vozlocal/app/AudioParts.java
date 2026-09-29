@@ -33,7 +33,7 @@ final class AudioParts {
     static List<Part> plan(Context c,Recording r,HttpApi http,long targetMs,JSONArray cached,List<Long> cutsOut,Log log)throws Exception{
         File source=r.audio(c);long total=r.duration>0?r.duration:AudioConvert.duration(source);targetMs=Math.max(targetMs,60_000);
         List<Long> cuts=new ArrayList<>();
-        if(cached!=null&&cached.length()>=2){for(int i=0;i<cached.length();i++)cuts.add(cached.getLong(i));if(log!=null)log.line("Cortes reutilizados del intento anterior ("+(cuts.size()-1)+" bloques)");}
+        if(cached!=null&&cached.length()>=2){for(int i=0;i<cached.length();i++)cuts.add(cached.getLong(i));if(log!=null)log.line("Cortes reutilizados del intento anterior ("+(cuts.size()-1)+(cuts.size()==2?" parte)":" partes)"));}
         else{
             cuts.add(0L);
             if(total>SINGLE_MAX_MS||source.length()>20_000_000){
@@ -126,19 +126,23 @@ final class AudioParts {
      * - de preferencia en medio de una racha de la misma persona o rodeados de pausa, y cerca de 7 s;
      * - solo de personas que hablan 10 s o más; con 1–2 personas, 2 muestras de cada una.
      * exclude: etiquetas que no necesitan muestra (p. ej. la voz del usuario, ya reconocida con "Mi voz").
+     * También se usa sobre la transcripción COMPLETA («Segunda pasada con tus correcciones», ver Retranscribe): por eso
+     * la búsqueda de voces encimadas trabaja sobre arreglos simples (una transcripción de 52 min tiene ~1500 tramos).
      */
     static List<Clip> pickReferences(JSONArray segments,int limit,Set<String> exclude){
         List<JSONObject> segs=new ArrayList<>();
         if(segments!=null)for(int i=0;i<segments.length();i++){JSONObject s=segments.optJSONObject(i);if(s!=null&&!s.isNull("speaker")&&!s.optString("text").trim().isEmpty())segs.add(s);}
+        int count=segs.size();double[] from=new double[count],to=new double[count];int[] voice=new int[count];Map<String,Integer> voices=new HashMap<>();
+        for(int i=0;i<count;i++){JSONObject s=segs.get(i);from[i]=s.optDouble("start");to[i]=s.optDouble("end");Integer v=voices.get(s.optString("speaker"));if(v==null){v=voices.size();voices.put(s.optString("speaker"),v);}voice[i]=v;}
         Map<String,Double> talk=new HashMap<>();for(JSONObject s:segs)talk.merge(s.optString("speaker"),s.optDouble("end")-s.optDouble("start"),Double::sum);
         Map<String,List<double[]>> candidates=new HashMap<>();
-        for(int i=0;i<segs.size();i++){
+        for(int i=0;i<count;i++){
             JSONObject s=segs.get(i);String who=s.optString("speaker");if(exclude!=null&&exclude.contains(who))continue;
-            double a=s.optDouble("start"),b=s.optDouble("end"),d=b-a;if(d<2.5||s.optString("text").trim().split("\\s+").length<3)continue;
-            boolean crowded=false;for(JSONObject o:segs)if(o!=s&&!o.optString("speaker").equals(who)&&o.optDouble("start")<b+0.5&&o.optDouble("end")>a-0.5){crowded=true;break;}
+            double a=from[i],b=to[i],d=b-a;if(d<2.5||s.optString("text").trim().split("\\s+").length<3)continue;
+            boolean crowded=false;for(int j=0;j<count;j++)if(j!=i&&voice[j]!=voice[i]&&from[j]<b+0.5&&to[j]>a-0.5){crowded=true;break;}
             if(crowded)continue;
-            JSONObject prev=i>0?segs.get(i-1):null,next=i+1<segs.size()?segs.get(i+1):null;
-            boolean calm=(prev==null||prev.optString("speaker").equals(who)||a-prev.optDouble("end")>1)&&(next==null||next.optString("speaker").equals(who)||next.optDouble("start")-b>1);
+            int prev=i-1,next=i+1<count?i+1:-1;
+            boolean calm=(prev<0||voice[prev]==voice[i]||a-to[prev]>1)&&(next<0||voice[next]==voice[i]||from[next]-b>1);
             double start=a+0.4,end=Math.min(b-0.4,start+9.5);if(end-start<2)continue;
             candidates.computeIfAbsent(who,k->new ArrayList<>()).add(new double[]{Math.abs(d-7)-(calm?5:0),start,end});
         }

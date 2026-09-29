@@ -1,0 +1,73 @@
+[
+  {
+    "version": "0.6.0",
+    "date": "2026-09-29",
+    "title": "Del botón rojo a tu segundo cerebro",
+    "items": [
+      "Un botón que avanza contigo: cada grabación te muestra su siguiente paso (Transcribir, Revisar voces, Guardar en 0-Inbox). Si después corriges algo, «Actualizar» reemplaza el mismo archivo, sin copias.",
+      "Nota para tu segundo cerebro: al terminar, la app arma un resumen con decisiones, tareas y frases clave, y la guarda en 0-Inbox con la transcripción al final. En Ajustes eliges si la arma OpenAI o Claude.",
+      "★ Marcar momentos: mientras grabas, toca ★ para marcar lo importante, también desde la notificación con el teléfono bloqueado. Después saltas directo a cada momento.",
+      "Grabar y leer, más claro: al grabar ves una onda grande, el tiempo y los botones siempre en su lugar. Cada grabación se lee como un documento, con la onda del audio para moverte.",
+      "El avance a la vista: en la grabación, en Inicio y en la Biblioteca ves cuántas partes van listas y cuánto falta. La Biblioteca muestra el comienzo del texto y quién habla.",
+      "Voces conocidas y segundas pasadas: guarda tu voz y la de las personas con que más hablas (hasta 4 por audio) para que las reconozca con su nombre desde el inicio; edítalas o bórralas en Ajustes. Además, nombra voces de una vez y vuelve a transcribir sin perder la versión anterior."
+    ]
+  },
+  {
+    "version": "0.5.0",
+    "date": "2026-09-28",
+    "title": "Voces que se confunden menos",
+    "items": [
+      "Mi voz: graba 10 segundos en Ajustes y, al separar voces, la app te reconoce con tu nombre desde el primer segundo.",
+      "Menos errores al separar voces: muestras más limpias de cada persona y menos cortes en el audio, para que nadie aparezca repetido ni se crucen los nombres.",
+      "Corrige con un toque: toca el nombre de una intervención para escucharla y elegir a la persona correcta, o intercambia a dos personas desde ese punto.",
+      "Mismo nombre, misma persona: si nombras igual a dos voces, se unen en una sola, con un solo color.",
+      "Siempre puedes deshacer: cada corrección se puede deshacer, y puedes volver a las voces originales.",
+      "Texto más fácil de leer: el archivo .txt junta en un párrafo lo que una persona dice seguido."
+    ]
+  },
+  {
+    "version": "0.4.4",
+    "date": "2026-09-28",
+    "title": "Transcribe aunque bloquees el teléfono",
+    "items": [
+      "Con la pantalla bloqueada: la app te avisa si Android la está frenando y te lleva al permiso, con la ruta para tu marca de teléfono.",
+      "Nada queda colgado: si el envío deja de avanzar, la app lo corta y lo reintenta sola.",
+      "Los cortes del teléfono no cuentan como fallos: se reintenta en segundos y, al desbloquear, de inmediato.",
+      "Adiós a los toques accidentales: las grabaciones de menos de 3 segundos no se guardan ni se envían."
+    ]
+  },
+  {
+    "version": "0.4.3",
+    "date": "2026-09-27",
+    "title": "Audios largos sin esperas eternas",
+    "items": [
+      "Más rápido y confiable: el audio ya no se vuelve a comprimir y, si algo falla, la app sigue donde quedó en vez de empezar de nuevo.",
+      "Reintentos que no se pierden: siguen trabajando aunque cierres la app.",
+      "Guardado rápido: eliges una carpeta (por ejemplo Drive/0-Inbox) y guardas cada transcripción con un toque.",
+      "Fecha delante del nombre: tus archivos se ordenan solos por fecha.",
+      "Cancelar con confirmación: ya no pierdes una transcripción por un toque de más."
+    ]
+  },
+  {
+    "version": "0.4.2",
+    "date": "2026-09-23",
+    "title": "Transcripción más rápida y a la vista",
+    "items": [
+      "Un modelo nuevo para el texto: más rápido y económico cuando no necesitas separar voces.",
+      "¿Separar voces?: al transcribir eliges, viendo cuánto tarda y cuánto cuesta cada opción.",
+      "Audios largos en menos tiempo: se cortan en las pausas y se envían varias partes a la vez, sin cambiarle el nombre a nadie.",
+      "Cifras en vivo: mientras transcribe ves el tiempo que falta, la velocidad y el costo estimado."
+    ]
+  },
+  {
+    "version": "0.4.1",
+    "date": "2026-09-23",
+    "title": "Transcripción que no se detiene",
+    "items": [
+      "Sigue con el teléfono bloqueado: una notificación te muestra el avance.",
+      "Detalles del proceso: ves en qué paso va, cuánto lleva y qué está esperando (Wi-Fi, cargador o batería).",
+      "Sin cobros repetidos en audios largos: la app espera lo necesario antes de volver a enviar.",
+      "Grabar queda fija: el estado de la transcripción va en un aviso arriba, sin mover la pantalla."
+    ]
+  }
+]

@@ -29,10 +29,51 @@ final class Settings {
     /** Elección por defecto cuando no se puede preguntar (p. ej. transcripción automática). */
     boolean defaultSpeakers(){return canSeparate()&&!speakersMode().equals("never");}
     ProviderConfig config()throws Exception{return config(defaultSpeakers());}
+    /** Dirección del servidor propio ("" si aún no se configura). */
+    String customBase(){return prefs.getString("customBase","").trim();}
+    /** Con «Servidor compatible» sin dirección no se puede transcribir (ni comprobar la clave). */
+    boolean needsServer(){return !provider().equals("openai")&&customBase().isEmpty();}
+    static final String NO_SERVER="Configura la dirección de tu servidor en Ajustes.";
     ProviderConfig config(boolean speakers)throws Exception{
         boolean openai=provider().equals("openai");
         if(openai)return new ProviderConfig("openai","https://api.openai.com/v1",speakers?"gpt-4o-transcribe-diarize":textModel(),apiKey(),speakers);
-        return new ProviderConfig(provider(),prefs.getString("customBase","https://example.com/v1"),prefs.getString("customModel","whisper-1"),apiKey(),speakers&&prefs.getBoolean("customSpeakers",false));
+        // Sin dirección no hay a dónde enviar: nunca una por defecto (la clave y el audio irían a un tercero).
+        if(customBase().isEmpty())throw new HttpApi.UserAction(NO_SERVER);
+        return new ProviderConfig(provider(),customBase(),prefs.getString("customModel","whisper-1"),apiKey(),speakers&&prefs.getBoolean("customSpeakers",false));
+    }
+    // ---------- 0.6.0 ----------
+    /** Armar la «Nota para tu segundo cerebro» al terminar cada transcripción. */
+    boolean noteAuto(){return prefs.getBoolean("noteAuto",true);}
+    /** IA que arma la nota: "openai" (usa la clave de OpenAI) o "anthropic" (Claude, requiere su clave). */
+    String noteProvider(){return prefs.getString("noteProvider","openai");}
+    /** Modelo de la nota; vacío = el recomendado del proveedor (ver Notes). */
+    String noteModel(){return prefs.getString("noteModel","");}
+    /** Clave de OpenAI aunque se transcriba con un servidor propio (la usa la nota). */
+    boolean hasOpenAiKey(){return prefs.contains("keyEncrypted");}
+    String openAiKey()throws Exception{return hasOpenAiKey()?decrypt(""):"";}
+    boolean hasAnthropicKey(){return prefs.contains("anthropic_keyEncrypted");}
+    String anthropicKey()throws Exception{return hasAnthropicKey()?decrypt("anthropic_"):"";}
+    void saveAnthropicKey(String value)throws Exception{encrypt("anthropic_",value);}
+    /** Carpeta de guardado rápido (p. ej. Drive/0-Inbox): uri del árbol o "". */
+    String inboxTree(){return prefs.getString("saveTree","");}
+    String inboxName(){return prefs.getString("saveTreeName","0-Inbox");}
+    int lastSeenVersion(){return prefs.getInt("lastSeenVersion",0);}
+    void setLastSeenVersion(int v){prefs.edit().putInt("lastSeenVersion",v).apply();}
+    /** Recordar si la bitácora quedó abierta (se miraba en cada visita). */
+    boolean bitacoraOpen(){return prefs.getBoolean("bitacoraOpen",false);}
+    void setBitacoraOpen(boolean open){prefs.edit().putBoolean("bitacoraOpen",open).apply();}
+    private void encrypt(String prefixKey,String value)throws Exception{
+        value=value.trim();
+        if(value.isEmpty()){prefs.edit().remove(prefixKey+"keyEncrypted").remove(prefixKey+"keyIv").commit();return;}
+        if(value.length()>8192||value.matches(".*\\s.*"))throw new IllegalArgumentException("La clave no debe contener espacios ni saltos de línea.");
+        Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.ENCRYPT_MODE,key());
+        String encrypted=Base64.encodeToString(cipher.doFinal(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)),Base64.NO_WRAP);
+        if(!prefs.edit().putString(prefixKey+"keyEncrypted",encrypted).putString(prefixKey+"keyIv",Base64.encodeToString(cipher.getIV(),Base64.NO_WRAP)).commit())throw new java.io.IOException("No se pudo guardar la clave.");
+    }
+    private String decrypt(String prefixKey)throws Exception{
+        Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.DECRYPT_MODE,key(),new GCMParameterSpec(128,Base64.decode(prefs.getString(prefixKey+"keyIv",""),Base64.NO_WRAP)));
+        return new String(cipher.doFinal(Base64.decode(prefs.getString(prefixKey+"keyEncrypted",""),Base64.NO_WRAP)),java.nio.charset.StandardCharsets.UTF_8);
     }
     private static synchronized javax.crypto.SecretKey key() throws Exception {
         KeyStore store = KeyStore.getInstance("AndroidKeyStore"); store.load(null);

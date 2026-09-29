@@ -1,5 +1,7 @@
 package cl.vozlocal.app;
 
+import android.animation.TimeInterpolator;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -7,6 +9,10 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowInsetsController;
+import android.view.animation.Interpolator;
+import android.view.animation.PathInterpolator;
 import android.widget.TextView;
 
 /**
@@ -100,15 +106,80 @@ final class AppTheme {
     /** Movimiento (ms): corto para respuestas, medio para aparecer, largo para transformaciones. */
     static final int MOTION_FAST=100,MOTION_BASE=250,MOTION_SLOW=400;
 
+    /*
+     * Curvas de movimiento de Material 3 Expressive (ver PROPUESTA #12):
+     * - Color, transparencia y forma usan las curvas "emphasized", sin rebote.
+     * - Lo que cambia de lugar o de tamaño usa un resorte con un rebote leve (SPATIAL).
+     * Todo respeta «Quitar animaciones» de Android: con la escala de animación en 0, motion() es false
+     * y los animadores terminan de inmediato.
+     */
+    /** Emphasized (estándar para transformaciones completas). */
+    static final TimeInterpolator EMPHASIZED=new PathInterpolator(0.2f,0f,0f,1f);
+    /** Emphasized decelerate: para lo que entra a la pantalla. */
+    static final TimeInterpolator EMPHASIZED_DECELERATE=new PathInterpolator(0.05f,0.7f,0.1f,1f);
+    /** Emphasized accelerate: para lo que sale de la pantalla. */
+    static final TimeInterpolator EMPHASIZED_ACCELERATE=new PathInterpolator(0.3f,0f,0.8f,0.15f);
+    /** Resortes espaciales de Material 3 Expressive (amortiguación, rigidez): rápido, normal y lento. */
+    static final Spring SPATIAL_FAST=new Spring(0.6f,800f),SPATIAL=new Spring(0.8f,380f),SPATIAL_SLOW=new Spring(0.8f,200f);
+
+    /**
+     * Resorte amortiguado como interpolador (masa 1). Su duración es el tiempo que tarda en asentarse
+     * (±0,1 %): se usa como `animate().setDuration(s.duration).setInterpolator(s)`.
+     * Con amortiguación &lt; 1 pasa un poco de largo y vuelve: 0,8 ≈ 1,5 % de rebote, 0,6 ≈ 9 %.
+     */
+    static final class Spring implements Interpolator {
+        final float damping,stiffness;final long duration;
+        Spring(float damping,float stiffness){
+            this.damping=damping;this.stiffness=stiffness;double w=Math.sqrt(stiffness);
+            double envelope=damping<1f?1.0/Math.sqrt(1-damping*damping):1.0;
+            duration=Math.max(150,Math.min(1000,Math.round(1000*Math.log(1000*envelope)/(damping*w))));
+        }
+        @Override public float getInterpolation(float input){
+            if(input<=0f)return 0f;if(input>=1f)return 1f;
+            double t=input*duration/1000.0,w=Math.sqrt(stiffness),z=damping;
+            if(z<1){double wd=w*Math.sqrt(1-z*z);return (float)(1-Math.exp(-z*w*t)*(Math.cos(wd*t)+z*w/wd*Math.sin(wd*t)));}
+            return (float)(1-Math.exp(-w*t)*(1+w*t));
+        }
+    }
+    /** false si el usuario activó «Quitar animaciones» (o la escala de animación está en 0). */
+    static boolean motion(){return ValueAnimator.areAnimatorsEnabled();}
+    static boolean motion(Context c){
+        try{if(android.provider.Settings.Global.getFloat(c.getContentResolver(),android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,1f)==0f)return false;}catch(RuntimeException ignored){}
+        return motion();
+    }
+
     static String appearance(Context c){return new Settings(c).prefs.getString("appearance","system");}
     static boolean dynamicColor(Context c){return Build.VERSION.SDK_INT>=31&&new Settings(c).prefs.getBoolean("dynamicColor",false);}
     static boolean isDark(Context c){String mode=appearance(c);return mode.equals("dark") || (mode.equals("system") && (c.getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES);}
     static Palette apply(Activity activity){Palette p=new Palette(activity,isDark(activity),dynamicColor(activity));activity.setTheme(p.dark?R.style.AppThemeDark:R.style.AppTheme);return p;}
     static int dp(Context c,float n){return Math.round(n*c.getResources().getDisplayMetrics().density);}
+    /**
+     * Barras del sistema del mismo color que la pantalla: la de estado como el fondo y la de navegación como la
+     * zona que queda encima (barra de pestañas o fondo). Sin divisor ni velo de contraste, así en modo oscuro no se ve una franja.
+     * En Android 15+ (de borde a borde) el color lo pinta Screen detrás de la barra.
+     */
     static void window(Activity activity,Palette p,int navigationColor){
-        activity.getWindow().setStatusBarColor(p.background);activity.getWindow().setNavigationBarColor(navigationColor);activity.getWindow().getDecorView().setBackgroundColor(p.background);
-        activity.getWindow().getDecorView().setSystemUiVisibility(p.dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|(Build.VERSION.SDK_INT>=27?View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:0));
+        Window w=activity.getWindow();
+        w.setStatusBarColor(p.background);w.setNavigationBarColor(navigationColor);w.getDecorView().setBackgroundColor(p.background);
+        if(Build.VERSION.SDK_INT>=28)w.setNavigationBarDividerColor(navigationColor);
+        if(Build.VERSION.SDK_INT>=29){w.setNavigationBarContrastEnforced(false);w.setStatusBarContrastEnforced(false);}
+        boolean lightNav=!p.dark&&luminance(navigationColor)>0.5f;
+        w.getDecorView().setSystemUiVisibility((p.dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR)|(lightNav&&Build.VERSION.SDK_INT>=27?View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:0));
+        if(Build.VERSION.SDK_INT>=30){
+            WindowInsetsController controller=w.getInsetsController();
+            if(controller!=null){int mask=WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                controller.setSystemBarsAppearance((p.dark?0:WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS)|(lightNav?WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS:0),mask);}
+        }
     }
+    /** Mezcla lineal de dos colores ARGB (t = 0 → a, t = 1 → b). */
+    static int blend(int a,int b,float t){
+        t=Math.max(0f,Math.min(1f,t));float u=1f-t;
+        return (Math.round(((a>>>24)&0xFF)*u+((b>>>24)&0xFF)*t)<<24)|(Math.round(((a>>16)&0xFF)*u+((b>>16)&0xFF)*t)<<16)|(Math.round(((a>>8)&0xFF)*u+((b>>8)&0xFF)*t)<<8)|Math.round((a&0xFF)*u+(b&0xFF)*t);
+    }
+    /** El mismo color con otra opacidad (0–255). */
+    static int withAlpha(int color,int alpha){return (color&0x00FFFFFF)|((alpha&0xFF)<<24);}
+    /** Luminancia relativa aproximada (0 = negro, 1 = blanco). */
+    static float luminance(int color){return (0.2126f*((color>>16)&0xFF)+0.7152f*((color>>8)&0xFF)+0.0722f*(color&0xFF))/255f;}
     static Typeface typeface(Weight weight){
         switch(weight){
             case BOLD:return Typeface.create("sans-serif",Typeface.BOLD);

@@ -1,5 +1,62 @@
 # Historial de versiones
 
+## 0.6.0 — 2026-09-29 · «Del botón rojo a tu segundo cerebro»
+
+Rediseño de la experiencia basado en el uso real: 999 acciones registradas, una auditoría de cada pantalla y apps de referencia. Detalle en `docs/diseno/PROPUESTA-0.6.md`; contratos técnicos en `docs/diseno/SPEC-0.6.md`.
+
+**Del audio a tu segundo cerebro**
+- **Un botón principal que avanza** con cada grabación: Transcribir → Revisar voces → Guardar en 0-Inbox → ✓ En 0-Inbox · hh:mm. «Actualizar» reemplaza el **mismo archivo**, sin copias «(1)». Las demás salidas quedan en ▾: copiar, compartir, .txt, .md, otra carpeta y volver a transcribir.
+- **Nota para tu segundo cerebro:** al terminar, una IA arma un resumen con decisiones, tareas (marcables), frases clave, etiquetas y momentos ★. Se guarda como .md para Obsidian, con frontmatter y la transcripción al final.
+  - Puede armarla OpenAI (`gpt-6-luna`, con la misma clave) o Claude (`claude-sonnet-5-5`, con clave de Anthropic).
+  - La nota nombra a las personas con marcas {S1} y pone los nombres actuales al mostrarse, así sigue siendo válida después de corregir voces.
+  - Si la grabación tenía el título automático, la nota le pone uno.
+- **★ Marcar momentos** mientras grabas, también desde la notificación con el teléfono bloqueado (con vibración). Después aparecen en la onda, en la transcripción y en la nota.
+- **Volver a transcribir** con alternativas que cambian algo:
+  - segunda pasada con tus correcciones, que usa las voces corregidas como muestras en todo el audio;
+  - separar voces sin cortar (hasta 23 min);
+  - separar voces de nuevo;
+  - solo el texto.
+
+  La versión anterior se guarda: al terminar eliges «Quedarme con la nueva» o «Volver a la anterior». Si se cancela o falla, vuelve sola.
+
+**Pantallas rediseñadas**
+- **Grabar:** onda grande, tiempo destacado y tres controles fijos (Pausa · Detener · ★ Marcar). Detener se ignora el primer segundo, para evitar grabaciones accidentales. La tarjeta «Última grabación» muestra su siguiente paso. La cabecera dice «✓ Listo para transcribir» o «Revisar · «título»».
+- **Detalle como documento:**
+  - arriba, la ficha con las personas y su %, la nota, los momentos ★ y la transcripción a todo el ancho, que sigue al audio;
+  - abajo, fijos, la onda del reproductor (con el color de quién habla y las ★), los controles y el botón que avanza.
+- **El avance a la vista:** «3 de 5 partes listas», tiempo estimado y la última línea de la bitácora como titular. La app recuerda si dejaste la bitácora abierta, y «Cancelar» pasa al menú ⋮.
+- **Biblioteca que se lee sola:**
+  - filas con el comienzo del texto, quién habla, la duración en palabras y «✓ En 0-Inbox» o «Por guardar»;
+  - anillo de avance, «Reintentar» en la misma fila y un punto «nuevo»;
+  - filtros Por guardar / En proceso / Sin transcribir / Con error.
+- **Voces conocidas:** la biblioteca guarda tu voz y la de otras personas (p. ej. la Fran), grabadas en Ajustes o con «Guardar la voz de X» desde una transcripción. Hasta 4 se envían en cada audio, así cada persona aparece con su nombre desde el inicio. Se pueden escuchar, renombrar, volver a grabar, apagar o eliminar.
+- **Nombrar voces en una sola pasada:** cada voz con ▶ para escucharla, su frase, su % y nombres sugeridos. Si dos llevan el mismo nombre, se unen.
+- **Ajustes reordenados:**
+  - «Tu flujo» primero: 0-Inbox, nota e IA de la nota, automático, fecha y voces;
+  - «Comprobar conexión» muestra el resultado en la misma fila;
+  - nueva sección **Novedades y versiones** (y una hoja con las novedades al actualizar).
+- **Importar:** abre directo el selector, salir no cancela la importación, el título va sin extensión y la ayuda de WhatsApp está aquí.
+- **Notificación «Transcripción lista»:** suena, abre la grabación y ofrece «Revisar voces» o «Guardar en 0-Inbox». La notificación de grabación trae cronómetro, Pausar/Reanudar, ★ Marcar y Detener.
+
+**Terminaciones**
+- Íconos Material Symbols con un solo estilo.
+- Interruptores reales de Material 3.
+- Botón de dos partes con estado de carga que se convierte en ✓.
+- Vibraciones con significado.
+- Movimiento enfatizado; se respeta «Quitar animaciones».
+- Duraciones en palabras, sin jerga técnica a la vista.
+
+**Correcciones**
+- **Revisión independiente de toda la versión:** 27 problemas confirmados y corregidos. Los principales:
+  - la pantalla Grabar hacía girar el procesador sin parar mientras se veía la Biblioteca (gastaba batería y alteraba la grabación);
+  - volver a transcribir dos veces sin elegir versión podía borrar la original;
+  - una nota podía quedar «Armando…» para siempre;
+  - la opción «sin cortar» podía reenviarse (y cobrarse) varias veces desde la tarea de fondo;
+  - un servidor propio sin dirección podía recibir la clave.
+- **Privacidad del informe de soporte:** ya no incluye nombres de personas ni títulos de grabaciones. Se ocultan en las etiquetas de botones y en las bitácoras.
+- La pantalla de detalle ya no se reconstruye con cambios de otras grabaciones y conserva la posición.
+- La onda de audios largos se calcula midiendo ventanas: tarda lo mismo con 5 o 90 minutos.
+
 ## 0.5.0 — 2026-09-28
 
 Voces que se confunden menos y que se corrigen con un toque. Parte de una prueba real: una conversación de 26 min entre 2 personas salió con 4 personas y con las etiquetas cruzadas en el primer minuto. El diagnóstico completo está en `docs/PLAN-voces.md`.

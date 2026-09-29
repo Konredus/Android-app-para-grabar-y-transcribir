@@ -49,7 +49,7 @@ class HttpApi {
         HttpURLConnection c=(HttpURLConnection)target.openConnection();active=c;stalled=null;touch();
         try{
             c.setInstanceFollowRedirects(false);c.setConnectTimeout(30000);c.setReadTimeout(readTimeoutMs);c.setRequestMethod(method);
-            c.setRequestProperty("Authorization","Bearer "+token);
+            if(token!=null&&!token.isEmpty())c.setRequestProperty("Authorization","Bearer "+token);
             if(contentType!=null)c.setRequestProperty("Content-Type",contentType);
             if(extra!=null)for(Map.Entry<String,String> entry:extra.entrySet())c.setRequestProperty(entry.getKey(),entry.getValue());
             if(body!=null){c.setDoOutput(true);c.setFixedLengthStreamingMode(body.length());try(OutputStream out=c.getOutputStream()){body.write(out);}touch();if(onUploaded!=null)onUploaded.run();}
@@ -84,7 +84,7 @@ class HttpApi {
             else if(message.contains("format")||message.contains("decode")||message.contains("corrupt"))reason="El proveedor no pudo decodificar este audio. Prueba importar una copia para convertirla.";
             else if(message.contains("too short")||message.contains("empty"))reason="El audio está vacío o es demasiado corto. Prueba una grabación de al menos unos segundos.";
             else if(message.contains("model"))reason="El modelo no está disponible o no admite estos parámetros. Revisa el modelo y sus capacidades.";
-            else if(message.contains("size")||message.contains("large"))reason="El bloque supera un límite del proveedor. Prueba recortar el audio.";
+            else if(message.contains("size")||message.contains("large"))reason="Una parte del audio supera un límite del proveedor. Prueba recortar el audio.";
         }}catch(Exception ignored){}
         Diagnostics.event("api_rejected",response.jobId,"http",response.code,"request_id",response.requestId,"code",code,"type",type,"param",param);
         if(response.code==401)throw new UserAction("La clave del proveedor no es válida o fue revocada. Revísala en Ajustes.");

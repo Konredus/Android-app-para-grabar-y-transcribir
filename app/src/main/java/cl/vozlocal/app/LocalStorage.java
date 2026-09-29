@@ -18,14 +18,32 @@ final class LocalStorage {
         if(!stamp.equals(FilesStore.state(c,r.id).optString("localAudioStamp"))){try(InputStream in=new FileInputStream(r.audio(c))){write(c,child(c,tree,folder,"audio.m4a","audio/mp4"),in);}FilesStore.update(c,r.id,s->s.put("localAudioStamp",stamp));}
         writeText(c,child(c,tree,folder,"informacion.txt","text/plain"),r.title+"\nDuración: "+Recording.time(r.duration));
         if(Transcript.exists(c,r.id)){Transcript transcript=Transcript.load(c,r.id);writeText(c,child(c,tree,folder,"transcripcion.txt","text/plain"),transcript.text(r));writeText(c,child(c,tree,folder,"transcripcion.json","application/json"),transcript.data.toString(2));}
+        // La nota para el segundo cerebro (0.6.0), en Markdown. Si falla, el resto de la copia sigue valiendo.
+        if(Notes.exists(c,r.id)){try{writeText(c,child(c,tree,folder,"nota.md","text/markdown"),Notes.markdown(c,r));}catch(Exception e){Diagnostics.event("local_note_failed",r.id,"error_class",e.getClass().getSimpleName());}}
+        // La versión actual no tiene nota (p. ej. al volver a transcribir): la nota.md de antes llevaba otro resumen y otro
+        // texto, así que se quita. Sin transcripción (una versión nueva en curso) no se toca: la copia sigue siendo la anterior.
+        else if(Transcript.exists(c,r.id)){
+            try{Uri old=find(c,tree,folder,"nota.md");if(old!=null)DocumentsContract.deleteDocument(c.getContentResolver(),old);}
+            catch(Exception e){Diagnostics.event("local_note_delete_failed",r.id,"error_class",e.getClass().getSimpleName());}
+        }
         FilesStore.update(c,r.id,s->s.put("localStatus","Copia local actualizada"));Diagnostics.event("local_copy_complete",r.id);
     }
-    static Uri child(Context c,Uri tree,Uri parent,String name,String mime)throws Exception{
+    /** El documento con ese nombre dentro de parent, o null si no existe (no lo crea). */
+    static Uri find(Context c,Uri tree,Uri parent,String name)throws Exception{
         Uri children=DocumentsContract.buildChildDocumentsUriUsingTree(tree,DocumentsContract.getDocumentId(parent));
         try(android.database.Cursor cursor=c.getContentResolver().query(children,new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME},null,null,null)){
             if(cursor!=null)while(cursor.moveToNext())if(name.equals(cursor.getString(1)))return DocumentsContract.buildDocumentUriUsingTree(tree,cursor.getString(0));
         }
-        Uri created=DocumentsContract.createDocument(c.getContentResolver(),parent,mime,name);if(created==null)throw new IOException();return created;
+        return null;
+    }
+    static Uri child(Context c,Uri tree,Uri parent,String name,String mime)throws Exception{
+        Uri found=find(c,tree,parent,name);if(found!=null)return found;
+        Uri created;
+        try{created=DocumentsContract.createDocument(c.getContentResolver(),parent,mime,name);}
+        catch(SecurityException e){throw e;}
+        // Un proveedor que no conoce text/markdown: application/octet-stream conserva el nombre tal cual («nota.md», no «nota.md.txt»).
+        catch(Exception e){if(!"text/markdown".equals(mime))throw e;created=DocumentsContract.createDocument(c.getContentResolver(),parent,"application/octet-stream",name);}
+        if(created==null)throw new IOException();return created;
     }
     static void writeText(Context c,Uri uri,String value)throws Exception{write(c,uri,new ByteArrayInputStream(value.getBytes(StandardCharsets.UTF_8)));}
     static void write(Context c,Uri uri,InputStream input)throws Exception{try(InputStream in=input;OutputStream out=open(c,uri)){if(out==null)throw new IOException();byte[] buffer=new byte[65536];int read;while((read=in.read(buffer))>=0)out.write(buffer,0,read);}}

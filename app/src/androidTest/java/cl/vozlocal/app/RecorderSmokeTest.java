@@ -81,6 +81,12 @@ public class RecorderSmokeTest extends Instrumentation {
             check(!new File(Recording.directory(c), shortId + ".m4a").exists(), "Short recording audio left behind");
             FeatureChecks.run(c,r);
             ExportChecks.run(c,r);
+            EngineChecks.run(c,r);
+            NotesChecks.run(c,r);
+            MediaChecks.run(c,r);
+            UiChecks.run(c,r);
+            IntegrationChecks.run(c,r);
+            VoicesChecks.run(c,r);
             long longStarted = SystemClock.elapsedRealtime();
             if (longChecks) LongImportChecks.run(c,r);
             String longResult = longChecks ? "one-hour AAC import/crop/cancel, WAV import, interrupted-import recovery (" + (SystemClock.elapsedRealtime() - longStarted) / 1000 + " s)" : "one-hour import checks SKIPPED (-e long false)";
