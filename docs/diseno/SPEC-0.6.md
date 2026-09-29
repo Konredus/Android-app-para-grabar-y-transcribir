@@ -123,3 +123,9 @@ Claves nuevas (todas opcionales):
   - `contentDescription` en lo que es solo ícono;
   - al cambiar el texto de un `Ui.Btn`, usar `setText`.
 - Modo oscuro: solo roles de `AppTheme`, sin hex sueltos.
+
+## Agregados de la fase 0
+
+- **`Next`**, en `RecordingActions.java` (dueño: **sheets**): `Next.of(c,r)` devuelve el siguiente paso de una grabación (`step`, `label`, `icon`). Pasos: TRANSCRIBE, WORKING, RETRY, REVIEW, SAVE, SAVED, UPDATE y CHOOSE_FOLDER. Es la lógica del **botón principal que avanza**: la usan **detail** (barra inferior) y **home** (tarjeta «Última grabación» y Biblioteca).
+- **`HttpApi.request`**: si el token es `""`, no envía `Authorization`. Sirve para Anthropic, que usa el encabezado `x-api-key` en `extra`. `HttpApi.java` pasa a ser de **engine**.
+- **`RecorderService`** tiene los stubs `startedAt()`, `marksCount()` y `lastMarkAt()`. Los implementa **media**. **No** hay que bloquear STOP en el servicio: la prueba de grabación corta envía STOP a los 0,8 s. El bloqueo de Detener durante el primer segundo va solo en la UI (**home**).

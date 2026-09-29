@@ -49,7 +49,7 @@ class HttpApi {
         HttpURLConnection c=(HttpURLConnection)target.openConnection();active=c;stalled=null;touch();
         try{
             c.setInstanceFollowRedirects(false);c.setConnectTimeout(30000);c.setReadTimeout(readTimeoutMs);c.setRequestMethod(method);
-            c.setRequestProperty("Authorization","Bearer "+token);
+            if(token!=null&&!token.isEmpty())c.setRequestProperty("Authorization","Bearer "+token);
             if(contentType!=null)c.setRequestProperty("Content-Type",contentType);
             if(extra!=null)for(Map.Entry<String,String> entry:extra.entrySet())c.setRequestProperty(entry.getKey(),entry.getValue());
             if(body!=null){c.setDoOutput(true);c.setFixedLengthStreamingMode(body.length());try(OutputStream out=c.getOutputStream()){body.write(out);}touch();if(onUploaded!=null)onUploaded.run();}

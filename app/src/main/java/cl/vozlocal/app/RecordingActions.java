@@ -11,6 +11,31 @@ import org.json.JSONObject;
 import static cl.vozlocal.app.AppTheme.*;
 
 /** Estado visible de una grabación. Un solo lugar define texto, color e ícono de cada estado. */
+/**
+ * Siguiente paso de una grabación: UN botón principal que avanza con ella (0.6.0).
+ * Transcribir → Revisar voces → Guardar en 0-Inbox → ✓ En 0-Inbox · hh:mm (o Actualizar).
+ * Implementación básica de la fase 0; la parte «sheets» la afina (ver docs/diseno/SPEC-0.6.md).
+ */
+final class Next {
+    enum Step{TRANSCRIBE,WORKING,RETRY,REVIEW,SAVE,SAVED,UPDATE,CHOOSE_FOLDER}
+    final Step step;final String label;final int icon;
+    Next(Step step,String label,int icon){this.step=step;this.label=label;this.icon=icon;}
+    static Next of(Context c,Recording r){
+        JSONObject st=FilesStore.state(c,r.id);
+        if(!Transcript.exists(c,r.id)){
+            if(st.optBoolean("requested"))return new Next(Step.WORKING,"Transcribiendo…",R.drawable.ic_clock);
+            if(st.optBoolean("failed"))return new Next(Step.RETRY,"Reintentar",R.drawable.ic_refresh);
+            return new Next(Step.TRANSCRIBE,"Transcribir",R.drawable.ic_sparkle);
+        }
+        try{Transcript t=Transcript.load(c,r.id);if(t.diarized()&&t.speakers().size()>1&&!t.reviewed())return new Next(Step.REVIEW,"Revisar voces",R.drawable.ic_people);}catch(Exception ignored){}
+        if(!Inbox.configured(c))return new Next(Step.CHOOSE_FOLDER,"Elegir carpeta rápida",R.drawable.ic_folder);
+        String folder=Inbox.folderName(c);long at=Inbox.savedAt(c,r.id);
+        if(at==0)return new Next(Step.SAVE,"Guardar en "+folder,R.drawable.ic_save);
+        if(Inbox.outdated(c,r.id))return new Next(Step.UPDATE,"Actualizar en "+folder,R.drawable.ic_refresh);
+        return new Next(Step.SAVED,"En "+folder+" · "+new java.text.SimpleDateFormat("HH:mm",java.util.Locale.ROOT).format(new java.util.Date(at)),R.drawable.ic_check);
+    }
+}
+
 final class RecState {
     enum Kind{NEW,QUEUED,FAILED,DONE}
     final Kind kind;final String label,detail;
