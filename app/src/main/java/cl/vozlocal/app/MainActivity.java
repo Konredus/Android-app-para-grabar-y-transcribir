@@ -60,7 +60,8 @@ public class MainActivity extends Screen {
 
     // Grabar
     private LinearLayout homePanel,hero,statusRow,subRow,bottomSection,recentSection,recentList,statusChip,pauseBox,markBox,importRow;private FrameLayout stage;
-    private boolean recentsFit=true;private int compact;
+    /** fitPending: hay que volver a medir si todo cabe (se resuelve con Grabar a la vista y ya medida; nunca en bucle). */
+    private boolean recentsFit=true,fitPending;private int compact;
     private TextView statusLabel,timer,idlePrompt,hint,readyChip,pauseLabel,markBadge,importMeta;private Ui.Btn titleButton;
     private int workingCount,failedCount;private String workingTitle="",workingId,failedId,reviewId,reviewTitle="";
     private View statusDot;private ProgressBar chipSpinner;private ImageView chipIcon;
@@ -84,7 +85,12 @@ public class MainActivity extends Screen {
         Item(Recording r,JSONObject state,boolean transcribed){this.r=r;this.state=state;this.transcribed=transcribed;this.status=RecState.of(state,transcribed);}
         boolean done(){return status.kind==RecState.Kind.DONE;}
         /** Voces separadas que el usuario aún no revisó. */
-        boolean toReview(){Meta m=meta;return done()&&m!=null&&m.diarized&&m.names.size()>1&&!m.reviewed;}
+        boolean toReview(){return toReview(meta);}
+        /**
+         * Lo mismo sobre una lectura ya tomada de meta: el hilo de disco la completa mientras se dibuja, así que quien
+         * después usa m (p. ej. cuántas voces) debe decidir con esa misma m.
+         */
+        boolean toReview(Meta m){return done()&&m!=null&&m.diarized&&m.names.size()>1&&!m.reviewed;}
         /** Lista y aún no guardada (o con cambios) en la carpeta rápida. */
         boolean toSave(){return done()&&inbox&&(savedAt==0||outdated);}
         int blocks(){return state.optInt("blocks");}
@@ -98,7 +104,8 @@ public class MainActivity extends Screen {
         }
         String snippet(){Meta m=meta;return m!=null&&!m.snippet.isEmpty()?m.snippet:state.optString("snippet","");}
     }
-    private ArrayList<Item> items=new ArrayList<>();private int loadVersion,dataVersion=-1;
+    /** loadVersion: la última lectura pedida (se lee en el hilo de disco para saltarse las que ya quedaron atrás). */
+    private ArrayList<Item> items=new ArrayList<>();private volatile int loadVersion;private int dataVersion=-1;
 
     /** 70 ms al grabar (onda fluida); 400 ms en reposo para ahorrar batería. */
     private final Runnable tick=new Runnable(){@Override public void run(){update();handler.postDelayed(this,RecorderService.activeId!=null||starting?70:400);}};
@@ -113,7 +120,9 @@ public class MainActivity extends Screen {
         root.setFocusableInTouchMode(true);
         // Grabar es una pantalla FIJA (sin desplazamiento): va fuera del ScrollView y ocupa el alto disponible.
         homePanel=ui.column();homePanel.setPadding(ui.dp(S4),0,ui.dp(S4),ui.dp(S3));root.addView(homePanel,0,new LinearLayout.LayoutParams(-1,0,1));buildHome();
-        homePanel.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{if(b-t!=ob-ot){recentsFit=true;if(compact!=0){compact=0;applyCompact();}v.post(this::fitHome);}});
+        homePanel.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{if(b-t!=ob-ot){recentsFit=true;if(compact!=0){compact=0;applyCompact();}requestFit();}});
+        // Un ajuste que esperaba a que la zona de grabación se midiera se retoma con su siguiente medición (no sondeando).
+        hero.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{if(fitPending)v.post(this::fitHome);});
         libraryPanel=ui.column();page.addView(libraryPanel,Ui.fill());buildLibrary();
         root.getViewTreeObserver().addOnGlobalLayoutListener(this::checkIme);
         section(showLibrary);root.requestFocus();
@@ -137,7 +146,7 @@ public class MainActivity extends Screen {
         if(showLibrary!=library){if(showLibrary)libraryScroll=scroll.getScrollY();else homeScroll=scroll.getScrollY();}
         showLibrary=library;nav.select(library?1:0);
         homePanel.setVisibility(library?View.GONE:View.VISIBLE);libraryPanel.setVisibility(library?View.VISIBLE:View.GONE);scroll.setVisibility(library?View.VISIBLE:View.GONE);
-        if(library)ui.fadeIn(libraryPanel);else hideKeyboard();
+        if(library)ui.fadeIn(libraryPanel);else{hideKeyboard();requestFit();}
         renderPill();
         scroll.post(()->scroll.scrollTo(0,library?libraryScroll:homeScroll));Diagnostics.event("section_open",null,"screen",library?"library":"home");
     }
@@ -261,28 +270,45 @@ public class MainActivity extends Screen {
 
     /**
      * Pantalla fija: si no cabe todo, primero se ocultan «Recientes»; después se compacta por niveles:
-     * 1) sin la línea de ayuda ni el rótulo de la tarjeta, tiempo más chico; 2) sin «Añadir título» al grabar (el título
-     * se pone al terminar); 3) pantallas muy bajas: sin la línea «Grabando» y la tarjeta queda en una fila (tocarla abre).
+     * 1) sin la línea de ayuda ni el rótulo de la tarjeta, tiempo más chico; 2) sin «Añadir título» al grabar si
+     * «Nombrar al terminar» está activo (el título se pone al terminar); 3) pantallas muy bajas: sin la línea «Grabando»
+     * y la tarjeta queda en una fila (tocarla abre).
      * Se decide por el tamaño de la pantalla, nunca por el estado, así nada cambia de lugar entre grabar y detener.
      */
+    private void requestFit(){fitPending=true;if(homePanel.getVisibility()==View.VISIBLE)homePanel.post(this::fitHome);}
+    /**
+     * Un paso de ajuste. Nunca se vuelve a programar sola mientras espera: con Grabar oculto (Biblioteca) o sin medir
+     * (p. ej. la app en segundo plano) queda pendiente y la retoman section(false) o la siguiente medición de la zona.
+     */
     private void fitHome(){
-        if(hero.getWidth()==0||hero.isLayoutRequested()){homePanel.post(this::fitHome);return;}
+        if(!fitPending||homePanel.getVisibility()!=View.VISIBLE||hero.getWidth()==0||hero.isLayoutRequested())return;
+        fitPending=false;
         int free=stage.getHeight();
-        if(recentSection.getVisibility()!=View.GONE&&free<ui.dp(STAGE_FULL)){recentsFit=false;applyRecents();homePanel.post(this::fitHome);return;}
-        if(free<ui.dp(STAGE_MIN)&&compact<3){compact++;applyCompact();homePanel.post(this::fitHome);}
+        if(recentSection.getVisibility()!=View.GONE&&free<ui.dp(STAGE_FULL)){recentsFit=false;applyRecents();requestFit();return;}
+        if(free<ui.dp(STAGE_MIN)&&compact<3){compact++;applyCompact();requestFit();}
     }
     private void applyCompact(){
         hint.setVisibility(compact>=1?View.GONE:View.VISIBLE);lastOverline.setVisibility(compact>=1?View.GONE:View.VISIBLE);
         timer.setTextSize(compact>=1?48:64);
         boolean active=RecorderService.activeId!=null;
-        subRow.setVisibility(compact>=2?View.GONE:active?View.VISIBLE:View.INVISIBLE);
+        renderTitleRow(active);
         statusRow.setVisibility(compact>=3?View.GONE:active?View.VISIBLE:View.INVISIBLE);
         lastActions.setVisibility(compact>=3?View.GONE:View.VISIBLE);if(compact>=3)lastBar.setVisibility(View.GONE);else if(lastBar.getVisibility()==View.GONE)lastBar.setVisibility(View.INVISIBLE);
+    }
+    /**
+     * «Añadir título» al grabar. En pantallas compactas (nivel 2+) se quita solo si el título se pone al terminar
+     * («Nombrar al terminar»); si no, es la única forma de ponerlo durante la grabación. Si vuelve a ocupar lugar, se
+     * vuelve a medir (compactar más si hace falta).
+     */
+    private void renderTitleRow(boolean active){
+        boolean hide=compact>=2&&new Settings(this).askTitle(),wasGone=subRow.getVisibility()==View.GONE;
+        subRow.setVisibility(hide?View.GONE:active?View.VISIBLE:View.INVISIBLE);
+        if(wasGone&&!hide)requestFit();
     }
     private void applyRecents(){
         boolean recording=RecorderService.activeId!=null;
         recentSection.setVisibility(items.size()<2||!recentsFit?View.GONE:recording?View.INVISIBLE:View.VISIBLE);if(!recording)recentSection.setAlpha(1f);
-        if(recentSection.getVisibility()!=View.GONE)homePanel.post(this::fitHome);
+        if(recentSection.getVisibility()!=View.GONE)requestFit();
     }
     /** Bucle de UI: refleja el estado real del servicio de grabación. */
     private void update(){
@@ -314,7 +340,7 @@ public class MainActivity extends Screen {
         if(compact<3)statusRow.setVisibility(active?View.VISIBLE:View.INVISIBLE);statusDot.setBackground(oval(paused?p.onSurfaceVariant:p.record));
         statusLabel.setText(paused?"En pausa":"Grabando");statusLabel.setTextColor(paused?p.onSurfaceVariant:p.record);
         timer.setVisibility(active?View.VISIBLE:View.INVISIBLE);timer.setAlpha(1f);if(!active)timer.setText("00:00");
-        if(compact<2)subRow.setVisibility(active?View.VISIBLE:View.INVISIBLE);
+        renderTitleRow(active);
         idlePrompt.setVisibility(active?View.GONE:View.VISIBLE);
         wave.setMode(active?(paused?Waveform.PAUSED:Waveform.LIVE):Waveform.IDLE);
         if(active&&!was&&animate&&ValueAnimator.areAnimatorsEnabled()){wave.setAlpha(0f);wave.setScaleY(0.6f);wave.animate().alpha(1f).scaleY(1f).setDuration(MOTION_SLOW).start();}
@@ -459,7 +485,7 @@ public class MainActivity extends Screen {
             default:{
                 Next.Step step=i.next!=null?i.next.step:derivedStep(i);String next=i.next!=null?i.next.label:null;String folder=folderName();
                 switch(step){
-                    case REVIEW:{int n=i.meta==null?0:i.meta.names.size();icon=R.drawable.ic_people;fg=p.onPrimaryContainer;bg=p.primaryContainer;status=dur+" · Lista · "+(n>1?n+" voces por revisar":"voces por revisar");label=next!=null?next:"Revisar voces";actionIcon=R.drawable.ic_people;style=Ui.Style.PRIMARY;action=v->startActivity(new Intent(this,RecordingActivity.class).putExtra("id",r.id).putExtra("names",true));break;}
+                    case REVIEW:{Meta m=i.meta;int n=m==null?0:m.names.size();icon=R.drawable.ic_people;fg=p.onPrimaryContainer;bg=p.primaryContainer;status=dur+" · Lista · "+(n>1?n+" voces por revisar":"voces por revisar");label=next!=null?next:"Revisar voces";actionIcon=R.drawable.ic_people;style=Ui.Style.PRIMARY;action=v->startActivity(new Intent(this,RecordingActivity.class).putExtra("id",r.id).putExtra("names",true));break;}
                     case SAVE:icon=R.drawable.ic_inbox;fg=p.onPrimaryContainer;bg=p.primaryContainer;status=dur+" · Lista · por guardar";label=next!=null?next:"Guardar en "+folder;actionIcon=R.drawable.ic_save;style=Ui.Style.PRIMARY;action=v->saveInbox(r);break;
                     case UPDATE:icon=R.drawable.ic_refresh;fg=p.onPrimaryContainer;bg=p.primaryContainer;status=dur+" · Hay cambios sin guardar";label=next!=null?next:"Actualizar en "+folder;actionIcon=R.drawable.ic_refresh;style=Ui.Style.PRIMARY;action=v->saveInbox(r);break;
                     case CHOOSE_FOLDER:status=dur+" · Transcripción lista";label=next!=null?next:"Elegir carpeta rápida";actionIcon=R.drawable.ic_folder;style=Ui.Style.TONAL;action=v->startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true).putExtra("inbox",true));break;
@@ -543,9 +569,14 @@ public class MainActivity extends Screen {
     }
     private void hideKeyboard(){if(search==null)return;InputMethodManager imm=getSystemService(InputMethodManager.class);if(imm!=null)imm.hideSoftInputFromWindow(search.getWindowToken(),0);if(search.hasFocus()){search.clearFocus();root.requestFocus();}}
 
+    /**
+     * Relee la lista en el hilo de disco. Durante una transcripción se pide muy seguido: las lecturas en cola que ya
+     * quedaron atrás se saltan (solo corre la más reciente) y cada lectura que termina se muestra, en orden.
+     */
     private void load(){
         int version=++loadVersion;Context app=getApplicationContext();
         disk.execute(()->{
+            if(version!=loadVersion)return;
             boolean inbox=false;try{inbox=Inbox.configured(app);}catch(RuntimeException ignored){}
             String blocker=null;try{blocker=Pipeline.blocker(app);}catch(RuntimeException ignored){}
             long since=newSince(app);ArrayList<Item> loaded=new ArrayList<>(),missing=new ArrayList<>();
@@ -562,12 +593,14 @@ public class MainActivity extends Screen {
             }
             if(!loaded.isEmpty())try{loaded.get(0).next=Next.of(app,loaded.get(0).r);}catch(Throwable ignored){}
             // Primero la lista rápida; después, lo que hay que leer de las transcripciones (fragmento, personas y colores).
-            if(!missing.isEmpty())publish(version,loaded,inbox,blocker);
-            for(Item i:missing){if(version!=loadVersion)return;Meta m=readMeta(app,i.r.id);METAS.put(i.r.id,m);i.meta=m;storeSnippet(app,i,m);}
-            publish(version,loaded,inbox,blocker);
+            if(!missing.isEmpty())publish(loaded,inbox,blocker);
+            // Aunque llegue otra lectura, se termina: lo leído queda en METAS y la siguiente ya no lo relee.
+            for(Item i:missing){Meta m=readMeta(app,i.r.id);METAS.put(i.r.id,m);i.meta=m;storeSnippet(app,i,m);}
+            publish(loaded,inbox,blocker);
         });
     }
-    private void publish(int version,ArrayList<Item> loaded,boolean inbox,String blocker){ArrayList<Item> copy=new ArrayList<>(loaded);runOnUiThread(()->{if(!isDestroyed()&&version==loadVersion){items=copy;inboxOn=inbox;queueBlocker=blocker;render();}});}
+    /** Un solo hilo de disco (en orden): lo publicado siempre es más nuevo que lo anterior, así que no se descarta. */
+    private void publish(ArrayList<Item> loaded,boolean inbox,String blocker){ArrayList<Item> copy=new ArrayList<>(loaded);runOnUiThread(()->{if(!isDestroyed()){items=copy;inboxOn=inbox;queueBlocker=blocker;render();}});}
     private static Meta readMeta(Context c,String id){
         File f=FilesStore.file(c,id,".transcript.json");Meta m=new Meta(f.lastModified(),f.length());
         try{Transcript t=Transcript.load(c,id);m.diarized=t.diarized();m.reviewed=t.reviewed();m.snippet=t.snippet(120);
@@ -680,7 +713,7 @@ public class MainActivity extends Screen {
             b.append(' ');for(int k=0;k<Math.min(2,n);k++)b.append(k==0?"":", ").append(m.names.get(k));if(n>2)b.append(" +").append(String.valueOf(n-2));
         }
         String action=null;boolean highlight=false;
-        if(i.toReview()){action=m.names.size()+" voces por revisar";highlight=true;}
+        if(i.toReview(m)){action=m.names.size()+" voces por revisar";highlight=true;}
         else if(i.inbox){String folder=folderName();if(i.savedAt==0){action="Por guardar";highlight=true;}else if(i.outdated){action="Actualizar en "+folder;highlight=true;}else action="✓ En "+folder;}
         if(action!=null){if(b.length()>0)b.append(" · ");int s=b.length();b.append(action);if(highlight)b.setSpan(new ForegroundColorSpan(p.primary),s,b.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);}
         return b;
