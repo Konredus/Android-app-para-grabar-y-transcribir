@@ -37,7 +37,16 @@ final class TranscriptExport {
         return intent;
     }
 
-    static String filename(String title) {
+    static String filename(String title) { return base(title, ".txt") + ".txt"; }
+
+    /** Markdown con la misma limpieza que el .txt: «Reunión.md» (sin duplicar la extensión). */
+    static String markdownFilename(String title) { return base(title, ".md") + ".md"; }
+
+    /** Nota para el segundo cerebro: siempre con la fecha delante, «2026-09-29 Título.md» (sin duplicarla si ya la tiene). */
+    static String noteFilename(String title, long created) { return markdownFilename(Recording.withDate(title, created)); }
+
+    /** Nombre seguro sin extensión: sin rutas, controles ni nombres reservados, y con espacio para la extensión. */
+    private static String base(String title, String extension) {
         String normalized = Normalizer.normalize(title == null ? "" : title, Normalizer.Form.NFC);
         StringBuilder safe = new StringBuilder();
         normalized.codePoints().forEach(point -> {
@@ -47,15 +56,15 @@ final class TranscriptExport {
             else safe.appendCodePoint(point);
         });
         String value = safe.toString().replaceAll("[\\s\\p{Z}]+", " ").trim();
-        if (value.toLowerCase(java.util.Locale.ROOT).endsWith(".txt")) value = value.substring(0, value.length() - 4);
+        if (value.toLowerCase(java.util.Locale.ROOT).endsWith(extension)) value = value.substring(0, value.length() - extension.length());
         value = value.replaceAll("^[. ]+|[. ]+$", "");
         if (value.matches("(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\\..*)?")) value = "Transcripción " + value;
-        // Leave room for .txt on providers that enforce a byte-based filename limit.
+        // Leave room for the extension on providers that enforce a byte-based filename limit.
         while (value.getBytes(StandardCharsets.UTF_8).length > 180) {
             value = value.substring(0, value.offsetByCodePoints(value.length(), -1));
         }
         value = value.replaceAll("[. ]+$", "");
         if (value.isEmpty()) value = "Transcripción";
-        return value + ".txt";
+        return value;
     }
 }
