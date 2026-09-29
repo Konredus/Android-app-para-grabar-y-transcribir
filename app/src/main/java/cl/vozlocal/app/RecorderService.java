@@ -18,6 +18,12 @@ public class RecorderService extends Service {
     static final long MIN_MS = 3000;
     /** Aviso breve para la pantalla de inicio (p. ej. grabación descartada por corta). */
     static volatile String notice;
+    private static volatile long startedAtMs;
+    /** elapsedRealtime del inicio de la grabación actual (0 si no se graba): la UI ignora Detener durante el primer segundo. */
+    static long startedAt(){return activeId==null?0:startedAtMs;}
+    /** Momentos ★ marcados en la grabación actual (STUB fase 0; la parte «media» lo implementa). */
+    static int marksCount(){return 0;}
+    static long lastMarkAt(){return 0;}
     private static volatile long accumulated, started;
     private MediaRecorder recorder;
     private Recording recording;
@@ -65,7 +71,7 @@ public class RecorderService extends Service {
             recorder.setAudioEncodingBitRate(96000); recorder.setAudioSamplingRate(44100); recorder.setAudioChannels(1);
             recorder.setOutputFile(recording.audio(this).getAbsolutePath());
             recorder.setOnErrorListener((r,w,e) -> { error = "El micrófono se interrumpió. Revisa el audio guardado."; finishRecording(); stopSelf(); });
-            recorder.prepare(); recorder.start(); started = SystemClock.elapsedRealtime();Diagnostics.event("recording_started",activeId);
+            recorder.prepare(); recorder.start(); started = SystemClock.elapsedRealtime(); startedAtMs = started;Diagnostics.event("recording_started",activeId);
             getSystemService(android.app.job.JobScheduler.class).cancel(Pipeline.JOB_ID);
             wakeLock = getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "VozLocal:Recording");
             wakeLock.acquire();

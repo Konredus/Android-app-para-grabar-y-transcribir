@@ -164,6 +164,30 @@ final class Ui {
         else if(event.getActionMasked()==MotionEvent.ACTION_UP||event.getActionMasked()==MotionEvent.ACTION_CANCEL)view.animate().scaleX(1f).scaleY(1f).setDuration(MOTION_BASE).start();
         return false;});}
     static void haptic(View v){v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);}
+    /** Vibraciones con significado (0.6.0): cada tipo de momento se siente distinto. STUB básico de la fase 0; la parte «design» lo afina. */
+    enum Haptic{CONFIRM,REJECT,TICK,TOGGLE_ON,TOGGLE_OFF}
+    static void haptic(View v,Haptic h){
+        int k=HapticFeedbackConstants.VIRTUAL_KEY;
+        if(android.os.Build.VERSION.SDK_INT>=30){switch(h){case CONFIRM:k=HapticFeedbackConstants.CONFIRM;break;case REJECT:k=HapticFeedbackConstants.REJECT;break;case TICK:k=HapticFeedbackConstants.CLOCK_TICK;break;default:k=HapticFeedbackConstants.VIRTUAL_KEY;}}
+        v.performHapticFeedback(k);
+    }
+    /** Duración en lenguaje humano: «5 s», «4 min», «52 min», «1 h 04 min». */
+    static String humanDuration(long ms){long s=Math.max(0,Math.round(ms/1000.0));if(s<60)return s+" s";long m=Math.round(s/60.0);if(m<60)return m+" min";return (m/60)+" h "+String.format(java.util.Locale.ROOT,"%02d",m%60)+" min";}
+    /** Botón de dos partes (Material 3 Expressive): acción principal + ▾ con las demás. STUB básico de la fase 0; la parte «design» lo afina. */
+    final class Split extends LinearLayout {
+        final Btn main;final ImageButton more;
+        Split(String label,int icon,View.OnClickListener onMain,View.OnClickListener onMore){
+            super(c);setOrientation(HORIZONTAL);setGravity(Gravity.CENTER_VERTICAL);
+            main=button(label,icon,Style.PRIMARY,onMain);addView(main,new LinearLayout.LayoutParams(0,-2,1));
+            addView(space(2));
+            more=iconButton(R.drawable.ic_more,"Más opciones para guardar o compartir",p.onPrimary,p.primary,52);more.setOnClickListener(onMore);addView(more);
+        }
+        void setLabel(String v){main.setText(v);}
+        void setIcon(int res){main.setIcon(res);}
+        void setTonal(boolean tonal){}
+        void setBusy(boolean busy){main.setEnabled(!busy);}
+    }
+    Split split(String label,int icon,View.OnClickListener main,View.OnClickListener more){return new Split(label,icon,main,more);}
     static View.AccessibilityDelegate buttonRole(){return new View.AccessibilityDelegate(){@Override public void onInitializeAccessibilityNodeInfo(View host,AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(host,info);info.setClassName(Button.class.getName());}};}
     void fadeIn(View v){v.setAlpha(0f);v.setTranslationY(dp(8));v.animate().alpha(1f).translationY(0).setDuration(MOTION_BASE).start();}
 }

@@ -18,7 +18,7 @@ final class Diagnostics {
         Context context=app;
         IO.execute(()->{try{
             JSONObject row=new JSONObject().put("time",System.currentTimeMillis()).put("event",event).put("version",version).put("job",job==null?"":job);
-            for(int i=0;i+1<fields.length;i+=2){String key=String.valueOf(fields[i]);if(Arrays.asList("stage","provider","model","http","request_id","code","type","param","elapsed_ms","bytes","duration_ms","part","parts","action","screen","result","error_class","count","runner","net","reason","local","display","idle","battery").contains(key))row.put(key,fields[i+1]);}
+            for(int i=0;i+1<fields.length;i+=2){String key=String.valueOf(fields[i]);if(Arrays.asList("stage","provider","model","http","request_id","code","type","param","elapsed_ms","bytes","duration_ms","part","parts","action","screen","result","error_class","count","runner","net","reason","local","display","idle","battery","mode","kind","source","label").contains(key))row.put(key,fields[i+1]);}
             File dir=new File(context.getFilesDir(),"diagnostics");dir.mkdirs();File file=new File(dir,"events.jsonl"),old=new File(dir,"events.previous.jsonl");
             if(file.length()>2*1024*1024){old.delete();file.renameTo(old);}
             if(old.exists() && old.lastModified()<System.currentTimeMillis()-30L*86400000)old.delete();

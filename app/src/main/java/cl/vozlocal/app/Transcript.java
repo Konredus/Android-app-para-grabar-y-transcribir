@@ -72,6 +72,20 @@ final class Transcript {
         if(cuts!=null&&cuts.length()-1==data.optInt("parts",1))for(int i=0;i+1<cuts.length();i++)out.add(cuts.optLong(i)/1000d);
         return out;
     }
+    /** Proporción del tiempo que habla cada voz presente (0..1). */
+    Map<String,Double> talkShare() throws JSONException {
+        Map<String,Double> talk=new LinkedHashMap<>();double total=0;JSONArray s=segments();
+        for(int i=0;i<s.length();i++){JSONObject seg=s.getJSONObject(i);double d=Math.max(0,seg.optDouble("end",seg.getDouble("start"))-seg.getDouble("start"));talk.merge(seg.getString("speaker"),d,Double::sum);total+=d;}
+        if(total>0)for(Map.Entry<String,Double> e:talk.entrySet())e.setValue(e.getValue()/total);
+        return talk;
+    }
+    /** Comienzo legible para la Biblioteca: «Konrad: la idea es…». */
+    String snippet(int max) throws Exception {
+        JSONArray s=segments();if(s.length()==0)return "";Map<String,String> names=speakers();JSONObject first=s.getJSONObject(0);
+        StringBuilder b=new StringBuilder();if(diarized())b.append(names.get(first.getString("speaker"))).append(": ");
+        for(int i=0;i<s.length()&&b.length()<max+20;i++)b.append(i==0?"":" ").append(s.getJSONObject(i).getString("text").trim());
+        String t=b.toString().replaceAll("\\s+"," ");return t.length()>max?t.substring(0,max-1).trim()+"…":t;
+    }
     /** true si el usuario corrigió quién habla en algún tramo. */
     boolean edited(){JSONArray s=segments();for(int i=0;i<s.length();i++)if(s.optJSONObject(i)!=null&&s.optJSONObject(i).has("orig"))return true;return false;}
 
