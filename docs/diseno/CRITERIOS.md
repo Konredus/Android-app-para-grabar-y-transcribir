@@ -125,6 +125,8 @@ El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bai
 | **Onda** | `Waveform` | Escala en dB; en reposo, línea punteada tenue |
 | **Selector de tramo** | `RangeView` | Dos manijas; los campos numéricos se mantienen para precisión y accesibilidad |
 | **Estado de grabación** | `RecState` | **Único lugar** que decide texto, contenedor, color "on" e ícono de cada estado |
+| **Snackbar** | `Screen.snackbar(texto, acción, run)` | Confirma un cambio y ofrece **Deshacer** por 6 s. Colores invertidos (`inverseSurface`, `inverseOnSurface`, acción en `inversePrimary`). Va sobre la zona inferior fija, sin tapar el contenido. Se usa en vez de pedir confirmación para cambios reversibles |
+| **Opción con persona** | `Sheet.choice(texto, apoyo, elegido, color, run)` | Radio + punto del color de la voz: el mismo punto que en chips y encabezados, para reconocer a cada persona de un vistazo |
 
 ---
 
@@ -153,6 +155,15 @@ El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bai
 - Barra fija de salida con acciones neutras: Copiar · Compartir · .txt · **Guardar en…** (sirve para Google Drive).
 - **"¿Separar voces?"** al transcribir (configurable: preguntar, siempre, nunca). Cada opción muestra para qué sirve, su velocidad y el costo estimado de ese audio: el usuario decide con información, no a ciegas.
 - **Métricas** en la tarjeta de proceso: tiempo total y restante en vivo, audio procesado, velocidad (× tiempo real), costo estimado hasta ahora y total, tokens, datos enviados y texto recibido. Al terminar, el mismo resumen queda dentro de "Ver detalles del proceso". Los costos se rotulan como estimados con la fecha de la tarifa pública (principio 2: no inventar).
+- **Corregir voces sin modo edición** (0.5.0). El nombre de color de cada intervención se puede tocar y abre «¿Quién habla aquí?»:
+  - escuchar solo ese tramo sin cerrar la hoja;
+  - elegir a la persona correcta (radio con su color) u «Otra persona»;
+  - «Intercambiar A y B desde aquí», hasta el final o solo en ese bloque, que arregla un cruce con un toque;
+  - «Corregir solo una frase».
+  Los chips de personas abren la ficha de cada una: escuchar una muestra, cambiar el nombre, «Es la misma persona que…» y ver solo sus intervenciones. **Mismo nombre = misma persona**: se unen de verdad, con un solo chip y un solo color. Cada cambio muestra un snackbar con **Deshacer**, y en «Nombrar voces» existe **Restaurar voces originales**.
+- **Números y colores fijos**: al corregir, nadie cambia de número ni de color (el orden se congela en la primera corrección).
+- **Escuchar sin perder el lugar**: tocar la hora reproduce ahí mismo (sin subir al reproductor) y la intervención que suena se resalta en `primaryContainer`.
+- **Aviso honesto**: «Voces separadas automáticamente: pueden tener errores» hasta que el usuario revisa las voces. Un separador discreto marca dónde empieza cada bloque.
 - **Detalles del proceso** mientras transcribe: paso actual con contador en vivo, progreso de envío (MB), bloques listos, condiciones reales (Wi-Fi, cargador, batería), botón "Empezar ahora" si Android está demorando y una **bitácora** plegable con la hora y duración de cada paso. Al terminar: "tardó X".
 
 ### Importar
@@ -234,3 +245,7 @@ adb exec-out screencap -p > captura.png    # captura para comparar
 | 2026-09-28 | Mostrar el estado de la batería como una **condición más** de la tarjeta de proceso, con un botón para permitirlo | El problema aparece justo ahí (la transcripción no avanza con el teléfono bloqueado); explicarlo en contexto funciona mejor que un aviso al abrir la app |
 | 2026-09-28 | Los cortes del propio teléfono no cuentan como intentos fallidos | No son culpa del proveedor; contarlos agotaba los 5 intentos y mostraba "falló" cuando bastaba con reintentar |
 | 2026-09-28 | Descartar grabaciones de menos de 3 s sin preguntar | Un toque accidental no es una decisión: pedir confirmación agrega fricción y además se enviaba (y cobraba) a OpenAI |
+| 2026-09-28 | «Mi voz»: una muestra del usuario en todos los bloques, incluido el primero | El cruce de voces de la prueba real ocurrió dentro del bloque 1, donde el modelo no tenía ninguna referencia. El usuario está en casi todas sus grabaciones |
+| 2026-09-28 | Muestras con nombres únicos («voz_1») y solo de tramos limpios | Las letras «A»/«B» podían chocar con las que el modelo da a voces desconocidas; un tramo con dos voces contagiaba el error a todos los bloques |
+| 2026-09-28 | Bloques parejos de hasta 12 min al separar voces (antes 5) | Menos uniones entre bloques, menos oportunidades de cruce; se mantiene bajo el límite de 1400 s del modelo sin volver lento el primer bloque |
+| 2026-09-28 | Corregir con un toque + Deshacer, en vez de confirmar | Corregir voces es frecuente y reversible: pedir confirmación en cada cambio agrega fricción; el snackbar deja arrepentirse |

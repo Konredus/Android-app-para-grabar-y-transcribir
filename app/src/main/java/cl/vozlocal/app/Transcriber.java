@@ -18,8 +18,17 @@ import java.util.concurrent.*;
 final class Transcriber {
     static final java.util.concurrent.locks.ReentrantLock RUNNING=new java.util.concurrent.locks.ReentrantLock();
     static final int NOTIFICATION=9,DONE_NOTIFICATION=10,PARALLEL=3;
-    /** Duración objetivo de cada bloque: más corto con voces (el modelo es más lento), más largo sin voces. */
-    static final long BLOCK_SPEAKERS_MS=5*60_000,BLOCK_TEXT_MS=8*60_000;
+    /** Duración objetivo de cada bloque sin voces. */
+    static final long BLOCK_TEXT_MS=8*60_000;
+    /**
+     * Con voces, bloques parejos de hasta 12 min (antes 5): cada unión entre bloques es una oportunidad de que una persona
+     * cambie de etiqueta, así que conviene tener pocas. El modelo acepta hasta 1400 s por envío.
+     * 26 min → 3 bloques de ~8:40 (antes 5 de 5 min).
+     */
+    static final long SPEAKER_BLOCK_MAX_MS=12*60_000;
+    static long speakerBlockMs(long totalMs,long bytes){int n=(int)Math.max(Math.ceil(totalMs/(double)SPEAKER_BLOCK_MAX_MS),Math.ceil(bytes/19_000_000d));return n<=1?Math.max(1,totalMs):totalMs/n;}
+    /** Máximo de voces conocidas por envío (límite de la API). */
+    static final int MAX_KNOWN=4;
     /** La tarea diferida cede el turno antes de este tiempo para que Android no la corte a mitad de un envío. */
     static final long JOB_BUDGET_MS=6*60*1000;
     static final class Yield extends Exception{Yield(){super("Pausa corta");}}
@@ -34,6 +43,8 @@ final class Transcriber {
     /** En la última ronda hubo un corte del propio teléfono (el servicio reintenta pronto, sin esperas largas). */
     volatile boolean sawLocalCut;
     private volatile long frozenLoggedAt;
+    /** En esta ronda ya se envió al menos un bloque (la tarea de fondo solo cede el turno después de avanzar). */
+    private final java.util.concurrent.atomic.AtomicBoolean sentThisRun=new java.util.concurrent.atomic.AtomicBoolean();
 
     private final Context c;private final HttpApi http;private final long budgetMs;private final long started=System.currentTimeMillis();
     private final Map<Integer,long[]> uploads=new ConcurrentHashMap<>();private volatile long lastProgress;
@@ -47,6 +58,7 @@ final class Transcriber {
                 if(http.cancelled)break;
                 JSONObject state=FilesStore.state(c,r.id);if(!state.optBoolean("requested"))continue;
                 if(RecorderService.activeId!=null){retry=true;Pipeline.log(c,r.id,"En espera: hay una grabación en curso");break;}
+                if(budgetMs>0&&System.currentTimeMillis()-started>budgetMs){retry=true;break;}
                 http.jobId=r.id;
                 try{process(r);}
                 catch(Yield y){retry=true;Pipeline.log(c,r.id,"Pausa corta para no exceder el límite de Android · continúa enseguida");break;}
@@ -54,13 +66,13 @@ final class Transcriber {
                 catch(Exception e){
                     if(http.cancelled)break;
                     if(!r.audio(c).exists()||!FilesStore.state(c,r.id).optBoolean("requested"))continue;
-                    JSONObject st=FilesStore.state(c,r.id);int cuts=st.optInt("cuts",0)+(localCut(e)?1:0);
+                    JSONObject st=FilesStore.state(c,r.id);int cuts=st.optInt("localCuts",0)+(localCut(e)?1:0);
                     // Un corte hecho por el propio teléfono (pantalla bloqueada, ahorro de batería) no es culpa del proveedor:
                     // no gasta uno de los 5 intentos, salvo que se repita demasiado.
                     boolean local=localCut(e)&&cuts<=MAX_LOCAL_CUTS;sawLocalCut|=local;
                     int attempts=st.optInt("attempts",0)+(local?0:1);boolean again=attempts<5;retry|=again;
                     String reason=describe(e);
-                    FilesStore.update(c,r.id,s->s.put("attempts",attempts).put("retries",s.optInt("retries")+1).put("cuts",cuts).put("requested",again).put("failed",!again).put("lastError",reason));
+                    FilesStore.update(c,r.id,s->s.put("attempts",attempts).put("retries",s.optInt("retries")+1).put("localCuts",cuts).put("requested",again).put("failed",!again).put("lastError",reason));
                     String hint=local&&!Battery.unrestricted(c)?" · para evitarlo, permite a Voz local usar batería en segundo plano":"";
                     Pipeline.log(c,r.id,local?"El teléfono cortó la conexión ("+reason+") · se reintenta sin gastar un intento"+hint
                         :"Intento "+attempts+" de 5 falló: "+reason+(again?" · se reintentará (los bloques ya listos no se vuelven a enviar)":" · pulsa Reintentar"));
@@ -98,8 +110,10 @@ final class Transcriber {
         JSONObject initial=FilesStore.state(c,r.id);boolean wantSpeakers=initial.has("speakers")?initial.optBoolean("speakers"):settings.defaultSpeakers();
         if(!Transcript.exists(c,r.id)){
             ProviderConfig config=settings.config(wantSpeakers);if(config.key.isEmpty())throw new HttpApi.UserAction("Agrega una clave de API en Ajustes y pulsa Reintentar.");
-            long target=config.speakers?BLOCK_SPEAKERS_MS:BLOCK_TEXT_MS;
-            String profile=config.fingerprint()+settings.language()+"|v2|"+target;
+            long target=config.speakers?speakerBlockMs(r.duration>0?r.duration:AudioConvert.duration(r.audio(c)),r.audio(c).length()):BLOCK_TEXT_MS;
+            // "Mi voz" va como voz conocida en todos los bloques (también el primero). Si cambia la muestra, no se reutilizan bloques ya transcritos.
+            String[] mine=config.speakers&&config.provider.equals("openai")?Voices.reference(c):null;
+            String profile=config.fingerprint()+settings.language()+"|v3|"+target+"|"+(mine==null?"none":Voices.fingerprint(c));
             if(!profile.equals(FilesStore.state(c,r.id).optString("profile"))){
                 java.io.File[] checkpoints=Recording.directory(c).listFiles((dir,name)->name.startsWith(r.id+".part")&&name.endsWith(".json"));if(checkpoints!=null)for(java.io.File file:checkpoints)file.delete();
                 AudioParts.clearBlocks(c,r.id);
@@ -117,12 +131,20 @@ final class Transcriber {
             if(n>1)Pipeline.log(c,r.id,"Audio de "+Recording.time(r.duration)+" dividido en "+n+" bloques de ~"+(target/60000)+" min, cortados en pausas · se envían de a "+PARALLEL+" en paralelo");
             JSONObject[] responses=new JSONObject[n];
             try{
-                List<String[]> references=null;int from=0;
+                List<String[]> own=mine==null?null:Collections.singletonList(mine);
+                if(mine!=null)Pipeline.log(c,r.id,"Tu voz («"+Voices.name(c)+"») va como muestra en "+(n>1?"todos los bloques":"el envío")+" para reconocerte desde el inicio");
+                List<String[]> references=own;int from=0;
                 if(config.speakers&&n>1){
                     // El bloque 1 va solo: de él salen las muestras de voz para los demás.
-                    responses[0]=block(r,config,settings,parts,0,null);from=1;
-                    check(r);references=AudioParts.references(c,r,responses[0],http);
-                    if(!references.isEmpty())Pipeline.log(c,r.id,"Muestras de voz: "+references.size()+(references.size()==1?" persona":" personas")+" del bloque 1 · se usan para reconocerlas en los demás bloques");
+                    responses[0]=block(r,config,settings,parts,0,own);from=1;
+                    check(r);
+                    // Si el bloque 1 ya reconoció al usuario con "Mi voz", no hace falta muestra automática de él.
+                    Set<String> exclude=new HashSet<>();if(mine!=null)exclude.add(Voices.MINE);
+                    List<String[]> auto=AudioParts.references(c,r,responses[0],http,MAX_KNOWN-(mine==null?0:1),exclude);
+                    references=new ArrayList<>();if(mine!=null)references.add(mine);references.addAll(auto);
+                    if(!auto.isEmpty()){StringBuilder which=new StringBuilder();for(String[] ref:auto)which.append(which.length()==0?"":", ").append(ref[3]);
+                        Pipeline.log(c,r.id,"Muestras de voz del bloque 1: "+which+" · se usan para reconocer a las mismas personas en los demás bloques");}
+                    else if(mine==null)Pipeline.log(c,r.id,"El bloque 1 no tiene tramos limpios para muestras de voz · cada bloque separa voces por su cuenta");
                 }
                 if(budgetMs>0&&from<n&&System.currentTimeMillis()-started>budgetMs&&!allDone(r,from,n))throw new Yield();
                 List<String[]> refs=references;ExecutorService pool=Executors.newFixedThreadPool(PARALLEL);List<Future<JSONObject>> futures=new ArrayList<>();
@@ -132,7 +154,9 @@ final class Transcriber {
                     for(int i=from;i<n;i++){try{responses[i]=futures.get(i-from).get();}catch(ExecutionException e){if(first==null)first=e.getCause() instanceof Exception?(Exception)e.getCause():e;}}
                     if(first!=null)throw first;
                 }finally{pool.shutdownNow();}
-                check(r);Transcript transcript=Transcript.fromParts(Arrays.asList(responses),offsets(parts));transcript.data.put("provider",config.provider).put("model",config.model);transcript.save(c,r.id);
+                check(r);Transcript transcript=Transcript.fromParts(Arrays.asList(responses),offsets(parts));transcript.data.put("provider",config.provider).put("model",config.model);
+                if(mine!=null&&transcript.speakers().containsKey(Voices.ME))transcript.data.getJSONObject("names").put(Voices.ME,Voices.name(c));
+                transcript.save(c,r.id);
             }finally{http.onUploaded=null;http.onProgress=null;}
             // Los bloques se conservan entre intentos; se borran solo con la transcripción ya guardada.
             AudioParts.clearBlocks(c,r.id);
@@ -150,6 +174,10 @@ final class Transcriber {
         int n=parts.size();java.io.File checkpoint=FilesStore.file(c,r.id,".part"+i+".json");
         if(checkpoint.exists())return FilesStore.read(checkpoint);
         check(r);AudioParts.Part part=parts.get(i);String label=n>1?"bloque "+(i+1)+" de "+n:"audio";
+        // Tarea de fondo: Android la corta a los ~10 min. Si este bloque no alcanza a volver, se cede el turno antes de enviarlo.
+        // Nunca antes del primer envío de la ronda: así cada ronda avanza al menos un bloque.
+        if(budgetMs>0){long partEstimate=90_000+(long)(0.6*(part.durationMs>0?part.durationMs:r.duration));if(sentThisRun.get()&&System.currentTimeMillis()-started+partEstimate>9*60_000)throw new Yield();}
+        sentThisRun.set(true);
         HttpApi h=http.child();h.jobId=r.id;long partMs=part.durationMs>0?part.durationMs:r.duration;
         // La espera escala con la duración: un bloque con separación de voces puede tardar varios minutos.
         h.readTimeoutMs=(int)Math.min(20*60_000L,Math.max(240_000L,120_000L+partMs));
@@ -179,21 +207,31 @@ final class Transcriber {
             }
         }finally{guard.cancel(false);}
         check(r);
-        if(refs!=null&&!refs.isEmpty()){JSONArray known=new JSONArray();for(String[] ref:refs)known.put(ref[0]);response.put("_known",known);}
+        // "_known": qué nombre enviado corresponde a qué voz (se usa al unir bloques; ver Transcript.fromParts).
+        JSONObject known=new JSONObject();if(refs!=null)for(String[] ref:refs)known.put(ref[0],ref.length>2?ref[2]:"block0:"+ref[0]);if(known.length()>0)response.put("_known",known);
+        String voices=describeVoices(response,known);
         synchronized(FilesStore.LOCK){if(r.audio(c).exists())FilesStore.write(checkpoint,response);}
         long took=System.currentTimeMillis()-blockStart;long bytes=part.file.length();JSONObject usage=response.optJSONObject("usage");
         FilesStore.update(c,r.id,s->{
-            s.put("blocksDone",s.optInt("blocksDone")+1).put("doneAudioMs",s.optLong("doneAudioMs")+partMs).put("bytesSent",s.optLong("bytesSent")+bytes)
+            s.put("localCuts",0).put("blocksDone",s.optInt("blocksDone")+1).put("doneAudioMs",s.optLong("doneAudioMs")+partMs).put("bytesSent",s.optLong("bytesSent")+bytes)
              .put("blockMsSum",s.optLong("blockMsSum")+took).put("blockCount",s.optInt("blockCount")+1);
             if(usage!=null){
                 if("duration".equals(usage.optString("type")))s.put("usageSec",s.optDouble("usageSec",0)+usage.optDouble("seconds",0));
                 else s.put("inTokens",s.optLong("inTokens")+usage.optLong("input_tokens")).put("outTokens",s.optLong("outTokens")+usage.optLong("output_tokens"));
             }
         });
-        Pipeline.log(c,r.id,(n>1?"Bloque "+(i+1)+" de "+n+" listo":"Respuesta recibida")+" · tardó "+Recording.time(took));
+        Pipeline.log(c,r.id,(n>1?"Bloque "+(i+1)+" de "+n+" listo":"Respuesta recibida")+" · tardó "+Recording.time(took)+voices);
         Diagnostics.event("part_complete",r.id,"part",i+1,"parts",n,"elapsed_ms",took);
         JSONObject st=FilesStore.state(c,r.id);notice("Transcribiendo · "+st.optInt("blocksDone")+" de "+n+" bloques listos",true,(int)(st.optLong("doneAudioMs")*100/Math.max(1,r.duration)));
         return response;
+    }
+    /** Resumen de voces de un bloque para la bitácora: cuántas reconoció por muestra y cuántas son nuevas. */
+    private static String describeVoices(JSONObject response,JSONObject known){
+        JSONArray s=response.optJSONArray("segments");if(s==null||!response.optBoolean("_diarized",true))return "";
+        Set<String> recognized=new HashSet<>(),fresh=new HashSet<>();
+        for(int k=0;k<s.length();k++){JSONObject seg=s.optJSONObject(k);if(seg==null||seg.optString("text").trim().isEmpty())continue;String sp=seg.optString("speaker");if(known.has(sp))recognized.add(known.optString(sp));else fresh.add(sp);}
+        if(known.length()==0)return fresh.isEmpty()?"":" · "+fresh.size()+(fresh.size()==1?" voz":" voces");
+        return " · reconoció "+recognized.size()+(recognized.size()==1?" voz":" voces")+(fresh.isEmpty()?"":", "+fresh.size()+(fresh.size()==1?" nueva":" nuevas"));
     }
     /** Progreso de subida sumado entre bloques en paralelo; se guarda cada ~0,7 s. */
     private void progress(Recording r,int block,long sent,long total,String label){

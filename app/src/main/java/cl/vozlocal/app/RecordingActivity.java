@@ -24,7 +24,7 @@ public class RecordingActivity extends Screen {
     private final Handler handler=new Handler(Looper.getMainLooper());private int dataVersion;
     // Reproductor
     private MediaPlayer player;private AudioFocusRequest focus;private SeekBar seek;private TextView elapsed,remaining,speed;private ImageButton play;private boolean prepared;private float rate=1f;
-    private final Runnable progress=new Runnable(){public void run(){if(player!=null&&prepared){int pos=player.getCurrentPosition();seek.setProgress(pos);elapsed.setText(Recording.time(pos));remaining.setText("-"+Recording.time(player.getDuration()-pos));}
+    private final Runnable progress=new Runnable(){public void run(){if(player!=null&&prepared){int pos=player.getCurrentPosition();seek.setProgress(pos);elapsed.setText(Recording.time(pos));remaining.setText("-"+Recording.time(player.getDuration()-pos));tickPlayback(pos);}
         int v=FilesStore.version.get();if(!demo&&v!=dataVersion){dataVersion=v;reload();}tickProcess();handler.postDelayed(this,250);}};
 
     @Override public void onCreate(Bundle state){
@@ -48,7 +48,7 @@ public class RecordingActivity extends Screen {
     @Override protected void onDestroy(){handler.removeCallbacksAndMessages(null);releasePlayer();super.onDestroy();}
 
     private void reload(){
-        if(recording==null)return;
+        if(recording==null)return;dataVersion=FilesStore.version.get();
         if(!demo){Recording latest=FilesStore.recording(this,id);if(latest==null){finish();return;}recording=latest;try{transcript=Transcript.exists(this,id)?Transcript.load(this,id):null;}catch(Exception e){transcript=null;}}
         title.setText(recording.title);
         meta.setText(new SimpleDateFormat("d MMM yyyy · HH:mm",new Locale("es","CL")).format(new Date(recording.created))+" · "+Recording.time(recording.duration));
@@ -84,7 +84,7 @@ public class RecordingActivity extends Screen {
             player=new MediaPlayer();AudioAttributes attr=new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build();player.setAudioAttributes(attr);
             focus=new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(attr).setOnAudioFocusChangeListener(c->{if(c<0&&player!=null&&player.isPlaying()){player.pause();play.setImageResource(R.drawable.ic_play);}}).build();
             player.setDataSource(recording.audio(this).getAbsolutePath());player.prepare();prepared=true;seek.setMax(player.getDuration());
-            player.setOnCompletionListener(mp->{play.setImageResource(R.drawable.ic_play);play.setContentDescription("Reproducir");});
+            player.setOnCompletionListener(mp->{play.setImageResource(R.drawable.ic_play);play.setContentDescription("Reproducir");if(playUntil>0){playUntil=0;if(tramoEnded!=null)tramoEnded.run();}});
             player.setOnErrorListener((mp,w,e)->{releasePlayer();message("No se pudo reproducir","El audio puede haberse interrumpido al grabar.");return true;});
             Diagnostics.event("playback_open",id);
         }catch(Exception e){releasePlayer();message("No se pudo reproducir","El archivo de audio no se pudo abrir.");}
@@ -93,7 +93,26 @@ public class RecordingActivity extends Screen {
         if(player.isPlaying()){player.pause();play.setImageResource(R.drawable.ic_play);play.setContentDescription("Reproducir");}
         else if(getSystemService(AudioManager.class).requestAudioFocus(focus)==AudioManager.AUDIOFOCUS_REQUEST_GRANTED){applySpeed();player.start();play.setImageResource(R.drawable.ic_pause);play.setContentDescription("Pausar");}}
     private void skip(int ms){ensurePlayer();if(prepared)player.seekTo(Math.max(0,Math.min(player.getDuration(),player.getCurrentPosition()+ms)));}
-    private void seekTo(double seconds){ensurePlayer();if(!prepared)return;player.seekTo((int)(seconds*1000));if(!player.isPlaying())toggle();if(playerCard!=null)scroll.smoothScrollTo(0,0);}
+    /** Escuchar sin perder el lugar: no sube al reproductor; la intervención que suena se resalta. Tocar de nuevo la misma hora pausa. */
+    private void playTurn(View turn,double seconds){
+        ensurePlayer();if(!prepared)return;
+        if(player.isPlaying()&&playingTurn==turn&&playUntil==0){toggle();return;}
+        playUntil=0;player.seekTo((int)(seconds*1000));if(!player.isPlaying())toggle();markPlaying(turn);
+    }
+    /** Reproduce solo [from, to] (s) y se detiene sola. Devuelve false si no se pudo reproducir. */
+    private boolean playRange(double from,double to){
+        ensurePlayer();if(!prepared)return false;
+        player.seekTo((int)(from*1000));playUntil=(long)(to*1000)+200;if(!player.isPlaying())toggle();
+        if(!player.isPlaying()){playUntil=0;return false;}return true;
+    }
+    private void stopTramo(){playUntil=0;if(player!=null&&prepared&&player.isPlaying())toggle();}
+    private void tickPlayback(int pos){
+        if(playUntil>0&&pos>=playUntil){playUntil=0;if(player.isPlaying())toggle();if(tramoEnded!=null)tramoEnded.run();}
+        if(!player.isPlaying())return;
+        View now=null;for(Object[] turn:turns){if(pos>=(long)turn[1]-300&&pos<(long)turn[2]+300){now=(View)turn[0];break;}}
+        if(now!=null)markPlaying(now);
+    }
+    private void markPlaying(View turn){if(turn==playingTurn)return;if(playingTurn!=null)playingTurn.setBackground(null);playingTurn=turn;if(turn!=null)turn.setBackground(shape(this,p.primaryContainer,R_CONTROL));}
     private void cycleSpeed(){float[] rates={1f,1.25f,1.5f,2f,0.75f};int i=0;for(int k=0;k<rates.length;k++)if(Math.abs(rates[k]-rate)<0.01f)i=k;rate=rates[(i+1)%rates.length];String label=(rate==(int)rate?String.valueOf((int)rate):String.valueOf(rate))+"×";speed.setText(label);speed.setContentDescription("Velocidad "+label);applySpeed();}
     private void applySpeed(){if(player!=null&&prepared)try{boolean playing=player.isPlaying();player.setPlaybackParams(player.getPlaybackParams().setSpeed(rate));if(!playing&&player.isPlaying())player.pause();}catch(Exception ignored){}}
     private void releasePlayer(){prepared=false;if(player!=null){player.release();player=null;}if(focus!=null){getSystemService(AudioManager.class).abandonAudioFocusRequest(focus);focus=null;}if(play!=null)play.setImageResource(R.drawable.ic_play);}
@@ -169,7 +188,7 @@ public class RecordingActivity extends Screen {
         else if(secs>0)cells.add(new String[]{"Audio facturado",Recording.time((long)(secs*1000))});
         long sent=st.optLong("bytesSent")+(live?st.optLong("upSent"):0);if(sent>0)cells.add(new String[]{"Datos enviados",String.format(Locale.ROOT,"%.1f MB",sent/1e6).replace('.',',')});
         int chars=st.optInt("liveChars");if(live&&chars>0)cells.add(new String[]{"Texto recibido",String.format(Locale.ROOT,"%,d",chars).replace(',','.')+" caracteres"});
-        int retries=st.optInt("retries",st.optInt("attempts"));if(retries>0)cells.add(new String[]{"Reintentos",retries+(st.optInt("cuts")>0?" · "+st.optInt("cuts")+" por el teléfono":"")});
+        int retries=st.optInt("retries",st.optInt("attempts"));if(retries>0)cells.add(new String[]{"Reintentos",retries+(st.optInt("localCuts")>0?" · "+st.optInt("localCuts")+" por el teléfono":"")});
         for(int i=0;i<cells.size();i+=2){
             LinearLayout line=ui.row();line.setGravity(Gravity.TOP);line.setPadding(0,ui.dp(S1),0,ui.dp(S1));
             for(int k=i;k<Math.min(i+2,cells.size());k++){LinearLayout cell=ui.column();cell.addView(ui.text(cells.get(k)[0],Type.BODY_SMALL,p.onSurfaceVariant));TextView v=ui.text(cells.get(k)[1],Type.TITLE_SMALL,p.onSurface);v.setFontFeatureSettings("tnum");cell.addView(v);line.addView(cell,new LinearLayout.LayoutParams(0,-2,1));
@@ -212,36 +231,54 @@ public class RecordingActivity extends Screen {
         LinearLayout card=ui.card();card.setBackground(shape(this,p.errorContainer,R_CARD));LinearLayout row=ui.row();row.setGravity(Gravity.TOP);row.addView(ui.icon(R.drawable.ic_alert,p.onErrorContainer,24));row.addView(ui.space(S3));
         LinearLayout texts=ui.column();texts.addView(ui.text("No se pudo transcribir",Type.TITLE_MEDIUM,p.onErrorContainer));texts.addView(ui.text(state.detail,Type.BODY_MEDIUM,p.onErrorContainer));row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));card.addView(row,Ui.fill());
         card.addView(ui.button("Reintentar",R.drawable.ic_refresh,Ui.Style.PRIMARY,v->RecordingActions.transcribe(this,recording,this::reload)),ui.top(S4));
-        card.addView(ui.button("Revisar ajustes",0,Ui.Style.PLAIN,v->startActivity(new Intent(this,SettingsActivity.class))),ui.top(S1));
+        card.addView(ui.button("Revisar ajustes",0,Ui.Style.PLAIN,v->startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true))),ui.top(S1));
         content.addView(card,ui.top(S4));content.addView(timeline(FilesStore.state(this,id),true));
     }
+    // ---------- Transcripción y corrección de voces ----------
+    /** Si no es null, solo se muestran las intervenciones de esta voz ("Ver solo sus intervenciones"). */
+    private String onlySpeaker;
+    /** Intervenciones en pantalla: {vista, inicio ms, fin ms}, para resaltar la que está sonando. */
+    private final List<Object[]> turns=new ArrayList<>();private View playingTurn;
+    /** Fin (ms) del tramo que se escucha desde una hoja; 0 = reproducción normal. */
+    private long playUntil;private Runnable tramoEnded;
+    /** Color de cada voz en esta vista (se calcula una vez por render: las transcripciones largas tienen miles de tramos). */
+    private final Map<String,Integer> colors=new HashMap<>();
+
     private void showTranscript(){
         try{
-            boolean diarized=transcript.data.optBoolean("diarized",true);Map<String,String> names=transcript.speakers();JSONArray segments=transcript.segments();
-            List<String> order=new ArrayList<>(names.keySet());
+            boolean diarized=transcript.diarized();Map<String,String> names=transcript.speakers();JSONArray segments=transcript.segments();
+            if(onlySpeaker!=null&&!names.containsKey(onlySpeaker))onlySpeaker=null;
+            List<String> order=transcript.order();colors.clear();for(String key:names.keySet())colors.put(key,p.speaker(order.indexOf(key)));
             LinearLayout head=ui.row();head.setPadding(ui.dp(S1),ui.dp(S6),0,ui.dp(S2));head.addView(ui.heading("Transcripción",Type.TITLE_MEDIUM));head.addView(ui.flex());
             if(diarized&&!names.isEmpty()){Ui.Btn n=ui.button("Nombrar voces",R.drawable.ic_people,Ui.Style.PLAIN,v->editSpeakers());n.setPadding(ui.dp(S2),0,ui.dp(S1),0);head.addView(n);}
             content.addView(head,Ui.fill());
             if(demo)content.addView(note(R.drawable.ic_info,"Texto de demostración: no proviene de la API. Prueba a nombrar las voces."));
             if(diarized&&names.size()>0){
                 HorizontalScrollView hs=new HorizontalScrollView(this);hs.setHorizontalScrollBarEnabled(false);LinearLayout chips=ui.row();chips.setPadding(0,0,0,ui.dp(S3));hs.addView(chips);
-                for(String key:order){int color=p.speaker(order.indexOf(key));LinearLayout c=ui.row();c.setBackground(ui.ripple(outline(this,0x00000000,p.outline,R_SMALL,false),R_SMALL));c.setPadding(ui.dp(S3),ui.dp(6),ui.dp(14),ui.dp(6));c.setMinimumHeight(ui.dp(36));View dot=new View(this);dot.setBackground(oval(color));c.addView(dot,new LinearLayout.LayoutParams(ui.dp(10),ui.dp(10)));c.addView(ui.space(S2));c.addView(ui.text(names.get(key),Type.BODY_MEDIUM,p.onSurface));c.setClickable(true);c.setContentDescription("Cambiar nombre de "+names.get(key));c.setAccessibilityDelegate(Ui.buttonRole());c.setOnClickListener(v->editSpeakers());LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginEnd(ui.dp(S2));chips.addView(c,lp);}
+                for(String key:names.keySet()){int color=colors.get(key);boolean only=key.equals(onlySpeaker);LinearLayout c=ui.row();
+                    c.setBackground(ui.ripple(only?shape(this,p.secondaryContainer,R_SMALL):outline(this,0x00000000,p.outline,R_SMALL,false),R_SMALL));c.setPadding(ui.dp(S3),ui.dp(6),ui.dp(14),ui.dp(6));c.setMinimumHeight(ui.dp(36));
+                    View dot=new View(this);dot.setBackground(oval(color));c.addView(dot,new LinearLayout.LayoutParams(ui.dp(10),ui.dp(10)));c.addView(ui.space(S2));c.addView(ui.text(names.get(key),Type.BODY_MEDIUM,only?p.onSecondaryContainer:p.onSurface));
+                    c.setClickable(true);c.setContentDescription("Opciones de "+names.get(key));c.setAccessibilityDelegate(Ui.buttonRole());c.setOnClickListener(v->personSheet(key));LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginEnd(ui.dp(S2));chips.addView(c,lp);}
                 content.addView(hs,Ui.fill());
             }
-            if(transcript.data.optInt("parts",1)>1)content.addView(note(R.drawable.ic_info,diarized?"Audio procesado en bloques: una misma persona puede aparecer con dos etiquetas. Dales el mismo nombre si corresponde.":"Audio procesado en bloques: los tiempos indican el inicio de cada bloque."));
-            LinearLayout card=ui.card();card.setPadding(ui.dp(S4),ui.dp(S2),ui.dp(S4),ui.dp(S4));
+            // Aviso honesto: la separación automática puede equivocarse; se oculta cuando el usuario ya revisó las voces.
+            if(diarized&&!transcript.reviewed()&&segments.length()>0)content.addView(note(R.drawable.ic_info,"Voces separadas automáticamente: pueden tener errores. Toca el nombre de una intervención para escuchar y corregir quién habla."));
+            else if(!diarized&&transcript.data.optInt("parts",1)>1)content.addView(note(R.drawable.ic_info,"Audio procesado en bloques: los tiempos indican el inicio de cada bloque."));
+            if(onlySpeaker!=null){LinearLayout f=ui.row();f.setPadding(ui.dp(S1),0,0,ui.dp(S2));f.addView(ui.text("Mostrando solo a "+names.get(onlySpeaker),Type.BODY_MEDIUM,p.onSurfaceVariant),new LinearLayout.LayoutParams(0,-2,1));
+                f.addView(ui.button("Ver todo",0,Ui.Style.PLAIN,v->{onlySpeaker=null;reload();}));content.addView(f,Ui.fill());}
+            LinearLayout card=ui.card();card.setPadding(ui.dp(S2),ui.dp(S1),ui.dp(S2),ui.dp(S3));
             if(segments.length()==0)card.addView(ui.text("No se detectó habla en este audio.",Type.BODY_LARGE,p.onSurfaceVariant));
-            String last=null;
-            for(int i=0;i<segments.length();i++){
+            List<Double> blocks=diarized?transcript.blockStarts(demo?null:FilesStore.state(this,id)):new ArrayList<>();
+            turns.clear();playingTurn=null;int block=0;boolean first=true;
+            for(int i=0;i<segments.length();){
                 JSONObject s=segments.getJSONObject(i);String speaker=s.getString("speaker");double start=s.getDouble("start");
-                if(!speaker.equals(last)){
-                    LinearLayout h=ui.row();h.setPadding(0,ui.dp(last==null?S2:S5),0,ui.dp(S1));
-                    if(diarized){TextView name=ui.text(names.get(speaker),Type.BODY_MEDIUM,p.speaker(order.indexOf(speaker)));name.setTypeface(typeface(Weight.MEDIUM));h.addView(name);h.addView(ui.space(S2));}
-                    TextView time=ui.text(Recording.time((long)(start*1000)),Type.BODY_MEDIUM,p.onSurfaceVariant);time.setFontFeatureSettings("tnum");
-                    if(!demo){time.setTextColor(p.onSurfaceVariant);time.setPadding(ui.dp(S1),ui.dp(S1),ui.dp(S1),ui.dp(S1));time.setBackground(ui.ripple(null,R_SMALL));time.setContentDescription("Escuchar desde "+Recording.time((long)(start*1000)));time.setAccessibilityDelegate(Ui.buttonRole());time.setOnClickListener(v->seekTo(start));}
-                    h.addView(time);card.addView(h,Ui.fill());last=speaker;
-                }else card.addView(ui.space(S2));
-                TextView text=ui.text(s.getString("text").trim(),Type.BODY_LARGE,p.onSurface);text.setTextIsSelectable(true);text.setLineSpacing(ui.dp(4),1f);card.addView(text,Ui.fill());
+                int b=block;while(b+1<blocks.size()&&start>=blocks.get(b+1)-0.05)b++;
+                if(b!=block){block=b;if(onlySpeaker==null){card.addView(blockDivider(b,blocks.get(b)),Ui.fill());first=true;}}
+                // Una intervención = tramos seguidos de la misma voz, sin pausas largas y dentro del mismo bloque.
+                int j=i+1;double end=s.optDouble("end",start);
+                while(j<segments.length()){JSONObject n=segments.getJSONObject(j);double ns=n.getDouble("start");if(!n.getString("speaker").equals(speaker)||ns-end>Transcript.TURN_GAP_S||(block+1<blocks.size()&&ns>=blocks.get(block+1)-0.05))break;end=Math.max(end,n.optDouble("end",ns));j++;}
+                if(onlySpeaker==null||onlySpeaker.equals(speaker)){card.addView(turn(i,j,speaker,start,end,names,diarized,first),Ui.fill());first=false;}
+                i=j;
             }
             content.addView(card,Ui.fill());
             JSONObject st=demo?new JSONObject():FilesStore.state(this,id);long took=st.optLong("doneIn");
@@ -276,7 +313,7 @@ public class RecordingActivity extends Screen {
         new Thread(()->{try{Uri t=Uri.parse(tree);Uri dir=android.provider.DocumentsContract.buildDocumentUriUsingTree(t,android.provider.DocumentsContract.getTreeDocumentId(t));
                 Uri doc=android.provider.DocumentsContract.createDocument(getContentResolver(),dir,"text/plain",TranscriptExport.filename(recording.title));if(doc==null)throw new java.io.IOException();
                 LocalStorage.writeText(this,doc,exportText());Diagnostics.event("transcript_quick_saved",id);runOnUiThread(()->toast("Guardado en "+name));}
-            catch(Exception e){Diagnostics.event("transcript_quick_save_failed",id,"error_class",e.getClass().getSimpleName());runOnUiThread(()->sheet("No se pudo guardar en "+name,"Puede que Android haya retirado el permiso a esa carpeta. Elígela de nuevo en Ajustes o usa \"Otra carpeta\".").primary("Ir a Ajustes",()->startActivity(new Intent(this,SettingsActivity.class))).secondary("Otra carpeta",this::saveAs).show());}}).start();
+            catch(Exception e){Diagnostics.event("transcript_quick_save_failed",id,"error_class",e.getClass().getSimpleName());runOnUiThread(()->sheet("No se pudo guardar en "+name,"Puede que Android haya retirado el permiso a esa carpeta. Elígela de nuevo en Ajustes o usa \"Otra carpeta\".").primary("Ir a Ajustes",()->startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true))).secondary("Otra carpeta",this::saveAs).show());}}).start();
     }
     private void saveAs(){try{Intent pick=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("text/plain").putExtra(Intent.EXTRA_TITLE,TranscriptExport.filename(recording.title));
         // Abre directamente donde guardaste la última vez (p. ej. tu carpeta Inbox de Drive).
@@ -289,17 +326,133 @@ public class RecordingActivity extends Screen {
                 catch(Exception e){Diagnostics.event("transcript_save_as_failed",id,"error_class",e.getClass().getSimpleName());runOnUiThread(()->message("Guardar en…","No se pudo escribir el archivo en esa ubicación. Prueba otra carpeta."));}}).start();}
     }
 
+    /** Una intervención: nombre (toca para corregir quién habla), hora (toca para escuchar ahí mismo) y sus frases. */
+    private View turn(int a,int b,String speaker,double start,double end,Map<String,String> names,boolean diarized,boolean first)throws JSONException{
+        LinearLayout t=ui.column();t.setPadding(ui.dp(S2),ui.dp(first?S1:S3),ui.dp(S2),ui.dp(S2));
+        LinearLayout h=ui.row();String when=Recording.time((long)(start*1000));
+        if(diarized){TextView name=ui.text(names.get(speaker),Type.BODY_MEDIUM,colors.containsKey(speaker)?colors.get(speaker):p.speaker(transcript.colorIndex(speaker)));name.setTypeface(typeface(Weight.MEDIUM));name.setGravity(Gravity.CENTER_VERTICAL);name.setMinHeight(ui.dp(48));name.setPadding(ui.dp(S1),0,ui.dp(S1),0);
+            name.setBackground(ui.ripple(null,R_SMALL));name.setContentDescription(names.get(speaker)+", "+when+". Cambiar quién habla");name.setAccessibilityDelegate(Ui.buttonRole());name.setOnClickListener(v->whoSheet(a,b));h.addView(name);}
+        TextView time=ui.text(when,Type.BODY_MEDIUM,p.onSurfaceVariant);time.setFontFeatureSettings("tnum");time.setGravity(Gravity.CENTER_VERTICAL);time.setMinHeight(ui.dp(48));time.setPadding(ui.dp(S1),0,ui.dp(S1),0);
+        if(!demo){time.setBackground(ui.ripple(null,R_SMALL));time.setContentDescription("Escuchar desde "+when);time.setAccessibilityDelegate(Ui.buttonRole());time.setOnClickListener(v->playTurn(t,start));}
+        h.addView(time);t.addView(h,Ui.fill());
+        JSONArray segments=transcript.segments();
+        for(int k=a;k<b;k++){if(k>a)t.addView(ui.space(S2));TextView text=ui.text(segments.getJSONObject(k).getString("text").trim(),Type.BODY_LARGE,p.onSurface);text.setTextIsSelectable(true);text.setLineSpacing(ui.dp(4),1f);text.setPadding(ui.dp(S1),0,ui.dp(S1),0);t.addView(text,Ui.fill());}
+        turns.add(new Object[]{t,(long)(start*1000),(long)(end*1000)});
+        return t;
+    }
+    /** Separador discreto donde empieza cada bloque: ahí es donde una voz puede cruzarse entre bloques. */
+    private View blockDivider(int index,double startS){
+        LinearLayout r=ui.row();r.setGravity(Gravity.CENTER_VERTICAL);r.setPadding(ui.dp(S2),ui.dp(S4),ui.dp(S2),ui.dp(S1));
+        View a=new View(this);a.setBackgroundColor(p.outlineVariant);r.addView(a,new LinearLayout.LayoutParams(0,ui.dp(1),1));
+        TextView label=ui.text("Bloque "+(index+1)+" · desde "+Recording.time((long)(startS*1000)),Type.BODY_SMALL,p.onSurfaceVariant);label.setPadding(ui.dp(S2),0,ui.dp(S2),0);r.addView(label);
+        View b=new View(this);b.setBackgroundColor(p.outlineVariant);r.addView(b,new LinearLayout.LayoutParams(0,ui.dp(1),1));
+        return r;
+    }
+    private static String quote(String text,int max){String t=text.trim().replaceAll("\\s+"," ");return t.length()>max?t.substring(0,max-1).trim()+"…":t;}
+    /** Botón "Escuchar" dentro de una hoja: reproduce solo ese tramo y no cierra la hoja. */
+    private void listenButton(Sheet s,String label,double from,double to){
+        if(demo)return;Ui.Btn listen=ui.button(label,R.drawable.ic_play,Ui.Style.TONAL,null);
+        listen.setOnClickListener(v->{if(playUntil>0){stopTramo();listen.setText(label);}else if(playRange(from,to))listen.setText("Detener");});
+        tramoEnded=()->listen.setText(label);LinearLayout.LayoutParams lp=Ui.wrap();lp.bottomMargin=ui.dp(S2);s.body.addView(listen,lp);
+        s.onDismiss(()->{tramoEnded=null;if(playUntil>0)stopTramo();});
+    }
+    /** «¿Quién habla aquí?»: escuchar el tramo y elegir a la persona correcta, o intercambiar dos voces desde aquí. */
+    private void whoSheet(int a,int b){try{
+        JSONArray segs=transcript.segments();JSONObject first=segs.getJSONObject(a),last=segs.getJSONObject(b-1);String current=first.getString("speaker");
+        double from=first.getDouble("start"),to=last.optDouble("end",from);Map<String,String> names=transcript.speakers();
+        StringBuilder said=new StringBuilder();for(int k=a;k<b&&said.length()<120;k++)said.append(said.length()==0?"":" ").append(segs.getJSONObject(k).getString("text").trim());
+        Sheet s=sheet("¿Quién habla aquí?",Recording.time((long)(from*1000))+" – "+Recording.time((long)(to*1000))+" · «"+quote(said.toString(),90)+"»");
+        listenButton(s,"Escuchar este tramo",from,to);
+        for(String key:names.keySet()){boolean now=key.equals(current);String name=names.get(key);
+            s.choice(name,now?"Así está ahora":null,now,p.speaker(transcript.colorIndex(key)),()->applyEdit(t->t.assign(a,b,key),"Ahora lo dice "+name,"reassign"));}
+        s.choice("Otra persona","Una voz que no está en la lista",false,0,()->applyEdit(t->t.assign(a,b,t.newPerson()),"Ahora lo dice una persona nueva","new_person"));
+        List<String> others=new ArrayList<>(names.keySet());others.remove(current);
+        if(!others.isEmpty())s.action(R.drawable.ic_swap,others.size()==1?"Intercambiar "+names.get(current)+" y "+names.get(others.get(0))+" desde aquí":"Intercambiar "+names.get(current)+" con otra voz desde aquí",false,()->swapPartner(a,current));
+        if(b-a>1)s.action(R.drawable.ic_edit,"Corregir solo una frase",false,()->pickSentence(a,b));
+        s.show();
+    }catch(Exception e){message("Transcripción","No se pudo abrir esta intervención.");}}
+    private void pickSentence(int a,int b){try{
+        JSONArray segs=transcript.segments();Sheet s=sheet("¿Qué frase?","Elige la frase que dijo otra persona.");
+        for(int k=a;k<b;k++){JSONObject seg=segs.getJSONObject(k);int index=k;s.choice(Recording.time((long)(seg.getDouble("start")*1000))+" · "+quote(seg.getString("text"),70),null,false,()->whoSheet(index,index+1));}
+        s.secondary("Cancelar",null).show();
+    }catch(Exception e){message("Transcripción","No se pudieron cargar las frases.");}}
+    private void swapPartner(int a,String x){try{
+        Map<String,String> names=transcript.speakers();List<String> others=new ArrayList<>(names.keySet());others.remove(x);
+        if(others.size()==1){swapScope(a,x,others.get(0));return;}
+        Sheet s=sheet("¿Con quién se cruzó "+names.get(x)+"?","Elige la otra voz que quedó cruzada.");
+        for(String y:others)s.choice(names.get(y),null,false,p.speaker(transcript.colorIndex(y)),()->swapScope(a,x,y));
+        s.secondary("Cancelar",null).show();
+    }catch(Exception e){message("Transcripción","No se pudieron cargar las voces.");}}
+    /** Intercambiar dos voces desde este punto: hasta el final o solo hasta el fin del bloque. */
+    private void swapScope(int a,String x,String y){try{
+        Map<String,String> names=transcript.speakers();String nx=names.get(x),ny=names.get(y);double from=transcript.segments().getJSONObject(a).getDouble("start");String when=Recording.time((long)(from*1000));
+        List<Double> blocks=transcript.blockStarts(demo?null:FilesStore.state(this,id));int k=0;for(int i=0;i<blocks.size();i++)if(blocks.get(i)<=from+0.05)k=i;double blockEnd=k+1<blocks.size()?blocks.get(k+1):-1;int blockNo=k+1;
+        Sheet s=sheet("Intercambiar "+nx+" y "+ny,"Desde "+when+", lo que dice "+nx+" pasa a "+ny+" y al revés. Si más adelante vuelven a cruzarse, repite desde ese punto.");
+        s.option(R.drawable.ic_swap,"Hasta el final","Hasta "+Recording.time(recording.duration),()->applyEdit(t->t.swap(x,y,from,Double.MAX_VALUE),"Intercambiadas desde "+when,"swap"));
+        if(blockEnd>from)s.option(R.drawable.ic_swap,"Solo en el bloque "+blockNo,"Hasta "+Recording.time((long)(blockEnd*1000)),()->applyEdit(t->t.swap(x,y,from,blockEnd),"Intercambiadas en el bloque "+blockNo,"swap_block"));
+        s.secondary("Cancelar",null).show();
+    }catch(Exception e){message("Transcripción","No se pudo preparar el intercambio.");}}
+    /** Hoja de una persona (desde su chip): escuchar, cambiar nombre, unir con otra, ver solo sus intervenciones. */
+    private void personSheet(String key){try{
+        Map<String,String> names=transcript.speakers();String name=names.get(key);JSONArray segs=transcript.segments();
+        int count=0;double talk=0,firstAt=-1,bestLen=0,bestFrom=0,bestTo=0;
+        for(int i=0;i<segs.length();i++){JSONObject s=segs.getJSONObject(i);if(!s.getString("speaker").equals(key))continue;double a=s.getDouble("start"),b=s.optDouble("end",a);count++;talk+=Math.max(0,b-a);if(firstAt<0)firstAt=a;if(b-a>bestLen&&b-a<=15){bestLen=b-a;bestFrom=a;bestTo=b;}}
+        Sheet s=sheet(name,count+(count==1?" frase":" frases")+" · "+Recording.time((long)(talk*1000))+" en total · desde "+Recording.time((long)(Math.max(0,firstAt)*1000)));
+        if(bestLen>0)listenButton(s,"Escuchar una muestra",bestFrom,bestTo);
+        s.action(R.drawable.ic_edit,"Cambiar nombre",false,()->renameOne(key));
+        if(names.size()>1)s.action(R.drawable.ic_people,"Es la misma persona que…",false,()->mergeSheet(key));
+        boolean only=key.equals(onlySpeaker);s.action(R.drawable.ic_search,only?"Ver todas las intervenciones":"Ver solo sus intervenciones",false,()->{onlySpeaker=only?null:key;reload();});
+        s.action(R.drawable.ic_people,"Nombrar todas las voces",false,this::editSpeakers);
+        s.show();
+    }catch(Exception e){message("Transcripción","No se pudo abrir esta voz.");}}
+    private void mergeSheet(String x){try{
+        Map<String,String> names=transcript.speakers();String nx=names.get(x);
+        Sheet s=sheet("¿Con quién unir a "+nx+"?","Sus intervenciones pasan a esa persona. Puedes deshacerlo.");
+        for(String y:names.keySet()){if(y.equals(x))continue;String ny=names.get(y);s.choice(ny,null,false,p.speaker(transcript.colorIndex(y)),()->applyEdit(t->t.merge(x,y),nx+" se unió con "+ny,"merge"));}
+        s.secondary("Cancelar",null).show();
+    }catch(Exception e){message("Transcripción","No se pudieron cargar las voces.");}}
+    private void renameOne(String key){try{
+        Map<String,String> names=transcript.speakers();String current=names.get(key);
+        Sheet s=sheet("Cambiar nombre","Si le pones el nombre de otra voz, se unen en una sola persona.");
+        EditText f=ui.field(current,"Nombre");if(!current.equals(transcript.defaultLabel(key)))f.setText(current);f.setSingleLine(true);f.setFilters(new InputFilter[]{new InputFilter.LengthFilter(80)});s.add(f);
+        s.primary("Guardar",Ui.Style.PRIMARY,()->{Map<String,String> one=new LinkedHashMap<>();one.put(key,f.getText().toString().trim());saveNames(one);return true;}).secondary("Cancelar",null).show();
+    }catch(Exception e){message("Transcripción","No se pudo cargar el nombre.");}}
+    /** Aplica una corrección, guarda y ofrece "Deshacer". */
+    private void applyEdit(Transcript.Edit op,String done,String action){
+        try{JSONObject before;
+            if(demo){before=new JSONObject(transcript.data.toString());op.apply(transcript);writeDemo();}
+            else before=Transcript.edit(this,id,op);
+            Diagnostics.event("transcript_edited",demo?null:id,"action",action);
+            reload();snackbar(done,"Deshacer",()->undo(before));
+        }catch(Exception e){message("Transcripción","No se pudo guardar el cambio. Vuelve a intentarlo.");}
+    }
+    private void undo(JSONObject before){
+        try{if(demo){transcript=new Transcript(before);writeDemo();}else Transcript.replace(this,id,before);Diagnostics.event("transcript_edited",demo?null:id,"action","undo");reload();}
+        catch(Exception e){message("Transcripción","No se pudo deshacer el cambio.");}
+    }
+    private void writeDemo()throws Exception{FilesStore.write(new java.io.File(getFilesDir(),"demo-transcript.json"),transcript.data);}
+    /** Guarda nombres; las voces con el mismo nombre se unen (con "Deshacer"). */
+    private void saveNames(Map<String,String> names){
+        hideSnackbar();
+        try{int[] merged={0};JSONObject before;
+            if(demo){before=new JSONObject(transcript.data.toString());merged[0]=transcript.applyNames(names);writeDemo();}
+            else before=Transcript.edit(this,id,t->merged[0]=t.applyNames(names));
+            reload();
+            if(merged[0]>0)snackbar(merged[0]==1?"Se unieron 2 voces con el mismo nombre":"Se unieron las voces con el mismo nombre","Deshacer",()->undo(before));else toast("Nombres guardados");
+        }catch(Exception e){message("No se guardaron los nombres","Vuelve a intentarlo.");}
+    }
+
     // ---------- Hablantes ----------
     private void editSpeakers(){try{
-        Map<String,String> current=transcript.speakers();List<String> order=new ArrayList<>(current.keySet());Map<String,EditText> fields=new LinkedHashMap<>();
-        Sheet s=sheet("Nombrar voces","El nombre se aplica a todas las intervenciones de esa voz.");
-        for(String key:order){LinearLayout row=ui.row();row.setPadding(0,ui.dp(S1),0,ui.dp(S1));View dot=new View(this);dot.setBackground(oval(p.speaker(order.indexOf(key))));row.addView(dot,new LinearLayout.LayoutParams(ui.dp(12),ui.dp(12)));row.addView(ui.space(S3));
-            EditText f=ui.field("Persona "+(order.indexOf(key)+1),"Nombre para Persona "+(order.indexOf(key)+1));String value=current.get(key);if(!value.startsWith("Persona "))f.setText(value);f.setFilters(new InputFilter[]{new InputFilter.LengthFilter(80)});row.addView(f,new LinearLayout.LayoutParams(0,-2,1));fields.put(key,f);s.add(row);}
-        s.primary("Guardar nombres",Ui.Style.PRIMARY,()->{try{
+        Map<String,String> current=transcript.speakers();Map<String,EditText> fields=new LinkedHashMap<>();
+        Sheet s=sheet("Nombrar voces","El nombre se aplica a todas las intervenciones de esa voz. Si dos voces son la misma persona, dales el mismo nombre y se unen.");
+        for(String key:current.keySet()){LinearLayout row=ui.row();row.setPadding(0,ui.dp(S1),0,ui.dp(S1));View dot=new View(this);dot.setBackground(oval(p.speaker(transcript.colorIndex(key))));row.addView(dot,new LinearLayout.LayoutParams(ui.dp(12),ui.dp(12)));row.addView(ui.space(S3));
+            String label=transcript.defaultLabel(key);EditText f=ui.field(label,"Nombre para "+label);String value=current.get(key);if(!value.equals(label))f.setText(value);f.setFilters(new InputFilter[]{new InputFilter.LengthFilter(80)});row.addView(f,new LinearLayout.LayoutParams(0,-2,1));fields.put(key,f);s.add(row);}
+        if(transcript.edited()){Ui.Btn restore=ui.button("Restaurar voces originales",R.drawable.ic_refresh,Ui.Style.PLAIN,v->{s.dismiss();confirm("¿Restaurar voces originales?","Se deshacen todas las correcciones de quién habla. Los nombres se mantienen.","Restaurar",false,()->applyEdit(Transcript::restore,"Voces originales restauradas","restore"));});
+            LinearLayout.LayoutParams lp=Ui.wrap();lp.topMargin=ui.dp(S2);s.body.addView(restore,lp);}
+        s.primary("Guardar nombres",Ui.Style.PRIMARY,()->{
             Map<String,String> names=new LinkedHashMap<>();for(Map.Entry<String,EditText> f:fields.entrySet())names.put(f.getKey(),f.getValue().getText().toString().trim());
-            if(demo){JSONObject mapping=new JSONObject();for(Map.Entry<String,String> n:names.entrySet())mapping.put(n.getKey(),n.getValue());transcript.data.put("names",mapping);FilesStore.write(new java.io.File(getFilesDir(),"demo-transcript.json"),transcript.data);}
-            else Transcript.rename(this,id,names);
-            reload();toast("Nombres guardados");return true;}catch(Exception e){message("No se guardaron los nombres","Vuelve a intentarlo.");return false;}
+            saveNames(names);return true;
         }).secondary("Cancelar",null).show();
     }catch(Exception e){message("Transcripción","No se pudieron cargar las voces.");}}
 

@@ -30,6 +30,19 @@
   - Preguntar al usuario si quiere aplicarlo a las grabaciones que ya existen, por ejemplo con un botón "Aplicar a todas" en Ajustes.
 - **Ubicación en Ajustes:** sección "Grabación", interruptor "Agregar la fecha al nombre" con el ejemplo `2026-09-23 Reunión` como texto de apoyo.
 
+## Hechas en la 0.5.0
+- ✅ Etapas 1 y 2 de `PLAN-voces.md`: «Mi voz», muestras limpias con nombres únicos, bloques de hasta 12 min, sin fantasmas, «¿Quién habla aquí?», intercambiar desde aquí, unir personas, Deshacer, restaurar y escuchar sin perder el lugar.
+
+## Por validar con el usuario (0.5.0)
+- Grabar «Mi voz» y hacer una conversación nueva de 10 a 15 min con la Fran. Escuchar 5 puntos y marcar si están bien o mal. **Éxito:** 2 personas (o 3 que se unen con el mismo nombre), el usuario siempre con su nombre y como máximo 1 error en 5 puntos.
+- Recortar una copia de 00:00–05:00 de «Prueba con la Fran» y transcribirla con «Mi voz» para comparar con el resultado anterior.
+
+## Etapa 3 de `PLAN-voces.md` (opcional, sin fecha)
+- Voces conocidas de otras personas (p. ej. la Fran) y elegir «¿Quiénes hablan?» al transcribir (máx. 4).
+- Volver a transcribir (con «Mi voz», separando voces otra vez o solo texto), guardando la versión anterior.
+- «¿Cuántas personas hablan?», solo para avisar si aparecen más de las esperadas.
+- Plan B por el retiro de gpt-4o-transcribe-diarize (26-02-2027).
+
 ## Hechas en la 0.4.4
 - ✅ Descartar grabaciones de menos de 3 s (sin "Deshacer" por ahora: el aviso solo informa).
 - ✅ Permiso de batería en la tarjeta de proceso y en Ajustes, con la ruta por marca (vivo, Xiaomi, Samsung, Huawei, OPPO).

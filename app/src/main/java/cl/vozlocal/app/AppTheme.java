@@ -28,6 +28,8 @@ final class AppTheme {
         final int surface,surfaceContainerLowest,surfaceContainerLow,surfaceContainer,surfaceContainerHigh,surfaceContainerHighest;
         final int onSurface,onSurfaceVariant,outline,outlineVariant;
         final int error,onError,errorContainer,onErrorContainer;
+        /** Roles invertidos (snackbar con "Deshacer"): superficie oscura en tema claro y viceversa. */
+        final int inverseSurface,inverseOnSurface,inversePrimary;
         // Roles de la app, derivados de los anteriores
         final int background,card,record,ripple;
         final int[] speakers;
@@ -58,6 +60,7 @@ final class AppTheme {
                 surface=0xFFFBF8FF;surfaceContainerLowest=0xFFFFFFFF;surfaceContainerLow=0xFFF5F2FA;surfaceContainer=0xFFEFEDF4;surfaceContainerHigh=0xFFE9E7EF;surfaceContainerHighest=0xFFE3E1E9;
                 onSurface=0xFF1B1B21;onSurfaceVariant=0xFF45464F;outline=0xFF767680;outlineVariant=0xFFC6C5D0;
             }
+            inverseSurface=onSurface;inverseOnSurface=surfaceContainerLow;inversePrimary=this.dynamic?sys(c,dark?"system_accent1_600":"system_accent1_200"):(dark?0xFF3A5BC7:0xFFB5C4FF);
             error=dark?0xFFFFB4AB:0xFFBA1A1A;onError=dark?0xFF690005:0xFFFFFFFF;errorContainer=dark?0xFF93000A:0xFFFFDAD6;onErrorContainer=dark?0xFFFFDAD6:0xFF410002;
             // Fondo de pantalla un tono más oscuro que las tarjetas, como en los Ajustes de Android.
             background=dark?surface:surfaceContainer;card=dark?surfaceContainer:surfaceContainerLowest;

@@ -56,7 +56,7 @@ final class Diagnostics {
         for(Object[] item:found.subList(0,Math.min(5,found.size()))){
             Recording r=(Recording)item[1];JSONObject st=(JSONObject)item[2];org.json.JSONArray log=(org.json.JSONArray)item[3];
             out.append("\n· Grabación ").append(r.id,0,8).append(" · audio ").append(Recording.time(r.duration)).append(" · modelo ").append(st.optString("model","?")).append(" · voces ").append(st.optBoolean("speakers")?"sí":"no")
-               .append(" · bloques ").append(st.optInt("blocksDone")).append('/').append(st.optInt("blocks")).append(" · reintentos ").append(st.optInt("retries",st.optInt("attempts"))).append(" (cortes del teléfono ").append(st.optInt("cuts")).append(')').append(" · estado ").append(st.optBoolean("requested")?"en proceso":st.optBoolean("failed")?"error":"terminado").append("\n");
+               .append(" · bloques ").append(st.optInt("blocksDone")).append('/').append(st.optInt("blocks")).append(" · reintentos ").append(st.optInt("retries",st.optInt("attempts"))).append(" (cortes del teléfono ").append(st.optInt("localCuts")).append(')').append(" · estado ").append(st.optBoolean("requested")?"en proceso":st.optBoolean("failed")?"error":"terminado").append("\n");
             if(st.has("doneIn"))out.append("  tiempo total ").append(Recording.time(st.optLong("doneIn"))).append("\n");
             for(int i=0;i<log.length();i++){JSONObject e=log.optJSONObject(i);if(e!=null)out.append("  ").append(f.format(new Date(e.optLong("t")))).append("  ").append(e.optString("m")).append("\n");}
         }
