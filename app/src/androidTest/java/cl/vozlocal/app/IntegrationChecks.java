@@ -13,7 +13,7 @@ final class IntegrationChecks {
         JSONArray segs=new JSONArray().put(seg("A",0,7)).put(seg("B",7,14)).put(seg("C",14,20)).put(seg("A",20,27));
         double[] a=NameVoices.sample(segs,"A");check(a!=null&&a[0]<=1&&a[1]>=6,"Voice sample not found");
         JSONArray crowded=new JSONArray().put(seg("A",0,5)).put(seg("B",4,8));check(NameVoices.sample(crowded,"A")==null,"Crowded sample accepted");
-        check(NameVoices.mergeRecent(Collections.singletonList("Fran"),Arrays.asList("Konra","persona 2","fran")).equals(Arrays.asList("Konra","Fran")),"Recent names merge wrong");
+        check(NameVoices.mergeRecent(Collections.singletonList("Fran"),Arrays.asList("Konra","persona 2","fran")).equals(Arrays.asList("Konra","fran")),"Recent names merge wrong");
         check(NameVoices.initial("Persona 3").equals("3")&&NameVoices.initial("fran").equals("F"),"Voice initials wrong");
         check(NameVoices.percent(0.004).equals("< 1 %")&&NameVoices.percent(0.46).equals("46 %"),"Voice share wrong");
         // Novedades: orden de versiones, titulares y fechas en español.

@@ -107,6 +107,14 @@ final class WaveData {
             codec=MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME));codec.configure(format,null,null,0);codec.start();started=true;
             double[] sum=new double[N];int[] count=new int[N];
             if(!report(job,progress,envelope(sum,count),0f))return null; // primer dibujo: la línea base
+            // Audios largos: en vez de decodificar TODO (10 min tardaban 2,5 min en el emulador), se mide una ventana
+            // corta en el centro de cada tramo. El costo queda fijo (N ventanas), dure 5 o 90 minutos.
+            if(durationUs>WINDOWED_FROM_US){
+                if(!windowed(extractor,codec,durationUs,rate,channels,sum,count,job,progress))return null;
+                boolean any=false;for(int n:count)if(n>0){any=true;break;}
+                if(!any)return null;
+                float[] v=envelope(sum,count);store(c,r,v,bytes);if(progress!=null)progress.update(v,1f);return v;
+            }
             MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();
             boolean inputDone=false;long lastOutput=SystemClock.elapsedRealtime(),lastPartial=lastOutput,reachedUs=0;
             while(true){
@@ -149,6 +157,64 @@ final class WaveData {
             if(codec!=null){if(started)try{codec.stop();}catch(Exception ignored){}try{codec.release();}catch(Exception ignored){}}
             extractor.release();
         }
+    }
+    /** Desde esta duración se mide por ventanas (más corto: se decodifica todo, es rápido y exacto). */
+    private static final long WINDOWED_FROM_US=90_000_000L;
+    /** Muestras (por canal) que se miden en cada ventana (~90 ms a 44,1 kHz) y tope de cuadros AAC por ventana. */
+    private static final int WINDOW_FRAMES=4096,WINDOW_MAX_FEED=10;
+    /** Mide la energía en una ventana corta centrada en cada tramo: seek → flush → decodificar unos cuadros. */
+    private static boolean windowed(MediaExtractor extractor,MediaCodec codec,long durationUs,int rate,int channels,double[] sum,int[] count,Job job,Progress progress){
+        MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();int encoding=AudioFormat.ENCODING_PCM_16BIT;long lastPartial=SystemClock.elapsedRealtime();
+        for(int b=0;b<N;b++){
+            if(Thread.currentThread().isInterrupted()){job.cancelled=true;return false;}
+            long target=(long)((b+0.5)*durationUs/N);
+            extractor.seekTo(target,MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
+            try{codec.flush();}catch(IllegalStateException e){return false;}
+            long got=0;int fed=0;boolean eos=false;long started=SystemClock.elapsedRealtime(),lastOut=started;
+            while(got<WINDOW_FRAMES){
+                if(!eos&&fed<WINDOW_MAX_FEED){
+                    int in=codec.dequeueInputBuffer(2000);
+                    if(in>=0){ByteBuffer buffer=codec.getInputBuffer(in);int size=buffer==null?-1:extractor.readSampleData(buffer,0);
+                        if(size<0){codec.queueInputBuffer(in,0,0,0,MediaCodec.BUFFER_FLAG_END_OF_STREAM);eos=true;}
+                        else{codec.queueInputBuffer(in,0,size,Math.max(0,extractor.getSampleTime()),0);extractor.advance();fed++;}}
+                }
+                int out=codec.dequeueOutputBuffer(info,2000);long now=SystemClock.elapsedRealtime();
+                if(out==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED){
+                    MediaFormat f=codec.getOutputFormat();
+                    if(f.containsKey(MediaFormat.KEY_SAMPLE_RATE))rate=f.getInteger(MediaFormat.KEY_SAMPLE_RATE);
+                    if(f.containsKey(MediaFormat.KEY_CHANNEL_COUNT))channels=f.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
+                    encoding=f.containsKey(MediaFormat.KEY_PCM_ENCODING)?f.getInteger(MediaFormat.KEY_PCM_ENCODING):AudioFormat.ENCODING_PCM_16BIT;
+                }else if(out>=0){
+                    lastOut=now;
+                    if(info.size>0&&(info.flags&MediaCodec.BUFFER_FLAG_CODEC_CONFIG)==0){
+                        ByteBuffer data=codec.getOutputBuffer(out);
+                        if(data!=null){int ch=Math.max(1,channels),width=encoding==AudioFormat.ENCODING_PCM_8BIT?1:encoding==AudioFormat.ENCODING_PCM_16BIT?2:4;
+                            // La ventana entera cae en este tramo (90 ms frente a tramos de 150 ms o más): se suma todo ahí.
+                            if(!accumulateInto(data,info,encoding,ch,b,sum,count))return false;
+                            got+=info.size/(width*ch);}
+                    }
+                    boolean end=(info.flags&MediaCodec.BUFFER_FLAG_END_OF_STREAM)!=0;
+                    codec.releaseOutputBuffer(out,false);
+                    if(end)break;
+                }else if((eos||fed>=WINDOW_MAX_FEED)&&now-lastOut>300)break;
+                if(now-started>3000)break; // un tramo que no decodifica no frena todo
+            }
+            long now=SystemClock.elapsedRealtime();
+            if(now-lastPartial>=PARTIAL_EVERY_MS){lastPartial=now;if(!report(job,progress,envelope(sum,count),(b+1f)/N))return false;}
+        }
+        return true;
+    }
+    /** Suma toda la energía de un bloque de PCM en el tramo b (modo por ventanas). false si la codificación no se puede leer. */
+    private static boolean accumulateInto(ByteBuffer data,MediaCodec.BufferInfo info,int encoding,int channels,int b,double[] sum,int[] count){
+        data.position(info.offset);data.limit(info.offset+info.size);
+        ByteBuffer pcm=data.slice().order(ByteOrder.nativeOrder());int width;
+        switch(encoding){case AudioFormat.ENCODING_PCM_16BIT:width=2;break;case AudioFormat.ENCODING_PCM_FLOAT:case AudioFormat.ENCODING_PCM_32BIT:width=4;break;case AudioFormat.ENCODING_PCM_8BIT:width=1;break;default:return false;}
+        int frames=info.size/(width*channels);
+        ShortBuffer s16=encoding==AudioFormat.ENCODING_PCM_16BIT?pcm.asShortBuffer():null;FloatBuffer f32=encoding==AudioFormat.ENCODING_PCM_FLOAT?pcm.asFloatBuffer():null;IntBuffer i32=encoding==AudioFormat.ENCODING_PCM_32BIT?pcm.asIntBuffer():null;
+        for(int j=0;j<frames;j+=2){int base=j*channels;double e=0;
+            for(int ch=0;ch<channels;ch++){double x;if(s16!=null)x=s16.get(base+ch)/32768d;else if(f32!=null)x=f32.get(base+ch);else if(i32!=null)x=i32.get(base+ch)/2147483648d;else x=((pcm.get(base+ch)&0xff)-128)/128d;e+=x*x;}
+            sum[b]+=e/channels;count[b]++;}
+        return true;
     }
     /** Publica el avance para quien espere esta grabación. false si hay que cancelar. */
     private static boolean report(Job job,Progress progress,float[] partial,float done){

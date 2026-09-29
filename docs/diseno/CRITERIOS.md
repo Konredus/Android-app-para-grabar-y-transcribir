@@ -105,6 +105,16 @@ El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bai
 - **Formas de Material:** small 8 (chips) · medium 12 (campos) · large 16 (tarjetas) · extra-large 28 (hojas) · full (botones en píldora, indicador de navegación, avatares).
 - **Espacio:** múltiplos de 4 dp (`S1=4 … S10=40`), con 16 de margen de pantalla y 24 dentro de las hojas.
 - **Movimiento:** 100 ms al presionar, 250 ms al aparecer y 400 ms para transformar el botón de grabar.
+- **Curvas (0.6.0, Material 3 Expressive):**
+  - `EMPHASIZED`, `EMPHASIZED_DECELERATE` y `EMPHASIZED_ACCELERATE` para entradas y salidas.
+  - Resortes (`SPATIAL`) solo para posición y tamaño; **nunca rebote en color ni transparencia**.
+  - Se respeta «Quitar animaciones» de Android: sin animación.
+- **Vibración con significado** (`Ui.haptic(v, Ui.Haptic.X)`):
+  - CONFIRM: empezar o detener, ★ Marcar, transcripción lista, guardado en 0-Inbox.
+  - REJECT: error o toque ignorado.
+  - TOGGLE_ON / TOGGLE_OFF: interruptores.
+  - TICK: pasar por una ★ al arrastrar la onda.
+  - En Android antiguo se usa la vibración básica.
 
 ---
 
@@ -112,7 +122,8 @@ El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bai
 
 | Componente M3 | Código | Reglas |
 | --- | --- | --- |
-| **Botones** | `ui.button(texto, ícono, Style, click)` | Píldora de 52 dp. `PRIMARY` = Filled (1 por pantalla), `TONAL` = Filled tonal, `SECONDARY` = Outlined, `PLAIN` = Text, `DESTRUCTIVE` = error |
+| **Botones** | `ui.button(texto, ícono, Style, click)` | Píldora de 52 dp. `PRIMARY` = Filled (1 por pantalla), `TONAL` = Filled tonal, `SECONDARY` = Outlined, `PLAIN` = Text, `DESTRUCTIVE` = error. Al presionar se hunden a 0,96 y cierran un poco las esquinas |
+| **Botón de dos partes** | `ui.split(texto, ícono, principal, más)` | 52 dp, con 2 dp entre la acción principal y ▾. `setTonal` para el estado «hecho» (`secondaryContainer`). `setBusy` muestra un indicador de carga y `showDone()` lo convierte en ✓. Es el **botón que avanza** del detalle: Transcribir → Revisar voces → Guardar en 0-Inbox → ✓ En 0-Inbox · hh:mm / Actualizar |
 | **Botón de ícono** | `ui.iconButton(...)` | 48 dp mínimo. Barra superior: ← a la izquierda y ⋮ a la derecha, en `onSurface` / `onSurfaceVariant` |
 | **Barra de navegación** | `BottomNav` | 3 destinos con ícono y texto. El activo lleva una píldora `secondaryContainer`. Un punto rojo indica grabación o trabajo en curso |
 | **Hoja inferior** | `Sheet` | Fondo `surfaceContainerLow`, asa de 32×4 y esquinas de 28. Menús sin tarjeta interna, íconos neutros y la destructiva en rojo al final. Para elegir entre opciones usa **botones de radio** |
@@ -120,9 +131,12 @@ El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bai
 | **Subtítulo de sección** | `ui.section()` | `TITLE_SMALL` en `primary`, sin forzar mayúsculas |
 | **Chips** | `ui.filter()` / `ui.chip()` / `ui.outlinedChip()` | Esquinas de 8 dp. El filtro sin elegir lleva borde; el elegido va en `secondaryContainer` con ✓ |
 | **Avatar / ícono de estado** | `ui.tile()` | Círculo tonal. Estado: Transcrito = `primaryContainer`, En proceso = `secondaryContainer`, Error = `errorContainer`, Sin transcribir = `surfaceContainerHighest` |
-| **Interruptor** | dentro de `switchRow` | Riel `primary` + perilla `onPrimary` al activarse; riel `surfaceContainerHighest` al apagarse |
+| **Interruptor** | `ui.switchRow(...)` → `Ui.SwitchRow` | Interruptor real de Material 3: riel de 52×32; perilla de 16 dp apagada y 24 dp encendida, con ✓; vibración TOGGLE |
+| **Íconos** | `res/drawable/ic_*` | Material Symbols Rounded, peso 400 y contorno. Rellenos solo play, pausa, detener y la pestaña activa |
 | **Botón de grabar** | `RecordButton` | Círculo → cuadrado (400 ms); halo según el volumen |
-| **Onda** | `Waveform` | Escala en dB; en reposo, línea punteada tenue |
+| **Onda en vivo** | `Waveform` | Barras redondeadas sobre tarjeta (~130 dp). Lo grabado va en `onSurfaceVariant`, lo más nuevo en rojo de grabar, gris en pausa y ★ encima |
+| **Onda del reproductor** | detalle (`WaveData`) | Envolvente de 600 puntos: lo escuchado en `primary`, lo que falta en `outlineVariant`, franja fina con el color de quién habla y puntos ★. Tocar o arrastrar mueve el audio |
+| **Anillo de avance** | Biblioteca | Progreso real (partes listas o audio procesado), nunca un porcentaje inventado |
 | **Selector de tramo** | `RangeView` | Dos manijas; los campos numéricos se mantienen para precisión y accesibilidad |
 | **Estado de grabación** | `RecState` | **Único lugar** que decide texto, contenedor, color "on" e ícono de cada estado |
 | **Snackbar** | `Screen.snackbar(texto, acción, run)` | Confirma un cambio y ofrece **Deshacer** por 6 s. Colores invertidos (`inverseSurface`, `inverseOnSurface`, acción en `inversePrimary`). Va sobre la zona inferior fija, sin tapar el contenido. Se usa en vez de pedir confirmación para cambios reversibles |
@@ -136,6 +150,10 @@ El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bai
 <img src="capturas/01-grabar.png" width="200"> <img src="capturas/02-grabando.png" width="200"> <img src="capturas/03-guardada.png" width="200"> <img src="capturas/10-bienvenida.png" width="200">
 
 - El botón rojo es el elemento más grande y está en la zona del pulgar.
+- **Grabando (0.6.0):** tres controles fijos, [Pausa] [Detener] [★ Marcar con contador]. Detener ocupa exactamente el lugar del botón de grabar y se ignora durante el primer segundo, para evitar grabaciones accidentales. En pausa, el tiempo parpadea, la onda queda gris y «Reanudar» se destaca. «Añadir título» sigue disponible como botón secundario.
+- **Cabecera:** si todo está bien, una línea tranquila «✓ Listo para transcribir». Si hay una transcripción lista sin abrir, dice «Revisar · «título»» y la abre.
+- **«Última grabación»** reemplaza la tarjeta de WhatsApp, con el mismo tamaño para que la pantalla siga fija. Muestra su estado y UN botón con el siguiente paso (`Next`).
+- Al detener, la hoja «Grabación guardada» abre el título con el teclado listo, muestra la fecha como prefijo fijo y ofrece «Ver grabación».
 - **Modo foco** al grabar: importar y recientes se desvanecen **sin dejar de ocupar su lugar**, así el botón de detener no se mueve (se corrigió después de probarlo).
 - **Pantalla fija, sin desplazamiento.** Si la pantalla es baja, "Recientes" se oculta sola (`fitHome`) para que el botón de grabar nunca quede apretado.
 - El chip de la cabecera resume el estado con esta prioridad: falta la clave → **Transcribiendo «…»** (con indicador de carga, abre el detalle) → **Revisar transcripción** (error) → Transcripción lista. Antes era una tarjeta aparte que desplazaba toda la vista.
@@ -145,12 +163,24 @@ El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bai
 <img src="capturas/04-biblioteca.png" width="200"> <img src="capturas/05-opciones.png" width="200">
 
 - Búsqueda, chips de filtro de Material (solo los que tienen elementos) y secciones por fecha.
+- **Filas de 3 líneas (0.6.0):**
+  1. título;
+  2. el comienzo del texto («Konrad: la idea es…») o el estado;
+  3. duración en palabras · personas con su color · «✓ En 0-Inbox» o «Por guardar».
+- Lo terminado va en tono neutro. Solo se destaca lo que pide acción: el anillo de avance, un error con «Reintentar» en la misma fila, o un punto «nuevo».
+- Filtros: Todas · Por guardar · En proceso · Sin transcribir · Con error. Tocar el filtro activo lo quita, y «Sin resultados» ofrece «Quitar filtro».
 - Tocar una fila abre el detalle; ⋮ o una pulsación larga abren la hoja de opciones.
 
 ### Detalle
 <img src="capturas/06-detalle-transcrito.png" width="200"> <img src="capturas/07-detalle-sin-transcribir.png" width="200"> <img src="capturas/13-detalles-proceso.png" width="200">
 
-- Orden: título → estado → escuchar → leer → exportar.
+- **Detalle como documento (0.6.0):**
+  - Orden: título con lápiz → ficha (personas con su % y «voces revisadas») → **Nota para tu segundo cerebro** (generada por IA, se marca como tal) → Momentos ★ → transcripción a todo el ancho.
+  - Abajo, fijo: onda del reproductor, controles compactos y **un botón principal que avanza**.
+  - Las demás salidas (copiar, compartir, .txt, .md, otra carpeta, volver a transcribir) van en ▾.
+- **La transcripción sigue al audio** mientras suena. Si el usuario se desplaza, aparece «↓ Volver a lo que suena». Los separadores de parte solo se ven al corregir voces.
+- Pie en palabras: «Transcrito el 23 sept · tardó 2 min · ≈ US$0,02». El nombre del modelo va solo en los detalles del proceso.
+- (Hasta 0.5.x) Orden: título → estado → escuchar → leer → exportar.
 - Los nombres de los hablantes van en su color; los tiempos van en gris y, al tocarlos, reproducen desde ese punto.
 - Barra fija de salida con acciones neutras: Copiar · Compartir · .txt · **Guardar en…** (sirve para Google Drive).
 - **"¿Separar voces?"** al transcribir (configurable: preguntar, siempre, nunca). Cada opción muestra para qué sirve, su velocidad y el costo estimado de ese audio: el usuario decide con información, no a ciegas.
@@ -170,11 +200,15 @@ El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bai
 <img src="capturas/08-importar-recorte.png" width="200">
 
 - Un solo paso visible a la vez; el botón Guardar queda fijo abajo.
+- (0.6.0) Abre directo el selector de archivos. Salir de la pantalla **no** cancela la importación, que sigue en segundo plano con barra de avance. El título va sin extensión, y la ayuda de WhatsApp está aquí.
 
 ### Ajustes
 <img src="capturas/09-ajustes.png" width="200"> <img src="capturas/11-oscuro.png" width="200"> <img src="capturas/12-material-you-oscuro.png" width="200">
 
 - Tarjeta de estado arriba: tonal si falta un paso, neutra si todo está listo.
+- **Orden (0.6.0):** Tu flujo (0-Inbox, nota, IA de la nota, automático, fecha, voces conocidas) → Servicio de transcripción → Energía y red → Copias → Apariencia → Ayuda y soporte (novedades y versiones, informe; «Borrar registros» sin rojo).
+- Una línea de apoyo por fila; lo largo va en «Más información».
+- «Comprobar conexión» muestra el resultado en la misma fila, sin una hoja que haya que cerrar.
 - Los cambios se hacen en hojas con botones de radio.
 
 ---
@@ -200,6 +234,7 @@ El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bai
 - [ ] ¿Algún elemento cambia de lugar entre estados? (No debería.)
 - [ ] ¿Pasa la regresión? `adb shell am instrument -w cl.vozlocal.app.test/cl.vozlocal.app.RecorderSmokeTest`
 - [ ] ¿Actualizaste las capturas y este documento?
+- [ ] ¿Agregaste la entrada de la versión en `app/src/main/assets/novedades.json`? Van de 3 a 6 puntos en lenguaje simple, con formato «Titular: detalle».
 
 ### Cómo probar en el emulador
 ```text
@@ -249,3 +284,7 @@ adb exec-out screencap -p > captura.png    # captura para comparar
 | 2026-09-28 | Muestras con nombres únicos («voz_1») y solo de tramos limpios | Las letras «A»/«B» podían chocar con las que el modelo da a voces desconocidas; un tramo con dos voces contagiaba el error a todos los bloques |
 | 2026-09-28 | Bloques parejos de hasta 12 min al separar voces (antes 5) | Menos uniones entre bloques, menos oportunidades de cruce; se mantiene bajo el límite de 1400 s del modelo sin volver lento el primer bloque |
 | 2026-09-28 | Corregir con un toque + Deshacer, en vez de confirmar | Corregir voces es frecuente y reversible: pedir confirmación en cada cambio agrega fricción; el snackbar deja arrepentirse |
+| 2026-09-29 | Un botón principal que avanza con la grabación (`Next`) | Guardar en 0-Inbox era la única salida que el usuario usaba, pero era 1 de 5 botones iguales (21 s para encontrarlo). Un paso claro por estado cumple el principio de «una acción principal» |
+| 2026-09-29 | La nota para el segundo cerebro, con IA (OpenAI o Claude), usa marcas {S1} en vez de nombres | La nota sigue siendo válida después de nombrar o corregir voces: los nombres se ponen al mostrarla |
+| 2026-09-29 | Volver a transcribir con alternativas que cambian algo, y la versión anterior se guarda | Repetir exactamente lo mismo no mejora el resultado. «Segunda pasada con tus correcciones» usa las voces corregidas como muestras en todo el audio |
+| 2026-09-29 | Marcar momentos ★ al grabar, también desde la notificación | Lo pidió el usuario: poder saltar a lo importante y destacarlo en la nota |

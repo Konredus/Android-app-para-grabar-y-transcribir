@@ -30,6 +30,29 @@
   - Preguntar al usuario si quiere aplicarlo a las grabaciones que ya existen, por ejemplo con un botón "Aplicar a todas" en Ajustes.
 - **Ubicación en Ajustes:** sección "Grabación", interruptor "Agregar la fecha al nombre" con el ejemplo `2026-09-23 Reunión` como texto de apoyo.
 
+## Hechas en la 0.6.0
+- ✅ Volver a transcribir, con alternativas que cambian algo; la versión anterior se guarda.
+- ✅ Novedades de cada versión: hoja al actualizar, más el historial en Ajustes.
+- ✅ Nota para tu segundo cerebro (OpenAI o Claude), .md en 0-Inbox; «Actualizar» reemplaza el mismo archivo.
+- ✅ ★ Marcar momentos, también desde la notificación.
+- ✅ Propuesta de interfaz PRO (`diseno/PROPUESTA-0.6.md`):
+  - botón que avanza;
+  - Grabar viva;
+  - avance a la vista;
+  - detalle como documento con onda;
+  - Biblioteca de 3 líneas;
+  - nombrar voces en una pasada;
+  - Ajustes reordenados;
+  - íconos, interruptores, vibraciones y movimiento.
+- ✅ Importar: salir ya no cancela.
+- ✅ Biblioteca de voces conocidas: varias voces guardadas, para editarlas o eliminarlas (pedido del 2026-09-29).
+
+## Por validar en el teléfono (0.6.0)
+- Guardar en Drive/0-Inbox y después «Actualizar»: debe reemplazar el mismo archivo, sin crear «(1)».
+- La nota con OpenAI (gpt-6-luna) y con Claude (claude-sonnet-5-5), con una clave real.
+- ★ desde la notificación con el teléfono bloqueado (vivo).
+- La onda de un audio de 60 min: cuánto tarda en el teléfono.
+
 ## Hechas en la 0.5.0
 - ✅ Etapas 1 y 2 de `PLAN-voces.md`: «Mi voz», muestras limpias con nombres únicos, bloques de hasta 12 min, sin fantasmas, «¿Quién habla aquí?», intercambiar desde aquí, unir personas, Deshacer, restaurar y escuchar sin perder el lugar.
 
