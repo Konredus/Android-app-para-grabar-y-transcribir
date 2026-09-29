@@ -51,10 +51,13 @@ final class Sheet {
         list.addView(row,Ui.fill());return this;
     }
     /** Opción de selección única con botón de radio (patrón de Material para elegir uno entre varios). */
-    Sheet choice(String label,String detail,boolean selected,Runnable run){
+    Sheet choice(String label,String detail,boolean selected,Runnable run){return choice(label,detail,selected,0,run);}
+    /** dot: color de la persona (el mismo punto que en la transcripción); 0 = sin punto. */
+    Sheet choice(String label,String detail,boolean selected,int dot,Runnable run){
         if(list==null){list=ui.column();LinearLayout.LayoutParams lp=Ui.fill();lp.setMargins(-ui.dp(S6),0,-ui.dp(S6),0);body.addView(list,lp);}
         LinearLayout row=ui.row();row.setMinimumHeight(ui.dp(56));row.setPadding(ui.dp(S6),ui.dp(S3),ui.dp(S6),ui.dp(S3));
         row.addView(ui.icon(selected?R.drawable.ic_radio_on:R.drawable.ic_radio_off,selected?ui.p.primary:ui.p.onSurfaceVariant,24));row.addView(ui.space(S4));
+        if(dot!=0){View d=new View(activity);d.setBackground(oval(dot));row.addView(d,new LinearLayout.LayoutParams(ui.dp(10),ui.dp(10)));row.addView(ui.space(S3));}
         LinearLayout texts=ui.column();texts.addView(ui.text(label,Type.BODY_LARGE,ui.p.onSurface));if(detail!=null&&!detail.isEmpty()){TextView d=ui.text(detail,Type.BODY_MEDIUM,ui.p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);texts.addView(d);}
         row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
         row.setBackground(ui.ripple(null,0));row.setClickable(true);row.setContentDescription(label+(selected?", seleccionado":""));row.setAccessibilityDelegate(Ui.buttonRole());

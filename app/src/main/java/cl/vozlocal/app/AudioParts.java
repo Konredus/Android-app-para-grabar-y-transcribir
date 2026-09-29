@@ -31,7 +31,7 @@ final class AudioParts {
      * Devuelve los bloques; los cortes usados quedan en cutsOut.
      */
     static List<Part> plan(Context c,Recording r,HttpApi http,long targetMs,JSONArray cached,List<Long> cutsOut,Log log)throws Exception{
-        File source=r.audio(c);long total=r.duration>0?r.duration:AudioConvert.duration(source);
+        File source=r.audio(c);long total=r.duration>0?r.duration:AudioConvert.duration(source);targetMs=Math.max(targetMs,60_000);
         List<Long> cuts=new ArrayList<>();
         if(cached!=null&&cached.length()>=2){for(int i=0;i<cached.length();i++)cuts.add(cached.getLong(i));if(log!=null)log.line("Cortes reutilizados del intento anterior ("+(cuts.size()-1)+" bloques)");}
         else{
@@ -46,7 +46,7 @@ final class AudioParts {
             cuts.add(total);
             // Resguardo de tamaño (25 MB por envío): si un tramo pesaría más de 20 MB se divide por la mitad.
             double bytesPerMs=source.length()/(double)Math.max(1,total);
-            for(int i=0;i+1<cuts.size();i++){long a=cuts.get(i),b=cuts.get(i+1);if((b-a)*bytesPerMs>20_000_000){cuts.add(i+1,a+(b-a)/2);i--;}}
+            for(int i=0;i+1<cuts.size();i++){long a=cuts.get(i),b=cuts.get(i+1);if((b-a)*bytesPerMs>20_000_000){long mid=a+(b-a)/2,q=quietest(source,mid,10_000,http);cuts.add(i+1,q>a+30_000&&q<b-30_000?q:mid);i--;}}
         }
         cutsOut.clear();cutsOut.addAll(cuts);
         if(cuts.size()==2)return Collections.singletonList(new Part(source,0,total));
@@ -115,22 +115,59 @@ final class AudioParts {
         finally{extractor.release();if(decoder!=null){try{decoder.stop();}catch(Exception ignored){}decoder.release();}}
     }
 
+    /** Muestra de voz elegida: etiqueta del bloque 1 y tramo ya recortado (s). */
+    static final class Clip{final String label;final double start,end;Clip(String label,double start,double end){this.label=label;this.start=start;this.end=end;}}
+    /** Solo se toma muestra de quien habla al menos esto en el bloque 1 (menos es poco confiable). */
+    static final double MIN_TALK_S=10;
     /**
-     * Muestras de voz del primer bloque: para cada persona (máx. 4, las que más hablan) se toma una intervención
-     * de 2–10 s y se envía como data URL. Así el modelo reconoce a las mismas personas en los demás bloques.
+     * Elige muestras LIMPIAS del bloque 1, a lo más limit en total:
+     * - tramos con texto (3 palabras o más) de 2,5 s o más;
+     * - sin otra voz encima ni pegada (±0,5 s): si el modelo mezcló dos voces ahí, la muestra contagiaría el error a todos los bloques;
+     * - de preferencia en medio de una racha de la misma persona o rodeados de pausa, y cerca de 7 s;
+     * - solo de personas que hablan 10 s o más; con 1–2 personas, 2 muestras de cada una.
+     * exclude: etiquetas que no necesitan muestra (p. ej. la voz del usuario, ya reconocida con "Mi voz").
      */
-    static List<String[]> references(Context c,Recording r,JSONObject first,HttpApi http){
-        List<String[]> refs=new ArrayList<>();JSONArray segments=first.optJSONArray("segments");if(segments==null)return refs;
-        Map<String,Double> talk=new HashMap<>();Map<String,JSONObject> best=new HashMap<>();
-        for(int i=0;i<segments.length();i++){JSONObject s=segments.optJSONObject(i);if(s==null||s.isNull("speaker"))continue;String who=s.optString("speaker");double d=s.optDouble("end")-s.optDouble("start");talk.merge(who,d,Double::sum);
-            if(d>=2.5){JSONObject prior=best.get(who);double pd=prior==null?999:Math.abs(prior.optDouble("end")-prior.optDouble("start")-6);if(Math.abs(d-6)<pd)best.put(who,s);}}
-        List<String> order=new ArrayList<>(best.keySet());order.sort((a,b)->Double.compare(talk.get(b),talk.get(a)));
-        for(String who:order.subList(0,Math.min(4,order.size()))){
-            JSONObject s=best.get(who);double start=s.optDouble("start")+0.2,end=Math.min(s.optDouble("end")-0.1,start+8);if(end-start<2)continue;
-            File clip=new File(c.getCacheDir(),r.id+"-ref-"+refs.size()+".m4a");
-            try{AudioConvert.convert(r.audio(c),clip,(long)(start*1000),(long)(end*1000),http);byte[] data=java.nio.file.Files.readAllBytes(clip.toPath());
-                refs.add(new String[]{who,"data:audio/mp4;base64,"+android.util.Base64.encodeToString(data,android.util.Base64.NO_WRAP)});}
-            catch(Exception ignored){}finally{clip.delete();}
+    static List<Clip> pickReferences(JSONArray segments,int limit,Set<String> exclude){
+        List<JSONObject> segs=new ArrayList<>();
+        if(segments!=null)for(int i=0;i<segments.length();i++){JSONObject s=segments.optJSONObject(i);if(s!=null&&!s.isNull("speaker")&&!s.optString("text").trim().isEmpty())segs.add(s);}
+        Map<String,Double> talk=new HashMap<>();for(JSONObject s:segs)talk.merge(s.optString("speaker"),s.optDouble("end")-s.optDouble("start"),Double::sum);
+        Map<String,List<double[]>> candidates=new HashMap<>();
+        for(int i=0;i<segs.size();i++){
+            JSONObject s=segs.get(i);String who=s.optString("speaker");if(exclude!=null&&exclude.contains(who))continue;
+            double a=s.optDouble("start"),b=s.optDouble("end"),d=b-a;if(d<2.5||s.optString("text").trim().split("\\s+").length<3)continue;
+            boolean crowded=false;for(JSONObject o:segs)if(o!=s&&!o.optString("speaker").equals(who)&&o.optDouble("start")<b+0.5&&o.optDouble("end")>a-0.5){crowded=true;break;}
+            if(crowded)continue;
+            JSONObject prev=i>0?segs.get(i-1):null,next=i+1<segs.size()?segs.get(i+1):null;
+            boolean calm=(prev==null||prev.optString("speaker").equals(who)||a-prev.optDouble("end")>1)&&(next==null||next.optString("speaker").equals(who)||next.optDouble("start")-b>1);
+            double start=a+0.4,end=Math.min(b-0.4,start+9.5);if(end-start<2)continue;
+            candidates.computeIfAbsent(who,k->new ArrayList<>()).add(new double[]{Math.abs(d-7)-(calm?5:0),start,end});
+        }
+        List<String> people=new ArrayList<>();for(String who:candidates.keySet())if(talk.getOrDefault(who,0d)>=MIN_TALK_S)people.add(who);
+        people.sort((x,y)->Double.compare(talk.get(y),talk.get(x)));
+        for(List<double[]> list:candidates.values())list.sort((x,y)->Double.compare(x[0],y[0]));
+        List<Clip> out=new ArrayList<>();
+        for(String who:people){if(out.size()>=limit)break;double[] c=candidates.get(who).get(0);out.add(new Clip(who,c[1],c[2]));}
+        if(people.size()<=2)for(String who:people){if(out.size()>=limit)break;List<double[]> list=candidates.get(who);if(list.size()>1){double[] c=list.get(1);out.add(new Clip(who,c[1],c[2]));}}
+        return out;
+    }
+    /**
+     * Muestras de voz del primer bloque para reconocer a las mismas personas en los demás bloques.
+     * Devuelve {nombre enviado ("voz_1", "voz_1b"…), data URL, voz destino ("block0:A"), descripción para la bitácora}.
+     * Los nombres son únicos a propósito: el modelo llama "A", "B"… a las voces que no reconoce, y enviar esas mismas
+     * letras podía pegar una voz nueva a otra persona.
+     */
+    static List<String[]> references(Context c,Recording r,JSONObject first,HttpApi http,int limit,Set<String> exclude){
+        List<String[]> refs=new ArrayList<>();JSONArray segments=first.optJSONArray("segments");if(segments==null||limit<=0)return refs;
+        // Número visible de cada voz del bloque 1 (Persona N por orden de aparición), para que la bitácora hable el mismo idioma que la pantalla.
+        List<String> appearance=new ArrayList<>();for(int i=0;i<segments.length();i++){JSONObject s=segments.optJSONObject(i);if(s!=null&&!s.isNull("speaker")&&!s.optString("text").trim().isEmpty()&&!appearance.contains(s.optString("speaker")))appearance.add(s.optString("speaker"));}
+        Map<String,Integer> taken=new HashMap<>();
+        for(Clip clip:pickReferences(segments,limit,exclude)){
+            File file=new File(c.getCacheDir(),r.id+"-ref-"+refs.size()+".m4a");
+            try{AudioConvert.convert(r.audio(c),file,(long)(clip.start*1000),(long)(clip.end*1000),http);byte[] data=java.nio.file.Files.readAllBytes(file.toPath());
+                int person=appearance.indexOf(clip.label)+1;int n=taken.merge(clip.label,1,Integer::sum);
+                refs.add(new String[]{"voz_"+person+(n>1?"b":""),"data:audio/mp4;base64,"+android.util.Base64.encodeToString(data,android.util.Base64.NO_WRAP),"block0:"+clip.label,
+                    "Persona "+person+" ("+Recording.time((long)(clip.start*1000))+"–"+Recording.time((long)(clip.end*1000))+")"});}
+            catch(Exception ignored){}finally{file.delete();}
         }
         return refs;
     }

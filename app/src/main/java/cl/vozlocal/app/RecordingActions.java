@@ -74,10 +74,13 @@ final class RecordingActions {
         try{
             String voices=settings.config(true).model,text=settings.config(false).model;
             String provider=settings.provider();String costVoices=Pricing.usd(Pricing.estimate(provider,voices,r.duration)),costText=Pricing.usd(Pricing.estimate(provider,text,r.duration));boolean live=provider.equals("openai")&&text.equals("gpt-transcribe");
-            s.sheet("¿Separar voces?","Audio de "+Recording.time(r.duration)+". Puedes cambiar esta pregunta en Ajustes.")
-                .option(R.drawable.ic_people,"Sí, separar voces","Para reuniones y conversaciones: Persona 1, Persona 2… · más lento"+(costVoices.equals("—")?"":" · ≈"+costVoices),()->start(s,r,changed,true))
-                .option(R.drawable.ic_doc,"No, solo el texto","Para dictados y notas · más rápido"+(live?", el texto aparece en vivo":"")+(costText.equals("—")?"":" · ≈"+costText),()->start(s,r,changed,false))
-                .show();
+            boolean mine=provider.equals("openai")&&Voices.has(s);
+            Sheet sheet=s.sheet("¿Separar voces?","Audio de "+Recording.time(r.duration)+". Puedes cambiar esta pregunta en Ajustes.")
+                .option(R.drawable.ic_people,"Sí, separar voces",(mine?"Te reconoce como "+Voices.name(s)+"; las demás, Persona 2…":"Para reuniones y conversaciones: Persona 1, Persona 2…")+" · más lento"+(costVoices.equals("—")?"":" · ≈"+costVoices),()->start(s,r,changed,true))
+                .option(R.drawable.ic_doc,"No, solo el texto","Para dictados y notas · más rápido"+(live?", el texto aparece en vivo":"")+(costText.equals("—")?"":" · ≈"+costText),()->start(s,r,changed,false));
+            // Sin "Mi voz", la separación se equivoca más al inicio: se sugiere grabarla (una sola vez).
+            if(provider.equals("openai")&&!mine)sheet.action(R.drawable.ic_mic_fill,"Grabar mi voz para que me reconozca",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true)));
+            sheet.show();
         }catch(Exception e){start(s,r,changed,settings.defaultSpeakers());}
     }
     static void start(Screen s,Recording r,Runnable changed,boolean speakers){

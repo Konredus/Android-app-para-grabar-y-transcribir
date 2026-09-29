@@ -111,5 +111,64 @@ final class FeatureChecks {
             assertThat(settings.config(false).model.equals("gpt-transcribe")&&!settings.config(false).speakers,"Default text model should be gpt-transcribe");
             assertThat(settings.config(true).model.equals("gpt-4o-transcribe-diarize")&&settings.config(true).speakers,"Speaker model wrong");
         }finally{settings.prefs.edit().putString("provider",provider).commit();}
+        voices(c,r);
+    }
+    private static JSONObject seg(String who,double a,double b,String text)throws JSONException{return new JSONObject().put("speaker",who).put("start",a).put("end",b).put("text",text);}
+    /** 0.5.0: voces que no se confunden, muestras limpias, bloques parejos y correcciones a mano. */
+    static void voices(Context c,Recording r)throws Exception{
+        // Tramos vacíos: no crean personas fantasma (ni al unir bloques ni al abrir transcripciones antiguas).
+        JSONObject ghost=new JSONObject().put("segments",new JSONArray().put(seg("A",0,2,"Hola")).put(seg("B",2,3,"")).put(seg("C",3,4,"   ")));
+        assertThat(Transcript.fromParts(Collections.singletonList(ghost),Collections.singletonList(0d)).speakers().size()==1,"Empty segments created ghost speakers");
+        Transcript old=new Transcript(new JSONObject(ghost.toString()));old.clean();assertThat(old.speakers().size()==1,"Stored empty segments not cleaned");
+        // Nombres únicos para las muestras: una letra desconocida en el bloque 2 NO se pega a la persona del bloque 1.
+        JSONObject b1=new JSONObject().put("segments",new JSONArray().put(seg("A",0,5,"Uno")).put(seg("B",5,9,"Dos")));
+        JSONObject b2=new JSONObject().put("_known",new JSONObject().put("voz_1","block0:A").put("voz_2","block0:B"))
+            .put("segments",new JSONArray().put(seg("voz_1",0,3,"Sigo yo")).put(seg("A",3,6,"Soy nueva")).put(seg("voz_2",6,8,"Y yo")));
+        Transcript joined=Transcript.fromParts(Arrays.asList(b1,b2),Arrays.asList(0d,300d));JSONArray js=joined.segments();
+        assertThat(js.getJSONObject(2).getString("speaker").equals("block0:A")&&js.getJSONObject(3).getString("speaker").equals("block1:A")&&js.getJSONObject(4).getString("speaker").equals("block0:B"),"Known-name map misapplied");
+        assertThat(joined.speakers().size()==3&&joined.data.getJSONArray("blocks").length()==2,"Blocks or speakers wrong after join");
+        // "Mi voz" en un solo envío: el nombre enviado se convierte en la voz del usuario.
+        JSONObject single=new JSONObject().put("_known",new JSONObject().put(Voices.MINE,Voices.ME)).put("segments",new JSONArray().put(seg(Voices.MINE,0,3,"Hola, soy yo")).put(seg("A",3,5,"Hola")));
+        assertThat(Transcript.fromParts(Collections.singletonList(single),Collections.singletonList(0d)).segments().getJSONObject(0).getString("speaker").equals(Voices.ME),"My voice not mapped");
+        if(!Voices.has(c))assertThat(Voices.reference(c)==null,"Reference without a recorded voice");
+        // Bloques parejos de hasta 12 min con voces.
+        assertThat(Transcriber.speakerBlockMs(1_561_000,19_011_522)==520_333&&Transcriber.speakerBlockMs(600_000,7_000_000)==600_000&&Transcriber.speakerBlockMs(3_600_000,43_000_000)==720_000,"Speaker block size wrong");
+        assertThat(Transcriber.speakerBlockMs(660_000,21_000_000)==330_000,"High-bitrate audio not split by size before the pause search");
+        // Muestras limpias: sin otra voz encima o pegada, solo de quien habla 10 s o más, y nunca de voces excluidas.
+        JSONArray talk=new JSONArray().put(seg("A",0,8,"hola esto es una prueba larga")).put(seg("B",8.2,12,"yo respondo algo breve aquí"))
+            .put(seg("A",20,27,"otra intervención limpia de la persona uno")).put(seg("B",40,47,"la persona dos habla tranquila un rato"))
+            .put(seg("C",50,58,"yo soy el usuario grabado aquí")).put(seg("D",60,65,"habla poco en este bloque"));
+        List<AudioParts.Clip> clips=AudioParts.pickReferences(talk,4,Collections.singleton("C"));
+        assertThat(clips.size()==2,"Unexpected number of voice samples: "+clips.size());
+        for(AudioParts.Clip clip:clips){assertThat(!clip.label.equals("C")&&!clip.label.equals("D"),"Excluded or quiet voice sampled");assertThat(clip.label.equals("A")?Math.abs(clip.start-20.4)<0.01:Math.abs(clip.start-40.4)<0.01,"Crowded segment used as sample");assertThat(clip.end-clip.start<=9.5,"Sample too long");}
+        // Correcciones: reasignar, intercambiar desde un punto, unir, persona nueva, nombres iguales y restaurar.
+        Transcript t=new Transcript(new JSONObject().put("diarized",true).put("names",new JSONObject()).put("segments",new JSONArray()
+            .put(seg("A",0,5,"Uno")).put(seg("B",10,15,"Dos")).put(seg("A",20,25,"Tres")).put(seg("B",30,35,"Cuatro"))));
+        t.swap("A","B",20,Double.MAX_VALUE);JSONArray s=t.segments();
+        assertThat(s.getJSONObject(0).getString("speaker").equals("A")&&s.getJSONObject(2).getString("speaker").equals("B")&&s.getJSONObject(3).getString("speaker").equals("A")&&s.getJSONObject(2).getString("orig").equals("A"),"Swap from point wrong");
+        t.swap("A","B",20,Double.MAX_VALUE);assertThat(!t.edited(),"Swapping twice should undo and clear originals");
+        t.assign(0,1,"B");assertThat(s.getJSONObject(0).getString("speaker").equals("B")&&t.edited()&&t.data.optBoolean("reviewed"),"Reassign wrong");
+        String fresh=t.newPerson();t.assign(1,2,fresh);assertThat(t.speakers().containsKey(fresh)&&t.speakers().get(fresh).equals("Persona 3"),"New person wrong");
+        t.restore();assertThat(!t.edited()&&t.speakers().size()==2&&t.colorIndex("B")==1,"Restore wrong or colors moved");
+        Map<String,String> same=new LinkedHashMap<>();same.put("A","Fran");same.put("B"," fran ");
+        assertThat(t.applyNames(same)==1&&t.speakers().size()==1&&t.speakers().get("A").equals("Fran"),"Same names not merged");
+        String text=t.text(r);assertThat(!text.contains("pueden tener errores")&&text.contains("Fran: Uno"),"Reviewed transcript still warns or lost names");
+        // Restaurar después de unir: cada voz vuelve con su propio nombre; un nombre heredado no queda en la persona equivocada.
+        Transcript m=new Transcript(new JSONObject().put("diarized",true).put("names",new JSONObject().put("A","Konrad")).put("segments",new JSONArray().put(seg("A",0,5,"Uno")).put(seg("B",10,15,"Dos"))));
+        m.merge("A","B");assertThat(m.speakers().size()==1&&m.speakers().get("B").equals("Konrad"),"Merged voice did not inherit the name");
+        m.restore();assertThat(m.speakers().get("A").equals("Konrad")&&m.speakers().get("B").equals("Persona 2"),"Restore left names on the wrong voice");
+        // Escribir la etiqueta de otra voz ("Persona 1") también une.
+        Map<String,String> label=new LinkedHashMap<>();label.put("B","Persona 1");Transcript u=new Transcript(new JSONObject().put("diarized",true).put("names",new JSONObject()).put("segments",new JSONArray().put(seg("A",0,5,"Uno")).put(seg("B",10,15,"Dos"))));
+        assertThat(u.applyNames(label)==1&&u.speakers().size()==1,"Typing another voice's label did not merge");
+        u.restore();assertThat(u.speakers().size()==2&&u.speakers().get("B").equals("Persona 2"),"Typed label was stored as a name");
+        // Uniones encadenadas (A→B→C) y restaurar: el nombre vuelve solo a A.
+        Transcript k=new Transcript(new JSONObject().put("diarized",true).put("names",new JSONObject().put("A","Konrad")).put("segments",new JSONArray().put(seg("A",0,5,"Uno")).put(seg("B",10,15,"Dos")).put(seg("C",20,25,"Tres"))));
+        k.merge("A","B");k.merge("B","C");assertThat(k.speakers().size()==1&&k.speakers().get("C").equals("Konrad"),"Chained merge lost the name");
+        k.restore();assertThat(k.speakers().get("A").equals("Konrad")&&k.speakers().get("B").equals("Persona 2")&&k.speakers().get("C").equals("Persona 3"),"Chained restore left names on the wrong voices");
+        // Transcripciones anteriores con nombres cuentan como revisadas; las nuevas, no.
+        assertThat(new Transcript(new JSONObject().put("names",new JSONObject().put("A","Ana"))).reviewed()&&!Transcript.fromParts(Collections.singletonList(b1),Collections.singletonList(0d)).reviewed(),"Reviewed flag wrong");
+        // El .txt junta tramos seguidos de la misma persona, pero no a través de una pausa larga.
+        Transcript g=new Transcript(new JSONObject().put("diarized",true).put("segments",new JSONArray().put(seg("A",0,1,"Hola")).put(seg("A",1.5,3,"¿cómo estás?")).put(seg("A",60,61,"Sigo"))));
+        String gt=g.text(r);assertThat(gt.contains("Persona 1: Hola ¿cómo estás?")&&gt.contains("[01:00] Persona 1: Sigo")&&gt.contains("pueden tener errores"),"Turn grouping or warning wrong");
     }
 }

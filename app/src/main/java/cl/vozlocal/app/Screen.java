@@ -71,6 +71,26 @@ abstract class Screen extends Activity {
         sheet(title,value).primary(action,destructive?Ui.Style.DESTRUCTIVE:Ui.Style.PRIMARY,()->{run.run();return true;}).secondary("Cancelar",null).show();
     }
     void toast(String value){Toast.makeText(this,value,Toast.LENGTH_SHORT).show();}
+    private View snack;private final android.os.Handler snackTimer=new android.os.Handler(android.os.Looper.getMainLooper());
+    /**
+     * Snackbar de Material 3: confirma un cambio y ofrece deshacerlo durante unos segundos.
+     * Va sobre la zona inferior fija, sin tapar el contenido (colores invertidos, ver CRITERIOS.md → Componentes).
+     */
+    void snackbar(String text,String action,Runnable run){
+        hideSnackbar();
+        LinearLayout s=ui.row();s.setBackground(shape(this,p.inverseSurface,R_SMALL));s.setPadding(ui.dp(S4),ui.dp(S1),ui.dp(S2),ui.dp(S1));s.setMinimumHeight(ui.dp(48));
+        s.addView(ui.text(text,Type.BODY_MEDIUM,p.inverseOnSurface),new LinearLayout.LayoutParams(0,-2,1));
+        if(action!=null&&run!=null){TextView a=ui.text(action,Type.LABEL_LARGE,p.inversePrimary);a.setGravity(Gravity.CENTER);a.setMinHeight(ui.dp(48));a.setPadding(ui.dp(S3),0,ui.dp(S3),0);a.setBackground(ui.ripple(null,R_SMALL));a.setAccessibilityDelegate(Ui.buttonRole());a.setOnClickListener(v->{hideSnackbar();run.run();});s.addView(a);}
+        s.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        LinearLayout.LayoutParams lp=Ui.fill();lp.setMargins(ui.dp(S4),ui.dp(S2),ui.dp(S4),ui.dp(S2));
+        int at=bottom==null?root.getChildCount():root.indexOfChild(bottom);root.addView(s,Math.max(0,at),lp);snack=s;
+        s.announceForAccessibility(text+(action!=null?". "+action+" disponible":""));
+        android.view.accessibility.AccessibilityManager am=getSystemService(android.view.accessibility.AccessibilityManager.class);
+        long timeout=8000;boolean keep=false;
+        if(am!=null){if(Build.VERSION.SDK_INT>=29)timeout=am.getRecommendedTimeoutMillis(8000,android.view.accessibility.AccessibilityManager.FLAG_CONTENT_TEXT|(action!=null?android.view.accessibility.AccessibilityManager.FLAG_CONTENT_CONTROLS:0));else keep=action!=null&&am.isTouchExplorationEnabled();}
+        if(!keep)snackTimer.postDelayed(this::hideSnackbar,timeout);
+    }
+    void hideSnackbar(){snackTimer.removeCallbacksAndMessages(null);if(snack!=null){root.removeView(snack);snack=null;}}
     void shareFile(String filename,String title){android.net.Uri uri=android.net.Uri.parse("content://cl.vozlocal.app.audio/"+filename);Intent share=new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);share.setClipData(android.content.ClipData.newRawUri(title,uri));startActivity(Intent.createChooser(share,title));}
     int dp(float n){return ui.dp(n);}
 }

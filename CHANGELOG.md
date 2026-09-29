@@ -1,5 +1,33 @@
 # Historial de versiones
 
+## 0.5.0 — 2026-09-28
+
+Voces que se confunden menos y que se corrigen con un toque. Parte de una prueba real: una conversación de 26 min entre 2 personas salió con 4 personas y con las etiquetas cruzadas en el primer minuto. El diagnóstico completo está en `docs/PLAN-voces.md`.
+
+**Menos errores al separar voces**
+- **Mi voz:** en Ajustes grabas 10 s leyendo un texto. Al separar voces, tu muestra va en todos los bloques, también el primero, así que apareces con tu nombre desde el segundo 0. Queda en el teléfono y viaja a OpenAI solo junto con los audios que transcribes.
+- **Muestras de voz limpias:** se toman de tramos donde habla una sola persona, sin otra voz encima ni pegada, y solo de quien habla 10 s o más. Con 1 o 2 personas se toman 2 muestras de cada una. La bitácora dice de qué minutos salieron.
+- **Nombres únicos para las muestras** (`voz_1`, `voz_propia`) en vez de las letras del modelo, que podían pegar una voz nueva a otra persona.
+- **Bloques parejos de hasta 12 min** al separar voces (antes 5 min), para que haya menos uniones entre bloques. Un audio de 26 min va en 3 bloques en vez de 5.
+- **Sin personas fantasma:** los tramos vacíos se descartan, también en las transcripciones anteriores.
+- **Bitácora por bloque:** «reconoció 2 voces, 1 nueva».
+
+**Corregir a mano**
+- **«¿Quién habla aquí?»:** tocas el nombre de una intervención. Ahí puedes:
+  - escuchar solo ese tramo;
+  - elegir a la persona correcta u «Otra persona»;
+  - corregir una sola frase.
+- **«Intercambiar A y B desde aquí»**, hasta el final o solo en ese bloque: arregla un cruce con un toque.
+- **Ficha de cada persona** (al tocar su chip):
+  - escuchar una muestra;
+  - cambiar el nombre;
+  - «Es la misma persona que…»;
+  - ver solo sus intervenciones.
+- **Mismo nombre = misma persona:** al nombrar dos voces igual, se unen de verdad, con un solo chip y un solo color.
+- **Deshacer** después de cada cambio (snackbar) y **Restaurar voces originales** en «Nombrar voces». Números y colores fijos al corregir.
+- **Escuchar sin perder el lugar:** tocar la hora reproduce ahí mismo y resalta la intervención que suena. Un separador marca dónde empieza cada bloque.
+- **.txt más legible:** junta en un párrafo los tramos seguidos de la misma persona. Cambia el aviso «etiquetas independientes entre bloques» por «Voces separadas automáticamente: pueden tener errores», que desaparece al revisar.
+
 ## 0.4.4 — 2026-09-28
 
 Transcripción confiable con la pantalla bloqueada, a partir del informe de un vivo V2318 (audio de 2 min que tardó 1 h: el teléfono cortó la conexión tres veces y congeló la app hasta 36 min).
