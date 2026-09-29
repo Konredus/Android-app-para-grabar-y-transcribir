@@ -42,19 +42,25 @@ final class NameVoices {
         String typed(){return field.getText().toString().trim();}
     }
 
-    static void show(Screen s,String id,boolean demo,Transcript t,Runnable changed){
+    /** Abre la hoja y la devuelve (para cerrarla, y así guardar lo escrito, si la pantalla se destruye); null si no se abrió. */
+    static Sheet show(Screen s,String id,boolean demo,Transcript t,Runnable changed){
         Transcript tr=t;
-        if(!demo){try{tr=Transcript.load(s,id);}catch(Exception e){if(tr==null){s.message("Nombrar voces","No se pudo abrir la transcripción.");return;}}}
-        if(tr==null){s.message("Nombrar voces","No se pudo abrir la transcripción.");return;}
-        try{build(s,id,demo,tr,changed);}
-        catch(Exception e){Diagnostics.event("name_voices_failed",demo?null:id,"error_class",e.getClass().getSimpleName());s.message("Nombrar voces","No se pudieron cargar las voces.");}
+        // Marca de la versión que se lee: si la transcripción cambia mientras la hoja está abierta, no se le aplican estos
+        // nombres (null = sin comprobar: el ejemplo, o si solo se pudo usar la transcripción que ya tenía la pantalla).
+        String stamp=null;
+        if(!demo)synchronized(FilesStore.LOCK){try{stamp=stamp(s,id);tr=Transcript.load(s,id);}catch(Exception e){stamp=null;if(tr==null){s.message("Nombrar voces","No se pudo abrir la transcripción.");return null;}}}
+        if(tr==null){s.message("Nombrar voces","No se pudo abrir la transcripción.");return null;}
+        try{return build(s,id,demo,tr,stamp,changed);}
+        catch(Exception e){Diagnostics.event("name_voices_failed",demo?null:id,"error_class",e.getClass().getSimpleName());s.message("Nombrar voces","No se pudieron cargar las voces.");return null;}
     }
+    /** «fecha:tamaño» de la transcripción guardada; cambia con cada escritura (corrección, versión nueva o anterior). */
+    static String stamp(Context c,String id){File f=FilesStore.file(c,id,".transcript.json");return f.isFile()?f.lastModified()+":"+f.length():"";}
 
-    private static void build(Screen s,String id,boolean demo,Transcript tr,Runnable changed)throws Exception{
+    private static Sheet build(Screen s,String id,boolean demo,Transcript tr,String stamp,Runnable changed)throws Exception{
         Ui ui=s.ui;Palette p=s.p;
         LinkedHashMap<String,String> names=tr.speakers();
-        if(names.isEmpty()){s.message("Nombrar voces","Esta transcripción no tiene intervenciones para nombrar.");return;}
-        if(!tr.diarized()){s.message("Nombrar voces","Esta transcripción se hizo sin separar voces. Para tener Persona 1, Persona 2…, vuelve a transcribir separando voces.");return;}
+        if(names.isEmpty()){s.message("Nombrar voces","Esta transcripción no tiene intervenciones para nombrar.");return null;}
+        if(!tr.diarized()){s.message("Nombrar voces","Esta transcripción se hizo sin separar voces. Para tener Persona 1, Persona 2…, vuelve a transcribir separando voces.");return null;}
         Map<String,Double> share=tr.talkShare();JSONArray segs=tr.segments();
         boolean mine=Voices.has(s);String myName=Voices.name(s);List<String> recent=recentNames(s);
         Recording recording=demo?null:FilesStore.recording(s,id);File audio=recording==null?null:recording.audio(s);
@@ -80,7 +86,7 @@ final class NameVoices {
 
         // Se guarda una sola vez al cerrar. «Listo» además cuenta como «ya revisé las voces» aunque no cambies nada.
         boolean[] closed={false};
-        java.util.function.Consumer<Boolean> save=explicit->{if(closed[0])return;closed[0]=true;sampler.release();commit(s,id,demo,tr,voices,explicit,changed);};
+        java.util.function.Consumer<Boolean> save=explicit->{if(closed[0])return;closed[0]=true;sampler.release();commit(s,id,demo,tr,stamp,voices,explicit,changed);};
         if(tr.edited()){
             Ui.Btn restore=ui.button("Restaurar voces originales",R.drawable.ic_refresh,Ui.Style.PLAIN,null);
             restore.setOnClickListener(v->{save.accept(false);sheet.dismiss();
@@ -88,10 +94,12 @@ final class NameVoices {
             LinearLayout.LayoutParams lp=Ui.wrap();lp.topMargin=ui.dp(S3);sheet.body.addView(restore,lp);
         }
         sheet.primary("Listo",Ui.Style.PRIMARY,()->{save.accept(true);return true;});
-        // Tocar fuera o «atrás» también guarda lo escrito (con Deshacer): nunca se pierde.
+        // Tocar fuera o «atrás» también guarda lo escrito (con Deshacer): nunca se pierde. Si la pantalla se destruye
+        // (giro, tema), ella cierra la hoja y esto mismo guarda lo escrito y libera el reproductor de muestras.
         sheet.onDismiss(()->save.accept(false));
         sheet.show();
         Diagnostics.event("name_voices_open",demo?null:id,"voices",voices.size(),"sample",canListen);
+        return sheet;
     }
 
     // ---------- Filas ----------
@@ -175,7 +183,7 @@ final class NameVoices {
     static String percent(double share){if(share<=0)return "0 %";if(share<0.01)return "< 1 %";return Math.round(share*100)+" %";}
 
     // ---------- Guardar (una sola vez) ----------
-    private static void commit(Screen s,String id,boolean demo,Transcript tr,List<Voice> voices,boolean explicit,Runnable changed){
+    private static void commit(Screen s,String id,boolean demo,Transcript tr,String stamp,List<Voice> voices,boolean explicit,Runnable changed){
         Map<String,String> names=new LinkedHashMap<>(),merges=new LinkedHashMap<>();boolean edited=false;
         for(Voice v:voices){
             Voice target=v.mergeInto==null?null:find(voices,v.mergeInto);
@@ -187,30 +195,44 @@ final class NameVoices {
         int[] merged={0};
         Transcript.Edit op=x->{for(Map.Entry<String,String> m:merges.entrySet())x.merge(m.getKey(),m.getValue());merged[0]=merges.size()+x.applyNames(names);};
         try{
-            JSONObject before;
+            JSONObject before;String after=null;
             if(demo){before=new JSONObject(tr.data.toString());op.apply(tr);writeDemo(s,tr);}
-            else before=Transcript.edit(s,id,op);
+            else synchronized(FilesStore.LOCK){
+                // Otra versión (p. ej. «Volver a la anterior») llegó mientras la hoja estaba abierta: estas voces son de
+                // la otra transcripción y sus nombres irían a parar a personas equivocadas. No se aplica nada.
+                if(stamp!=null&&!stamp.equals(stamp(s,id))){changedMeanwhile(s,id,"name");return;}
+                before=Transcript.edit(s,id,op);after=stamp(s,id);
+            }
             rememberNames(s,names.values());
             Diagnostics.event("voices_named",demo?null:id,"voices",voices.size(),"merged",merged[0],"changed",edited);
             Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);
             if(changed!=null)changed.run();
             String done=!edited?"Voces revisadas":merged[0]==0?"Nombres guardados":merged[0]==1?"Nombres guardados · 2 voces quedaron en una":"Nombres guardados · "+merged[0]+" voces se unieron a otras";
-            s.snackbar(done,"Deshacer",()->undo(s,id,demo,tr,before,changed));
+            String saved=after;s.snackbar(done,"Deshacer",()->undo(s,id,demo,tr,before,saved,changed));
         }catch(Exception e){Diagnostics.event("voices_name_failed",demo?null:id,"error_class",e.getClass().getSimpleName());s.message("No se guardaron los nombres","Vuelve a intentarlo.");}
     }
+    /** La transcripción cambió por otro lado (otra versión): se avisa en vez de escribir sobre ella. */
+    private static void changedMeanwhile(Screen s,String id,String what){
+        Diagnostics.event("voices_name_skipped",id,"reason","transcript_changed","kind",what);
+        s.message("Nombrar voces","La transcripción cambió mientras la hoja estaba abierta (por ejemplo, volviste a la otra versión), así que no se aplicó nada. Ábrela de nuevo para nombrar estas voces.");
+    }
     private static void restore(Screen s,String id,boolean demo,Transcript tr,Runnable changed){
-        try{JSONObject before;
+        try{JSONObject before;String after=null;
             if(demo){before=new JSONObject(tr.data.toString());tr.restore();writeDemo(s,tr);}
-            else before=Transcript.edit(s,id,Transcript::restore);
+            else synchronized(FilesStore.LOCK){before=Transcript.edit(s,id,Transcript::restore);after=stamp(s,id);}
             Diagnostics.event("transcript_edited",demo?null:id,"action","restore");
             if(changed!=null)changed.run();
-            s.snackbar("Voces originales restauradas","Deshacer",()->undo(s,id,demo,tr,before,changed));
+            String saved=after;s.snackbar("Voces originales restauradas","Deshacer",()->undo(s,id,demo,tr,before,saved,changed));
         }catch(Exception e){s.message("Transcripción","No se pudieron restaurar las voces. Vuelve a intentarlo.");}
     }
-    private static void undo(Screen s,String id,boolean demo,Transcript tr,JSONObject before,Runnable changed){
+    /** saved: marca de la transcripción justo después del cambio; si ya no coincide, «Deshacer» pisaría otra versión. */
+    private static void undo(Screen s,String id,boolean demo,Transcript tr,JSONObject before,String saved,Runnable changed){
         try{
             if(demo){replaceData(tr.data,before);writeDemo(s,tr);}
-            else Transcript.replace(s,id,before);
+            else synchronized(FilesStore.LOCK){
+                if(saved!=null&&!saved.equals(stamp(s,id))){s.message("Deshacer","La transcripción cambió después (por ejemplo, volviste a la otra versión), así que ya no se puede deshacer este cambio.");return;}
+                Transcript.replace(s,id,before);
+            }
             Diagnostics.event("transcript_edited",demo?null:id,"action","undo");
             if(changed!=null)changed.run();
         }catch(Exception e){s.message("Transcripción","No se pudo deshacer el cambio.");}

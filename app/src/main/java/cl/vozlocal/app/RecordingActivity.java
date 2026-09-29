@@ -48,8 +48,15 @@ public class RecordingActivity extends Screen {
     private final Handler handler=new Handler(Looper.getMainLooper());private SharedPreferences prefs;
     /** Firma de los archivos de esta grabación y «forma» del estado con que se armó la pantalla. */
     private int dataVersion=-1;private String[] lastSig;private String lastKey="";
-    private boolean intentHandled,offeredKeep,markedOpened,correctionOpened,noteBusy,saving,detailsOpen,suppressTask;
+    private boolean intentHandled,markedOpened,correctionOpened,noteBusy,saving,detailsOpen,suppressTask;
     private long[] marksMs=new long[0];private long demoStamp;
+    /**
+     * «Nueva versión lista» ya ofrecida: el «at» de esa vuelta a transcribir (-1 = ninguna). Así cada versión nueva se
+     * ofrece una vez, también si vuelves a transcribir sin salir de la pantalla.
+     */
+    private long offeredKeepAt=-1;private boolean keepPending;
+    /** Hojas abiertas que se cierran al destruir la pantalla (giro, tema): «Nombrar voces» guarda lo escrito al cerrarse. */
+    private Sheet keepSheet,nameSheet;
 
     // Reproductor (fijo abajo)
     private MediaPlayer player;private AudioFocusRequest focus;private boolean prepared;private float rate=1f;
@@ -70,7 +77,7 @@ public class RecordingActivity extends Screen {
 
     @Override public void onCreate(Bundle state){
         super.onCreate(state);demo=getIntent().getBooleanExtra("demo",false);id=getIntent().getStringExtra("id");prefs=getSharedPreferences("detail",MODE_PRIVATE);if(!demo&&id!=null)Transcriber.clearDone(this,id);
-        if(state!=null){intentHandled=true;offeredKeep=state.getBoolean("offeredKeep");markedOpened=state.getBoolean("markedOpened");correctionOpened=state.getBoolean("correcting");onlySpeaker=state.getString("onlySpeaker");}
+        if(state!=null){intentHandled=true;offeredKeepAt=state.getLong("offeredKeepAt",-1);markedOpened=state.getBoolean("markedOpened");correctionOpened=state.getBoolean("correcting");onlySpeaker=state.getString("onlySpeaker");saveAsNote=state.getBoolean("saveAsNote");}
         shell(demo?"Ajustes":"Biblioteca",-1);
         try{
             if(demo){recording=new Recording("00000000-0000-0000-0000-000000000000","Conversación de ejemplo",System.currentTimeMillis(),27000);java.io.File f=demoFile();transcript=f.exists()?new Transcript(FilesStore.read(f)):example();demoStamp=f.exists()?f.lastModified():0;}
@@ -102,8 +109,22 @@ public class RecordingActivity extends Screen {
     private String lastSettings;
     private String settingsKey(){Settings s=new Settings(this);return s.inboxTree()+"|"+s.hasKey()+"|"+s.provider()+"|"+s.textModel()+"|"+s.noteProvider()+"|"+s.hasAnthropicKey()+"|"+s.noteAuto();}
     @Override protected void onPause(){handler.removeCallbacks(progress);if(player!=null&&player.isPlaying()){player.pause();setPlaying(false);}super.onPause();}
-    @Override protected void onDestroy(){handler.removeCallbacksAndMessages(null);releasePlayer();super.onDestroy();}
-    @Override protected void onSaveInstanceState(Bundle out){out.putBoolean("offeredKeep",offeredKeep);out.putBoolean("markedOpened",markedOpened);out.putBoolean("correcting",correctionOpened);if(onlySpeaker!=null)out.putString("onlySpeaker",onlySpeaker);super.onSaveInstanceState(out);}
+    @Override protected void onDestroy(){
+        handler.removeCallbacksAndMessages(null);releasePlayer();
+        // Android quita las ventanas de las hojas sin cerrarlas: sin esto, lo escrito en «Nombrar voces» se perdía y su
+        // reproductor de muestras quedaba vivo.
+        if(nameSheet!=null){nameSheet.dismiss();nameSheet=null;}
+        if(keepSheet!=null){keepSheet.dismiss();keepSheet=null;}
+        super.onDestroy();
+    }
+    @Override protected void onSaveInstanceState(Bundle out){
+        // «Nueva versión lista» sin responder se vuelve a ofrecer al recrear la pantalla.
+        boolean offerOpen=keepPending||(keepSheet!=null&&keepSheet.dialog.isShowing());
+        out.putLong("offeredKeepAt",offerOpen?-1:offeredKeepAt);out.putBoolean("markedOpened",markedOpened);out.putBoolean("correcting",correctionOpened);if(onlySpeaker!=null)out.putString("onlySpeaker",onlySpeaker);
+        // «Guardar en otra carpeta…»: el selector puede volver a una pantalla nueva; así sigue sabiendo si escribir la nota o el texto.
+        out.putBoolean("saveAsNote",saveAsNote);
+        super.onSaveInstanceState(out);
+    }
 
     // ---------- Armar la pantalla (solo cuando cambió ESTA grabación) ----------
     /** Vuelve a armar el contenido conservando la posición (las correcciones no te devuelven arriba). */
@@ -149,11 +170,20 @@ public class RecordingActivity extends Screen {
     /** Pedidos que llegan con la apertura (notificación «lista», «Nueva versión lista») y el punto «nuevo» de la Biblioteca. */
     private void afterBuild(JSONObject st){
         if(demo)return;
+        JSONObject again=st.optJSONObject("retranscribe");long at=again==null?0:again.optLong("at");
+        boolean offer=offeredKeepAt!=at&&transcript!=null&&(again!=null||getIntent().getBooleanExtra("retranscribed",false))&&Retranscribe.hasPrevious(this,id);
+        Runnable asked=null;boolean onlyNew=false;
         if(!intentHandled){intentHandled=true;Intent in=getIntent();
-            if(transcript!=null&&in.getBooleanExtra("names",false))handler.post(this::openNameVoices);
-            else if(transcript!=null&&in.getBooleanExtra("save",false))handler.post(this::inboxSave);}
-        if(!offeredKeep&&transcript!=null&&(st.has("retranscribe")||getIntent().getBooleanExtra("retranscribed",false))&&Retranscribe.hasPrevious(this,id)){
-            offeredKeep=true;handler.post(()->{try{RetranscribeSheet.offerKeep(this,recording,this::reload);}catch(RuntimeException ignored){}});}
+            if(transcript!=null&&in.getBooleanExtra("names",false)){asked=this::openNameVoices;onlyNew=true;}
+            else if(transcript!=null&&in.getBooleanExtra("save",false))asked=this::inboxSave;}
+        if(offer){
+            // Con una versión nueva por elegir, primero se elige y después se hace lo pedido: si no, «Nombrar voces» quedaba
+            // debajo de «Nueva versión lista» y, tras «Volver a la anterior», sus nombres iban a las voces de la otra versión.
+            // Nombrar sigue solo si te quedas con la nueva (era la que pedía revisar); guardar, con la que elijas.
+            offeredKeepAt=at;keepPending=true;Runnable then=asked;boolean newOnly=onlyNew;
+            handler.post(()->{keepPending=false;if(isDestroyed())return;
+                try{keepSheet=RetranscribeSheet.offerKeep(this,recording,this::reload,false,then==null?null:kept->{if(kept||!newOnly)then.run();});}catch(RuntimeException ignored){}});
+        }else if(asked!=null)handler.post(asked);
         if(!markedOpened&&transcript!=null){markedOpened=true;long now=System.currentTimeMillis();
             try{FilesStore.update(this,id,s->s.put("opened",now));}catch(Exception ignored){}
             dataVersion=FilesStore.version.get();lastSig=signature();}
@@ -263,7 +293,8 @@ public class RecordingActivity extends Screen {
             case REVIEW:openNameVoices();break;
             case SAVE:case UPDATE:inboxSave();break;
             case SAVED:savedSheet();break;
-            case CHOOSE_FOLDER:startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true));break;
+            // Igual que en Inicio y Biblioteca: abre directo la elección de carpeta y, al elegirla, vuelve aquí.
+            case CHOOSE_FOLDER:RecordingActions.chooseFolder(this);break;
         }
     }
     /** ▾: todas las salidas siguen a mano (copiar, compartir, .txt, nota, otra carpeta, volver a transcribir). */
@@ -276,11 +307,23 @@ public class RecordingActivity extends Screen {
         if(!demo){
             if(Notes.exists(this,id))s.action(R.drawable.ic_sparkle,"Compartir nota .md",false,this::shareNote);
             Next.Step step=next==null?null:next.step;
-            if(Inbox.configured(this)&&step!=Next.Step.SAVE&&step!=Next.Step.UPDATE)s.action(R.drawable.ic_save,(step==Next.Step.SAVED?"Guardar de nuevo en ":"Guardar en ")+Inbox.folderName(this),false,this::inboxSave);
+            if(Inbox.configured(this)&&step!=Next.Step.SAVE&&step!=Next.Step.UPDATE){String verb=step==Next.Step.SAVED?"Guardar de nuevo en ":"Guardar en ";
+                privateAction(s,R.drawable.ic_save,verb+"carpeta rápida",verb+Inbox.folderName(this),this::inboxSave);}
             s.action(R.drawable.ic_folder,"Guardar en otra carpeta…",false,this::saveAs);
             s.action(R.drawable.ic_refresh,"Volver a transcribir…",false,()->RetranscribeSheet.show(this,recording,this::reload));
         }
         s.show();
+    }
+    /**
+     * Opción de hoja cuyo texto lleva un nombre de persona o de carpeta. En pantalla se lee completo, pero el registro
+     * técnico (Diagnóstico, informe de soporte) guarda solo la acción genérica: «Guardar la voz», nunca «… de mamá».
+     */
+    private static void privateAction(Sheet s,int icon,String logged,String shown,Runnable run){s.action(icon,logged,false,run);relabel(s.body,logged,shown);}
+    /** Cambia el texto visible (y el que lee TalkBack) de la opción recién agregada; el registro de la hoja no cambia. */
+    private static void relabel(View v,String from,String to){
+        if(v.getContentDescription()!=null&&from.contentEquals(v.getContentDescription()))v.setContentDescription(to);
+        if(v instanceof TextView&&from.contentEquals(((TextView)v).getText()))((TextView)v).setText(to);
+        if(v instanceof ViewGroup){ViewGroup g=(ViewGroup)v;for(int i=0;i<g.getChildCount();i++)relabel(g.getChildAt(i),from,to);}
     }
     private void savedSheet(){
         String folder=Inbox.folderName(this);long at=Inbox.savedAt(this,id);
@@ -727,16 +770,32 @@ public class RecordingActivity extends Screen {
     }
 
     // ---------- Nota para tu segundo cerebro ----------
+    /**
+     * «Armando la nota…» solo vale si empezó hace poco. Si la app se cerró mientras se armaba, el estado queda en
+     * «working» y nadie lo termina: pasado este plazo (la IA espera como máximo 5 min) se ofrece reintentar.
+     */
+    private static final long NOTE_STALE_MS=7*60_000;
+    private final Runnable noteExpired=()->{if(!isDestroyed())reload();};
     private View noteCard(JSONObject st,Map<String,String> names){
         String state=st.optString("noteState","");JSONObject note=Notes.load(this,id);
-        if(noteBusy||"working".equals(state))return noteSkeleton();
-        if(note!=null)return noteFull(note,names,"failed".equals(state)?st.optString("noteError",""):null);
-        if("failed".equals(state))return noteMessage("No se pudo armar la nota",st.optString("noteError","").isEmpty()?"Vuelve a intentarlo en un momento.":st.optString("noteError"),"Reintentar",R.drawable.ic_refresh);
+        long age=Math.abs(System.currentTimeMillis()-st.optLong("noteStartedAt"));
+        boolean working="working".equals(state),stale=working&&age>=NOTE_STALE_MS;
+        if(noteBusy||working&&!stale){
+            // Si nada la termina, al vencer el plazo la tarjeta pasa sola a «Reintentar».
+            if(!noteBusy){handler.removeCallbacks(noteExpired);handler.postDelayed(noteExpired,NOTE_STALE_MS-age+1000);}
+            return noteSkeleton();
+        }
+        String error="failed".equals(state)?st.optString("noteError",""):null;
+        if(note!=null)return noteFull(note,names,stale?"se interrumpió antes de terminar":error);
+        if(stale)return noteMessage("No se pudo armar la nota","Se interrumpió antes de terminar (por ejemplo, si se cerró la app). Vuelve a intentarlo.","Reintentar",R.drawable.ic_refresh);
+        if(error!=null)return noteMessage("No se pudo armar la nota",error.isEmpty()?"Vuelve a intentarlo en un momento.":error,"Reintentar",R.drawable.ic_refresh);
         if(Notes.canGenerate(this))return noteMessage("Nota para tu segundo cerebro","Resumen, decisiones, tareas y frases clave de esta grabación, listos para guardar.","Armar nota",R.drawable.ic_sparkle);
-        // Sin IA para la nota: una pista corta que lleva a configurarla.
+        // Sin IA para la nota: una pista corta que lleva directo a configurarla.
         LinearLayout box=ui.row();box.setPadding(0,ui.dp(S1),0,0);TextView hint=chip("Configura la IA de la nota en Ajustes",R.drawable.ic_sparkle,p.onSurfaceVariant,0,true);
-        hint.setOnClickListener(v->startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true)));box.addView(hint);return box;
+        hint.setOnClickListener(v->openNoteAi());box.addView(hint);return box;
     }
+    /** Ajustes con la hoja «IA de la nota» abierta; Atrás vuelve aquí. */
+    private void openNoteAi(){startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true).putExtra("noteAi",true));}
     private LinearLayout noteHeader(LinearLayout card,String subtitle){
         LinearLayout head=ui.row();head.setMinimumHeight(ui.dp(48));head.addView(ui.icon(R.drawable.ic_sparkle,p.primary,20));head.addView(ui.space(S3));
         LinearLayout titles=ui.column();TextView t=ui.text("Nota para tu segundo cerebro",Type.TITLE_MEDIUM,p.primary);if(Build.VERSION.SDK_INT>=28)t.setAccessibilityHeading(true);titles.addView(t);
@@ -841,7 +900,7 @@ public class RecordingActivity extends Screen {
     /** Arma la nota en segundo plano; mientras tanto se ve «Armando la nota…». */
     private void generateNote(){
         if(noteBusy||demo)return;
-        if(!Notes.canGenerate(this)){sheet("Falta configurar la IA de la nota","Elige en Ajustes con qué IA se arma la nota (tu clave de OpenAI o Claude).").primary("Ir a Ajustes",()->startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true))).secondary("Ahora no",null).show();return;}
+        if(!Notes.canGenerate(this)){sheet("Falta configurar la IA de la nota","Elige en Ajustes con qué IA se arma la nota (tu clave de OpenAI o Claude).").primary("Ir a Ajustes",this::openNoteAi).secondary("Ahora no",null).show();return;}
         noteBusy=true;reload();Diagnostics.event("note_requested",id);
         Context app=getApplicationContext();Recording r=recording;
         new Thread(()->{String error=null;
@@ -869,7 +928,7 @@ public class RecordingActivity extends Screen {
      */
     private void inboxSave(){
         if(demo||saving||transcript==null)return;
-        if(!Inbox.configured(this)){startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true));return;}
+        if(!Inbox.configured(this)){RecordingActions.chooseFolder(this);return;}
         saving=true;refreshPrimary();String folder=Inbox.folderName(this);Recording r=recording;Context app=getApplicationContext();
         new Thread(()->{Exception error=null;
             try{try{Inbox.save(app,r);}catch(UnsupportedOperationException notYet){legacyQuickSave(r);}Diagnostics.event("transcript_quick_saved",r.id);}
@@ -878,8 +937,8 @@ public class RecordingActivity extends Screen {
             runOnUiThread(()->{saving=false;if(isDestroyed())return;refreshPrimary();
                 if(failed==null){Ui.haptic(primary,Ui.Haptic.CONFIRM);snackbar("Guardado en "+folder,null,null);}
                 else{Ui.haptic(primary,Ui.Haptic.REJECT);
-                    sheet("No se pudo guardar en "+folder,failed instanceof HttpApi.UserAction?failed.getMessage():"Puede que Android haya retirado el permiso a esa carpeta. Elígela de nuevo en Ajustes o usa «Otra carpeta».")
-                        .primary("Ir a Ajustes",()->startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true))).secondary("Otra carpeta",this::saveAs).show();}});
+                    sheet("No se pudo guardar en "+folder,failed instanceof HttpApi.UserAction?failed.getMessage():"Puede que Android haya retirado el permiso a esa carpeta. Elígela de nuevo o usa «Otra carpeta».")
+                        .primary("Elegir la carpeta de nuevo",()->RecordingActions.chooseFolder(this)).secondary("Otra carpeta",this::saveAs).show();}});
         },"inbox").start();
     }
     /** Respaldo mientras Inbox no esté disponible: crea el .txt en la carpeta rápida, como en la 0.5. */
@@ -941,7 +1000,7 @@ public class RecordingActivity extends Screen {
     /** «Nombrar voces» en una sola pasada (hoja de la parte «sheets»); si no está disponible, la hoja clásica. */
     private void openNameVoices(){
         if(transcript==null)return;correctionOpened=true;
-        try{NameVoices.show(this,demo?recording.id:id,demo,transcript,()->{if(demo)syncDemo();reload();});}
+        try{nameSheet=NameVoices.show(this,demo?recording.id:id,demo,transcript,()->{if(demo)syncDemo();reload();});}
         catch(RuntimeException e){editSpeakers();}
     }
     /** «¿Quién habla aquí?»: escuchar el tramo y elegir a la persona correcta, o intercambiar dos voces desde aquí. */
@@ -956,7 +1015,7 @@ public class RecordingActivity extends Screen {
             s.choice(name,now?"Así está ahora":null,now,p.speaker(transcript.colorIndex(key)),()->applyEdit(t->t.assign(a,b,key),"Ahora lo dice "+name,"reassign"));}
         s.choice("Otra persona","Una voz que no está en la lista",false,0,()->applyEdit(t->t.assign(a,b,t.newPerson()),"Ahora lo dice una persona nueva","new_person"));
         List<String> others=new ArrayList<>(names.keySet());others.remove(current);
-        if(!others.isEmpty())s.action(R.drawable.ic_swap,others.size()==1?"Intercambiar "+names.get(current)+" y "+names.get(others.get(0))+" desde aquí":"Intercambiar "+names.get(current)+" con otra voz desde aquí",false,()->swapPartner(a,current));
+        if(!others.isEmpty())privateAction(s,R.drawable.ic_swap,"Intercambiar voces desde aquí",others.size()==1?"Intercambiar "+names.get(current)+" y "+names.get(others.get(0))+" desde aquí":"Intercambiar "+names.get(current)+" con otra voz desde aquí",()->swapPartner(a,current));
         if(b-a>1)s.action(R.drawable.ic_edit,"Corregir solo una frase",false,()->pickSentence(a,b));
         s.show();
     }catch(Exception e){message("Transcripción","No se pudo abrir esta intervención.");}}
@@ -997,7 +1056,7 @@ public class RecordingActivity extends Screen {
         // conocida y hay un tramo limpio (sin otra voz encima) de 3 s o más.
         double[] clean=!demo&&transcript.diarized()&&!key.startsWith(Voices.TARGET)&&!name.equals(transcript.defaultLabel(key))&&!name.trim().isEmpty()
             &&new Settings(this).provider().equals("openai")&&recording.audio(this).isFile()?NameVoices.sample(segs,key):null;
-        if(clean!=null&&(clean[1]-clean[0])*1000>=Voices.MIN_MS)s.action(R.drawable.ic_mic_fill,"Guardar la voz de "+name,false,()->saveVoice(name,clean));
+        if(clean!=null&&(clean[1]-clean[0])*1000>=Voices.MIN_MS)privateAction(s,R.drawable.ic_mic_fill,"Guardar la voz","Guardar la voz de "+name,()->saveVoice(name,clean));
         s.show();
     }catch(Exception e){message("Transcripción","No se pudo abrir esta voz.");}}
     /** Guarda el tramo limpio de esta voz como voz conocida (si ya hay una con ese nombre, pregunta antes de reemplazarla). */
@@ -1036,15 +1095,20 @@ public class RecordingActivity extends Screen {
     }catch(Exception e){message("Transcripción","No se pudo cargar el nombre.");}}
     /** Aplica una corrección, guarda y ofrece "Deshacer". La pantalla conserva su posición. */
     private void applyEdit(Transcript.Edit op,String done,String action){
-        try{JSONObject before;
+        try{JSONObject before;String saved=null;
             if(demo){before=new JSONObject(transcript.data.toString());op.apply(transcript);writeDemo();}
-            else before=Transcript.edit(this,id,op);
+            else synchronized(FilesStore.LOCK){before=Transcript.edit(this,id,op);saved=NameVoices.stamp(this,id);}
             Diagnostics.event("transcript_edited",demo?null:id,"action",action);
-            reload();snackbar(done,"Deshacer",()->undo(before));
+            String stamp=saved;reload();snackbar(done,"Deshacer",()->undo(before,stamp));
         }catch(Exception e){message("Transcripción","No se pudo guardar el cambio. Vuelve a intentarlo.");}
     }
-    private void undo(JSONObject before){
-        try{if(demo){transcript=new Transcript(before);writeDemo();}else Transcript.replace(this,id,before);Diagnostics.event("transcript_edited",demo?null:id,"action","undo");reload();}
+    /** saved: marca de la transcripción tras el cambio. Si otra versión llegó entretanto, «Deshacer» la pisaría: no se hace. */
+    private void undo(JSONObject before,String saved){
+        try{if(demo){transcript=new Transcript(before);writeDemo();}
+            else synchronized(FilesStore.LOCK){
+                if(saved!=null&&!saved.equals(NameVoices.stamp(this,id))){message("Deshacer","La transcripción cambió después (por ejemplo, volviste a la otra versión), así que ya no se puede deshacer este cambio.");return;}
+                Transcript.replace(this,id,before);}
+            Diagnostics.event("transcript_edited",demo?null:id,"action","undo");reload();}
         catch(Exception e){message("Transcripción","No se pudo deshacer el cambio.");}
     }
     private java.io.File demoFile(){return new java.io.File(getFilesDir(),"demo-transcript.json");}
@@ -1054,11 +1118,11 @@ public class RecordingActivity extends Screen {
     /** Guarda nombres; las voces con el mismo nombre se unen (con "Deshacer"). */
     private void saveNames(Map<String,String> names){
         hideSnackbar();
-        try{int[] merged={0};JSONObject before;
+        try{int[] merged={0};JSONObject before;String saved=null;
             if(demo){before=new JSONObject(transcript.data.toString());merged[0]=transcript.applyNames(names);writeDemo();}
-            else before=Transcript.edit(this,id,t->merged[0]=t.applyNames(names));
-            reload();
-            if(merged[0]>0)snackbar(merged[0]==1?"Se unieron 2 voces con el mismo nombre":"Se unieron las voces con el mismo nombre","Deshacer",()->undo(before));else toast("Nombres guardados");
+            else synchronized(FilesStore.LOCK){before=Transcript.edit(this,id,t->merged[0]=t.applyNames(names));saved=NameVoices.stamp(this,id);}
+            String stamp=saved;reload();
+            if(merged[0]>0)snackbar(merged[0]==1?"Se unieron 2 voces con el mismo nombre":"Se unieron las voces con el mismo nombre","Deshacer",()->undo(before,stamp));else toast("Nombres guardados");
         }catch(Exception e){message("No se guardaron los nombres","Vuelve a intentarlo.");}
     }
     /** Hoja clásica «Nombrar voces» (respaldo si la hoja nueva no está disponible). */
