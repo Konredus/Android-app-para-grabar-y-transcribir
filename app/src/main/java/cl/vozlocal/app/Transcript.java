@@ -18,9 +18,36 @@ final class Transcript {
     Transcript(JSONObject data) { this.data=data; }
     static boolean exists(Context c,String id) { return FilesStore.file(c,id,".transcript.json").isFile(); }
     static Transcript load(Context c,String id) throws Exception { synchronized(FilesStore.LOCK) { Transcript t=new Transcript(FilesStore.read(FilesStore.file(c,id,".transcript.json")));t.clean();return t; } }
+    /**
+     * Guarda la transcripción y deja en el estado su comienzo legible ("snippet", ~120 caracteres) para que la
+     * Biblioteca no tenga que leer cada transcripción. Como toda corrección pasa por aquí, el comienzo siempre
+     * muestra los nombres actuales.
+     */
     void save(Context c,String id) throws Exception {
-        synchronized(FilesStore.LOCK) { if(FilesStore.file(c,id,".m4a").exists()) FilesStore.write(FilesStore.file(c,id,".transcript.json"),data); }
+        synchronized(FilesStore.LOCK) {
+            if(!FilesStore.file(c,id,".m4a").exists())return;
+            FilesStore.write(FilesStore.file(c,id,".transcript.json"),data);
+            storeSnippet(c,id,this);
+        }
     }
+    static final int SNIPPET=120;
+    private static void storeSnippet(Context c,String id,Transcript t){
+        try{String snippet=t.snippet(SNIPPET);FilesStore.update(c,id,s->s.put("snippet",snippet));}catch(Exception ignored){}
+    }
+    /** Vuelve a calcular el comienzo guardado (p. ej. al restaurar una versión anterior copiando el archivo). */
+    static void refreshSnippet(Context c,String id){
+        synchronized(FilesStore.LOCK){try{if(exists(c,id))storeSnippet(c,id,load(c,id));else FilesStore.update(c,id,s->s.remove("snippet"));}catch(Exception ignored){}}
+    }
+    /** Comienzo legible de una grabación: el guardado, o se calcula y se guarda (transcripciones anteriores a la 0.6.0). "" sin transcripción. */
+    static String snippetOf(Context c,String id){
+        JSONObject state=FilesStore.state(c,id);if(state.has("snippet"))return state.optString("snippet");
+        if(!exists(c,id))return "";
+        refreshSnippet(c,id);return FilesStore.state(c,id).optString("snippet");
+    }
+    /** ¿Tiene algo dicho? (tramos con texto). */
+    boolean hasText(){JSONArray s=segments();for(int i=0;i<s.length();i++){JSONObject seg=s.optJSONObject(i);if(seg!=null&&!seg.optString("text").trim().isEmpty())return true;}return false;}
+    /** ¿El usuario le puso nombre a alguna voz? */
+    boolean named(){JSONObject names=data.optJSONObject("names");if(names!=null)for(Iterator<String> it=names.keys();it.hasNext();)if(!names.optString(it.next()).trim().isEmpty())return true;return false;}
     JSONArray segments() { return data.optJSONArray("segments") == null ? new JSONArray() : data.optJSONArray("segments"); }
     boolean diarized(){return data.optBoolean("diarized",true);}
 
@@ -188,12 +215,15 @@ final class Transcript {
      * Une las respuestas de cada bloque. "_known" dice qué nombres enviados como muestras de voz reconoció el modelo:
      * - objeto {nombre enviado → voz} (0.5.0): nombres únicos como "voz_1", que no chocan con las letras del modelo;
      * - arreglo de letras (hasta 0.4.4): la letra del bloque 1.
+     * "_prefix" (0.6.0, «Segunda pasada con tus correcciones»): las voces que el modelo NO reconoció llevan este prefijo.
+     * Las reconocidas vuelven con el mismo id de la versión anterior ("block0:A", "voice:me"…), y una voz nueva a la que
+     * el modelo llame "A" no debe confundirse con la "A" de la versión anterior.
      * Los tramos sin texto se descartan.
      */
     static Transcript fromParts(List<JSONObject> parts,List<Double> offsets) throws Exception {
         JSONArray segments=new JSONArray();
         for(int p=0;p<parts.size();p++){
-            JSONObject response=parts.get(p); JSONArray source=response.optJSONArray("segments");
+            JSONObject response=parts.get(p); JSONArray source=response.optJSONArray("segments");String prefix=response.optString("_prefix","");
             Map<String,String> map=new HashMap<>();Set<String> legacy=new HashSet<>();Object known=response.opt("_known");
             if(known instanceof JSONObject){JSONObject k=(JSONObject)known;for(Iterator<String> it=k.keys();it.hasNext();){String name=it.next();map.put(name,k.getString(name));}}
             else if(known instanceof JSONArray){JSONArray k=(JSONArray)known;for(int i=0;i<k.length();i++)legacy.add(k.optString(i));}
@@ -203,7 +233,7 @@ final class Transcript {
                 if(!segment.has("speaker") || !segment.has("start") || !segment.has("end") || !segment.has("text"))throw new java.io.IOException("La transcripción recibida está incompleta.");
                 if(segment.optString("text").trim().isEmpty())continue;
                 String speaker=segment.isNull("speaker")?"unknown":segment.getString("speaker");
-                String id=map.containsKey(speaker)?map.get(speaker):parts.size()<=1?speaker:(p>0&&legacy.contains(speaker)?"block0:"+speaker:"block"+p+":"+speaker);
+                String id=map.containsKey(speaker)?map.get(speaker):prefix+(parts.size()<=1?speaker:(p>0&&legacy.contains(speaker)?"block0:"+speaker:"block"+p+":"+speaker));
                 segments.put(new JSONObject().put("speaker",id)
                     .put("start",segment.getDouble("start")+offsets.get(p)).put("end",segment.getDouble("end")+offsets.get(p)).put("text",segment.getString("text")));
             }

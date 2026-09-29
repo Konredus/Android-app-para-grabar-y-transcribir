@@ -57,11 +57,16 @@ final class Recording {
         }
         all.sort((a,b) -> Long.compare(b.created, a.created)); return all;
     }
+    /** Archivos propios de cada grabación (además del audio). Los que no están en la lista igual se borran por prefijo. */
+    static final String[] FILES = {".json", ".sync.json", ".transcript.json", ".transcript.prev.json", ".note.json", ".note.prev.json", ".wave.json"};
     boolean delete(Context c) {
-        try { Pipeline.cancel(c,id); } catch(Exception ignored) { }
-        AudioParts.clearBlocks(c,id);
+        // Al eliminar no se restaura la versión anterior de «Volver a transcribir»: se borra todo.
+        try { Pipeline.cancel(c,id,false); } catch(Exception ignored) { }
+        AudioParts.clearBlocks(c,id);Transcriber.clearDone(c,id);
         synchronized(FilesStore.LOCK) {
             if (!audio(c).delete()) return false;
+            // AtomicFile.delete también quita sus respaldos (.bak/.new).
+            for (String suffix : FILES) new android.util.AtomicFile(new File(directory(c), id + suffix)).delete();
             File[] files=directory(c).listFiles((dir,name)->name.startsWith(id+"."));
             if(files!=null)for(File file:files)file.delete();
             FilesStore.version.incrementAndGet();return true;

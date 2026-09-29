@@ -26,7 +26,7 @@ final class OpenAiClient {
     JSONObject transcribe(File audio,ProviderConfig config,String language)throws Exception{return transcribe(audio,config,language,null,null);}
     /** references: pares {nombre, data URL} de muestras de voz (2–10 s) para reconocer a las mismas personas en otros bloques. */
     JSONObject transcribe(File audio,ProviderConfig config,String language,List<String[]> references,Delta delta)throws Exception{
-        if(audio.length()>25_000_000)throw new HttpApi.UserAction("Este bloque supera el tamaño permitido por el proveedor (25 MB).");
+        if(audio.length()>25_000_000)throw new HttpApi.UserAction("Esta parte del audio supera el tamaño que acepta el proveedor (25 MB). Prueba recortar el audio.");
         String boundary="VozLocal"+java.util.UUID.randomUUID().toString().replace("-","");
         boolean fast=config.provider.equals("openai")&&config.model.equals("gpt-transcribe");
         StringBuilder header=new StringBuilder(field(boundary,"model",config.model));
