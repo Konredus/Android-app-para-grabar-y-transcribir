@@ -47,6 +47,13 @@ Rediseño de la experiencia basado en el uso real: 999 acciones registradas, una
 - Duraciones en palabras, sin jerga técnica a la vista.
 
 **Correcciones**
+- **Revisión independiente de toda la versión:** 27 problemas confirmados y corregidos. Los principales:
+  - la pantalla Grabar hacía girar el procesador sin parar mientras se veía la Biblioteca (gastaba batería y alteraba la grabación);
+  - volver a transcribir dos veces sin elegir versión podía borrar la original;
+  - una nota podía quedar «Armando…» para siempre;
+  - la opción «sin cortar» podía reenviarse (y cobrarse) varias veces desde la tarea de fondo;
+  - un servidor propio sin dirección podía recibir la clave.
+- **Privacidad del informe de soporte:** ya no incluye nombres de personas ni títulos de grabaciones. Se ocultan en las etiquetas de botones y en las bitácoras.
 - La pantalla de detalle ya no se reconstruye con cambios de otras grabaciones y conserva la posición.
 - La onda de audios largos se calcula midiendo ventanas: tarda lo mismo con 5 o 90 minutos.
 
