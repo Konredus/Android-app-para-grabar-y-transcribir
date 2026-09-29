@@ -15,6 +15,9 @@ final class Pipeline {
         if(Transcript.exists(c,id)){LocalStorage.enqueue(c,id);return;}
         FilesStore.update(c,id,s -> s.put("requested",true).put("failed",false).put("attempts",0).put("retries",0).put("localCuts",0).put("queuedAt",System.currentTimeMillis()).put("log",new JSONArray()).put("upSent",0).put("upTotal",0).put("speakers",speakers).put("liveChars",0).remove("lastError"));
         Diagnostics.event("job_queued",id);
+        // «Volver a transcribir»: la bitácora dice qué alternativa se usó (para aprender cuál funciona mejor).
+        JSONObject state=FilesStore.state(c,id);Retranscribe.Mode again=Retranscribe.mode(state);
+        if(again!=null){JSONArray fixed=state.optJSONArray("fixedRefs");log(c,id,"Volver a transcribir: «"+Retranscribe.label(again)+"»"+(again==Retranscribe.Mode.CORRECTIONS&&fixed!=null&&fixed.length()>0?" · muestras de "+Retranscribe.who(fixed):"")+" · la versión anterior queda guardada");}
         String blocker=blocker(c);
         log(c,id,blocker==null?"En cola · empezando":"En cola · "+blocker);
         if(blocker!=null||!startForeground(c))schedule(c,true);
@@ -70,9 +73,16 @@ final class Pipeline {
     static void log(Context c,String id,String message){
         try{FilesStore.update(c,id,s->{JSONArray log=s.optJSONArray("log");if(log==null)log=new JSONArray();JSONObject last=log.length()>0?log.optJSONObject(log.length()-1):null;if(last!=null&&message.equals(last.optString("m"))){s.put("since",System.currentTimeMillis());return;}log.put(new JSONObject().put("t",System.currentTimeMillis()).put("m",message));while(log.length()>80)log.remove(0);s.put("log",log).put("status",message).put("since",System.currentTimeMillis());});}catch(Exception ignored){}
     }
-    static void cancel(Context c,String id)throws Exception{
+    /** Cancela y, si era «Volver a transcribir» y la nueva versión aún no estaba, vuelve sola la anterior. */
+    static void cancel(Context c,String id)throws Exception{cancel(c,id,true);}
+    /** restorePrevious: false al eliminar la grabación (no tiene sentido restaurar algo que se va a borrar). */
+    static void cancel(Context c,String id,boolean restorePrevious)throws Exception{
         Diagnostics.event("job_cancelled",id);FilesStore.update(c,id,s -> s.put("requested",false));log(c,id,"Transcripción cancelada");AudioParts.clearBlocks(c,id);
         HttpApi active=TranscribeService.current;if(active!=null&&id.equals(active.jobId))active.cancel();
+        // La grabación nunca queda sin transcripción por cancelar una versión nueva.
+        if(restorePrevious&&Retranscribe.hasPrevious(c,id)&&!Transcript.exists(c,id)){
+            try{Retranscribe.restore(c,id,"Se mantiene la versión anterior","retranscribe_cancelled");}catch(Exception e){Diagnostics.event("retranscribe_restore_failed",id,"error_class",e.getClass().getSimpleName());}
+        }
         c.getSystemService(JobScheduler.class).cancel(JOB_ID);schedule(c,true);
     }
 }

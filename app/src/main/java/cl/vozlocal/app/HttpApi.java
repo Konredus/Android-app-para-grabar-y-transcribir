@@ -84,7 +84,7 @@ class HttpApi {
             else if(message.contains("format")||message.contains("decode")||message.contains("corrupt"))reason="El proveedor no pudo decodificar este audio. Prueba importar una copia para convertirla.";
             else if(message.contains("too short")||message.contains("empty"))reason="El audio está vacío o es demasiado corto. Prueba una grabación de al menos unos segundos.";
             else if(message.contains("model"))reason="El modelo no está disponible o no admite estos parámetros. Revisa el modelo y sus capacidades.";
-            else if(message.contains("size")||message.contains("large"))reason="El bloque supera un límite del proveedor. Prueba recortar el audio.";
+            else if(message.contains("size")||message.contains("large"))reason="Una parte del audio supera un límite del proveedor. Prueba recortar el audio.";
         }}catch(Exception ignored){}
         Diagnostics.event("api_rejected",response.jobId,"http",response.code,"request_id",response.requestId,"code",code,"type",type,"param",param);
         if(response.code==401)throw new UserAction("La clave del proveedor no es válida o fue revocada. Revísala en Ajustes.");
