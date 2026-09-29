@@ -56,6 +56,44 @@
 - **Detalle técnico:** las respuestas guardadas por bloque (`<id>.partN.json`) y los cortes (`cuts`) se reutilizan si el perfil no cambia. Con la misma opción saldría el mismo resultado sin llamar a OpenAI. Hay que borrarlos o agregar un id de intento al `profile` en `Transcriber.process`.
 - **Relacionado:** ofrecer «Grabar mi voz» antes de repetir, si todavía no está grabada.
 
+#### Que la segunda pasada salga distinta, y mejor (pedido 2026-09-29)
+Repetir exactamente lo mismo no sirve: el modelo varía un poco solo, pero no de forma confiable. La segunda pasada debe **cambiar algo que importe**. Opciones de la hoja, de la más recomendada a la menos:
+
+1. **«Segunda pasada con tus correcciones»** (recomendada si ya corregiste o nombraste voces).
+   - Se toman muestras limpias de cada persona a partir de la transcripción corregida: tramos que el usuario confirmó (con nombre o corregidos) y sin otra voz encima.
+   - Se envían como voces conocidas (máx. 4, incluida «Mi voz») a **todos** los bloques, también el primero.
+   - Así el modelo sabe desde el segundo 0 quién es la Fran y quién eres tú, y los nombres salen puestos.
+   - Es la alternativa con más probabilidad de mejorar de verdad.
+2. **«Separar voces sin cortar el audio»** (audios de hasta ~23 min).
+   - Un solo envío en vez de bloques: no hay uniones donde las voces se crucen.
+   - Es más lento. Arriba de 23 min no se puede (límite de 1400 s del modelo).
+3. **«Con Mi voz»**, si la primera vez no estaba grabada.
+4. **«Solo el texto con otro modelo»** (gpt-4o-transcribe o GPT Transcribe).
+   - Sirve cuando lo que falló fueron las palabras y no las voces.
+   - Pierde la separación de voces.
+5. **«Idioma: detección automática»**, para audios con mezcla de idiomas.
+
+Al terminar:
+- mostrar **«Nueva versión lista»** con «Quedarme con la nueva» / «Volver a la anterior»;
+- si se puede, una vista simple que marque las intervenciones cuya persona cambió entre las dos versiones.
+
+Para cada opción:
+- mostrar el costo estimado;
+- registrar en la bitácora qué alternativa se usó (para aprender cuál funciona mejor).
+
+### Novedades de cada versión (pedido 2026-09-29)
+- **Al abrir la app después de actualizar,** aparece una hoja «Novedades de la 0.x.x»:
+  - 3 a 5 puntos en lenguaje simple (qué cambió para el usuario, no detalles técnicos);
+  - botones «Entendido» y «Ver todas las versiones».
+  - Se muestra una sola vez por versión: se compara `versionCode` con el último visto.
+  - No se muestra en la primera instalación, donde ya está la bienvenida.
+- **En Ajustes → Ayuda y soporte,** una fila «Novedades y versiones» con la versión actual como valor. Abre una pantalla con el historial:
+  - la más nueva arriba;
+  - cada versión con su fecha y sus puntos, plegable.
+- **Fuente:** un archivo propio de novedades para el usuario (p. ej. `assets/novedades.json`), escrito en español simple. Es distinto del `CHANGELOG.md` técnico.
+- **Proceso:** agregar la entrada de novedades pasa a ser un paso obligatorio de cada versión, en el checklist de `diseno/CRITERIOS.md`.
+- **Opcional:** una etiqueta «Nuevo» junto a las funciones recién agregadas (p. ej. «Mi voz»), que desaparece tras usarlas una vez.
+
 ## Etapa 3 de `PLAN-voces.md` (opcional, sin fecha)
 - Voces conocidas de otras personas (p. ej. la Fran) y elegir «¿Quiénes hablan?» al transcribir (máx. 4).
 - ~~Volver a transcribir~~ → pasó a «Para la próxima versión».
