@@ -15,9 +15,11 @@ final class Pipeline {
         if(Transcript.exists(c,id)){LocalStorage.enqueue(c,id);return;}
         FilesStore.update(c,id,s -> s.put("requested",true).put("failed",false).put("attempts",0).put("retries",0).put("localCuts",0).put("queuedAt",System.currentTimeMillis()).put("log",new JSONArray()).put("upSent",0).put("upTotal",0).put("speakers",speakers).put("liveChars",0).remove("lastError"));
         Diagnostics.event("job_queued",id);
-        // «Volver a transcribir»: la bitácora dice qué alternativa se usó (para aprender cuál funciona mejor).
+        // «Volver a transcribir»: la bitácora dice qué alternativa se usó (para aprender cuál funciona mejor). Cuántas
+        // personas, no quiénes: la bitácora viaja (sin títulos ni nombres) en el informe de soporte.
         JSONObject state=FilesStore.state(c,id);Retranscribe.Mode again=Retranscribe.mode(state);
-        if(again!=null){JSONArray fixed=state.optJSONArray("fixedRefs");log(c,id,"Volver a transcribir: «"+Retranscribe.label(again)+"»"+(again==Retranscribe.Mode.CORRECTIONS&&fixed!=null&&fixed.length()>0?" · muestras de "+Retranscribe.who(fixed):"")+" · la versión anterior queda guardada");}
+        if(again!=null){JSONArray fixed=state.optJSONArray("fixedRefs");int people=Retranscribe.people(fixed);
+            log(c,id,"Volver a transcribir: «"+Retranscribe.label(again)+"»"+(again==Retranscribe.Mode.CORRECTIONS&&people>0?" · muestras de "+people+(people==1?" persona":" personas"):"")+" · la versión anterior queda guardada");}
         String blocker=blocker(c);
         log(c,id,blocker==null?"En cola · empezando":"En cola · "+blocker);
         if(blocker!=null||!startForeground(c))schedule(c,true);

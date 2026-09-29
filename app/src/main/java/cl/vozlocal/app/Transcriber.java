@@ -39,7 +39,21 @@ final class Transcriber {
     static final int MAX_KNOWN=4;
     /** La tarea diferida cede el turno antes de este tiempo para que Android no la corte a mitad de un envío. */
     static final long JOB_BUDGET_MS=6*60*1000;
+    /** Lo que la tarea de fondo se permite gastar en un envío: Android la corta a los 10 min. */
+    static final long JOB_SEND_LIMIT_MS=9*60_000;
+    /** Cuánto puede tardar el envío de una parte (subida + respuesta), para decidir si cabe en la tarea de fondo. */
+    static long sendEstimate(long partMs){return 90_000+(long)(0.6*partMs);}
     static final class Yield extends Exception{Yield(){super("Pausa corta");}}
+    /**
+     * Un envío que ni solo cabe en la tarea de fondo (p. ej. «sin cortar» de 20 min): no se manda desde ahí, porque
+     * Android lo cortaría a mitad y cada intento volvería a subir (y quizá a cobrar) el audio completo. Queda pedido y lo
+     * hace el servicio en primer plano al abrir la app.
+     */
+    static final class NeedsForeground extends Exception{NeedsForeground(String what){super(what);}}
+    /** Grabaciones que esta ronda dejó para el primer plano (la tarea de fondo no se reprograma por ellas). */
+    private final Set<String> waitingForeground=ConcurrentHashMap.newKeySet();
+    /** La primera grabación que quedó esperando la app abierta, o null. */
+    String waitingForeground(){for(String id:waitingForeground)return id;return null;}
     /** Cortes del propio teléfono que se reintentan sin gastar intentos; pasado este número sí cuentan. */
     static final int MAX_LOCAL_CUTS=12;
     /** Vigilante de conexiones: mide con elapsedRealtime, que avanza aunque Android congele la app. */
@@ -72,6 +86,12 @@ final class Transcriber {
                 http.jobId=r.id;currentId=r.id;
                 try{process(r);}
                 catch(Yield y){retry=true;Pipeline.log(c,r.id,"Pausa corta para no exceder el límite de Android · continúa enseguida");break;}
+                catch(NeedsForeground f){
+                    // Sigue pedida; no se reintenta desde aquí (daría vueltas sin avanzar): la retoma el primer plano.
+                    waitingForeground.add(r.id);
+                    Pipeline.log(c,r.id,f.getMessage()+" tarda más de lo que Android da a una tarea de fondo · abre la app para enviarlo (sigue aunque bloquees el teléfono)");
+                    Diagnostics.event("job_needs_foreground",r.id,"runner","job");
+                }
                 catch(HttpApi.UserAction e){
                     FilesStore.update(c,r.id,s->s.put("requested",false).put("failed",true));Pipeline.log(c,r.id,e.getMessage());
                     if(!keepPrevious(r))attention(r,"La transcripción necesita atención",e.getMessage());
@@ -98,7 +118,8 @@ final class Transcriber {
                 }
                 finally{currentId=null;}
             }
-            retry|=Pipeline.pending(c);
+            // Queda trabajo si hay otra grabación pedida (las que esperan la app abierta no cuentan).
+            if(!retry)for(Recording r:Recording.list(c))if(!waitingForeground.contains(r.id)&&FilesStore.state(c,r.id).optBoolean("requested")){retry=true;break;}
         }catch(Exception e){retry=true;Diagnostics.event("pipeline_failure",null,"error_class",e.getClass().getSimpleName());}
         return retry;
     }
@@ -141,6 +162,8 @@ final class Transcriber {
             long bytes=r.audio(c).length(),audioMs=r.duration>0||!config.speakers?r.duration:AudioConvert.duration(r.audio(c));
             // «Separar voces sin cortar el audio»: un solo envío, sin uniones donde las voces se crucen.
             boolean single=mode==Retranscribe.Mode.SINGLE&&config.speakers&&Retranscribe.fitsSingle(audioMs,bytes);
+            // Tarea de fondo: un envío único que no alcanza a volver antes del corte de Android se deja al primer plano.
+            if(single&&budgetMs>0&&sendEstimate(audioMs)>JOB_SEND_LIMIT_MS)throw new NeedsForeground("Sin cortar: el envío del audio completo");
             long target=single?audioMs:config.speakers?speakerBlockMs(audioMs,bytes):BLOCK_TEXT_MS;
             // Voces conocidas («Mi voz» y las demás guardadas) van en todos los bloques (también el primero), la tuya primero y
             // a lo más MAX_KNOWN. Si cambia alguna muestra, no se reutilizan bloques ya transcritos.
@@ -171,8 +194,9 @@ final class Transcriber {
             try{
                 List<String[]> own=saved.isEmpty()?null:saved;
                 if(!saved.isEmpty()){
-                    List<String> who=new ArrayList<>();for(String[] ref:saved)who.add(ref[3]);int active=Voices.used(c).size();
-                    Pipeline.log(c,r.id,"Voces conocidas: "+String.join(", ",who)+" · se reconocen desde el inicio"+(active>saved.size()?" (van "+saved.size()+" de tus "+active+": el máximo por audio)":""));
+                    // Cantidades, no nombres: la bitácora viaja (sin títulos ni nombres) en el informe de soporte.
+                    boolean mine=false;for(String[] ref:saved)if(Voices.ME.equals(ref[2]))mine=true;int active=Voices.used(c).size();
+                    Pipeline.log(c,r.id,"Voces conocidas: "+saved.size()+(mine?" (incluida la tuya)":"")+" · se reconocen desde el inicio"+(active>saved.size()?" (van "+saved.size()+" de tus "+active+": el máximo por audio)":""));
                 }
                 List<String[]> references=own;int from=0;String fresh=null;
                 List<String[]> corrections=fixed==null?Collections.emptyList():fixedReferences(r,fixed,savedNames);
@@ -180,8 +204,8 @@ final class Transcriber {
                     // Las voces reconocidas vuelven con su id anterior; las nuevas llevan un prefijo para no chocar con esos ids.
                     fresh="pass"+attempt+":";
                     references=new ArrayList<>(saved);references.addAll(corrections);
-                    LinkedHashSet<String> people=new LinkedHashSet<>();for(String[] ref:corrections)people.add(ref[3]);
-                    Pipeline.log(c,r.id,"Segunda pasada: muestras de "+String.join(", ",people)+" (de tus correcciones) van en "+(n>1?"todas las partes":"el envío")+" desde el inicio");
+                    LinkedHashSet<String> people=new LinkedHashSet<>();for(String[] ref:corrections)people.add(ref[2]);
+                    Pipeline.log(c,r.id,"Segunda pasada: muestras de "+people.size()+(people.size()==1?" persona":" personas")+" (de tus correcciones) van en "+(n>1?"todas las partes":"el envío")+" desde el inicio");
                 }else{
                     if(fixed!=null)Pipeline.log(c,r.id,"No se pudieron preparar las muestras de tus correcciones · se separan voces de nuevo sin ellas");
                     if(config.speakers&&n>1){
@@ -314,8 +338,11 @@ final class Transcriber {
         if(checkpoint.exists())return FilesStore.read(checkpoint);
         check(r);AudioParts.Part part=parts.get(i);String label=n>1?"parte "+(i+1)+" de "+n:"audio";
         // Tarea de fondo: Android la corta a los ~10 min. Si este bloque no alcanza a volver, se cede el turno antes de enviarlo.
-        // Nunca antes del primer envío de la ronda: así cada ronda avanza al menos un bloque.
-        if(budgetMs>0){long partEstimate=90_000+(long)(0.6*(part.durationMs>0?part.durationMs:r.duration));if(sentThisRun.get()&&System.currentTimeMillis()-started+partEstimate>9*60_000)throw new Yield();}
+        // Nunca antes del primer envío de la ronda: así cada ronda avanza al menos un bloque. Un bloque que ni solo cabe
+        // no se envía desde aquí (se cortaría siempre a mitad y se volvería a subir entero): lo hace el primer plano.
+        if(budgetMs>0){long partEstimate=sendEstimate(part.durationMs>0?part.durationMs:r.duration);
+            if(partEstimate>JOB_SEND_LIMIT_MS)throw new NeedsForeground(n>1?"El envío de la parte "+(i+1)+" de "+n:"El envío del audio");
+            if(sentThisRun.get()&&System.currentTimeMillis()-started+partEstimate>JOB_SEND_LIMIT_MS)throw new Yield();}
         sentThisRun.set(true);
         HttpApi h=http.child();h.jobId=r.id;long partMs=part.durationMs>0?part.durationMs:r.duration;
         // La espera escala con la duración: un bloque con separación de voces puede tardar varios minutos.

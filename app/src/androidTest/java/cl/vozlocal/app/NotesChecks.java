@@ -135,6 +135,19 @@ final class NotesChecks {
         expect(TranscriptExport.noteFilename("2026-09-20 Ya fechada.md",created).equals("2026-09-20 Ya fechada.md")&&TranscriptExport.markdownFilename("... /\\").equals("Transcripción.md"),"Note filename duplicated date/extension or lost fallback");
         expect(TranscriptExport.filename("Reunión.txt").equals("Reunión.txt")&&TranscriptExport.filename("Notas.md").equals("Notas.md.txt"),".txt filename behavior changed");
         expect(Notes.usd(Notes.OPENAI_MODEL,1_000_000,1_000_000)>0&&Notes.estimateUsd(Notes.ANTHROPIC_MODEL,52*60_000)<0.2&&Notes.usd("modelo-propio",1,1)<0,"Cost estimate wrong");
+
+        // «Armando la nota…» solo mientras es reciente: si Android cerró la app a mitad, se puede reintentar.
+        long now=System.currentTimeMillis();
+        expect(Notes.working(new JSONObject().put("noteState","working").put("noteStartedAt",now-60_000)),"Recent note not reported as working");
+        expect(!Notes.working(new JSONObject().put("noteState","working").put("noteStartedAt",now-Notes.WORKING_MAX_MS-1000))&&!Notes.working(new JSONObject().put("noteState","working")),"Stale «working» note would stick forever");
+        expect(!Notes.working(new JSONObject().put("noteState","ready").put("noteStartedAt",now))&&!Notes.working(null),"Ready note reported as working");
+    }
+    /** Respuesta de Chat Completions con la nota de prueba. */
+    private static String openAiReply(String title)throws JSONException{
+        JSONObject content=answer().put("title",title);
+        return new JSONObject().put("id","chatcmpl-test").put("choices",new JSONArray().put(new JSONObject().put("index",0).put("finish_reason","stop")
+            .put("message",new JSONObject().put("role","assistant").put("content",content.toString()).put("refusal",JSONObject.NULL))))
+            .put("usage",new JSONObject().put("prompt_tokens",1000).put("completion_tokens",200)).toString();
     }
 
     /** Con archivos: generar con cada proveedor (HttpApi falso), título automático, tareas, 0-Inbox y borrar. */
@@ -205,6 +218,24 @@ final class NotesChecks {
         JSONObject noteB=Notes.load(c,b.id);
         expect(noteB!=null&&noteB.getString("provider").equals("anthropic")&&noteB.getString("summary").equals("{S1} y {S2} revisaron el presupuesto.")&&noteB.getJSONObject("usage").getLong("output_tokens")==300,"Anthropic note wrong: "+noteB);
         expect(FilesStore.recording(c,b.id).title.equals(userTitle)&&FilesStore.state(c,b.id).optString("suggestedTitle").equals("Metas del trimestre"),"User title overwritten or suggestion missing");
+
+        // 0-Inbox: un documento que otra grabación guardó después (el proveedor reutilizó su id) no se pisa.
+        String shared="content://example/doc";long later=System.currentTimeMillis();
+        FilesStore.update(c,b.id,s->s.put("inboxUri",shared).put("inboxAt",later));
+        expect(Inbox.claimedByOther(c,a.id,shared)&&!Inbox.claimedByOther(c,b.id,shared)&&!Inbox.claimedByOther(c,a.id,""),"A document saved later by another recording would be overwritten");
+        FilesStore.update(c,b.id,s->{s.remove("inboxUri");s.remove("inboxAt");});
+
+        // «Volver a transcribir» empezó mientras se armaba la nota: la respuesta (de la versión anterior) no se guarda
+        // y el estado de la nota de la nueva versión no se toca.
+        Recording late=fixture(c,source,"Nota que llega tarde",now,fixtures);
+        HttpApi racing=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra)throws Exception{
+            FilesStore.update(c,late.id,s->s.put("attempt",s.optInt("attempt",0)+1).put("noteState","working").put("noteStartedAt",12345L));
+            return new Response(200,openAiReply("Tarde"),null);
+        }};
+        boolean discarded=false;try{Notes.generate(c,late,racing,"openai",Notes.OPENAI_MODEL,"sk-test-notes");}catch(Notes.Discarded e){discarded=true;}
+        JSONObject lateState=FilesStore.state(c,late.id);
+        expect(discarded&&!Notes.exists(c,late.id)&&!lateState.has("suggestedTitle"),"A note for the previous version was saved over the new one");
+        expect(lateState.optString("noteState").equals("working")&&lateState.optLong("noteStartedAt")==12345L,"A late note changed the note state of the new version: "+lateState);
 
         // Errores: clave inválida y respuesta ilegible → «failed» con un texto claro; la nota anterior se conserva.
         HttpApi denied=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra){return new Response(401,"{\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"}}",null);}};

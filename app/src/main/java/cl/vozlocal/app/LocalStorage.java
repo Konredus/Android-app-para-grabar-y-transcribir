@@ -20,13 +20,24 @@ final class LocalStorage {
         if(Transcript.exists(c,r.id)){Transcript transcript=Transcript.load(c,r.id);writeText(c,child(c,tree,folder,"transcripcion.txt","text/plain"),transcript.text(r));writeText(c,child(c,tree,folder,"transcripcion.json","application/json"),transcript.data.toString(2));}
         // La nota para el segundo cerebro (0.6.0), en Markdown. Si falla, el resto de la copia sigue valiendo.
         if(Notes.exists(c,r.id)){try{writeText(c,child(c,tree,folder,"nota.md","text/markdown"),Notes.markdown(c,r));}catch(Exception e){Diagnostics.event("local_note_failed",r.id,"error_class",e.getClass().getSimpleName());}}
+        // La versión actual no tiene nota (p. ej. al volver a transcribir): la nota.md de antes llevaba otro resumen y otro
+        // texto, así que se quita. Sin transcripción (una versión nueva en curso) no se toca: la copia sigue siendo la anterior.
+        else if(Transcript.exists(c,r.id)){
+            try{Uri old=find(c,tree,folder,"nota.md");if(old!=null)DocumentsContract.deleteDocument(c.getContentResolver(),old);}
+            catch(Exception e){Diagnostics.event("local_note_delete_failed",r.id,"error_class",e.getClass().getSimpleName());}
+        }
         FilesStore.update(c,r.id,s->s.put("localStatus","Copia local actualizada"));Diagnostics.event("local_copy_complete",r.id);
     }
-    static Uri child(Context c,Uri tree,Uri parent,String name,String mime)throws Exception{
+    /** El documento con ese nombre dentro de parent, o null si no existe (no lo crea). */
+    static Uri find(Context c,Uri tree,Uri parent,String name)throws Exception{
         Uri children=DocumentsContract.buildChildDocumentsUriUsingTree(tree,DocumentsContract.getDocumentId(parent));
         try(android.database.Cursor cursor=c.getContentResolver().query(children,new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME},null,null,null)){
             if(cursor!=null)while(cursor.moveToNext())if(name.equals(cursor.getString(1)))return DocumentsContract.buildDocumentUriUsingTree(tree,cursor.getString(0));
         }
+        return null;
+    }
+    static Uri child(Context c,Uri tree,Uri parent,String name,String mime)throws Exception{
+        Uri found=find(c,tree,parent,name);if(found!=null)return found;
         Uri created;
         try{created=DocumentsContract.createDocument(c.getContentResolver(),parent,mime,name);}
         catch(SecurityException e){throw e;}

@@ -71,7 +71,7 @@ final class Ui {
     ImageView icon(int res,int color,int sizeDp){ImageView i=new ImageView(c);i.setImageResource(res);i.setImageTintList(ColorStateList.valueOf(color));i.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);i.setLayoutParams(new LinearLayout.LayoutParams(dp(sizeDp),dp(sizeDp)));return i;}
     /** Ícono dentro de un círculo tonal (avatar de Material). Siempre en la misma familia de color. */
     FrameLayout tile(int res,int fg,int bg,int sizeDp,int iconDp){FrameLayout f=new FrameLayout(c);f.setBackground(oval(bg));ImageView i=icon(res,fg,iconDp);f.addView(i,new FrameLayout.LayoutParams(dp(iconDp),dp(iconDp),Gravity.CENTER));f.setLayoutParams(new LinearLayout.LayoutParams(dp(sizeDp),dp(sizeDp)));f.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);return f;}
-    /** Botón de ícono (Material "icon button"). Área táctil mínima 48 dp. */
+    /** Botón de ícono (Material "icon button"). Área táctil mínima 48 dp. Registra su descripción pasada por Diagnostics.safeAction. */
     ImageButton iconButton(int res,String description,int tint,int bg,int sizeDp){
         ImageButton b=new ImageButton(c){@Override public boolean performClick(){Diagnostics.event("ui_action",null,"screen",c.getClass().getSimpleName(),"action",description);return super.performClick();}};
         b.setImageResource(res);b.setImageTintList(ColorStateList.valueOf(tint));b.setContentDescription(description);b.setScaleType(ImageView.ScaleType.CENTER);
@@ -158,6 +158,10 @@ final class Ui {
             Drawable d=glyph.getDrawable();if(d instanceof Animatable)((Animatable)d).start();
         }
         @Override public void setEnabled(boolean enabled){super.setEnabled(enabled);setAlpha(enabled?1f:0.38f);}
+        /**
+         * Registra la etiqueta visible (p. ej. «Detener y guardar»). Puede ser contenido del usuario (el título que se está
+         * grabando, un nombre): Diagnostics.event la pasa por {@link Diagnostics#safeAction}, en su hilo, antes de guardarla.
+         */
         @Override public boolean performClick(){Diagnostics.event("ui_action",null,"screen",c.getClass().getSimpleName(),"action",label.getText().toString());return super.performClick();}
         @Override public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(info);info.setClassName(Button.class.getName());}
     }

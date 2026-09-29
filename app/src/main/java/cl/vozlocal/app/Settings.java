@@ -29,10 +29,17 @@ final class Settings {
     /** Elección por defecto cuando no se puede preguntar (p. ej. transcripción automática). */
     boolean defaultSpeakers(){return canSeparate()&&!speakersMode().equals("never");}
     ProviderConfig config()throws Exception{return config(defaultSpeakers());}
+    /** Dirección del servidor propio ("" si aún no se configura). */
+    String customBase(){return prefs.getString("customBase","").trim();}
+    /** Con «Servidor compatible» sin dirección no se puede transcribir (ni comprobar la clave). */
+    boolean needsServer(){return !provider().equals("openai")&&customBase().isEmpty();}
+    static final String NO_SERVER="Configura la dirección de tu servidor en Ajustes.";
     ProviderConfig config(boolean speakers)throws Exception{
         boolean openai=provider().equals("openai");
         if(openai)return new ProviderConfig("openai","https://api.openai.com/v1",speakers?"gpt-4o-transcribe-diarize":textModel(),apiKey(),speakers);
-        return new ProviderConfig(provider(),prefs.getString("customBase","https://example.com/v1"),prefs.getString("customModel","whisper-1"),apiKey(),speakers&&prefs.getBoolean("customSpeakers",false));
+        // Sin dirección no hay a dónde enviar: nunca una por defecto (la clave y el audio irían a un tercero).
+        if(customBase().isEmpty())throw new HttpApi.UserAction(NO_SERVER);
+        return new ProviderConfig(provider(),customBase(),prefs.getString("customModel","whisper-1"),apiKey(),speakers&&prefs.getBoolean("customSpeakers",false));
     }
     // ---------- 0.6.0 ----------
     /** Armar la «Nota para tu segundo cerebro» al terminar cada transcripción. */

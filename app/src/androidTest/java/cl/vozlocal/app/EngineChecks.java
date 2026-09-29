@@ -22,6 +22,7 @@ final class EngineChecks {
         availability();
         sizing();
         corrections();
+        server(c);
         Recording d=copy(c,r);
         try{versions(c,d);snippet(c,d);notification(c,d);}
         catch(Throwable failure){try{d.delete(c);}catch(Exception ignored){}throw failure;}
@@ -41,6 +42,9 @@ final class EngineChecks {
         f=ready();f.exists=false;check(has(Retranscribe.reason(f,TEXT),"audio"),"Missing audio not explained");
         f=ready();f.transcribed=false;check(has(Retranscribe.reason(f,SPEAKERS),"«Transcribir»"),"Untranscribed recording not sent to Transcribir");
         f.previous=true;check(has(Retranscribe.reason(f,SPEAKERS),"vuelve a la anterior"),"Unfinished new version not explained");
+        // Nueva versión lista y la anterior sin elegir: otra repetición borraría la anterior (solo se guarda una).
+        f=ready();f.previous=true;for(Retranscribe.Mode m:Retranscribe.Mode.values())check(Retranscribe.CHOOSE_FIRST.equals(Retranscribe.reason(f,m)),"Retranscribe offered before choosing a version: "+m);
+        f=ready();f.noteWorking=true;check(has(Retranscribe.reason(f,TEXT),"nota"),"Retranscribe offered while the note is being made");
         f=ready();f.hasKey=false;check(has(Retranscribe.reason(f,TEXT),"clave"),"Missing key not explained");
         // Segunda pasada con tus correcciones: necesita voces separadas, corregidas o nombradas, OpenAI y tramos limpios.
         f=ready();f.confirmed=false;check(has(Retranscribe.reason(f,CORRECTIONS),"nombra o corrige")&&Retranscribe.reason(f,SPEAKERS)==null,"Second pass allowed without corrections");
@@ -62,10 +66,30 @@ final class EngineChecks {
         f=ready();f.parts=1;check(has(Retranscribe.reason(f,SINGLE),"sin cortar"),"Single request offered when the version already was one piece");
         f.diarized=false;check(Retranscribe.reason(f,SINGLE)==null,"Single request refused for a text-only version");
         check(Retranscribe.fitsSingle(1_380_000,10_000_000)&&!Retranscribe.fitsSingle(1_381_000,10_000_000)&&!Retranscribe.fitsSingle(600_000,25_000_000)&&!Retranscribe.fitsSingle(0,1000),"Single-request sizing wrong");
+        // La tarea de fondo (corte de Android a los 10 min) no manda un envío de 20 min; sí las partes normales de hasta 12 min.
+        check(Transcriber.sendEstimate(20*60_000)>Transcriber.JOB_SEND_LIMIT_MS&&Transcriber.sendEstimate(Transcriber.SPEAKER_BLOCK_MAX_MS)<=Transcriber.JOB_SEND_LIMIT_MS,"Background job send limit wrong");
         // Cada intento cambia el perfil (las partes de otro intento no se reutilizan); sin repetir, el perfil no cambia
         // (una transcripción en curso al actualizar la app no pierde las partes ya listas).
         check(Transcriber.profile("base",0,null).equals("base"),"Profile changed for normal transcriptions");
         check(!Transcriber.profile("base",1,SPEAKERS).equals(Transcriber.profile("base",2,SPEAKERS))&&!Transcriber.profile("base",1,SINGLE).equals(Transcriber.profile("base",1,SPEAKERS)),"Retranscribe attempt not in the profile");
+    }
+
+    // ---------- Servidor propio sin dirección ----------
+    /** Sin dirección no hay configuración: nunca una dirección por defecto a la que irían la clave y el audio. */
+    static void server(Context c)throws Exception{
+        Settings s=new Settings(c);String provider=s.prefs.getString("provider",null),base=s.prefs.getString("customBase",null);
+        try{
+            s.prefs.edit().putString("provider","custom").remove("customBase").commit();
+            String why=null;try{s.config(false);}catch(HttpApi.UserAction e){why=e.getMessage();}
+            check(Settings.NO_SERVER.equals(why)&&s.needsServer(),"Custom provider without a server address would send the key somewhere");
+            s.prefs.edit().putString("customBase","https://transcribe.test/v1").commit();
+            check(!s.needsServer()&&s.config(false).base.equals("https://transcribe.test/v1"),"Custom server address not used");
+        }finally{
+            android.content.SharedPreferences.Editor e=s.prefs.edit();
+            if(provider==null)e.remove("provider");else e.putString("provider",provider);
+            if(base==null)e.remove("customBase");else e.putString("customBase",base);
+            e.commit();
+        }
     }
 
     // ---------- Segunda pasada: muestras y nombres ----------
@@ -152,8 +176,11 @@ final class EngineChecks {
         check(st.optString("suggestedTitle").equals("Título uno")&&st.optString("model").equals("modelo-uno")&&st.optJSONArray("cuts")!=null,"Process data of the previous version not restored");
         check(has(st.optString("snippet"),"Versión uno"),"Snippet not refreshed after restoring");
 
-        // Quedarse con la nueva (sin nota nueva: la nota anterior no reaparece).
-        Retranscribe.prepare(c,d,TEXT,null);check(FilesStore.state(c,id).optInt("attempt")==2,"Attempt counter not bumped");
+        // Quedarse con la nueva (sin nota nueva: la nota anterior no reaparece). Una nota «armándose» no se guarda como parte
+        // de la versión anterior (volvería como un «Armando la nota…» sin fin).
+        FilesStore.update(c,id,s->s.put("noteState","working").put("noteStartedAt",System.currentTimeMillis()));
+        Retranscribe.prepare(c,d,TEXT,null);st=FilesStore.state(c,id);check(st.optInt("attempt")==2,"Attempt counter not bumped");
+        check(!st.getJSONObject("retranscribe").getJSONObject("before").has("noteState")&&!st.has("noteStartedAt"),"A note in progress was kept with the previous version: "+st);
         Retranscribe.keepNew(c,id);check(Retranscribe.hasPrevious(c,id)&&!Transcript.exists(c,id),"keepNew without a new version deleted the only transcript");
         version("Versión tres").save(c,id);
         Retranscribe.keepNew(c,id);st=FilesStore.state(c,id);

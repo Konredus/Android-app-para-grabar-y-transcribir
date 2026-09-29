@@ -64,7 +64,8 @@ final class Retranscribe {
     // ---------- Disponibilidad ----------
     /** Lo que decide si cada alternativa se puede usar (separado del teléfono para poder probarlo). */
     static final class Facts{
-        boolean exists=true,demo,busy,transcribed,previous,hasKey,openai,canSeparate,diarized,confirmed;
+        /** noteWorking: se está armando la nota de la versión actual (ver {@link Notes#working}). */
+        boolean exists=true,demo,busy,noteWorking,transcribed,previous,hasKey,openai,canSeparate,diarized,confirmed;
         long durationMs,bytes;int parts=1;
         /** Voces conocidas que ya van en cada envío (ocupan lugares de las muestras). */
         int saved;
@@ -74,7 +75,7 @@ final class Retranscribe {
     }
     static Facts facts(Context c,Recording r){
         Facts f=new Facts();Settings s=new Settings(c);JSONObject st=FilesStore.state(c,r.id);File audio=r.audio(c);
-        f.exists=audio.isFile();f.demo=st.optBoolean("demo");f.busy=st.optBoolean("requested");
+        f.exists=audio.isFile();f.demo=st.optBoolean("demo");f.busy=st.optBoolean("requested");f.noteWorking=Notes.working(st);
         f.transcribed=Transcript.exists(c,r.id);f.previous=hasPrevious(c,r.id);
         f.hasKey=s.hasKey();f.openai=s.provider().equals("openai");f.canSeparate=s.canSeparate();f.saved=f.openai?Voices.selected(c).size():0;
         f.bytes=audio.length();f.durationMs=r.duration;
@@ -82,12 +83,20 @@ final class Retranscribe {
         if(f.transcribed)try{Transcript t=Transcript.load(c,r.id);f.transcript=t;f.diarized=t.diarized();f.confirmed=t.reviewed()||t.edited()||t.named();f.parts=t.data.optInt("parts",1);}catch(Exception ignored){}
         return f;
     }
+    /**
+     * Hay una versión anterior esperando que el usuario elija: otra repetición la borraría (solo se guarda una), así que
+     * primero se elige («Quedarme con la nueva» o «Volver a la anterior»).
+     */
+    static final String CHOOSE_FIRST="Primero elige con qué versión te quedas.";
     /** Motivo en palabras simples por el que la alternativa no se puede usar, o null si se puede. */
     static String reason(Facts f,Mode mode){
         if(!f.exists)return "No se encontró el audio de esta grabación.";
         if(f.demo)return "El ejemplo no se vuelve a transcribir.";
         if(f.busy)return "Ya se está transcribiendo. Espera a que termine.";
         if(!f.transcribed)return f.previous?"La nueva versión no terminó. Reintenta o vuelve a la anterior.":"Todavía no tiene transcripción. Usa «Transcribir».";
+        if(f.previous)return CHOOSE_FIRST;
+        // La nota que se está armando es de esta versión: si cambiara ahora, se perdería.
+        if(f.noteWorking)return "Se está armando la nota. Espera a que termine.";
         if(!f.hasKey)return "Agrega tu clave de API en Ajustes para volver a transcribir.";
         switch(mode){
             case CORRECTIONS:
@@ -164,10 +173,15 @@ final class Retranscribe {
             .put("label",labels.getOrDefault(clip.label,clip.label)).put("start",clip.start).put("end",clip.end));
         return out;
     }
-    /** "Fran, Persona 2" (una vez cada voz). */
+    /** "Fran, Persona 2" (una vez cada voz). Solo para la pantalla: la bitácora usa {@link #people}. */
     static String who(JSONArray fixed){
         LinkedHashSet<String> people=new LinkedHashSet<>();for(int i=0;fixed!=null&&i<fixed.length();i++){JSONObject f=fixed.optJSONObject(i);if(f!=null)people.add(f.optString("label",f.optString("id")));}
         return String.join(", ",people);
+    }
+    /** Cuántas personas tienen muestra (una vez cada voz). */
+    static int people(JSONArray fixed){
+        Set<String> ids=new HashSet<>();for(int i=0;fixed!=null&&i<fixed.length();i++){JSONObject f=fixed.optJSONObject(i);if(f!=null)ids.add(f.optString("id"));}
+        return ids.size();
     }
 
     // ---------- Empezar ----------
@@ -187,17 +201,21 @@ final class Retranscribe {
         String id=r.id;
         synchronized(FilesStore.LOCK){
             File current=FilesStore.file(c,id,".transcript.json");if(!current.isFile())throw new HttpApi.UserAction("Todavía no tiene transcripción.");
-            // Si quedaba una versión anterior sin elegir, la que se reemplaza es la que el usuario está viendo.
-            move(current,FilesStore.file(c,id,".transcript.prev.json"));
+            // Solo se guarda una versión anterior: con una esperando la elección, repetir la borraría sin aviso.
+            File prev=FilesStore.file(c,id,".transcript.prev.json");if(prev.isFile())throw new HttpApi.UserAction(CHOOSE_FIRST);
+            move(current,prev);
             File note=FilesStore.file(c,id,".note.json"),notePrev=FilesStore.file(c,id,".note.prev.json");
             if(note.isFile())move(note,notePrev);else new AtomicFile(notePrev).delete();
-            JSONObject st=FilesStore.state(c,id),before=new JSONObject();for(String key:BEFORE)if(st.has(key))before.put(key,st.get(key));
+            // Una nota «armándose» no es parte de la versión anterior: esa respuesta se descarta al llegar (ver Notes.generate)
+            // y, guardada aquí, volvería con «Volver a la anterior» como un «Armando la nota…» que nunca termina.
+            JSONObject st=FilesStore.state(c,id),before=new JSONObject();
+            for(String key:BEFORE)if(st.has(key)&&!("noteState".equals(key)&&"working".equals(st.optString(key))))before.put(key,st.get(key));
             int attempt=st.optInt("attempt",0)+1;long now=System.currentTimeMillis();
             FilesStore.update(c,id,s->{
                 s.put("attempt",attempt).put("retranscribe",new JSONObject().put("mode",mode.name()).put("at",now).put("before",before));
                 if(fixed!=null&&fixed.length()>0)s.put("fixedRefs",fixed);else s.remove("fixedRefs");
                 // Nada del intento anterior se reutiliza: ni cortes ni perfil; la nota y el comienzo son de la nueva versión.
-                s.remove("cuts");s.remove("profile");s.remove("noteState");s.remove("noteError");s.remove("suggestedTitle");s.remove("snippet");s.remove("notePending");s.remove("opened");
+                s.remove("cuts");s.remove("profile");s.remove("noteState");s.remove("noteError");s.remove("noteStartedAt");s.remove("suggestedTitle");s.remove("snippet");s.remove("notePending");s.remove("opened");
             });
         }
         clearCheckpoints(c,id);AudioParts.clearBlocks(c,id);Transcriber.clearDone(c,id);

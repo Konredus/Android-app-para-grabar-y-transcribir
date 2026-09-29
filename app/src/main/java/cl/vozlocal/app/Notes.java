@@ -62,6 +62,19 @@ final class Notes {
 
     // ---------- Consultas ----------
     static boolean exists(Context c,String id){return FilesStore.file(c,id,".note.json").isFile();}
+    /** Más que la espera máxima de la respuesta (5 min) más el armado del pedido: pasado esto, «working» quedó de un proceso que murió. */
+    static final long WORKING_MAX_MS=7*60_000;
+    /**
+     * ¿Se está armando la nota ahora? noteState "working" solo cuenta si empezó hace menos de {@link #WORKING_MAX_MS}: si
+     * Android cerró la app a mitad del pedido, el estado queda en "working" para siempre y hay que poder reintentar.
+     */
+    static boolean working(JSONObject state){
+        if(state==null||!"working".equals(state.optString("noteState")))return false;
+        long age=System.currentTimeMillis()-state.optLong("noteStartedAt",0);
+        return age>=-60_000&&age<WORKING_MAX_MS;
+    }
+    /** La respuesta llegó cuando la transcripción ya había cambiado (otra versión o cancelada): no se guarda. */
+    static final class Discarded extends HttpApi.UserAction{Discarded(){super("La transcripción cambió mientras se armaba la nota. Vuelve a armarla cuando la nueva versión esté lista.");}}
     static JSONObject load(Context c,String id){try{return exists(c,id)?FilesStore.read(FilesStore.file(c,id,".note.json")):null;}catch(Exception e){return null;}}
     /** ¿Hay clave para el proveedor elegido? (OpenAI usa la misma clave de transcribir). */
     static boolean canGenerate(Context c){Settings s=new Settings(c);return s.noteProvider().equals("anthropic")?s.hasAnthropicKey():s.hasOpenAiKey();}
@@ -114,6 +127,9 @@ final class Notes {
     static void generate(Context c,Recording r,HttpApi http,String provider,String model,String key)throws Exception{
         String id=r.id,service=service(provider);long started=System.currentTimeMillis();
         int timeout=http.readTimeoutMs;Runnable uploaded=http.onUploaded;HttpApi.Events events=http.onEvent;HttpApi.Progress progress=http.onProgress;String job=http.jobId;
+        // Versión de la transcripción para la que se pide la nota: si «Volver a transcribir» empieza entretanto, la
+        // respuesta es de la versión anterior y no se guarda (ni toca el estado de la nueva).
+        int attempt=FilesStore.state(c,id).optInt("attempt",0);
         try{
             FilesStore.update(c,id,st->st.put("noteState","working").put("noteStartedAt",started).remove("noteError"));
             if(!Transcript.exists(c,id))throw new HttpApi.UserAction("Esta grabación aún no tiene transcripción.");
@@ -130,7 +146,12 @@ final class Notes {
             JSONObject note=normalize(parseAnswer(answer.text),prompt.tokens,r.duration);
             note.put("version",1).put("provider",provider).put("model",model).put("createdAt",System.currentTimeMillis()).put("speakers",new JSONObject(prompt.tokens));
             if(answer.usage!=null){note.put("usage",answer.usage);double cost=usd(model,answer.usage.optLong("input_tokens"),answer.usage.optLong("output_tokens"));if(cost>=0)note.put("costUsd",cost);}
-            synchronized(FilesStore.LOCK){if(!FilesStore.file(c,id,".m4a").exists())return;FilesStore.write(FilesStore.file(c,id,".note.json"),note);}
+            synchronized(FilesStore.LOCK){
+                if(!FilesStore.file(c,id,".m4a").exists())return;
+                if(http.cancelled)throw new InterruptedIOException("Cancelado");
+                if(!Transcript.exists(c,id)||!ours(FilesStore.state(c,id),started,attempt))throw new Discarded();
+                FilesStore.write(FilesStore.file(c,id,".note.json"),note);
+            }
             String suggested=note.optString("title");
             boolean applied=!suggested.isEmpty()&&applyTitle(c,r,suggested);
             long took=System.currentTimeMillis()-started;
@@ -139,13 +160,22 @@ final class Notes {
             Diagnostics.event("note_ready",id,"provider",provider,"model",model,"elapsed_ms",took,"count",note.getJSONArray("tasks").length(),"result",applied?"title_applied":"title_suggested");
             LocalStorage.enqueue(c,id);
         }catch(Exception e){
+            // El estado de la nota solo se toca si sigue siendo el de ESTE pedido (no el de una versión nueva).
+            if(e instanceof Discarded){
+                try{FilesStore.update(c,id,st->{if(ours(st,started,attempt)){st.remove("noteState");st.remove("noteError");}});}catch(Exception ignored){}
+                log(c,id,"La nota se descartó: la transcripción cambió mientras se armaba");Diagnostics.event("note_discarded",id);throw e;
+            }
             boolean cancelled=http.cancelled||(e instanceof InterruptedIOException&&!(e instanceof java.net.SocketTimeoutException));
-            if(cancelled){try{FilesStore.update(c,id,st->{st.remove("noteState");st.remove("noteError");});}catch(Exception ignored){}Diagnostics.event("note_cancelled",id);throw e;}
-            String why=friendly(e,service);failed(c,id,why);log(c,id,"No se pudo armar la nota: "+why);
+            if(cancelled){try{FilesStore.update(c,id,st->{if(ours(st,started,attempt)){st.remove("noteState");st.remove("noteError");}});}catch(Exception ignored){}Diagnostics.event("note_cancelled",id);throw e;}
+            String why=friendly(e,service);
+            try{FilesStore.update(c,id,st->{if(ours(st,started,attempt))st.put("noteState","failed").put("noteError",why);});}catch(Exception ignored){}
+            log(c,id,"No se pudo armar la nota: "+why);
             Diagnostics.event("note_failed",id,"provider",provider,"model",model,"error_class",e.getClass().getSimpleName(),"reason",HttpApi.safeReason(e));
             throw e;
         }finally{http.readTimeoutMs=timeout;http.onUploaded=uploaded;http.onEvent=events;http.onProgress=progress;http.jobId=job;}
     }
+    /** ¿El estado sigue siendo el de este pedido? Misma versión de la transcripción y la misma hora de inicio de la nota. */
+    private static boolean ours(JSONObject st,long started,int attempt){return st.optInt("attempt",0)==attempt&&st.optLong("noteStartedAt",0)==started;}
     private static void failed(Context c,String id,String why){try{FilesStore.update(c,id,st->st.put("noteState","failed").put("noteError",why));}catch(Exception ignored){}}
     /** Texto para la persona (sin datos técnicos ni contenido). */
     static String friendly(Exception e,String service){

@@ -41,7 +41,10 @@ final class Inbox {
             String marks=md?signature(Marks.list(c,r.id)):null;
             Uri tree=Uri.parse(selected),doc=null;String mode="new";
             try{
-                Uri previous=reusable(c,tree,FilesStore.state(c,r.id).optString("inboxUri",""));
+                String stored=FilesStore.state(c,r.id).optString("inboxUri","");
+                // Con ids por ruta (carpetas del teléfono), el archivo que esta grabación guardó y que se movió o borró de la
+                // carpeta pudo pasar a ser el de OTRA grabación con el mismo nombre: ese no se pisa, se crea uno nuevo.
+                Uri previous=claimedByOther(c,r.id,stored)?null:reusable(c,tree,stored);
                 if(previous!=null){
                     try{LocalStorage.writeText(c,previous,content);doc=rename(c,previous,name);mode="update";}
                     catch(Exception e){Diagnostics.event("transcript_inbox_update_failed",r.id,"error_class",e.getClass().getSimpleName());}
@@ -77,6 +80,19 @@ final class Inbox {
     private static String title(Context c,String id){try{return FilesStore.read(FilesStore.file(c,id,".json")).optString("title");}catch(Exception e){return "";}}
     static String signature(JSONArray marks){return marks==null||marks.length()==0?"0":Integer.toHexString(marks.toString().hashCode())+":"+marks.length();}
 
+    /**
+     * ¿Otra grabación guardó después en este mismo documento? Entonces es suyo (el proveedor reutilizó el id tras mover o
+     * borrar el archivo de esta) y esta grabación no debe escribirlo.
+     */
+    static boolean claimedByOther(Context c,String id,String uri){
+        if(uri==null||uri.isEmpty())return false;
+        long mine=FilesStore.state(c,id).optLong("inboxAt",0);
+        for(Recording other:Recording.list(c)){
+            if(other.id.equals(id))continue;JSONObject st=FilesStore.state(c,other.id);
+            if(uri.equals(st.optString("inboxUri",""))&&st.optLong("inboxAt",0)>=mine)return true;
+        }
+        return false;
+    }
     /** El documento guardado antes, si sigue existiendo, se puede escribir y está en la carpeta rápida ACTUAL. */
     private static Uri reusable(Context c,Uri tree,String previous){
         if(previous==null||previous.isEmpty())return null;

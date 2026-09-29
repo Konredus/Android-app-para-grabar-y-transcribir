@@ -139,16 +139,17 @@ public class SettingsActivity extends Screen {
 
     /** Tarjeta de estado: responde «¿está funcionando?». Tonal si falta un paso o falló la última comprobación; neutra si todo está listo. */
     private View statusCard(){
-        boolean hasKey=settings.hasKey(),failed=hasKey&&verifyFailed(),ready=hasKey&&!failed;
+        // Servidor propio sin dirección: falta ese paso aunque la clave esté (sin dirección no se envía nada).
+        boolean hasKey=settings.hasKey(),server=hasKey&&settings.needsServer(),failed=hasKey&&!server&&verifyFailed(),ready=hasKey&&!server&&!failed;
         LinearLayout card=ui.card();card.setOrientation(LinearLayout.HORIZONTAL);card.setGravity(Gravity.CENTER_VERTICAL);
         int fg=ready?p.onSurface:p.onSecondaryContainer,fg2=ready?p.onSurfaceVariant:p.onSecondaryContainer;
-        int icon=ready?R.drawable.ic_check:failed?R.drawable.ic_alert:R.drawable.ic_key;
+        int icon=ready?R.drawable.ic_check:failed?R.drawable.ic_alert:server?R.drawable.ic_server:R.drawable.ic_key;
         card.addView(ui.tile(icon,ready?p.onPrimaryContainer:p.onSecondaryContainer,ready?p.primaryContainer:p.surfaceContainerLowest,40,22));card.addView(ui.space(S4));
         String title=ready?"Listo para transcribir":failed?"No se pudo conectar":"Falta un paso para transcribir";
-        String detail=ready?modelSummary(settings):failed?"Toca para ver qué pasó y reintentar":"Agrega tu clave de API. Grabar funciona igual sin ella.";
+        String detail=ready?modelSummary(settings):failed?"Toca para ver qué pasó y reintentar":server?"Configura la dirección de tu servidor.":"Agrega tu clave de API. Grabar funciona igual sin ella.";
         LinearLayout t=ui.column();t.addView(ui.text(title,Type.TITLE_MEDIUM,fg));TextView d=ui.text(detail,Type.BODY_MEDIUM,fg2);d.setPadding(0,ui.dp(2),0,0);t.addView(d);card.addView(t,new LinearLayout.LayoutParams(0,-2,1));
         if(!ready){card.setBackground(ui.ripple(shape(this,p.secondaryContainer,R_CARD),R_CARD));card.setClickable(true);card.setAccessibilityDelegate(Ui.buttonRole());card.setContentDescription(title+". "+detail);
-            card.setOnClickListener(v->{if(failed)verifyError(settings.prefs.getString("verifyMsg",""));else keySheet();});}
+            card.setOnClickListener(v->{if(failed)verifyError(settings.prefs.getString("verifyMsg",""));else if(server)custom();else keySheet();});}
         return card;
     }
     private String versionName(){String v=Novedades.versionName(this);if(!v.isEmpty())return v;try{return getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception e){return "";}}
@@ -235,11 +236,14 @@ public class SettingsActivity extends Screen {
             .action(R.drawable.ic_edit,"Reemplazar clave",false,this::keyInput).action(R.drawable.ic_trash,"Eliminar clave",true,()->confirm("¿Eliminar la clave?","Las transcripciones pendientes quedarán en espera hasta que agregues otra.","Eliminar",true,()->{try{settings.saveKey("");getSystemService(JobScheduler.class).cancel(Pipeline.JOB_ID);render();}catch(Exception e){message("Clave","No se pudo eliminar.");}})).show();return;}
         keyInput();
     }
-    /** Al guardar la clave se comprueba sola: el resultado queda en la fila, sin otro aviso que cerrar. */
+    /**
+     * Al guardar la clave se comprueba sola: el resultado queda en la fila, sin otro aviso que cerrar. Con un servidor
+     * propio aún sin dirección, primero se pide la dirección (la clave no se envía a ninguna parte hasta tenerla).
+     */
     private void keyInput(){
         boolean openai=settings.provider().equals("openai");
         secretInput("Agregar clave de API",openai?"Créala en platform.openai.com → API keys y pégala aquí. Se guarda cifrada y deja de mostrarse.":"Pega la clave de tu servidor. Se guarda cifrada.",openai?"sk-…":"Clave del servidor","Clave de API",
-            settings::saveKey,()->{Diagnostics.event("setting_changed",null,"action","api_key");Pipeline.schedule(this,true);render();page.post(this::verify);});
+            settings::saveKey,()->{Diagnostics.event("setting_changed",null,"action","api_key");Pipeline.schedule(this,true);render();page.post(settings.needsServer()?this::custom:this::verify);});
     }
     interface Secret{void save(String value)throws Exception;}
     /** Hoja segura para pegar una clave: campo oculto, sin autocompletar ni capturas de pantalla. */
@@ -271,6 +275,7 @@ public class SettingsActivity extends Screen {
     private void paintVerify(){if(verifyRow==null)return;verifyRow.setSubtitle(verifyText());verifyRow.subtitle.setTextColor(!verifying&&verifyFailed()?p.error:p.onSurfaceVariant);verifyRow.setEnabled(!verifying);}
     private void verify(){
         if(!settings.hasKey()){keySheet();return;}
+        if(settings.needsServer()){custom();return;}
         if(verifying)return;
         verifying=true;paintVerify();
         if(http!=null)http.cancel();HttpApi call=new HttpApi();http=call;String target=verifyTarget();boolean openai=settings.provider().equals("openai");
@@ -307,7 +312,11 @@ public class SettingsActivity extends Screen {
         EditText model=ui.labeled(box,"Identificador del modelo","whisper-1");model.setText(settings.prefs.getString("customModel",""));
         CheckBox voices=new CheckBox(this);voices.setText("Admite diarized_json y chunking_strategy");voices.setTextColor(p.onSurface);voices.setButtonTintList(android.content.res.ColorStateList.valueOf(p.primary));voices.setChecked(settings.prefs.getBoolean("customSpeakers",false));voices.setPadding(ui.dp(S1),ui.dp(S3),0,ui.dp(S3));voices.setMinHeight(ui.dp(48));box.addView(voices);
         sheet("Servidor compatible","Enviarás audio y tu clave a este servidor. Si cambias la URL, se borra la clave anterior.").add(box)
-            .primary("Guardar",Ui.Style.PRIMARY,()->{try{ProviderConfig config=new ProviderConfig("custom",base.getText().toString().trim(),model.getText().toString().trim(),"",voices.isChecked());if(!config.base.equals(settings.prefs.getString("customBase","")))settings.saveKey("");settings.prefs.edit().putString("customBase",config.base).putString("customModel",config.model).putBoolean("customSpeakers",config.speakers).apply();Pipeline.schedule(this,true);render();return true;}catch(Exception e){base.setError("Usa una URL HTTPS sin credenciales ni parámetros y un modelo válido.");return false;}})
+            .primary("Guardar",Ui.Style.PRIMARY,()->{try{ProviderConfig config=new ProviderConfig("custom",base.getText().toString().trim(),model.getText().toString().trim(),"",voices.isChecked());
+                // La clave anterior se borra solo si cambias a OTRO servidor; la que agregaste antes de poner la primera dirección se conserva.
+                String old=settings.customBase();boolean moved=!old.isEmpty()&&!config.base.equals(old);if(moved)settings.saveKey("");
+                settings.prefs.edit().putString("customBase",config.base).putString("customModel",config.model).putBoolean("customSpeakers",config.speakers).apply();Pipeline.schedule(this,true);render();
+                if(old.isEmpty()&&settings.hasKey())page.post(this::verify);return true;}catch(Exception e){base.setError("Usa una URL HTTPS sin credenciales ni parámetros y un modelo válido.");return false;}})
             .secondary("Cancelar",null).show();
     }
 
@@ -317,7 +326,9 @@ public class SettingsActivity extends Screen {
         Sheet s=sheet("Carpeta de copias",has?"Las grabaciones se copian automáticamente a esta carpeta.":"Elige o crea una carpeta. En el selector, abre el menú ☰ para ver Google Drive u otras ubicaciones.");
         s.action(R.drawable.ic_folder,has?"Cambiar carpeta":"Elegir carpeta",false,()->{try{startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),PICK_FOLDER);}catch(ActivityNotFoundException e){message("Carpeta","Este teléfono no permite elegir carpetas.");}});
         if(has){s.action(R.drawable.ic_refresh,"Actualizar todas las copias",false,()->{for(Recording r:Recording.list(this))LocalStorage.enqueue(this,r.id);toast("Actualizando copias…");});
-            s.action(R.drawable.ic_close,"Dejar de copiar",true,()->{String old=settings.prefs.getString("localTree","");settings.prefs.edit().remove("localTree").apply();try{getContentResolver().releasePersistableUriPermission(Uri.parse(old),Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);}catch(Exception ignored){}refreshFolder();});}
+            // El permiso es uno por carpeta: si el guardado rápido usa la misma, se conserva (sin él, «Guardar en 0-Inbox» fallaría).
+            s.action(R.drawable.ic_close,"Dejar de copiar",true,()->{String old=settings.prefs.getString("localTree","");settings.prefs.edit().remove("localTree").apply();
+                if(!old.isEmpty()&&!old.equals(settings.inboxTree()))try{getContentResolver().releasePersistableUriPermission(Uri.parse(old),Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);}catch(Exception ignored){}refreshFolder();});}
         s.show();
     }
     /** Aplica la fecha a los nombres de las grabaciones que ya existen (se pregunta primero). */
