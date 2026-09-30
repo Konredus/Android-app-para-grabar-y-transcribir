@@ -24,4 +24,10 @@ interface TranscribeClient {
     static TranscribeClient of(Context c,HttpApi http,ProviderConfig config){
         return "openrouter".equals(config.provider)?new OpenRouterClient(c,http):new OpenAiClient(http);
     }
+    /**
+     * ¿A este proveedor se le pueden mandar muestras de voz (voces guardadas, correcciones y muestras de la parte 1)?
+     * OpenAI las recibe como «voces conocidas»; OpenRouter, como anclas antes del audio (ver OpenRouterClient). Un
+     * servidor propio, no: ahí las voces guardadas y la segunda pasada con correcciones no se ofrecen.
+     */
+    static boolean knowsVoices(String provider){return "openai".equals(provider)||"openrouter".equals(provider);}
 }
