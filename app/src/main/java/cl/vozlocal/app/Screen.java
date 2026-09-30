@@ -49,6 +49,8 @@ abstract class Screen extends Activity {
             barActions=ui.row();barActions.setClipChildren(false);bar.addView(barActions);root.addView(bar,Ui.fill());
         }
         scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setClipToPadding(false);scroll.setVerticalScrollBarEnabled(false);
+        // Lo que se desplaza se desvanece en los bordes (sobre todo abajo, junto a la barra flotante) en vez de cortarse en seco.
+        scroll.setVerticalFadingEdgeEnabled(true);scroll.setFadingEdgeLength(ui.dp(S8));
         page=ui.column();page.setPadding(ui.dp(S4),ui.dp(back==null?S4:0),ui.dp(S4),ui.dp(S8));scroll.addView(page,new FrameLayout.LayoutParams(-1,-2));
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         bottom=ui.column();bottom.setVisibility(View.GONE);bottom.setPadding(ui.dp(S4),ui.dp(S2),ui.dp(S4),ui.dp(S3));bottom.setClipToPadding(false);root.addView(bottom,Ui.fill());

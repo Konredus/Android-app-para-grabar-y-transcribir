@@ -208,7 +208,7 @@ public class MainActivity extends Screen {
         LinearLayout greeting=ui.column();greeting.setPadding(ui.dp(S1),ui.dp(S1),ui.dp(S1),0);greeting.setClipChildren(false);
         hello=ui.text("",Type.ITEM,p.onSurfaceVariant);greeting.addView(hello);
         nameView=ui.heading("",Type.DISPLAY_SMALL);nameView.setMaxLines(2);nameView.setEllipsize(TextUtils.TruncateAt.END);greeting.addView(nameView,Ui.fill());
-        attention=ui.row();attention.setPadding(ui.dp(S3),0,ui.dp(S4),0);attention.setMinimumHeight(ui.dp(48));attention.setBackground(pill());
+        attention=ui.row();attention.setBackground(pill());attention.setPadding(ui.dp(S3),0,ui.dp(S4),0);attention.setMinimumHeight(ui.dp(48));
         FrameLayout glyph=new FrameLayout(this);attentionRing=new Ring(this,p.primary,p.primaryContainer,ui.dp(2));glyph.addView(attentionRing,new FrameLayout.LayoutParams(ui.dp(16),ui.dp(16),Gravity.CENTER));
         attentionIcon=ui.icon(R.drawable.ic_check,p.primary,18);glyph.addView(attentionIcon,new FrameLayout.LayoutParams(ui.dp(18),ui.dp(18),Gravity.CENTER));
         attention.addView(glyph,new LinearLayout.LayoutParams(ui.dp(18),ui.dp(18)));attention.addView(ui.space(S2));
@@ -233,11 +233,11 @@ public class MainActivity extends Screen {
         lastCard=buildLastCard();idleLayer.addView(lastCard,Ui.fill());
         weekCard=buildWeekCard();idleLayer.addView(weekCard,ui.top(S3));
     }
-    /** Píldora de vidrio (40 dp visibles dentro de un área táctil de 48 dp) con borde fino, para que se vea sobre el blanco. */
+    /** Píldora de vidrio (40 dp visibles dentro de un área táctil de 48 dp) con borde fino, para que se vea sobre el blanco. Ponerla ANTES de setPadding: el InsetDrawable trae su propio relleno y lo reemplazaría. */
     private Drawable pill(){int inset=ui.dp(S1);return new RippleDrawable(ColorStateList.valueOf(p.ripple),new InsetDrawable(outline(this,p.glass,p.outlineVariant,R_FULL,false),0,inset,0,inset),new InsetDrawable(shape(this,0xFF000000,R_FULL),0,inset,0,inset));}
     /** «Importar audio»: píldora de vidrio chica; mientras hay una importación en curso, dice su avance. */
     private LinearLayout buildImportPill(){
-        LinearLayout row=ui.row();row.setMinimumHeight(ui.dp(48));row.setPadding(ui.dp(S4),0,ui.dp(S4),0);row.setBackground(pill());
+        LinearLayout row=ui.row();row.setBackground(pill());row.setMinimumHeight(ui.dp(48));row.setPadding(ui.dp(S4),0,ui.dp(S4),0);
         row.addView(ui.icon(R.drawable.ic_upload,p.onSurface,18));row.addView(ui.space(S2));
         importLabel=Ui.tabular(ui.oneLine(ui.text("Importar audio",Type.LABEL_LARGE,p.onSurface)));row.addView(importLabel);
         row.setClickable(true);row.setFocusable(true);row.setAccessibilityDelegate(Ui.buttonRole());row.setContentDescription("Importar audio de WhatsApp, grabadoras o archivos");
@@ -251,7 +251,7 @@ public class MainActivity extends Screen {
         ImageButton back=ui.glassButton(R.drawable.ic_arrow_back,"Ir a Biblioteca, la grabación sigue");back.setOnClickListener(v->section(true));top.addView(back);top.addView(ui.flex());top.addView(ui.brand(18));
         recLayer.addView(top,Ui.fill());
         // En el lugar del «Default mic» de la referencia: el título de la grabación (tocar para escribirlo).
-        titlePill=ui.row();titlePill.setPadding(ui.dp(S4),0,ui.dp(S4),0);titlePill.setMinimumHeight(ui.dp(48));titlePill.setBackground(pill());
+        titlePill=ui.row();titlePill.setBackground(pill());titlePill.setPadding(ui.dp(S4),0,ui.dp(S4),0);titlePill.setMinimumHeight(ui.dp(48));
         titlePill.addView(ui.icon(R.drawable.ic_edit,p.onSurface,16));titlePill.addView(ui.space(S2));
         titlePillText=ui.oneLine(ui.text("Añadir título",Type.LABEL_LARGE,p.onSurface));titlePillText.setMaxWidth(ui.dp(220));titlePill.addView(titlePillText);
         titlePill.setClickable(true);titlePill.setFocusable(true);titlePill.setAccessibilityDelegate(Ui.buttonRole());

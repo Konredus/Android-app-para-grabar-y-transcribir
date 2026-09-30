@@ -53,15 +53,15 @@ final class Waveform extends View {
     /** Marca un momento ★ en la barra más reciente. */
     void mark(){if(mode==IDLE)return;marks[CAP-1]=true;if(count==0)count=1;invalidate();}
 
-    /** Geometría de la onda: alto útil, arriba y centro (la onda va un poco bajo el centro de la vista). */
+    /** Geometría de la onda: alto útil, arriba y centro (algo sobre el centro de la vista, cerca del cronómetro, como en la referencia). */
     private float band(){return Math.min(getHeight(),dp(MAX_DP));}
-    private float top(){return (getHeight()-band())*0.6f;}
+    private float top(){return (getHeight()-band())*0.38f;}
     @Override protected void onSizeChanged(int w,int h,int ow,int oh){
         super.onSizeChanged(w,h,ow,oh);
         // La sombra solo depende del tamaño: se arma una vez (no en cada cuadro).
         float band=band(),mid=top()+band/2f,inner=band-2*dp(16),headX=Math.round(w*HEAD),len=Math.min(headX,w*0.42f);
         shadePath.reset();shadePath.moveTo(headX,mid-inner/2f-dp(6));shadePath.lineTo(headX-len,mid-inner*0.2f);shadePath.lineTo(headX-len,mid+inner*0.2f);shadePath.lineTo(headX,mid+inner/2f+dp(6));shadePath.close();
-        shade.setShader(len<=0?null:new LinearGradient(headX,0,headX-len,0,AppTheme.withAlpha(deep,0x66),AppTheme.withAlpha(deep,0),Shader.TileMode.CLAMP));
+        shade.setShader(len<=0?null:new LinearGradient(headX,0,headX-len,0,AppTheme.withAlpha(deep,0x4D),AppTheme.withAlpha(deep,0),Shader.TileMode.CLAMP));
     }
     @Override protected void onDraw(Canvas canvas){
         if(mode==IDLE)return;

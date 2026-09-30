@@ -41,6 +41,18 @@ final class Sheet {
         Window w=dialog.getWindow();
         if(w!=null){
             w.setBackgroundDrawable(new ColorDrawable(0));w.setLayout(-1,-2);w.setGravity(Gravity.BOTTOM);w.setWindowAnimations(android.R.style.Animation_InputMethod);w.setDimAmount(0.32f);w.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);w.setNavigationBarColor(ui.p.dark?ui.p.surfaceContainerLow:ui.p.surfaceContainerLowest);
+            // Android 11+: la hoja se dibuja también detrás de la barra de navegación (el blanco llega hasta abajo, sin franja
+            // verde de la pantalla de atrás). El contenido se corre por esa barra y por el teclado.
+            if(Build.VERSION.SDK_INT>=30){
+                w.setDecorFitsSystemWindows(false);int base=body.getPaddingBottom();
+                // La ventana se aleja solo de la barra de estado (una hoja muy alta no queda bajo el reloj), no de la de navegación.
+                WindowManager.LayoutParams a=w.getAttributes();a.setFitInsetsTypes(WindowInsets.Type.statusBars());w.setAttributes(a);
+                // Las medidas se toman en la ventana completa de la hoja: el marco interno del diálogo puede no recibirlas.
+                w.getDecorView().setOnApplyWindowInsetsListener((v,insets)->{
+                    android.graphics.Insets nav=insets.getInsets(WindowInsets.Type.navigationBars()),ime=insets.getInsets(WindowInsets.Type.ime());
+                    frame.setPadding(0,0,0,Math.max(nav.bottom,ime.bottom));return insets;});
+                body.setPadding(body.getPaddingLeft(),body.getPaddingTop(),body.getPaddingRight(),base);
+            }
             // Android 12+: lo de atrás se desenfoca (vidrio). Solo si el teléfono lo permite (ahorro de batería, gama baja).
             if(Build.VERSION.SDK_INT>=31)try{WindowManager wm=activity.getSystemService(WindowManager.class);if(wm!=null&&wm.isCrossWindowBlurEnabled()){w.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND);w.getAttributes().setBlurBehindRadius(ui.dp(18));w.setDimAmount(0.22f);}}catch(RuntimeException ignored){}
         }

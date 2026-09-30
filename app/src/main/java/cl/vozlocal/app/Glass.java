@@ -40,7 +40,7 @@ final class Glass {
                 shaderHeight=h;shaderVivid=vivid;
                 int mid=blend(p.softMid,p.gradMid,vivid),bottom=bottomColor();
                 // Intenso: el verde empieza cerca de la mitad (como en la referencia); suave: solo en el último tercio.
-                float greenFrom=0.42f+0.22f*(1f-vivid);
+                float greenFrom=0.36f+0.28f*(1f-vivid);
                 int[] colors={p.gradTop,p.gradTop,mid,blend(mid,bottom,0.55f),bottom};
                 float[] stops={0f,0.18f,greenFrom,Math.min(0.97f,greenFrom+0.26f),1f};
                 paint.setShader(new LinearGradient(0,b.top,0,b.bottom,colors,stops,Shader.TileMode.CLAMP));

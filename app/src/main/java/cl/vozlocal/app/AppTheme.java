@@ -78,7 +78,8 @@ final class AppTheme {
                 surface=0xFFF7FAF8;surfaceContainerLowest=0xFFFFFFFF;surfaceContainerLow=0xFFF2F6F4;surfaceContainer=0xFFECF1EF;surfaceContainerHigh=0xFFE5ECE9;surfaceContainerHighest=0xFFDEE6E2;
                 onSurface=0xFF111714;onSurfaceVariant=0xFF4F5D57;outline=0xFF7C8A84;outlineVariant=0xFFCBD6D1;
                 ink=0xFF121815;onInk=0xFFFFFFFF;brand=0xFF2F6B58;brandDeep=0xFF1E4D3F;onBrand=0xFFFFFFFF;
-                glass=0xC7FFFFFF;glassStroke=0xF2FFFFFF;glassOnVivid=0x33FFFFFF;glassOnVividStroke=0x73FFFFFF;onVivid=0xFFFFFFFF;onVividVariant=0xD9FFFFFF;
+                // Borde del vidrio: un trazo muy tenue de verde oscuro. Uno blanco no se ve sobre la parte blanca del fondo.
+                glass=0xC7FFFFFF;glassStroke=0x1C0B2A20;glassOnVivid=0x33FFFFFF;glassOnVividStroke=0x73FFFFFF;onVivid=0xFFFFFFFF;onVividVariant=0xD9FFFFFF;
                 highlight=0xFFD8EDE3;gradTop=0xFFFFFFFF;gradMid=0xFFF1F6F4;gradBottom=0xFF3E7262;softMid=0xFFF5F9F7;softBottom=0xFFD3E4DC;
                 dotGrid=0x1A1E3A30;waveIdle=0xFFA3AEA9;shadow=0xFF0B2A20;
                 inverseSurface=0xFF121815;inverseOnSurface=0xFFEEF3F1;inversePrimary=0xFF9ED5BF;
