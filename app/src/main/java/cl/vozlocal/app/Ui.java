@@ -65,14 +65,30 @@ final class Ui {
     static TextView tabular(TextView t){t.setFontFeatureSettings("tnum");return t;}
     /**
      * Destaca la última palabra de un título grande con un rectángulo menta detrás (como «Simple» en la referencia).
-     * Solo si la palabra es corta (≤ 16 letras): una palabra larga no cabe bien en una línea con su recuadro.
+     * El recuadro es una sola pieza y Android no puede partirlo entre líneas. Por eso solo se destaca si la palabra es
+     * corta (≤ 16 letras) y, además, cabe entera con su recuadro en una línea, medida con la letra real del TextView (con
+     * «Tamaño de fuente» grande, «mantenimiento» a 36 sp ya no cabe). Si no cabe, el título va como texto simple: Android
+     * parte la palabra y se lee completa, en vez de salirse por el borde o quedar reemplazada por «…».
+     * No se mira maxLines: ese límite cambia después de poner el texto (la vista de grabación se compacta). Si el TextView
+     * termina cortando el título con «…», el recuadro no queda suelto: Android 10+ lo descarta y en Android 8–9 lo hace
+     * {@link Glass.Highlight}.
      */
     void highlightLast(TextView t,String value){
-        String v=value==null?"":value.trim();int cut=v.lastIndexOf(' ');String last=v.substring(cut+1);
-        if(v.isEmpty()||last.length()>16||last.length()<2){t.setText(v);return;}
+        String v=value==null?"":value.trim();int cut=v.lastIndexOf(' ');String last=v.substring(cut+1);int pad=dp(6);
+        if(v.isEmpty()||last.length()>16||last.length()<2||t.getPaint().measureText(last)+2*pad>lineWidth(t)){t.setText(v);return;}
         android.text.SpannableString s=new android.text.SpannableString(v);
-        s.setSpan(new Glass.Highlight(p.highlight,dp(6),dp(10)),cut+1,v.length(),android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        s.setSpan(new Glass.Highlight(p.highlight,pad,dp(10)),cut+1,v.length(),android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         t.setText(s);t.setContentDescription(v);
+    }
+    /**
+     * Ancho útil de una línea de t, en px. Si ya está en pantalla y su ancho lo fija su contenedor, el real. Si no (recién
+     * creado, o ancho según su propio texto), el de la pantalla menos 104 dp: el título más angosto que usa el recuadro
+     * (Detalle: márgenes de la página + lápiz de 48 dp). Quedarse corto solo quita el recuadro; la palabra no se pierde.
+     */
+    private int lineWidth(TextView t){
+        ViewGroup.LayoutParams lp=t.getLayoutParams();
+        if(t.getWidth()>0&&lp!=null&&lp.width!=ViewGroup.LayoutParams.WRAP_CONTENT)return t.getWidth()-t.getCompoundPaddingLeft()-t.getCompoundPaddingRight();
+        return c.getResources().getDisplayMetrics().widthPixels-dp(104);
     }
     /** Logo + nombre «Verbapp» (Outfit, levemente inclinado como en la referencia). textSp: tamaño del nombre. */
     LinearLayout brand(float textSp){

@@ -65,15 +65,23 @@ final class Glass {
     /**
      * Palabra destacada: un rectángulo menta redondeado detrás del texto (no cambia el color del texto). La palabra no
      * se corta entre líneas. Usar solo en títulos grandes y con una sola palabra (ver {@link Ui#highlightLast}).
+     *
+     * Si el TextView corta el título con «…» y la palabra queda dentro de lo cortado, Android 10+ deja de llamar a este
+     * span. Android 8 y 9 lo siguen llamando, con el texto ya reemplazado («…» y, después, caracteres de ancho cero): ahí
+     * se dibuja solo ese texto, sin recuadro. Antes quedaba un recuadro menta vacío tras el «…», o rodeándolo.
      */
     static final class Highlight extends ReplacementSpan {
         private final int color;private final float padH,radius;private final RectF rect=new RectF();
         Highlight(int color,float padH,float radius){this.color=color;this.padH=padH;this.radius=radius;}
+        /** ¿El tramo quedó dentro de los puntos suspensivos del TextView? (Android 8–9: «…» y relleno U+FEFF, sin ancho.) */
+        private static boolean cut(CharSequence text,int start,int end){if(end<=start)return true;char first=text.charAt(start);return first=='…'||first=='﻿';}
         @Override public int getSize(Paint paint,CharSequence text,int start,int end,Paint.FontMetricsInt fm){
             if(fm!=null){Paint.FontMetricsInt m=paint.getFontMetricsInt();fm.ascent=m.ascent;fm.descent=m.descent;fm.top=m.top;fm.bottom=m.bottom;}
+            if(cut(text,start,end))return Math.round(paint.measureText(text,start,end));
             return Math.round(paint.measureText(text,start,end)+2*padH);
         }
         @Override public void draw(Canvas canvas,CharSequence text,int start,int end,float x,int top,int y,int bottom,Paint paint){
+            if(cut(text,start,end)){canvas.drawText(text,start,end,x,y,paint);return;}
             float w=paint.measureText(text,start,end);Paint.FontMetrics m=paint.getFontMetrics();
             int old=paint.getColor();
             // El rectángulo abraza la altura de las letras (de la línea de base hacia arriba), no el interlineado.
