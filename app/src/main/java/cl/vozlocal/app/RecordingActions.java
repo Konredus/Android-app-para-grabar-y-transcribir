@@ -205,7 +205,7 @@ final class RecordingActions {
     }
     /** Falta la clave: el error trae su salida («Configurar ahora»). */
     static void missingKey(Screen s){
-        s.sheet("Falta tu clave de API","Para transcribir, Voz local usa tu propia cuenta del proveedor (por ejemplo OpenAI). Solo pagas lo que usas.")
+        s.sheet("Falta tu clave de API","Para transcribir, Verbapp usa tu propia cuenta del proveedor (por ejemplo OpenAI). Solo pagas lo que usas.")
             .primary("Configurar ahora",()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("focusKey",true))).secondary("Más tarde",null).show();
     }
     /** Pregunta si separar voces, con el costo y la velocidad de cada opción para este audio. */
@@ -239,7 +239,7 @@ final class RecordingActions {
     /** Explica por qué conviene quitar la optimización de batería y abre el permiso del sistema. */
     static void allowBackground(Screen s){
         String hint=Battery.makerHint();
-        Sheet sheet=s.sheet("Trabajar con la pantalla bloqueada","Con la optimización de batería activa, Android puede congelar Voz local al bloquear el teléfono y cortar el envío a OpenAI. Solo gasta batería mientras transcribe."+(hint.isEmpty()?"":"\n\n"+hint))
+        Sheet sheet=s.sheet("Trabajar con la pantalla bloqueada","Con la optimización de batería activa, Android puede congelar Verbapp al bloquear el teléfono y cortar el envío a OpenAI. Solo gasta batería mientras transcribe."+(hint.isEmpty()?"":"\n\n"+hint))
             .primary("Permitir",()->{Diagnostics.event("ui_action",null,"action","battery_request");Battery.request(s);});
         if(!hint.isEmpty())sheet.secondary("Abrir ajustes de la app",()->Battery.appSettings(s));
         sheet.secondary("Ahora no",null).show();

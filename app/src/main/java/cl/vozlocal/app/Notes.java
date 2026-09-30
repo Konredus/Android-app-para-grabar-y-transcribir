@@ -470,7 +470,7 @@ final class Notes {
         // "tags" es la propiedad que Obsidian reconoce como etiquetas (con otro nombre no aparecen en su panel de etiquetas).
         JSONArray tags=note==null?null:note.optJSONArray("tags");
         if(tags!=null&&tags.length()>0){md.append("tags:\n");for(int i=0;i<tags.length();i++)md.append("  - ").append(q(tags.optString(i))).append('\n');}
-        md.append("fuente: ").append(q("Voz local")).append('\n');
+        md.append("fuente: ").append(q("Verbapp")).append('\n');
         md.append("grabacion: ").append(q(r.title)).append('\n');
         if(note!=null)md.append("nota_ia: ").append(q(service(note.optString("provider"))+" · "+note.optString("model"))).append('\n');
         md.append("---\n\n# ").append(line(heading(r.title))).append("\n\n");

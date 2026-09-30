@@ -16,7 +16,9 @@ import static cl.vozlocal.app.AppTheme.*;
 abstract class Screen extends Activity {
     Palette p;Ui ui;
     LinearLayout root,page,bar,barActions,bottom;ScrollView scroll;BottomNav nav;
-    private int savedScroll;
+    /** Fondo degradado de la pantalla (blanco → verde); Grabar lo lleva intenso, las demás suave. */
+    Glass.Backdrop backdrop;
+    private int savedScroll;private android.animation.ValueAnimator vividAnim;
 
     @Override public void onCreate(Bundle state){
         p=AppTheme.apply(this);ui=new Ui(this,p);
@@ -29,59 +31,69 @@ abstract class Screen extends Activity {
     /**
      * Construye la estructura. back: texto del botón volver (null = pantalla raíz sin barra).
      * tab: pestaña activa de la barra inferior (-1 = sin barra de pestañas).
+     * El fondo es el degradado suave (ver {@link #shell(String,int,boolean)} para el intenso).
      */
-    void shell(String back,int tab){
+    void shell(String back,int tab){shell(back,tab,false);}
+    /**
+     * vivid: fondo intenso (blanco arriba, verde abajo), el de Grabar. La pantalla dibuja de borde a borde: el degradado
+     * pasa por detrás de las barras del sistema y el contenido se corre según sus medidas (insets).
+     */
+    void shell(String back,int tab,boolean vivid){
         int position=scroll==null?savedScroll:scroll.getScrollY();
-        int navigationColor=tab>=0?p.surfaceContainer:p.background;
-        AppTheme.window(this,p,navigationColor);
-        root=ui.column();Backdrop backdrop=new Backdrop(p.background,navigationColor);root.setBackground(backdrop);
+        root=ui.column();backdrop=new Glass.Backdrop(this,p,vivid);root.setBackground(backdrop);
+        AppTheme.window(this,p,backdrop.bottomColor());
         if(back!=null){
-            // Barra superior de Material: botón de ícono ← (sin texto) a la izquierda y acciones a la derecha.
-            bar=ui.row();bar.setPadding(ui.dp(S1),ui.dp(S2),ui.dp(S1),ui.dp(S1));bar.setMinimumHeight(ui.dp(64));
-            ImageButton backButton=ui.iconButton(R.drawable.ic_arrow_back,"Volver a "+back,p.onSurface,0,48);backButton.setOnClickListener(v->onBackPressed());bar.addView(backButton);bar.addView(ui.flex());
-            barActions=ui.row();bar.addView(barActions);root.addView(bar,Ui.fill());
+            // Barra superior: botón redondo de vidrio ← (sin texto) a la izquierda y acciones a la derecha.
+            bar=ui.row();bar.setPadding(ui.dp(S3),ui.dp(S2),ui.dp(S3),ui.dp(S1));bar.setMinimumHeight(ui.dp(64));bar.setClipToPadding(false);bar.setClipChildren(false);
+            ImageButton backButton=ui.glassButton(R.drawable.ic_arrow_back,"Volver a "+back);backButton.setOnClickListener(v->onBackPressed());bar.addView(backButton);bar.addView(ui.flex());
+            barActions=ui.row();barActions.setClipChildren(false);bar.addView(barActions);root.addView(bar,Ui.fill());
         }
         scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setClipToPadding(false);scroll.setVerticalScrollBarEnabled(false);
         page=ui.column();page.setPadding(ui.dp(S4),ui.dp(back==null?S4:0),ui.dp(S4),ui.dp(S8));scroll.addView(page,new FrameLayout.LayoutParams(-1,-2));
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        bottom=ui.column();bottom.setVisibility(View.GONE);bottom.setPadding(ui.dp(S4),ui.dp(S2),ui.dp(S4),ui.dp(S3));bottom.setBackgroundColor(p.background);root.addView(bottom,Ui.fill());
+        bottom=ui.column();bottom.setVisibility(View.GONE);bottom.setPadding(ui.dp(S4),ui.dp(S2),ui.dp(S4),ui.dp(S3));bottom.setClipToPadding(false);root.addView(bottom,Ui.fill());
         if(tab>=0){nav=new BottomNav(this,p,tab,this::navigate);root.addView(nav,Ui.fill());}
         setContentView(root);
         root.setOnApplyWindowInsetsListener((v,insets)->{
             boolean keyboard;
             if(Build.VERSION.SDK_INT>=30){
                 Insets b=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout()|WindowInsets.Type.ime());v.setPadding(b.left,b.top,b.right,b.bottom);
-                backdrop.band(insets.getInsets(WindowInsets.Type.navigationBars()).bottom);keyboard=insets.isVisible(WindowInsets.Type.ime());
+                keyboard=insets.isVisible(WindowInsets.Type.ime());
             }else{
                 v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());
-                backdrop.band(insets.getStableInsetBottom());keyboard=insets.getSystemWindowInsetBottom()-insets.getStableInsetBottom()>ui.dp(120);
+                keyboard=insets.getSystemWindowInsetBottom()-insets.getStableInsetBottom()>ui.dp(120);
             }
             // La barra de pestañas se esconde mientras está el teclado (PROPUESTA #2): deja más espacio para escribir.
-            if(nav!=null){int want=keyboard?View.GONE:View.VISIBLE;if(nav.getVisibility()!=want)nav.setVisibility(want);}
+            if(nav!=null){int want=keyboard||navHidden?View.GONE:View.VISIBLE;if(nav.getVisibility()!=want)nav.setVisibility(want);}
             return insets;});
         root.requestApplyInsets();
         scroll.post(()->scroll.scrollTo(0,position));
     }
+    /** La pantalla pidió esconder la barra de pestañas (p. ej. Grabar mientras graba: pantalla completa). */
+    private boolean navHidden;
+    /** Esconde o muestra la barra de pestañas (también la respeta el teclado). */
+    void setNavHidden(boolean hidden){navHidden=hidden;if(nav!=null)nav.setVisibility(hidden?View.GONE:View.VISIBLE);}
     /**
-     * Fondo de la pantalla que pinta la zona detrás de la barra de navegación del sistema con el color de lo que
-     * queda justo encima (barra de pestañas o fondo). En Android 15+ la app dibuja de borde a borde y, sin esto,
-     * en modo oscuro se veía una franja de otro color bajo las pestañas.
+     * Pasa el fondo a intenso (verde abajo) o a suave, con un fundido de 400 ms. También cambia el color de los íconos
+     * de la barra de navegación del sistema según lo que queda detrás.
      */
-    private static final class Backdrop extends android.graphics.drawable.Drawable {
-        private final android.graphics.Paint paint=new android.graphics.Paint();private final int background,navigation;private int band;
-        Backdrop(int background,int navigation){this.background=background;this.navigation=navigation;}
-        void band(int px){if(px!=band){band=Math.max(0,px);invalidateSelf();}}
-        @Override public void draw(android.graphics.Canvas canvas){
-            android.graphics.Rect b=getBounds();paint.setColor(background);canvas.drawRect(b,paint);
-            if(band>0&&navigation!=background){paint.setColor(navigation);canvas.drawRect(b.left,b.bottom-band,b.right,b.bottom,paint);}
-        }
-        @Override public void setAlpha(int alpha){}
-        @Override public void setColorFilter(android.graphics.ColorFilter filter){}
-        @Override public int getOpacity(){return android.graphics.PixelFormat.OPAQUE;}
+    void setVivid(boolean vivid,boolean animate){
+        if(backdrop==null)return;float to=vivid?1f:0f;if(vividAnim!=null)vividAnim.cancel();
+        if(!animate||!AppTheme.motion()||backdrop.vivid()==to){backdrop.setVivid(to);AppTheme.window(this,p,backdrop.bottomColor());return;}
+        vividAnim=android.animation.ValueAnimator.ofFloat(backdrop.vivid(),to);vividAnim.setDuration(MOTION_SLOW);vividAnim.setInterpolator(EMPHASIZED);
+        vividAnim.addUpdateListener(a->backdrop.setVivid((float)a.getAnimatedValue()));
+        vividAnim.addListener(new android.animation.AnimatorListenerAdapter(){@Override public void onAnimationEnd(android.animation.Animator a){if(!isDestroyed())AppTheme.window(Screen.this,p,backdrop.bottomColor());}});
+        vividAnim.start();
     }
-    /** Título grande (estilo iOS) + bajada opcional. */
+    /** Botón redondo de vidrio para la barra superior (a la derecha, p. ej. «Más opciones»). */
+    ImageButton barButton(int res,String description,View.OnClickListener click){
+        ImageButton b=ui.glassButton(res,description);b.setOnClickListener(click);
+        if(barActions!=null){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));lp.setMarginStart(ui.dp(S2));barActions.addView(b,lp);}
+        return b;
+    }
+    /** Título grande (Outfit) + bajada opcional. */
     TextView largeTitle(ViewGroup parent,String title,String subtitle){
-        TextView t=ui.heading(title,Type.HEADLINE_MEDIUM);t.setPadding(ui.dp(S1),ui.dp(S2),ui.dp(S1),ui.dp(subtitle==null||subtitle.isEmpty()?S4:S1));parent.addView(t);
+        TextView t=ui.heading(title,Type.HEADLINE_LARGE);t.setPadding(ui.dp(S1),ui.dp(S2),ui.dp(S1),ui.dp(subtitle==null||subtitle.isEmpty()?S4:S1));parent.addView(t);
         if(subtitle!=null&&!subtitle.isEmpty()){TextView s=ui.text(subtitle,Type.BODY_MEDIUM,p.onSurfaceVariant);s.setPadding(ui.dp(S1),0,ui.dp(S1),ui.dp(S4));parent.addView(s);}
         return t;
     }
@@ -108,7 +120,7 @@ abstract class Screen extends Activity {
      */
     void snackbar(String text,String action,Runnable run){
         removeSnackbar();
-        LinearLayout s=ui.row();s.setBackground(shape(this,p.inverseSurface,R_SMALL));s.setPadding(ui.dp(S4),ui.dp(S1),ui.dp(S2),ui.dp(S1));s.setMinimumHeight(ui.dp(48));
+        LinearLayout s=ui.row();s.setBackground(shape(this,p.inverseSurface,R_FULL));s.setPadding(ui.dp(S5),ui.dp(S1),ui.dp(S2),ui.dp(S1));s.setMinimumHeight(ui.dp(52));s.setElevation(ui.dp(4));
         s.addView(ui.text(text,Type.BODY_MEDIUM,p.inverseOnSurface),new LinearLayout.LayoutParams(0,-2,1));
         if(action!=null&&run!=null){TextView a=ui.text(action,Type.LABEL_LARGE,p.inversePrimary);a.setGravity(Gravity.CENTER);a.setMinHeight(ui.dp(48));a.setPadding(ui.dp(S3),0,ui.dp(S3),0);a.setBackground(ui.ripple(null,R_SMALL));a.setAccessibilityDelegate(Ui.buttonRole());a.setOnClickListener(v->{hideSnackbar();run.run();});s.addView(a);}
         s.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);

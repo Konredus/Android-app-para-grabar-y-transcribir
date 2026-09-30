@@ -66,7 +66,7 @@ public class PipelineJob extends JobService {
         Intent intent=new Intent(this,RecordingActivity.class).putExtra("id",id).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         PendingIntent open=PendingIntent.getActivity(this,OPEN_APP_NOTIFICATION,intent,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         String text="Este envío es largo y necesita la app abierta. Toca para seguir: continúa aunque bloquees el teléfono.";
-        Notification n=new Notification.Builder(this,"processing").setSmallIcon(R.drawable.ic_notification).setContentTitle("Abre Voz local para terminar").setContentText(text)
+        Notification n=new Notification.Builder(this,"processing").setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle("Abre Verbapp para terminar").setContentText(text)
             .setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true).setOnlyAlertOnce(true).build();
         try{m.notify(OPEN_APP_NOTIFICATION,n);}catch(SecurityException ignored){}
     }
@@ -92,7 +92,7 @@ public class PipelineJob extends JobService {
         for(Recording r:Recording.list(this))if(FilesStore.state(this,r.id).optBoolean("requested")){Pipeline.log(this,r.id,"Con la app cerrada Android solo permite una tarea de fondo (puede pausarla) · abre la app para acelerar");break;}
         NotificationManager m=getSystemService(NotificationManager.class);m.createNotificationChannel(new NotificationChannel("processing","Transcripciones",NotificationManager.IMPORTANCE_LOW));
         PendingIntent open=PendingIntent.getActivity(this,11,new Intent(this,MainActivity.class).putExtra("library",true),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        Notification n=new Notification.Builder(this,"processing").setSmallIcon(R.drawable.ic_notification).setContentTitle("Transcripción en segundo plano").setContentText("Toca para abrir Voz local y acelerarla").setContentIntent(open).setAutoCancel(true).setOnlyAlertOnce(true).build();
+        Notification n=new Notification.Builder(this,"processing").setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle("Transcripción en segundo plano").setContentText("Toca para abrir Verbapp y acelerarla").setContentIntent(open).setAutoCancel(true).setOnlyAlertOnce(true).build();
         try{m.notify(OPEN_APP_NOTIFICATION,n);}catch(SecurityException ignored){}
     }
     static String hash(byte[] data)throws Exception{return android.util.Base64.encodeToString(java.security.MessageDigest.getInstance("SHA-256").digest(data),android.util.Base64.NO_WRAP);}

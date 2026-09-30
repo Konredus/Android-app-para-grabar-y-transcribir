@@ -40,7 +40,7 @@ public class ImportActivity extends Screen {
         picker.setClickable(true);picker.setFocusable(true);picker.setContentDescription("Elegir un archivo de audio");picker.setAccessibilityDelegate(Ui.buttonRole());picker.setOnClickListener(v->pick());Ui.pressable(picker);
         pickerSection.addView(picker,Ui.fill());
         TextView wa=ui.section("Desde WhatsApp");wa.setPadding(ui.dp(S1),ui.dp(S6),0,ui.dp(S2));pickerSection.addView(wa);
-        LinearLayout steps=ui.card();String[] texts={"Abre el chat y mantén presionado el audio.","Toca Compartir (o ⋮ → Compartir).","Elige Voz local en la lista de apps.","Revisa el título y toca Guardar audio."};
+        LinearLayout steps=ui.card();String[] texts={"Abre el chat y mantén presionado el audio.","Toca Compartir (o ⋮ → Compartir).","Elige Verbapp en la lista de apps.","Revisa el título y toca Guardar audio."};
         for(int i=0;i<texts.length;i++){LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(0,ui.dp(S1),0,ui.dp(S1));TextView n=ui.text(String.valueOf(i+1),Type.LABEL_MEDIUM,p.onSecondaryContainer);n.setGravity(Gravity.CENTER);n.setBackground(oval(p.secondaryContainer));n.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);r.addView(n,new LinearLayout.LayoutParams(ui.dp(24),ui.dp(24)));r.addView(ui.space(S3));TextView t=ui.text(texts[i],Type.BODY_LARGE,p.onSurface);t.setContentDescription("Paso "+(i+1)+": "+texts[i]);r.addView(t,new LinearLayout.LayoutParams(0,-2,1));steps.addView(r,Ui.fill());}
         TextView note=ui.text("También funciona con grabadoras, Telegram y cualquier app que comparta audio.",Type.BODY_MEDIUM,p.onSurfaceVariant);note.setPadding(0,ui.dp(S3),0,0);steps.addView(note);
         pickerSection.addView(steps,Ui.fill());

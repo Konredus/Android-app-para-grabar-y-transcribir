@@ -87,7 +87,7 @@ public class RecorderService extends Service {
             : command(c, 2, new Intent(c, RecorderService.class).setAction("PAUSE").putExtra("toggle", false));
         PendingIntent mark = command(c, 4, new Intent(c, RecorderService.class).setAction("MARK"));
         String marked = marks > 0 ? "★ " + Marks.describe(marks) : null;
-        Notification.Builder b = new Notification.Builder(c, "recording").setSmallIcon(cl.vozlocal.app.R.drawable.ic_notification)
+        Notification.Builder b = new Notification.Builder(c, "recording").setSmallIcon(cl.vozlocal.app.R.drawable.ic_notification).setColor(0xFF2F6B58)
             .setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true)
             .setVisibility(Notification.VISIBILITY_PUBLIC);
         if (isPaused) b.setContentTitle("En pausa · " + Recording.time(elapsedMs))

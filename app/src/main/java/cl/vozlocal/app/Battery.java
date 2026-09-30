@@ -12,7 +12,7 @@ import android.provider.Settings;
  */
 final class Battery {
     private Battery(){}
-    /** true si Android no optimiza la batería de Voz local (puede trabajar con la pantalla bloqueada). */
+    /** true si Android no optimiza la batería de Verbapp (puede trabajar con la pantalla bloqueada). */
     static boolean unrestricted(Context c){PowerManager pm=c.getSystemService(PowerManager.class);return pm!=null&&pm.isIgnoringBatteryOptimizations(c.getPackageName());}
     static boolean screenOn(Context c){PowerManager pm=c.getSystemService(PowerManager.class);return pm==null||pm.isInteractive();}
     static boolean idle(Context c){PowerManager pm=c.getSystemService(PowerManager.class);return pm!=null&&pm.isDeviceIdleMode();}
@@ -31,11 +31,11 @@ final class Battery {
     /** Instrucción extra según la marca, para el control de energía propio del fabricante. */
     static String makerHint(){
         String m=android.os.Build.MANUFACTURER.toLowerCase(java.util.Locale.ROOT);
-        if(m.contains("vivo")||m.contains("iqoo"))return "En vivo, además: Ajustes → Batería → Control de energía en segundo plano → Voz local → Permitir uso de energía en segundo plano.";
-        if(m.contains("xiaomi")||m.contains("redmi")||m.contains("poco"))return "En Xiaomi, además: Ajustes → Apps → Voz local → Ahorro de batería → Sin restricciones.";
-        if(m.contains("samsung"))return "En Samsung, además: Ajustes → Apps → Voz local → Batería → Sin restricciones.";
-        if(m.contains("huawei")||m.contains("honor"))return "En Huawei/Honor, además: Ajustes → Batería → Inicio de aplicaciones → Voz local → Gestionar manualmente y activa \"Ejecutar en segundo plano\".";
-        if(m.contains("oppo")||m.contains("realme")||m.contains("oneplus"))return "En OPPO/realme/OnePlus, además: Ajustes → Batería → Voz local → Permitir actividad en segundo plano.";
+        if(m.contains("vivo")||m.contains("iqoo"))return "En vivo, además: Ajustes → Batería → Control de energía en segundo plano → Verbapp → Permitir uso de energía en segundo plano.";
+        if(m.contains("xiaomi")||m.contains("redmi")||m.contains("poco"))return "En Xiaomi, además: Ajustes → Apps → Verbapp → Ahorro de batería → Sin restricciones.";
+        if(m.contains("samsung"))return "En Samsung, además: Ajustes → Apps → Verbapp → Batería → Sin restricciones.";
+        if(m.contains("huawei")||m.contains("honor"))return "En Huawei/Honor, además: Ajustes → Batería → Inicio de aplicaciones → Verbapp → Gestionar manualmente y activa \"Ejecutar en segundo plano\".";
+        if(m.contains("oppo")||m.contains("realme")||m.contains("oneplus"))return "En OPPO/realme/OnePlus, además: Ajustes → Batería → Verbapp → Permitir actividad en segundo plano.";
         return "";
     }
 }

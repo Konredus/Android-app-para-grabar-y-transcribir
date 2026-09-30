@@ -108,12 +108,12 @@ public class SettingsActivity extends Screen {
                 .choice("Wi-Fi y datos móviles","Empieza antes, usa tu plan de datos",!settings.wifiOnly(),()->{settings.prefs.edit().putBoolean("wifi",false).apply();changed("wifi");}).show()));
         ui.addRow(energy,ui.switchRow(R.drawable.ic_battery,"Solo mientras carga",null,settings.charging(),on->toggle("charging",on)));
         batteryRow=ui.listRow(R.drawable.ic_battery,"Con la pantalla bloqueada",null,batteryValue());batteryRow.onClick(v->RecordingActions.allowBackground(this));ui.addRow(energy,batteryRow);
-        page.addView(more("Aplica también cuando transcribes a mano.","Energía y red","Con batería baja, el trabajo espera. Android puede retrasarlo unos minutos.\n\nPara que transcriba con el teléfono bloqueado, permite a Voz local usar batería en segundo plano («Con la pantalla bloqueada»). Solo la usa mientras transcribe."));
+        page.addView(more("Aplica también cuando transcribes a mano.","Energía y red","Con batería baja, el trabajo espera. Android puede retrasarlo unos minutos.\n\nPara que transcriba con el teléfono bloqueado, permite a Verbapp usar batería en segundo plano («Con la pantalla bloqueada»). Solo la usa mientras transcribe."));
 
         // 4. Copias
         page.addView(ui.section("Copias"));LinearLayout storage=ui.group();page.addView(storage,Ui.fill());
         folderRow=ui.listRow(R.drawable.ic_folder,"Carpeta de copias",null,"Desactivada");folderRow.onClick(v->folderSheet());ui.addRow(storage,folderRow);refreshFolder();
-        page.addView(more("Cada grabación se copia con su audio y su texto.","Carpeta de copias","Cada grabación se copia a esa carpeta con su audio, su información y su transcripción, y la copia se actualiza sola.\n\nPuedes elegir una carpeta del teléfono o de Google Drive (si tienes su app): en el selector, abre el menú ☰.\n\nBorrar una grabación en Voz local no borra sus copias."));
+        page.addView(more("Cada grabación se copia con su audio y su texto.","Carpeta de copias","Cada grabación se copia a esa carpeta con su audio, su información y su transcripción, y la copia se actualiza sola.\n\nPuedes elegir una carpeta del teléfono o de Google Drive (si tienes su app): en el selector, abre el menú ☰.\n\nBorrar una grabación en Verbapp no borra sus copias."));
 
         // 5. Apariencia
         String mode=AppTheme.appearance(this);String[] modes={"system","light","dark"},modeNames={"Automático","Claro","Oscuro"};
@@ -134,7 +134,7 @@ public class SettingsActivity extends Screen {
         ui.addRow(help,ui.listRow(R.drawable.ic_lifebuoy,"Compartir informe de soporte","Sin claves, títulos, audio ni texto",null).onClick(v->report()));
         ui.addRow(help,ui.listRow(R.drawable.ic_trash,"Borrar registros de diagnóstico",null,null).onClick(v->confirm("¿Borrar los registros locales?","Las grabaciones y transcripciones se conservan.","Borrar",true,()->{Diagnostics.clear(this);toast("Registros borrados");})));
         page.addView(ui.footnote("El registro técnico queda solo en este teléfono (máx. ~4 MB, 30 días) y se comparte únicamente si tú lo envías."));
-        TextView footer=ui.text("Voz local "+version+" · Software libre · Licencia MIT",Type.BODY_MEDIUM,p.outline);footer.setGravity(Gravity.CENTER);footer.setPadding(0,ui.dp(S8),0,0);page.addView(footer,Ui.fill());
+        TextView footer=ui.text("Verbapp "+version+" · Software libre · Licencia MIT",Type.BODY_MEDIUM,p.outline);footer.setGravity(Gravity.CENTER);footer.setPadding(0,ui.dp(S8),0,0);page.addView(footer,Ui.fill());
     }
 
     /** Tarjeta de estado: responde «¿está funcionando?». Tonal si falta un paso o falló la última comprobación; neutra si todo está listo. */
@@ -496,8 +496,8 @@ public class SettingsActivity extends Screen {
         String who=t.name==null||t.name.trim().isEmpty()?(t.me?Voices.name(this):"esa persona"):t.name.trim();
         TextView status=ui.text(t.me?"Toca Grabar y lee el texto con tu voz normal.":"Toca Grabar y pásale el teléfono a "+who+" para que lea con su voz normal.",Type.BODY_MEDIUM,p.onSurfaceVariant);
         status.setFontFeatureSettings("tnum");status.setPadding(0,ui.dp(S3),0,0);status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        TextView script=ui.text(t.me?"«Hola, soy "+who+". Estoy grabando mi voz para que Voz local me reconozca en mis conversaciones y reuniones. Hoy es un buen día para ordenar ideas.»"
-            :"«Hola, soy "+who+". Estoy grabando mi voz para que Voz local me reconozca en las conversaciones y reuniones. Hoy es un buen día para ordenar ideas.»",Type.BODY_LARGE,p.onSurface);
+        TextView script=ui.text(t.me?"«Hola, soy "+who+". Estoy grabando mi voz para que Verbapp me reconozca en mis conversaciones y reuniones. Hoy es un buen día para ordenar ideas.»"
+            :"«Hola, soy "+who+". Estoy grabando mi voz para que Verbapp me reconozca en las conversaciones y reuniones. Hoy es un buen día para ordenar ideas.»",Type.BODY_LARGE,p.onSurface);
         Sheet s=sheet(t.me?"Lee en voz alta":"Que "+who+" lea en voz alta",null);s.add(script);s.add(status);voiceRecording=s;
         Ui.Btn go=ui.button("Grabar",R.drawable.ic_mic_fill,Ui.Style.RECORD,null);LinearLayout.LayoutParams lp=Ui.fill();lp.topMargin=ui.dp(S4);s.body.addView(go,lp);
         go.setOnClickListener(v->{

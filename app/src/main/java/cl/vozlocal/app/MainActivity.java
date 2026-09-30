@@ -154,7 +154,7 @@ public class MainActivity extends Screen {
     // ================= GRABAR =================
     private void buildHome(){
         LinearLayout header=ui.row();header.setPadding(ui.dp(S1),ui.dp(S1),0,ui.dp(S1));header.setMinimumHeight(ui.dp(56));
-        header.addView(ui.heading("Voz local",Type.HEADLINE_SMALL));header.addView(ui.flex());
+        header.addView(ui.heading("Verbapp",Type.HEADLINE_SMALL));header.addView(ui.flex());
         // Estado en la cabecera: una línea tranquila si todo está bien; chip de color solo si algo pide acción.
         statusChip=ui.row();statusChip.setPadding(ui.dp(S2),0,ui.dp(S3),0);statusChip.setMinimumHeight(ui.dp(48));statusChip.setClickable(true);statusChip.setFocusable(true);statusChip.setAccessibilityDelegate(Ui.buttonRole());statusChip.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         chipSpinner=new ProgressBar(this,null,android.R.attr.progressBarStyleSmall);chipSpinner.setIndeterminateTintList(ColorStateList.valueOf(p.onSecondaryContainer));statusChip.addView(chipSpinner,new LinearLayout.LayoutParams(ui.dp(16),ui.dp(16)));
@@ -241,7 +241,7 @@ public class MainActivity extends Screen {
     }
     private void whatsappHelp(){
         Sheet s=sheet("Transcribir un audio de WhatsApp",null);
-        String[] steps={"Abre el chat y mantén presionado el audio.","Toca Compartir (o ⋮ → Compartir).","Elige Voz local en la lista de apps.","Revisa el título y toca Guardar audio."};
+        String[] steps={"Abre el chat y mantén presionado el audio.","Toca Compartir (o ⋮ → Compartir).","Elige Verbapp en la lista de apps.","Revisa el título y toca Guardar audio."};
         for(int i=0;i<steps.length;i++){LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(ui.dp(S1),ui.dp(S2),0,ui.dp(S2));TextView n=ui.text(String.valueOf(i+1),Type.LABEL_MEDIUM,p.onSecondaryContainer);n.setGravity(Gravity.CENTER);n.setBackground(oval(p.secondaryContainer));n.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);r.addView(n,new LinearLayout.LayoutParams(ui.dp(24),ui.dp(24)));r.addView(ui.space(S3));r.addView(ui.text(steps[i],Type.BODY_LARGE,p.onSurface),new LinearLayout.LayoutParams(0,-2,1));s.add(r);}
         TextView note=ui.text("También funciona con grabadoras, Telegram y cualquier app que comparta audio.",Type.BODY_MEDIUM,p.onSurfaceVariant);note.setPadding(ui.dp(S1),ui.dp(S3),0,0);s.add(note);
         s.primary("Entendido",()->{}).show();
@@ -436,7 +436,7 @@ public class MainActivity extends Screen {
     private void begin(){
         if(starting)return;
         if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
-            sheet("Permitir el micrófono","Voz local usa el micrófono solo mientras grabas. El audio se guarda en este teléfono.").primary("Continuar",()->requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},10)).secondary("Ahora no",null).show();return;
+            sheet("Permitir el micrófono","Verbapp usa el micrófono solo mientras grabas. El audio se guarda en este teléfono.").primary("Continuar",()->requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},10)).secondary("Ahora no",null).show();return;
         }
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED&&!getPreferences(0).getBoolean("notificationAsked",false)){
             getPreferences(0).edit().putBoolean("notificationAsked",true).apply();requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},11);return;
@@ -457,7 +457,7 @@ public class MainActivity extends Screen {
     /** Bienvenida de la primera instalación. Devuelve true si se mostró. */
     private boolean welcome(){
         Settings settings=new Settings(this);if(settings.prefs.getBoolean("welcomed",false))return false;settings.prefs.edit().putBoolean("welcomed",true).apply();
-        Sheet s=sheet("Bienvenido a Voz local","Graba o importa audio y transcríbelo con tu propia clave: pagas centavos por uso, sin suscripción.");
+        Sheet s=sheet("Bienvenido a Verbapp","Graba o importa audio y transcríbelo con tu propia clave: pagas centavos por uso, sin suscripción.");
         int[] icons={R.drawable.ic_mic_fill,R.drawable.ic_sparkle,R.drawable.ic_folder};
         String[][] rows={{"Graba sin internet","El audio queda en tu teléfono, incluso con la pantalla bloqueada."},{"Transcribe cuando quieras","Con separación de voces: Persona 1, Persona 2… y nombres editables."},{"Tus archivos son tuyos","Copias opcionales en una carpeta del teléfono o de Drive."}};
         for(int i=0;i<3;i++){LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(0,ui.dp(S2),0,ui.dp(S2));r.addView(ui.tile(icons[i],p.onPrimaryContainer,p.primaryContainer,40,22));r.addView(ui.space(S3));LinearLayout t=ui.column();t.addView(ui.text(rows[i][0],Type.TITLE_MEDIUM,p.onSurface));TextView d=ui.text(rows[i][1],Type.BODY_MEDIUM,p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);t.addView(d);r.addView(t,new LinearLayout.LayoutParams(0,-2,1));s.add(r);}

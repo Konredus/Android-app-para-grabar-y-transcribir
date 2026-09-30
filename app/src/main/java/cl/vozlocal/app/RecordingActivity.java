@@ -560,7 +560,7 @@ public class RecordingActivity extends Screen {
             condition(chargeOk,s.charging()?(charging?"Cargando":"Se requiere conectar el cargador"):"Cargador no requerido");
             condition(batteryOk,"Batería "+level+" %"+(batteryOk?"":" · Android espera a que cargues"));
             // Con la optimización activa, algunos teléfonos congelan la app con la pantalla bloqueada y cortan la conexión.
-            condition(free,free?"Puede trabajar con la pantalla bloqueada":"Android optimiza la batería de Voz local · puede cortar la transcripción al bloquear");
+            condition(free,free?"Puede trabajar con la pantalla bloqueada":"Android optimiza la batería de Verbapp · puede cortar la transcripción al bloquear");
             if(!free){Ui.Btn allow=ui.button("Permitir en segundo plano",R.drawable.ic_battery,Ui.Style.TONAL,v->RecordingActions.allowBackground(this));conditions.addView(allow,ui.top(S2));}
         }
         refreshWaiting(blocker);

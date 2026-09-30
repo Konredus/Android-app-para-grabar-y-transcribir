@@ -26,13 +26,19 @@ import java.util.List;
 import static cl.vozlocal.app.AppTheme.*;
 
 /**
- * Kit de componentes Material 3 construido de forma nativa (sin la librería de Material).
+ * Kit de componentes construido de forma nativa (sin la librería de Material), con la estética «Bosque de vidrio» de
+ * Verbapp (0.7.0): píldoras, vidrio translúcido, tinta para lo principal y Outfit en títulos y botones.
  * Cada pantalla arma su UI solo con estas piezas, así toda la app sigue la misma línea.
- * Ver docs/diseno/CRITERIOS.md → "Componentes".
+ * Ver docs/diseno/CRITERIOS.md → "Componentes" y docs/diseno/PROPUESTA-0.7.md.
  */
 final class Ui {
-    /** Estilos de botón de Material 3: Filled, Tonal, Outlined, Text, y Error (acciones destructivas). */
-    enum Style{PRIMARY,TONAL,SECONDARY,PLAIN,DESTRUCTIVE,RECORD}
+    /**
+     * Estilos de botón (todos en forma de píldora):
+     * PRIMARY = tinta (negro verdoso; en oscuro, blanco menta), lo principal de la pantalla · TONAL = menta ·
+     * SECONDARY = gris suave (Cancelar, Listo) · PLAIN = solo texto verde · DESTRUCTIVE = error ·
+     * RECORD = verde de marca (grabar) · VIVID = vidrio blanco sobre el verde intenso (Detener, Pausa).
+     */
+    enum Style{PRIMARY,TONAL,SECONDARY,PLAIN,DESTRUCTIVE,RECORD,VIVID}
 
     final Context c;final Palette p;
     Ui(Context c,Palette p){this.c=c;this.p=p;}
@@ -51,15 +57,48 @@ final class Ui {
     // ---------- Texto ----------
     TextView text(String value,Type type,int color){TextView t=new TextView(c);t.setText(value);t.setTextColor(color);AppTheme.type(t,type);t.setIncludeFontPadding(true);return t;}
     TextView heading(String value,Type type){TextView t=text(value,type,p.onSurface);if(Build.VERSION.SDK_INT>=28)t.setAccessibilityHeading(true);return t;}
-    /** Subtítulo de lista (como en Ajustes de Android): color primary, Title Small, sin mayúsculas forzadas. */
+    /** Subtítulo de lista (como en Ajustes de Android): verde de marca, Title Small (Outfit), sin mayúsculas forzadas. */
     TextView section(String value){TextView t=text(value,Type.TITLE_SMALL,p.primary);t.setPadding(dp(S4),dp(S6),dp(S4),dp(S2));if(Build.VERSION.SDK_INT>=28)t.setAccessibilityHeading(true);return t;}
     TextView footnote(String value){TextView t=text(value,Type.BODY_MEDIUM,p.onSurfaceVariant);t.setPadding(dp(S4),dp(S2),dp(S4),0);return t;}
     TextView oneLine(TextView t){t.setSingleLine(true);t.setEllipsize(TextUtils.TruncateAt.END);return t;}
+    /** Números que cambian (cronómetro, duraciones, contadores): cifras de ancho fijo (Outfit trae «tnum»), así no bailan. */
+    static TextView tabular(TextView t){t.setFontFeatureSettings("tnum");return t;}
+    /**
+     * Destaca la última palabra de un título grande con un rectángulo menta detrás (como «Simple» en la referencia).
+     * Solo si la palabra es corta (≤ 16 letras): una palabra larga no cabe bien en una línea con su recuadro.
+     */
+    void highlightLast(TextView t,String value){
+        String v=value==null?"":value.trim();int cut=v.lastIndexOf(' ');String last=v.substring(cut+1);
+        if(v.isEmpty()||last.length()>16||last.length()<2){t.setText(v);return;}
+        android.text.SpannableString s=new android.text.SpannableString(v);
+        s.setSpan(new Glass.Highlight(p.highlight,dp(6),dp(10)),cut+1,v.length(),android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        t.setText(s);t.setContentDescription(v);
+    }
+    /** Logo + nombre «Verbapp» (Outfit, levemente inclinado como en la referencia). textSp: tamaño del nombre. */
+    LinearLayout brand(float textSp){
+        LinearLayout r=row();r.setContentDescription("Verbapp");r.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        int mark=Math.round(textSp*1.3f);r.addView(new Glass.BrandMark(c,p.onSurface,p.brand),new LinearLayout.LayoutParams(dp(mark),dp(mark)));r.addView(space(S1));
+        TextView name=text("Verbapp",Type.TITLE_LARGE,p.onSurface);name.setTextSize(textSp);name.setTypeface(AppTheme.outfit(c,Weight.MEDIUM));name.getPaint().setTextSkewX(-0.12f);name.setLetterSpacing(-0.01f);name.setIncludeFontPadding(false);name.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        r.addView(name);return r;
+    }
 
     // ---------- Superficies ----------
-    LinearLayout card(){LinearLayout l=column();l.setBackground(shape(c,p.card,R_CARD));l.setPadding(dp(S4),dp(S4),dp(S4),dp(S4));return l;}
-    /** Grupo de lista: tarjeta cuyas filas se separan con divisores finos (outlineVariant). */
-    LinearLayout group(){LinearLayout l=column();l.setBackground(shape(c,p.card,R_CARD));l.setClipToOutline(true);return l;}
+    /** Tarjeta de vidrio: blanco translúcido con borde claro y esquinas de 24 dp. */
+    LinearLayout card(){LinearLayout l=column();l.setBackground(glass(c,p,R_CARD));l.setPadding(dp(S4),dp(S4),dp(S4),dp(S4));return l;}
+    /** Grupo de lista: tarjeta de vidrio cuyas filas se separan con divisores finos (outlineVariant). */
+    LinearLayout group(){LinearLayout l=column();l.setBackground(glass(c,p,R_CARD));l.setClipToOutline(true);return l;}
+    /**
+     * Dato de un resumen (p. ej. «Tu semana»): ícono en círculo blanco, número grande (Outfit) y rótulo.
+     * Lo arma una tarjeta chica de vidrio; quien la usa decide el ancho (normalmente 1/3 de una fila).
+     */
+    LinearLayout stat(int icon,String value,String label){
+        LinearLayout s=column();s.setBackground(shape(c,p.dark?p.glass:0xB3FFFFFF,R_CONTROL+4));s.setPadding(dp(S3),dp(S3),dp(S3),dp(S3));
+        FrameLayout dot=new FrameLayout(c);dot.setBackground(glassOval(c,p));dot.addView(icon(icon,p.onSurface,16),new FrameLayout.LayoutParams(dp(16),dp(16),Gravity.CENTER));s.addView(dot,new LinearLayout.LayoutParams(dp(32),dp(32)));
+        TextView v=tabular(text(value,Type.TITLE_LARGE,p.onSurface));v.setPadding(0,dp(S3),0,0);oneLine(v);s.addView(v);
+        TextView l=oneLine(text(label,Type.LABEL_MEDIUM,p.onSurfaceVariant));s.addView(l);
+        s.setContentDescription(value+" "+label);s.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        return s;
+    }
     void addRow(LinearLayout group,View row){if(group.getChildCount()>0)group.addView(separator(S4+24+S4));group.addView(row,fill());}
     View separator(int insetDp){View v=new View(c);v.setBackgroundColor(p.outlineVariant);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,Math.max(1,dp(0.5f)));lp.setMarginStart(dp(insetDp));v.setLayoutParams(lp);return v;}
     Drawable ripple(Drawable content,int radius){return new RippleDrawable(ColorStateList.valueOf(p.ripple),content,content==null?shape(c,0xFF000000,radius):null);}
@@ -78,6 +117,13 @@ final class Ui {
         GradientDrawable shape=oval(bg==0?0x00000000:bg);b.setBackground(new RippleDrawable(ColorStateList.valueOf(bg==0?p.ripple:stateLayer(tint)),shape,oval(0xFF000000)));
         int size=Math.max(48,sizeDp);b.setLayoutParams(new LinearLayout.LayoutParams(dp(size),dp(size)));b.setMinimumWidth(dp(48));b.setMinimumHeight(dp(48));pressable(b);return b;
     }
+    /** Botón de ícono redondo de vidrio (blanco con borde), como «volver» o «más» de la referencia. 48 dp. */
+    ImageButton glassButton(int res,String description){
+        ImageButton b=iconButton(res,description,p.onSurface,0,48);
+        b.setBackground(new RippleDrawable(ColorStateList.valueOf(p.ripple),glassOval(c,p),oval(0xFF000000)));
+        if(Build.VERSION.SDK_INT>=28&&!p.dark){b.setOutlineSpotShadowColor(p.shadow);b.setOutlineAmbientShadowColor(p.shadow);}
+        b.setElevation(p.dark?0:dp(1));return b;
+    }
 
     // ---------- Botones ----------
     /**
@@ -94,14 +140,16 @@ final class Ui {
         Btn(String text,int iconRes,Style style){
             super(c);this.style=style;setOrientation(HORIZONTAL);setGravity(Gravity.CENTER);setClickable(true);setFocusable(true);
             switch(style){
-                case PRIMARY:fg=p.onPrimary;bg=p.primary;break;
-                case RECORD:fg=0xFFFFFFFF;bg=p.record;break;
-                case TONAL:fg=p.onSecondaryContainer;bg=p.secondaryContainer;break;
+                case PRIMARY:fg=p.onInk;bg=p.ink;break;
+                case RECORD:fg=p.onBrand;bg=p.brand;break;
+                case TONAL:fg=p.onPrimaryContainer;bg=p.primaryContainer;break;
+                case SECONDARY:fg=p.onSurface;bg=p.dark?p.surfaceContainerHighest:p.surfaceContainerHigh;break;
                 case DESTRUCTIVE:fg=p.onError;bg=p.error;break;
+                case VIVID:fg=p.onVivid;bg=p.glassOnVivid;break;
                 case PLAIN:fg=p.primary;break;
                 default:fg=p.primary;
             }
-            if(style==Style.SECONDARY)fill=outline(c,0x00000000,p.outline,R_FULL,false);else fill=bg==0?null:shape(c,bg,R_FULL);
+            if(style==Style.VIVID)fill=outline(c,bg,p.glassOnVividStroke,R_FULL,false);else fill=bg==0?null:shape(c,bg,R_FULL);
             setBackground(new RippleDrawable(ColorStateList.valueOf(stateLayer(fg)),fill,shape(c,0xFF000000,R_FULL)));
             int h=style==Style.PLAIN?44:52;setMinimumHeight(dp(h));setPadding(dp(style==Style.PLAIN?S3:S6),dp(S2),dp(style==Style.PLAIN?S3:S6),dp(S2));
             // El ícono vive en un espacio fijo de 18 dp que comparte con el indicador de carga: así el texto no salta.
@@ -121,7 +169,7 @@ final class Ui {
         /** Recolorea contenido y relleno (sin crear otro fondo). */
         void setColors(int fg,int bg){
             this.fg=fg;this.bg=bg;label.setTextColor(fg);glyph.setImageTintList(ColorStateList.valueOf(fg));if(spinner!=null)spinner.setIndeterminateTintList(ColorStateList.valueOf(fg));
-            if(fill!=null&&style!=Style.SECONDARY)fill.setColor(bg);
+            if(fill!=null)fill.setColor(bg);
             if(getBackground() instanceof RippleDrawable)((RippleDrawable)getBackground()).setColor(ColorStateList.valueOf(stateLayer(fg)));
         }
         /** Reemplaza la forma del fondo por esquinas propias (en px, orden de GradientDrawable.setCornerRadii). */
@@ -168,7 +216,7 @@ final class Ui {
     Btn button(String text,int icon,Style style,View.OnClickListener click){Btn b=new Btn(text,icon,style);if(click!=null)b.setOnClickListener(click);return b;}
 
     /**
-     * Botón de dos partes de Material 3 Expressive: acción principal (píldora rellena) + ▾ con las demás,
+     * Botón de dos partes de Material 3 Expressive: acción principal (píldora de tinta) + ▾ con las demás,
      * separados por 2 dp y ambos de 52 dp de alto. Las esquinas interiores son pequeñas, así se leen como un solo control.
      * Al abrir el menú, la flecha gira y su segmento se redondea; vuelve solo cuando la hoja se cierra.
      */
@@ -184,19 +232,19 @@ final class Ui {
             main=button(label,icon,Style.PRIMARY,onMain);main.setCorners(mainCorners);main.setPadding(dp(S6),0,dp(S5),0);oneLine(main.label);
             addView(main,new LinearLayout.LayoutParams(0,dp(52),1));
             chevron=new RotateDrawable();chevron.setDrawable(c.getDrawable(R.drawable.ic_chevron_down).mutate());chevron.setFromDegrees(0f);chevron.setToDegrees(180f);chevron.setLevel(0);
-            more=iconButton(R.drawable.ic_chevron_down,"Más opciones para guardar o compartir",p.onPrimary,0,52);more.setImageDrawable(chevron);more.setImageTintList(ColorStateList.valueOf(p.onPrimary));
-            moreFill=new GradientDrawable();moreFill.setColor(p.primary);moreFill.setCornerRadii(moreCorners.clone());moreMask=new GradientDrawable();moreMask.setColor(0xFF000000);moreMask.setCornerRadii(moreCorners.clone());
-            more.setBackground(new RippleDrawable(ColorStateList.valueOf(stateLayer(p.onPrimary)),moreFill,moreMask));pressable(more,false);
+            more=iconButton(R.drawable.ic_chevron_down,"Más opciones para guardar o compartir",p.onInk,0,52);more.setImageDrawable(chevron);more.setImageTintList(ColorStateList.valueOf(p.onInk));
+            moreFill=new GradientDrawable();moreFill.setColor(p.ink);moreFill.setCornerRadii(moreCorners.clone());moreMask=new GradientDrawable();moreMask.setColor(0xFF000000);moreMask.setCornerRadii(moreCorners.clone());
+            more.setBackground(new RippleDrawable(ColorStateList.valueOf(stateLayer(p.onInk)),moreFill,moreMask));pressable(more,false);
             more.setOnClickListener(v->{openMenu();if(onMore!=null)onMore.onClick(v);});
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(52),dp(52));lp.setMarginStart(dp(2));addView(more,lp);
         }
         void setLabel(String v){main.setText(v);}
         void setIcon(int res){main.setIcon(res);}
         boolean tonal(){return tonal;}
-        /** Tonal (secondaryContainer) para un estado ya logrado, p. ej. «✓ En 0-Inbox · 16:09»; relleno para la acción pendiente. */
+        /** Menta (primaryContainer) para un estado ya logrado, p. ej. «✓ En 0-Inbox · 16:09»; tinta para la acción pendiente. */
         void setTonal(boolean value){
             if(tonal==value)return;tonal=value;
-            int fromFg=main.fg,fromBg=main.bg,toFg=value?p.onSecondaryContainer:p.onPrimary,toBg=value?p.secondaryContainer:p.primary;
+            int fromFg=main.fg,fromBg=main.bg,toFg=value?p.onPrimaryContainer:p.onInk,toBg=value?p.primaryContainer:p.ink;
             if(colors!=null)colors.cancel();
             if(!AppTheme.motion()||!isAttachedToWindow()){paint(toFg,toBg);return;}
             ArgbEvaluator ev=new ArgbEvaluator();colors=ValueAnimator.ofFloat(0f,1f);colors.setDuration(MOTION_BASE);colors.setInterpolator(EMPHASIZED);
@@ -238,19 +286,19 @@ final class Ui {
     }
 
     // ---------- Chips ----------
-    /** Chip de estado/asistencia (Material: esquinas de 8 dp, 32 dp de alto). */
-    TextView chip(String value,int fg,int bg){TextView t=text(value,Type.LABEL_LARGE,fg);t.setBackground(shape(c,bg,R_SMALL));t.setPadding(dp(S3),dp(6),dp(S3),dp(6));t.setGravity(Gravity.CENTER);oneLine(t);return t;}
-    /** Chip con borde (sin relleno) e ícono inicial opcional: estado neutro o acción secundaria. */
+    /** Chip de estado (píldora de 32 dp de alto). */
+    TextView chip(String value,int fg,int bg){TextView t=text(value,Type.LABEL_LARGE,fg);t.setBackground(shape(c,bg,R_FULL));t.setPadding(dp(S3),dp(6),dp(S3),dp(6));t.setGravity(Gravity.CENTER);oneLine(t);return t;}
+    /** Chip de vidrio con borde fino e ícono inicial opcional: estado neutro o acción secundaria. */
     TextView outlinedChip(String value,int icon,int iconColor){
-        TextView t=text(value,Type.LABEL_LARGE,p.onSurfaceVariant);t.setBackground(ripple(outline(c,0x00000000,p.outline,R_SMALL,false),R_SMALL));t.setPadding(dp(S2),dp(6),dp(S3),dp(6));t.setGravity(Gravity.CENTER_VERTICAL);t.setMinHeight(dp(32));oneLine(t);
+        TextView t=text(value,Type.LABEL_LARGE,p.onSurfaceVariant);t.setBackground(ripple(outline(c,p.glass,p.outlineVariant,R_FULL,false),R_FULL));t.setPadding(dp(S3),dp(6),dp(S4),dp(6));t.setGravity(Gravity.CENTER_VERTICAL);t.setMinHeight(dp(36));oneLine(t);
         if(icon!=0){Drawable d=c.getDrawable(icon).mutate();d.setTint(iconColor);d.setBounds(0,0,dp(18),dp(18));t.setCompoundDrawablesRelative(d,null,null,null);t.setCompoundDrawablePadding(dp(S2));}
         return t;
     }
-    /** Chip de filtro de Material 3: borde si no está elegido; relleno secondaryContainer con ✓ si está elegido. */
+    /** Chip de filtro (píldora): vidrio con borde si no está elegido; tinta con ✓ si está elegido. */
     TextView filter(String value,boolean selected,View.OnClickListener click){
-        TextView t=text(value,Type.LABEL_LARGE,selected?p.onSecondaryContainer:p.onSurfaceVariant);t.setGravity(Gravity.CENTER_VERTICAL);t.setPadding(dp(selected?S2:S4),0,dp(S4),0);t.setMinHeight(dp(32));t.setMinimumHeight(dp(32));
-        t.setBackground(new RippleDrawable(ColorStateList.valueOf(p.ripple),selected?shape(c,p.secondaryContainer,R_SMALL):outline(c,0x00000000,p.outline,R_SMALL,false),null));
-        if(selected){Drawable d=c.getDrawable(R.drawable.ic_check).mutate();d.setTint(p.onSecondaryContainer);d.setBounds(0,0,dp(18),dp(18));t.setCompoundDrawablesRelative(d,null,null,null);t.setCompoundDrawablePadding(dp(S2));}
+        TextView t=text(value,Type.LABEL_LARGE,selected?p.onInk:p.onSurfaceVariant);t.setGravity(Gravity.CENTER_VERTICAL);t.setPadding(dp(selected?S3:S4),0,dp(S4),0);t.setMinHeight(dp(36));t.setMinimumHeight(dp(36));
+        t.setBackground(new RippleDrawable(ColorStateList.valueOf(p.ripple),selected?shape(c,p.ink,R_FULL):outline(c,p.glass,p.outlineVariant,R_FULL,false),null));
+        if(selected){Drawable d=c.getDrawable(R.drawable.ic_check).mutate();d.setTint(p.onInk);d.setBounds(0,0,dp(18),dp(18));t.setCompoundDrawablesRelative(d,null,null,null);t.setCompoundDrawablePadding(dp(6));}
         t.setSelected(selected);t.setOnClickListener(click);t.setAccessibilityDelegate(buttonRole());t.setContentDescription(value+(selected?", seleccionado":""));return t;
     }
 
@@ -261,7 +309,7 @@ final class Ui {
         Row(int iconRes,String titleText,String subtitleText,String valueText){
             super(c);setOrientation(HORIZONTAL);setGravity(Gravity.CENTER_VERTICAL);setMinimumHeight(dp(56));setPadding(dp(S4),dp(S3),dp(S4),dp(S3));
             if(iconRes!=0){ImageView i=icon(iconRes,p.onSurfaceVariant,24);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(24),dp(24));lp.setMarginEnd(dp(S4));addView(i,lp);}
-            LinearLayout texts=column();title=text(titleText,Type.BODY_LARGE,p.onSurface);texts.addView(title);
+            LinearLayout texts=column();title=text(titleText,Type.ITEM,p.onSurface);texts.addView(title);
             subtitle=text(subtitleText==null?"":subtitleText,Type.BODY_MEDIUM,p.onSurfaceVariant);subtitle.setVisibility(subtitleText==null||subtitleText.isEmpty()?GONE:VISIBLE);subtitle.setPadding(0,dp(2),0,0);texts.addView(subtitle);
             addView(texts,new LinearLayout.LayoutParams(0,-2,1));
             value=text(valueText==null?"":valueText,Type.BODY_MEDIUM,p.onSurfaceVariant);value.setMaxWidth(dp(170));value.setGravity(Gravity.END);oneLine(value);value.setPadding(dp(S2),0,0,0);addView(value,wrap());
@@ -340,11 +388,13 @@ final class Ui {
     }
 
     // ---------- Campos ----------
-    /** Campo relleno (Material "filled text field" simplificado). */
+    /** Campo de texto: blanco (en oscuro, gris verdoso) con borde fino y esquinas de 16 dp. */
     EditText field(String hint,String description){
         EditText e=new EditText(c);e.setHint(hint);e.setContentDescription(description);e.setSingleLine(true);e.setTextColor(p.onSurface);e.setHintTextColor(p.onSurfaceVariant);AppTheme.type(e,Type.BODY_LARGE);
-        e.setBackground(shape(c,p.surfaceContainerHighest,R_CONTROL));e.setPadding(dp(S4),dp(S3),dp(S4),dp(S3));e.setMinHeight(dp(56));e.setMinimumHeight(dp(56));return e;
+        e.setBackground(fieldBackground());e.setPadding(dp(S4),dp(S3),dp(S4),dp(S3));e.setMinHeight(dp(56));e.setMinimumHeight(dp(56));return e;
     }
+    /** Fondo de un campo (también para cajas que envuelven un campo, p. ej. fecha fija + título). */
+    GradientDrawable fieldBackground(){return outline(c,p.dark?p.surfaceContainerHigh:p.surfaceContainerLowest,p.outlineVariant,R_CONTROL,false);}
     /** Etiqueta + campo apilados. */
     EditText labeled(LinearLayout parent,String label,String hint){TextView t=text(label,Type.BODY_SMALL,p.onSurfaceVariant);t.setPadding(dp(S1),dp(S3),0,dp(6));parent.addView(t);EditText e=field(hint,label);parent.addView(e,fill());return e;}
 

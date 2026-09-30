@@ -42,7 +42,7 @@ final class Diagnostics {
     /** Datos del teléfono que afectan el trabajo en segundo plano (sin datos personales). */
     private static String device(Context c){
         StringBuilder d=new StringBuilder("Teléfono: "+Build.MANUFACTURER+" "+Build.MODEL+"\n");
-        try{android.os.PowerManager pm=c.getSystemService(android.os.PowerManager.class);d.append("Optimización de batería para Voz local: ").append(pm.isIgnoringBatteryOptimizations(c.getPackageName())?"desactivada (sin restricciones)":"activada (Android puede frenar el trabajo de fondo)").append("\n");}catch(Exception ignored){}        try{android.app.ActivityManager am=c.getSystemService(android.app.ActivityManager.class);if(Build.VERSION.SDK_INT>=28)d.append("Segundo plano restringido: ").append(am.isBackgroundRestricted()?"sí":"no").append("\n");}catch(Exception ignored){}
+        try{android.os.PowerManager pm=c.getSystemService(android.os.PowerManager.class);d.append("Optimización de batería para Verbapp: ").append(pm.isIgnoringBatteryOptimizations(c.getPackageName())?"desactivada (sin restricciones)":"activada (Android puede frenar el trabajo de fondo)").append("\n");}catch(Exception ignored){}        try{android.app.ActivityManager am=c.getSystemService(android.app.ActivityManager.class);if(Build.VERSION.SDK_INT>=28)d.append("Segundo plano restringido: ").append(am.isBackgroundRestricted()?"sí":"no").append("\n");}catch(Exception ignored){}
         try{d.append("Red al generar el informe: ").append(Pipeline.networkName(c)).append("\n");}catch(Exception ignored){}
         return d.toString();
     }

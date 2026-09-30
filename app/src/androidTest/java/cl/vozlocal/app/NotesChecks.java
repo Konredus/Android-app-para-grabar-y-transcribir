@@ -98,7 +98,7 @@ final class NotesChecks {
         // Markdown para Obsidian: frontmatter, secciones en orden, tareas marcables y transcripción con nombres.
         String md=Notes.markdown(r,note,t,marks());
         expect(md.startsWith("---\nfecha: 2026-09-29\nhora: \"16:05\"\nduracion: \"1 min\"\npersonas:\n  - \"Fran\"\n  - \"Konrad\"\n  - \"Persona 3\"\ntags:\n  - \"presupuesto\"\n"),"Frontmatter wrong:\n"+md);
-        expect(md.contains("fuente: \"Voz local\"\n")&&md.contains("grabacion: \"2026-09-29 Reunión de presupuesto\"\n")&&md.contains("\n---\n\n# Reunión de presupuesto\n"),"Frontmatter tail or heading wrong:\n"+md);
+        expect(md.contains("fuente: \"Verbapp\"\n")&&md.contains("grabacion: \"2026-09-29 Reunión de presupuesto\"\n")&&md.contains("\n---\n\n# Reunión de presupuesto\n"),"Frontmatter tail or heading wrong:\n"+md);
         expect(md.contains("## Resumen\n\nFran y Konrad revisaron el presupuesto.\n")&&md.contains("## Decisiones\n\n- Usar la planilla de Konrad\n"),"Summary/decisions wrong:\n"+md);
         expect(md.contains("## Tareas\n\n- [ ] Enviar la planilla — Konrad · el viernes\n- [ ] Llamar a Juan — Pedro\n- [ ] Revisar las cifras\n"),"Tasks wrong:\n"+md);
         expect(md.contains("## Momentos marcados\n\n- ★ 00:07 precio\n- ★ 00:12\n"),"Marks section wrong:\n"+md);
