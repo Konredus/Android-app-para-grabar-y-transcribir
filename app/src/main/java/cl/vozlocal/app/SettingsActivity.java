@@ -17,6 +17,7 @@ import android.provider.DocumentsContract;
 import android.text.InputType;
 import android.view.*;
 import android.widget.*;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -31,6 +32,10 @@ import static cl.vozlocal.app.AppTheme.*;
  * 0.7.0 (Verbapp, PROPUESTA-0.7 §3.6): fondo suave, tarjeta de marca y estado (logo, lema y «¿está funcionando?»),
  * grupos de vidrio con cada ícono en un círculo menta, el tema elegido con miniaturas y un pie con la marca.
  * Se quitó «Colores de tu fondo de pantalla» (Verbapp tiene su propio verde); todo lo demás hace lo mismo que en 0.6.
+ *
+ * 0.8.0 (OpenRouter): tercer proveedor, con su clave, «Comprobar conexión» que muestra el saldo y dos filas de modelo
+ * («con voces» y «solo texto») que abren la hoja de modelos: la lista de OpenRouter que se actualiza sola, con
+ * «Automático (recomendado)» primero. La nota suma «OpenRouter» como IA y Ayuda, «Ver la bienvenida».
  *
  * Extras del intent: focusKey (pedir la clave si falta), voice (grabar tu voz, o ver las voces conocidas, y volver), back (Atrás vuelve a
  * la pantalla anterior), inbox (elegir la carpeta de guardado rápido y volver) y noteAi (abrir «IA de la nota»).
@@ -50,11 +55,21 @@ public class SettingsActivity extends Screen {
     /** Al volver del permiso del sistema, se refleja el nuevo estado. */
     @Override protected void onResume(){super.onResume();if(batteryRow!=null)batteryRow.setValue(batteryValue());}
 
-    static String modelName(Settings s){if(!s.provider().equals("openai"))return s.prefs.getString("customModel","personalizado");int i=Arrays.asList(MODELS).indexOf(s.textModel());return i<0?s.textModel():MODEL_NAMES[i];}
-    static String modelSummary(Settings s){if(!s.provider().equals("openai"))return "Tu servidor · "+modelName(s);return "OpenAI · "+modelName(s)+(s.speakersMode().equals("never")?"":" + separación de voces");}
+    static String modelName(Settings s){if(s.openRouter())return Models.name(Models.chosen(s,false));if(!s.provider().equals("openai"))return s.prefs.getString("customModel","personalizado");int i=Arrays.asList(MODELS).indexOf(s.textModel());return i<0?s.textModel():MODEL_NAMES[i];}
+    /** «OpenRouter · MAI Transcribe 2 + separación de voces». Con OpenRouter puede haber un modelo para el texto y otro para las voces. */
+    static String modelSummary(Settings s){
+        if(s.openRouter()){
+            String text=modelName(s);if(!s.defaultSpeakers())return "OpenRouter · "+text;
+            String voices=Models.name(Models.chosen(s,true));
+            return voices.equals(text)?"OpenRouter · "+text+" + separación de voces":"OpenRouter · "+text+" · voces con "+voices;
+        }
+        if(!s.provider().equals("openai"))return "Tu servidor · "+modelName(s);return "OpenAI · "+modelName(s)+(s.speakersMode().equals("never")?"":" + separación de voces");
+    }
 
     @Override public void onCreate(Bundle state){
         super.onCreate(state);settings=new Settings(this);
+        // Deja leída la lista de modelos guardada: la tarjeta de estado nombra el modelo de OpenRouter antes de armar sus filas.
+        if(settings.openRouter())Models.cached(this);
         Intent in=getIntent();voiceFlow=in.getBooleanExtra("voice",false);returnOnBack=in.getBooleanExtra("back",false);inboxFlow=in.getBooleanExtra("inbox",false);
         render();
         if(state==null)page.post(()->openFrom(in));
@@ -75,7 +90,7 @@ public class SettingsActivity extends Screen {
     private void render(){
         shell(null,2);largeTitle(page,"Ajustes",null);
         page.addView(statusCard(),Ui.fill());
-        boolean openai=settings.provider().equals("openai");
+        boolean openai=settings.provider().equals("openai"),router=settings.openRouter();
 
         // 1. Tu flujo: lo que pasa con cada grabación, de principio a fin.
         page.addView(ui.section("Tu flujo"));LinearLayout flow=ui.group();page.addView(flow,Ui.fill());
@@ -85,14 +100,15 @@ public class SettingsActivity extends Screen {
             settings.prefs.edit().putBoolean("noteAuto",on).apply();Diagnostics.event("setting_changed",null,"action","note_auto","result",on);
             subtitle(note[0],noteSubtitle(on));if(on&&!noteReady())page.post(this::noteMissingKey);});
         add(flow,note[0]);
-        Ui.Row noteAi=row(R.drawable.ic_sparkle,"IA de la nota",noteReady()?null:noteMissing(),noteAiValue());noteAi.onClick(v->noteAiSheet());add(flow,noteAi);
+        Ui.Row noteAi=row(R.drawable.ic_sparkle,"IA de la nota",noteReady()?noteAiHint():noteMissing(),noteAiValue());noteAi.onClick(v->noteAiSheet());add(flow,noteAi);
         add(flow,toggleRow(R.drawable.ic_bolt,"Transcribir automáticamente","Al guardar una grabación o importar un audio",settings.automatic(),on->{toggle("automatic",on);if(on&&Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},101);}));
         add(flow,toggleRow(R.drawable.ic_title,"Nombrar al terminar de grabar","Una hoja para poner el título y seguir",settings.askTitle(),on->toggle("askTitle",on)));
         Ui.Row dates=row(R.drawable.ic_edit,"Agregar fecha a las existentes","Para las grabaciones anteriores a esta opción",null);dates.onClick(v->offerDatesForExisting());
         add(flow,toggleRow(R.drawable.ic_calendar,"Fecha delante del nombre","Ej.: "+Recording.isoDate(System.currentTimeMillis())+" Reunión",settings.datePrefix(),on->{settings.prefs.edit().putBoolean("datePrefix",on).apply();Diagnostics.event("setting_changed",null,"action","date_prefix","result",on);showRow(dates,on);if(on)offerDatesForExisting();}));
         add(flow,dates);showRow(dates,settings.datePrefix());
         voiceRow=null;
-        if(openai&&settings.canSeparate()){voiceRow=row(R.drawable.ic_voice,"Voces conocidas","Para reconocer a cada persona al separar voces",voiceValue());voiceRow.onClick(v->voiceSheet());add(flow,voiceRow);}
+        // Con OpenRouter las muestras van delante del audio (no hay «voces conocidas» del proveedor), así que también se ofrecen.
+        if((openai||router)&&settings.canSeparate()){voiceRow=row(R.drawable.ic_voice,"Voces conocidas","Para reconocer a cada persona al separar voces",voiceValue());voiceRow.onClick(v->voiceSheet());add(flow,voiceRow);}
         page.addView(more("Guarda la nota o el texto con un toque desde cada grabación.","Tu flujo",
             "Guardado rápido: la carpeta donde el botón de cada grabación deja la nota (.md) o el texto (.txt), por ejemplo tu 0-Inbox de Google Drive. Si después corriges voces o nombres, «Actualizar» reemplaza el mismo archivo, sin crear copias.\n\n"
             +"Nota para tu segundo cerebro: una IA arma un resumen con decisiones, tareas y frases clave a partir del texto de la transcripción (no se vuelve a enviar el audio). Automática, se arma al terminar cada transcripción; si la apagas, la pides con un toque desde la grabación. Revísala antes de guardarla: puede tener errores.\n\n"
@@ -100,16 +116,24 @@ public class SettingsActivity extends Screen {
 
         // 2. Servicio de transcripción: quién transcribe y con qué clave. El resultado de la comprobación queda en su fila.
         page.addView(ui.section("Servicio de transcripción"));LinearLayout api=ui.group();page.addView(api,Ui.fill());
-        add(api,row(R.drawable.ic_globe,"Proveedor",null,openai?"OpenAI":"Tu servidor").onClick(v->providerSheet()));
-        if(openai)add(api,row(R.drawable.ic_wave,"Modelo de texto",null,modelName(settings)).onClick(v->modelSheet()));
+        add(api,row(R.drawable.ic_globe,"Proveedor",null,settings.providerName()).onClick(v->providerSheet()));
+        if(router){add(api,orModelRow(true));add(api,orModelRow(false));}
+        else if(openai)add(api,row(R.drawable.ic_wave,"Modelo de texto",null,modelName(settings)).onClick(v->modelSheet()));
         else{Ui.Row server=row(R.drawable.ic_server,"Servidor y modelo",settings.prefs.getString("customBase","Sin configurar"),null);ui.oneLine(server.subtitle);add(api,server.onClick(v->custom()));}
         if(settings.canSeparate())add(api,row(R.drawable.ic_people,"Separar voces",null,SPEAKER_NAMES[Math.max(0,Arrays.asList(SPEAKER_MODES).indexOf(settings.speakersMode()))]).onClick(v->speakersSheet()));
-        add(api,row(R.drawable.ic_key,"Clave de API",null,settings.hasKey()?"Configurada":"Falta").onClick(v->keySheet()));
+        add(api,row(R.drawable.ic_key,router?"Clave de OpenRouter":"Clave de API",null,settings.hasKey()?"Configurada":"Falta").onClick(v->keySheet()));
         verifyRow=row(R.drawable.ic_network_check,"Comprobar conexión",verifyText(),null);verifyRow.subtitle.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);verifyRow.onClick(v->verify());add(api,verifyRow);paintVerify();
         add(api,row(R.drawable.ic_translate,"Idioma del audio",null,settings.language().equals("es")?"Español":"Automático").onClick(v->
             sheet("Idioma del audio","Indicar el idioma mejora la precisión.").choice("Español",null,settings.language().equals("es"),()->set("language","es"))
                 .choice("Detección automática","Para audios en otros idiomas o mezclados",!settings.language().equals("es"),()->set("language","")).show()));
-        page.addView(openai
+        page.addView(router
+            ?more("Una sola clave para transcribir y para tus notas. Queda cifrada en este teléfono.","Servicio de transcripción",
+                "OpenRouter reúne modelos de varias empresas con una sola clave y un solo saldo: pagas solo lo que usas, sin suscripción.\n\n"
+                +"«Automático» usa el mejor modelo que Verbapp ya probó. La lista de modelos se actualiza sola desde OpenRouter una vez al día: los que van saliendo aparecen como «Nuevo · sin probar» y, si OpenRouter retira el que usas, Automático pasa solo al siguiente.\n\n"
+                +"El modelo con voces se usa cuando separas voces (Persona 1, Persona 2…); el de solo texto, cuando no.\n\n"
+                +"Los precios por hora salen de la lista de OpenRouter y son una referencia: el cobro real de cada transcripción lo informa OpenRouter.\n\n"
+                +"La clave se guarda cifrada en este teléfono y nunca aparece en los informes de soporte.\n\n«Comprobar conexión» confirma que la clave funciona y muestra tu saldo cuando OpenRouter lo informa. No prueba todavía la carga de audio ni la separación de voces.")
+            :openai
             ?more("El uso se cobra en tu cuenta de OpenAI. Tu clave queda cifrada en este teléfono.","Servicio de transcripción","El modelo de texto se usa cuando no separas voces. Para separar voces (Persona 1, Persona 2…) se usa GPT-4o Diarize.\n\nEl uso se cobra en tu cuenta de OpenAI: pagas solo lo que transcribes, sin suscripción.\n\nLa clave se guarda cifrada en este teléfono y nunca aparece en los informes de soporte.\n\n«Comprobar conexión» confirma que la clave funciona y que el modelo existe. No prueba todavía la carga de audio, el saldo ni la separación de voces.")
             :more("Tu servidor debe ser compatible con OpenAI. Tu clave queda cifrada en este teléfono.","Servicio de transcripción","Tu servidor debe implementar /audio/transcriptions igual que OpenAI. Si además admite diarized_json y chunking_strategy, puede separar voces.\n\nLa clave se guarda cifrada en este teléfono y nunca aparece en los informes de soporte. Si cambias la URL, se borra la clave anterior."));
 
@@ -136,6 +160,8 @@ public class SettingsActivity extends Screen {
         page.addView(ui.section("Ayuda y soporte"));LinearLayout help=ui.group();page.addView(help,Ui.fill());
         String version=versionName();
         Ui.Row news=row(R.drawable.ic_info,"Novedades y versiones",null,version).onClick(v->Novedades.showAll(this));versionPill(news.value);add(help,news);
+        // 0.8.0: la bienvenida de la primera instalación se puede volver a ver (no cambia claves ni ajustes ya guardados).
+        add(help,row(R.drawable.ic_replay,"Ver la bienvenida","El recorrido de la primera vez",null).onClick(v->OnboardingActivity.open(this,true)));
         add(help,row(R.drawable.ic_people,"Probar edición de voces","Un ejemplo que no usa tu clave",null).onClick(v->startActivity(new Intent(this,RecordingActivity.class).putExtra("demo",true))));
         add(help,row(R.drawable.ic_lifebuoy,"Compartir informe de soporte","Sin claves, títulos, audio ni texto",null).onClick(v->report()));
         add(help,row(R.drawable.ic_trash,"Borrar registros de diagnóstico",null,null).onClick(v->confirm("¿Borrar los registros locales?","Las grabaciones y transcripciones se conservan.","Borrar",true,()->{Diagnostics.clear(this);toast("Registros borrados");})));
@@ -168,7 +194,7 @@ public class SettingsActivity extends Screen {
         else if(failed){panel=p.errorContainer;fg=fg2=p.onErrorContainer;dotFg=p.error;dotBg=p.surfaceContainerLowest;}
         else{panel=p.primaryContainer;fg=fg2=p.onPrimaryContainer;dotFg=p.onPrimaryContainer;dotBg=p.surfaceContainerLowest;}
         String title=ready?"Listo para transcribir":failed?"No se pudo conectar":"Falta un paso para transcribir";
-        String detail=ready?modelSummary(settings):failed?"Toca para ver qué pasó y reintentar":server?"Configura la dirección de tu servidor.":"Agrega tu clave de API. Grabar funciona igual sin ella.";
+        String detail=ready?modelSummary(settings):failed?"Toca para ver qué pasó y reintentar":server?"Configura la dirección de tu servidor.":settings.openRouter()?"Agrega tu clave de OpenRouter. Grabar funciona igual sin ella.":"Agrega tu clave de API. Grabar funciona igual sin ella.";
         LinearLayout status=ui.row();status.setMinimumHeight(ui.dp(72));status.setPadding(ui.dp(S3),ui.dp(S3),ui.dp(S3),ui.dp(S3));
         status.addView(ui.tile(icon,dotFg,dotBg,40,22));status.addView(ui.space(S3));
         LinearLayout t=ui.column();t.addView(ui.text(title,Type.TITLE_MEDIUM,fg));TextView d=ui.text(detail,Type.BODY_MEDIUM,fg2);d.setPadding(0,ui.dp(2),0,0);t.addView(d);status.addView(t,new LinearLayout.LayoutParams(0,-2,1));
@@ -342,26 +368,52 @@ public class SettingsActivity extends Screen {
     private String inboxValue(){return settings.inboxTree().isEmpty()?"Sin elegir":settings.prefs.getString("saveTreeName","Carpeta elegida");}
 
     // ---------- Nota para tu segundo cerebro ----------
-    private boolean claude(){return settings.noteProvider().equals("anthropic");}
+    /** IA de la nota: "openai", "anthropic" u "openrouter" (cualquier otro valor guardado cuenta como OpenAI, igual que en Notes). */
+    private String noteAi(){String v=settings.noteProvider();return v.equals("anthropic")||v.equals("openrouter")?v:"openai";}
+    private boolean claude(){return noteAi().equals("anthropic");}
+    private boolean noteRouter(){return noteAi().equals("openrouter");}
     private static String noteSubtitle(boolean auto){return auto?"Se arma sola al terminar cada transcripción":"Con un toque, desde cada grabación";}
-    private boolean noteReady(){try{return Notes.canGenerate(this);}catch(Throwable t){return true;}}
-    private String noteMissing(){if(claude())return "Falta la clave de Anthropic";return settings.provider().equals("openai")?"Falta la clave de OpenAI":"Con tu servidor, elige Claude";}
-    private String noteAiValue(){String m=settings.noteModel();return (claude()?"Claude":"OpenAI")+(m.isEmpty()?"":" · "+m);}
+    private boolean noteReady(){try{return noteRouter()?settings.hasOpenRouterKey():Notes.canGenerate(this);}catch(Throwable t){return true;}}
+    private String noteMissing(){
+        if(claude())return "Falta la clave de Anthropic";if(noteRouter())return "Falta la clave de OpenRouter";
+        return settings.provider().equals("openai")?"Falta la clave de OpenAI":settings.openRouter()?"Falta la clave de OpenAI · puedes usar OpenRouter":"Con tu servidor, elige Claude u OpenRouter";
+    }
+    /** Alias de OpenRouter elegido para la nota (el recomendado si no hay uno válido guardado) y su nombre corto («Claude Sonnet»). */
+    private int noteAlias(){int i=Arrays.asList(Models.NOTE_MODELS).indexOf(settings.noteModel());return i<0?0:i;}
+    private static String noteAliasName(int i){return Models.NOTE_NAMES[i].replaceAll(" \\(.*\\)$","");}
+    private String noteAiValue(){if(noteRouter())return noteAliasName(noteAlias());String m=settings.noteModel();return (claude()?"Claude":"OpenAI")+(m.isEmpty()?"":" · "+m);}
+    /** Con OpenRouter el valor de la fila es el modelo; debajo se dice por dónde va y que no hay que actualizarlo. */
+    private String noteAiHint(){return noteRouter()?"Por OpenRouter · siempre la versión más nueva":null;}
     /** La nota quedó activada pero su IA no tiene clave: se ofrece la salida justa. */
-    private void noteMissingKey(){if(claude())anthropicKeyInput();else noteAiSheet();}
+    private void noteMissingKey(){if(claude())anthropicKeyInput();else if(noteRouter())routerNoteKeyInput();else noteAiSheet();}
     private void noteAiSheet(){
-        boolean claude=claude(),openaiReady=settings.provider().equals("openai")&&settings.hasKey(),hasClaudeKey=settings.hasAnthropicKey();
-        String openaiDetail=openaiReady?"Usa tu clave de OpenAI, sin configurar nada más":settings.provider().equals("openai")?"Usa tu clave de OpenAI · aún no la agregas":"Solo si transcribes con OpenAI";
+        String ai=noteAi();boolean claude=ai.equals("anthropic"),viaRouter=ai.equals("openrouter"),hasClaudeKey=settings.hasAnthropicKey(),hasRouterKey=settings.hasOpenRouterKey(),router=settings.openRouter();
+        // OpenAI arma la nota con la clave de OpenAI que esté guardada, aunque hoy se transcriba con otro proveedor.
+        String openaiDetail=settings.hasOpenAiKey()?"Usa tu clave de OpenAI, sin configurar nada más":settings.provider().equals("openai")?"Usa tu clave de OpenAI · aún no la agregas":"Solo si transcribes con OpenAI";
+        String routerDetail=hasRouterKey?"Usa tu clave de OpenRouter · siempre el modelo más nuevo":router?"Usa tu clave de OpenRouter · aún no la agregas":"Siempre el modelo más nuevo · requiere tu clave de OpenRouter";
         Sheet s=sheet("IA de la nota","Arma el resumen, las decisiones y las tareas con el texto de la transcripción. No se vuelve a enviar el audio, así que cuesta poco.");
-        s.choice("OpenAI",openaiDetail,!claude,()->setNoteProvider("openai"));
+        s.choice("OpenRouter",routerDetail,viaRouter,()->{setNoteProvider("openrouter");if(!settings.hasOpenRouterKey())routerNoteKeyInput();});
+        s.choice("OpenAI",openaiDetail,!claude&&!viaRouter,()->setNoteProvider("openai"));
         s.choice("Claude (Anthropic)","Mejor redacción en español · "+(hasClaudeKey?"clave configurada":"requiere tu clave de Anthropic"),claude,()->{setNoteProvider("anthropic");if(!settings.hasAnthropicKey())anthropicKeyInput();});
-        s.action(R.drawable.ic_edit,"Modelo: "+(settings.noteModel().isEmpty()?"el recomendado":settings.noteModel()),false,this::noteModelSheet);
+        s.action(R.drawable.ic_edit,"Modelo: "+(viaRouter?Models.NOTE_NAMES[noteAlias()]:settings.noteModel().isEmpty()?"el recomendado":settings.noteModel()),false,this::noteModelSheet);
         if(claude||hasClaudeKey)s.action(R.drawable.ic_key,hasClaudeKey?"Clave de Anthropic":"Agregar clave de Anthropic",false,this::anthropicKeySheet);
+        // Quien transcribe con OpenRouter administra esa clave en «Servicio de transcripción»; aquí solo si la usa nada más que para la nota.
+        if(!router&&(viaRouter||hasRouterKey))s.action(R.drawable.ic_key,hasRouterKey?"Clave de OpenRouter":"Agregar clave de OpenRouter",false,this::routerNoteKeySheet);
         s.show();
     }
     /** Cambiar de IA borra el modelo elegido a mano: el de una no sirve para la otra. */
     private void setNoteProvider(String provider){settings.prefs.edit().putString("noteProvider",provider).remove("noteModel").apply();Diagnostics.event("setting_changed",null,"action","note_provider","result",provider);render();}
     private void noteModelSheet(){
+        if(noteRouter()){
+            // OpenRouter: se elige una familia, no una versión. Sus alias «-latest» apuntan siempre a la más nueva, y la nota
+            // muestra cuál respondió. El recomendado se guarda como vacío, igual que con las otras IA.
+            String[] details={"Recomendado · la mejor redacción en español","Rápido y económico","La alternativa de Google, rápida y económica"};int current=noteAlias();
+            Sheet s=sheet("Modelo de la nota","OpenRouter usa siempre la versión más nueva de la familia que elijas. Cada nota muestra cuál la escribió.");
+            for(int i=0;i<Models.NOTE_MODELS.length;i++){int k=i;s.choice(Models.NOTE_NAMES[i],i<details.length?details[i]:null,i==current,()->{
+                SharedPreferences.Editor e=settings.prefs.edit();if(k==0)e.remove("noteModel");else e.putString("noteModel",Models.NOTE_MODELS[k]);e.apply();
+                Diagnostics.event("setting_changed",null,"action","note_model","result",k==0?"default":"alias");render();});}
+            s.show();return;
+        }
         EditText model=ui.field("Vacío = el recomendado","Modelo de la nota");model.setText(settings.noteModel());model.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         Sheet s=sheet("Modelo de la nota","Déjalo vacío para usar el recomendado de "+(claude()?"Claude":"OpenAI")+". Escribe otro solo si conoces su nombre exacto.").add(model);
         s.primary("Guardar",Ui.Style.PRIMARY,()->{String m=model.getText().toString().trim();
@@ -369,6 +421,19 @@ public class SettingsActivity extends Screen {
             settings.prefs.edit().putString("noteModel",m).apply();Diagnostics.event("setting_changed",null,"action","note_model","result",m.isEmpty()?"default":"custom");render();return true;});
         if(!settings.noteModel().isEmpty())s.secondary("Usar el recomendado",()->{settings.prefs.edit().remove("noteModel").apply();Diagnostics.event("setting_changed",null,"action","note_model","result","default");render();});
         s.secondary("Cancelar",null).show();
+    }
+    /** Clave de OpenRouter de quien la usa solo para la nota (transcribe con OpenAI o con su servidor). */
+    private void routerNoteKeySheet(){
+        if(settings.hasOpenRouterKey()){sheet("Clave de OpenRouter","Configurada y cifrada en este teléfono. Aquí se usa solo para armar la nota y nunca aparece en informes.")
+            .action(R.drawable.ic_edit,"Reemplazar clave",false,this::routerNoteKeyInput)
+            .action(R.drawable.ic_trash,"Eliminar clave",true,()->confirm("¿Eliminar la clave de OpenRouter?","Sin clave, OpenRouter no podrá armar tus notas. Puedes elegir otra IA en «IA de la nota».","Eliminar",true,()->{try{settings.saveOpenRouterKey("");Diagnostics.event("setting_changed",null,"action","openrouter_key","result","deleted");render();}catch(Exception e){message("Clave","No se pudo eliminar.");}})).show();return;}
+        routerNoteKeyInput();
+    }
+    private void routerNoteKeyInput(){
+        // Si además transcribe con OpenRouter es la misma clave de siempre: se pide (y se comprueba) por el camino normal.
+        if(settings.openRouter()){keyInput();return;}
+        secretInput("Agregar clave de OpenRouter","Créala en openrouter.ai → Keys y pégala aquí. Aquí se usa solo para armar la nota: se envía el texto de la transcripción, no el audio. Se guarda cifrada y deja de mostrarse.","sk-or-…","Clave de OpenRouter",
+            settings::saveOpenRouterKey,()->{Diagnostics.event("setting_changed",null,"action","openrouter_key");render();});
     }
     private void anthropicKeySheet(){
         if(settings.hasAnthropicKey()){sheet("Clave de Anthropic","Configurada y cifrada en este teléfono. Se usa solo para armar la nota y nunca aparece en informes.")
@@ -382,16 +447,30 @@ public class SettingsActivity extends Screen {
     }
 
     // ---------- Servicio de transcripción ----------
-    private void providerSheet(){boolean openai=settings.provider().equals("openai");
-        sheet("Proveedor","Cada proveedor usa su propia clave.").choice("OpenAI","Recomendado · separación de voces",openai,()->set("provider","openai"))
-            .choice("Servidor compatible","Cualquier API con /audio/transcriptions",!openai,()->set("provider","custom")).show();}
+    /** OpenRouter va primero (0.8.0): una clave para todo. Cambiar de proveedor no borra ninguna clave; al elegirlo sin clave, se pide ahí mismo. */
+    private void providerSheet(){boolean openai=settings.provider().equals("openai"),router=settings.openRouter();
+        sheet("Proveedor","Cada proveedor usa su propia clave. Las que ya guardaste se conservan al cambiar.")
+            .choice("OpenRouter","Una sola clave para transcribir y para tus notas",router,()->{switchProvider("openrouter");if(!settings.hasKey())page.post(this::keyInput);})
+            .choice("OpenAI","Directo con tu clave de OpenAI · separación de voces",openai,()->switchProvider("openai"))
+            .choice("Servidor compatible","Cualquier API con /audio/transcriptions",!openai&&!router,()->switchProvider("custom")).show();}
+    /**
+     * Cambia de proveedor. Quien nunca eligió la IA de la nota la ve cambiar con él (con OpenRouter, la nota sale por
+     * OpenRouter; al volver, por OpenAI): un modelo de nota escrito a mano para una no sirve en la otra, así que se borra,
+     * igual que al cambiar la IA de la nota a mano.
+     */
+    private void switchProvider(String provider){
+        SharedPreferences.Editor e=settings.prefs.edit().putString("provider",provider);
+        if(!settings.prefs.contains("noteProvider")&&provider.equals("openrouter")!=settings.openRouter())e.remove("noteModel");
+        e.apply();changed("provider");
+    }
     private void modelSheet(){String current=settings.textModel();Sheet s=sheet("Modelo de texto","Se usa cuando no separas voces. Si un audio falla, probar otro modelo puede ayudar.");
         for(int i=0;i<MODELS.length;i++){String m=MODELS[i];double rate=Pricing.perMinute(m);s.choice(MODEL_NAMES[i],MODEL_DETAILS[i]+(rate>0?" · "+Pricing.usd(rate)+"/min":""),m.equals(current),()->set("openaiTextModel",m));}s.show();}
     private void speakersSheet(){String current=settings.speakersMode();Sheet s=sheet("Separar voces","Separar voces identifica a cada persona (Persona 1, Persona 2…), pero es más lento.");
         String[] details={"Te preguntamos al transcribir cada audio","Para reuniones y conversaciones","Solo texto: más rápido y económico"};
         for(int i=0;i<3;i++){String m=SPEAKER_MODES[i];s.choice(SPEAKER_NAMES[i],details[i]+(i==0?" (la transcripción automática separa voces)":""),m.equals(current),()->set("speakersMode",m));}s.show();}
     private void keySheet(){
-        if(settings.hasKey()){sheet("Clave de API","Configurada y cifrada en este teléfono. Nunca aparece en informes.")
+        boolean router=settings.openRouter();
+        if(settings.hasKey()){sheet(router?"Clave de OpenRouter":"Clave de API",router?"Configurada y cifrada en este teléfono. Sirve para transcribir y para armar tus notas, y nunca aparece en informes.":"Configurada y cifrada en este teléfono. Nunca aparece en informes.")
             .action(R.drawable.ic_edit,"Reemplazar clave",false,this::keyInput).action(R.drawable.ic_trash,"Eliminar clave",true,()->confirm("¿Eliminar la clave?","Las transcripciones pendientes quedarán en espera hasta que agregues otra.","Eliminar",true,()->{try{settings.saveKey("");getSystemService(JobScheduler.class).cancel(Pipeline.JOB_ID);render();}catch(Exception e){message("Clave","No se pudo eliminar.");}})).show();return;}
         keyInput();
     }
@@ -400,8 +479,11 @@ public class SettingsActivity extends Screen {
      * propio aún sin dirección, primero se pide la dirección (la clave no se envía a ninguna parte hasta tenerla).
      */
     private void keyInput(){
-        boolean openai=settings.provider().equals("openai");
-        secretInput("Agregar clave de API",openai?"Créala en platform.openai.com → API keys y pégala aquí. Se guarda cifrada y deja de mostrarse.":"Pega la clave de tu servidor. Se guarda cifrada.",openai?"sk-…":"Clave del servidor","Clave de API",
+        boolean openai=settings.provider().equals("openai"),router=settings.openRouter();
+        secretInput(router?"Agregar clave de OpenRouter":"Agregar clave de API",
+            router?"Créala en openrouter.ai → Keys y pégala aquí. Sirve para transcribir y para armar tus notas. Se guarda cifrada y deja de mostrarse."
+                :openai?"Créala en platform.openai.com → API keys y pégala aquí. Se guarda cifrada y deja de mostrarse.":"Pega la clave de tu servidor. Se guarda cifrada.",
+            router?"sk-or-…":openai?"sk-…":"Clave del servidor",router?"Clave de OpenRouter":"Clave de API",
             settings::saveKey,()->{Diagnostics.event("setting_changed",null,"action","api_key");Pipeline.schedule(this,true);render();page.post(settings.needsServer()?this::custom:this::verify);});
     }
     interface Secret{void save(String value)throws Exception;}
@@ -418,6 +500,8 @@ public class SettingsActivity extends Screen {
     /** A qué configuración corresponde la última comprobación: si cambias proveedor, modelo o clave, deja de valer. */
     private String verifyTarget(){
         String provider=settings.provider();
+        // OpenRouter: lo que se comprueba es la clave (GET /key), no el modelo. Cambiar de modelo no deja la comprobación vieja.
+        if(settings.openRouter())return provider+"|"+settings.prefs.getString(settings.prefix()+"keyEncrypted","").hashCode();
         String what=provider.equals("openai")?settings.textModel()+"|"+settings.defaultSpeakers():settings.prefs.getString("customBase","")+"|"+settings.prefs.getString("customModel","")+"|"+settings.prefs.getBoolean("customSpeakers",false);
         return provider+"|"+what+"|"+settings.prefs.getString(settings.prefix()+"keyEncrypted","").hashCode();
     }
@@ -428,26 +512,50 @@ public class SettingsActivity extends Screen {
         if(!settings.hasKey())return "Primero agrega tu clave";
         if(!verifyValid())return "Confirma que tu clave funciona";
         long at=settings.prefs.getLong("verifyAt",0);
-        if(settings.prefs.getBoolean("verifyOk",false))return "✓ Conectado · "+seconds(settings.prefs.getLong("verifyMs",0))+" · "+ago(at);
+        if(settings.prefs.getBoolean("verifyOk",false)){
+            if(!settings.openRouter())return "✓ Conectado · "+seconds(settings.prefs.getLong("verifyMs",0))+" · "+ago(at);
+            // OpenRouter dice cuánto queda: es el dato que sirve (con saldo en cero la clave vale, pero no transcribe).
+            double left=verifyBalance();
+            String what=!Double.isNaN(left)?(left<=NO_BALANCE?"sin saldo: carga créditos en openrouter.ai":"quedan "+money(left)):settings.prefs.getBoolean("verifyFree",false)?"aún sin créditos cargados":seconds(settings.prefs.getLong("verifyMs",0));
+            return "✓ Clave válida · "+what+" · "+ago(at);
+        }
         return "No se pudo conectar · "+ago(at);
     }
-    private void paintVerify(){if(verifyRow==null)return;verifyRow.setSubtitle(verifyText());verifyRow.subtitle.setTextColor(!verifying&&verifyFailed()?p.error:p.onSurfaceVariant);verifyRow.setEnabled(!verifying);}
+    /** Bajo medio centavo ya no alcanza para nada: se muestra como «sin saldo». */
+    private static final double NO_BALANCE=0.005;
+    /** Saldo (US$) que informó OpenRouter en la última comprobación; NaN si no lo informó. Queda solo en las preferencias: no va al diagnóstico. */
+    private double verifyBalance(){try{return Double.parseDouble(settings.prefs.getString("verifyBalance",""));}catch(NumberFormatException e){return Double.NaN;}}
+    private boolean noBalance(){return settings.openRouter()&&verifyValid()&&settings.prefs.getBoolean("verifyOk",false)&&verifyBalance()<=NO_BALANCE;}
+    private void paintVerify(){if(verifyRow==null)return;verifyRow.setSubtitle(verifyText());verifyRow.subtitle.setTextColor(!verifying&&(verifyFailed()||noBalance())?p.error:p.onSurfaceVariant);verifyRow.setEnabled(!verifying);}
     private void verify(){
         if(!settings.hasKey()){keySheet();return;}
         if(settings.needsServer()){custom();return;}
         if(verifying)return;
         verifying=true;paintVerify();
-        if(http!=null)http.cancel();HttpApi call=new HttpApi();http=call;String target=verifyTarget();boolean openai=settings.provider().equals("openai");
-        io.execute(()->{String reason=null;long started=SystemClock.elapsedRealtime();
-            try{new OpenAiClient(call).verify(settings.config());}
-            catch(Exception e){reason=e instanceof HttpApi.UserAction?e.getMessage():openai?"No se pudo conectar. Revisa tu conexión a internet.":"No se pudo conectar. Revisa tu conexión y la URL del servidor.";}
+        if(http!=null)http.cancel();HttpApi call=new HttpApi();http=call;String target=verifyTarget();boolean openai=settings.provider().equals("openai"),router=settings.openRouter();
+        // Con OpenRouter son dos consultas cortas: si una no responde en 30 s, mejor decirlo que dejar «Comprobando…» por minutos.
+        if(router)call.readTimeoutMs=30000;
+        io.execute(()->{String reason=null;long started=SystemClock.elapsedRealtime(),ms=0;double balance=Double.NaN;boolean free=false;
+            try{
+                if(router){
+                    // OpenRouter: GET /key dice si la clave vale y cuánto le queda a la clave (si tiene tope). El saldo de la
+                    // cuenta se pide aparte y sin exigirlo: si OpenRouter no lo entrega a esta clave, la comprobación vale igual.
+                    String key=settings.apiKey();Models.KeyInfo info=Models.checkKey(call,key);ms=SystemClock.elapsedRealtime()-started;
+                    free=info.freeTier;balance=info.remaining;double account=Models.credits(call,key);
+                    if(!Double.isNaN(account))balance=Double.isNaN(balance)?account:Math.min(balance,account);
+                }else{new OpenAiClient(call).verify(settings.config());ms=SystemClock.elapsedRealtime()-started;}
+            }catch(Exception e){ms=SystemClock.elapsedRealtime()-started;reason=e instanceof HttpApi.UserAction?e.getMessage():openai||router?"No se pudo conectar. Revisa tu conexión a internet.":"No se pudo conectar. Revisa tu conexión y la URL del servidor.";}
             if(call.cancelled)return; // se salió de Ajustes: no se guarda un fallo que no fue
-            long ms=SystemClock.elapsedRealtime()-started;boolean ok=reason==null;String why=reason;
-            settings.prefs.edit().putLong("verifyAt",System.currentTimeMillis()).putBoolean("verifyOk",ok).putLong("verifyMs",ms).putString("verifyFor",target).putString("verifyMsg",ok?"":why).apply();
-            Diagnostics.event("setting_changed",null,"action","verify","result",ok,"elapsed_ms",ms);
+            boolean ok=reason==null;String why=reason;long took=ms;
+            settings.prefs.edit().putLong("verifyAt",System.currentTimeMillis()).putBoolean("verifyOk",ok).putLong("verifyMs",took).putString("verifyFor",target).putString("verifyMsg",ok?"":why)
+                .putString("verifyBalance",ok&&!Double.isNaN(balance)?String.valueOf(balance):"").putBoolean("verifyFree",ok&&free).apply();
+            // El saldo es un dato de la cuenta: se muestra en la fila y no se registra.
+            Diagnostics.event("setting_changed",null,"action","verify","result",ok,"elapsed_ms",took);
             runOnUiThread(()->{verifying=false;if(isDestroyed()||isFinishing())return;render();
-                if(verifyRow!=null){Ui.haptic(verifyRow,ok?Ui.Haptic.CONFIRM:Ui.Haptic.REJECT);verifyRow.announceForAccessibility(ok?"Conectado":"No se pudo conectar");}
-                if(!ok)verifyError(why);});
+                if(verifyRow!=null){Ui.haptic(verifyRow,ok?Ui.Haptic.CONFIRM:Ui.Haptic.REJECT);verifyRow.announceForAccessibility(ok?(router?"Clave válida":"Conectado"):"No se pudo conectar");}
+                if(!ok)verifyError(why);
+                // Con la clave recién comprobada se aprovecha de poner al día la lista de modelos (y lo que usa «Automático»).
+                else if(router&&Models.stale(this))loadCatalog();});
         });
     }
     /** Los errores siguen explicándose, con su salida: revisar la clave o reintentar. */
@@ -477,6 +585,244 @@ public class SettingsActivity extends Screen {
                 settings.prefs.edit().putString("customBase",config.base).putString("customModel",config.model).putBoolean("customSpeakers",config.speakers).apply();Pipeline.schedule(this,true);render();
                 if(old.isEmpty()&&settings.hasKey())page.post(this::verify);return true;}catch(Exception e){base.setError("Usa una URL HTTPS sin credenciales ni parámetros y un modelo válido.");return false;}})
             .secondary("Cancelar",null).show();
+    }
+
+    // ---------- Modelos de OpenRouter (0.8.0) ----------
+    private HttpApi catalogHttp;private boolean catalogLoading,catalogFailed;private ModelSheet modelSheet;
+    /** «US$0,26»: precio por hora con dos decimales; bajo 10 centavos, con tres (0,036 no se redondea a «0,04»). */
+    static String hourPrice(double perHour){return "US$"+String.format(Locale.ROOT,perHour>=0.095?"%.2f":"%.3f",perHour).replace('.',',');}
+    /** «US$4,20»: un saldo, siempre con dos decimales. */
+    static String money(double usd){return "US$"+String.format(Locale.ROOT,"%.2f",usd).replace('.',',');}
+    /** Precio del modelo para mostrar; con «≈» si no salió del catálogo sino de la referencia. Vacío si no se conoce. */
+    private static String priceText(Models.Model m){return m==null||m.perHour<=0?"":(m.approx?"≈ ":"")+hourPrice(m.perHour);}
+    /** «15 de octubre» o, si es otro año, «15 ene 2027» (corto: va dentro de una píldora). La fecha es la que informa OpenRouter, en UTC: no se corre un día por la hora de Chile. */
+    private static String retireDate(long seconds){
+        java.util.TimeZone utc=java.util.TimeZone.getTimeZone("UTC");java.util.Calendar now=java.util.Calendar.getInstance(utc),then=java.util.Calendar.getInstance(utc);then.setTimeInMillis(seconds*1000L);
+        java.text.SimpleDateFormat f=new java.text.SimpleDateFormat(now.get(java.util.Calendar.YEAR)==then.get(java.util.Calendar.YEAR)?"d 'de' MMMM":"d MMM yyyy",CL);f.setTimeZone(utc);
+        return f.format(then.getTime());
+    }
+    /**
+     * Fila «Modelo con voces» / «Modelo solo texto»: a la derecha la elección («Automático» o el nombre) y debajo lo que
+     * eso significa hoy: qué modelo usa Automático y cuánto cuesta la hora. Si el elegido a mano ya no está en la lista de
+     * OpenRouter, la fila lo avisa en color de error con la salida (elegir otro).
+     */
+    private Ui.Row orModelRow(boolean speakers){
+        String pick=speakers?settings.orSpeakersModel():settings.orTextModel(),id=Models.chosen(settings,speakers);boolean auto=pick.isEmpty()||Models.AUTO.equals(pick);
+        List<Models.Model> saved=Models.cached(this);Models.Model m=Models.find(saved.isEmpty()?Models.builtin():saved,id);
+        boolean gone=!auto&&m==null&&!saved.isEmpty();String price=priceText(m),name=Models.name(this,id);
+        String sub=gone?"Ya no aparece en OpenRouter · elige otro":auto?"Hoy usa "+name+(price.isEmpty()?"":" · "+price+" por hora"):price.isEmpty()?null:price+" por hora";
+        Ui.Row r=row(speakers?R.drawable.ic_chat:R.drawable.ic_wave,speakers?"Modelo con voces":"Modelo solo texto",sub,auto?"Automático":name);
+        if(gone)r.subtitle.setTextColor(p.error);
+        return r.onClick(v->new ModelSheet(speakers).show());
+    }
+    /**
+     * Lee la lista de modelos de OpenRouter en segundo plano (es pública: no viaja la clave). Una sola lectura a la vez;
+     * si hay una hoja de modelos abierta, muestra ahí el avance, el resultado o el error. No se corta al cerrar la hoja:
+     * es una consulta corta y conviene que termine, para que «Automático» quede al día.
+     */
+    private void loadCatalog(){
+        if(catalogLoading)return;catalogLoading=true;catalogFailed=false;if(modelSheet!=null)modelSheet.paint(false);
+        HttpApi call=new HttpApi();call.readTimeoutMs=30000;catalogHttp=call;
+        io.execute(()->{boolean ok=true;try{Models.refresh(this,call);}catch(Exception e){ok=false;}
+            boolean done=ok;runOnUiThread(()->{catalogLoading=false;if(isDestroyed()||isFinishing())return;catalogFailed=!done;
+                // Las filas de Ajustes muestran lo que usa «Automático» y su precio: se rehacen con la lista nueva.
+                if(done)render();
+                ModelSheet open=modelSheet;if(open==null||!open.s.dialog.isShowing())return;
+                if(done)open.fill();
+                open.paint(done);Ui.haptic(open.again,done?Ui.Haptic.CONFIRM:Ui.Haptic.REJECT);});});
+    }
+    /**
+     * Hoja de modelos de OpenRouter (0.8.0): la cara visible de «la lista que se actualiza sola». De arriba abajo:
+     * - el estado de la lista: cuándo se actualizó, «Actualizar lista», la carga y el error con «Reintentar»;
+     * - «Automático», destacado en menta con la etiqueta «Recomendado» y el modelo que usa hoy;
+     * - los modelos ya probados por Verbapp y, aparte, los que van llegando a OpenRouter («Nuevo · sin probar»).
+     * Cada modelo se entiende de un vistazo: nombre y quién lo hace, una píldora que dice si separa voces (menta) o es solo
+     * texto (gris) y, a la derecha, el precio por hora. Al abrirla con una lista de más de un día, se actualiza sola.
+     * Sin lista guardada (primera vez o sin internet) se ofrecen los modelos probados, así siempre hay de dónde elegir.
+     */
+    private final class ModelSheet {
+        final boolean speakers;final String key;final Sheet s;final LinearLayout strip,box;final TextView when;final Ui.Btn again;
+        /** Etiqueta del botón que cabe junto al texto («Actualizar lista» o, en pantallas angostas, «Actualizar»); null si ninguna cabe. */
+        private final String sideLabel;
+        ModelSheet(boolean speakers){
+            this.speakers=speakers;key=speakers?"orSpeakersModel":"orTextModel";
+            s=sheet(speakers?"Modelo con voces":"Modelo solo texto",speakers?"El que transcribe cuando separas voces (Persona 1, Persona 2…).":"El que transcribe cuando no separas voces: más rápido y económico.").closable(null);
+            when=ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant);when.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+            again=ui.button("Actualizar lista",R.drawable.ic_refresh,Ui.Style.PLAIN,v->loadCatalog());again.setMinimumHeight(ui.dp(48));
+            // El botón va al lado del texto solo si le deja al menos la mitad de la hoja; si «Actualizar lista» no cabe se
+            // prueba «Actualizar» y, si tampoco (letra muy grande), el botón baja a su propia línea con el nombre completo.
+            float half=(getResources().getDisplayMetrics().widthPixels-2*ui.dp(S6))*0.5f,chrome=ui.dp(18+S2+2*S3);android.graphics.Paint ink=again.label.getPaint();
+            sideLabel=ink.measureText("Actualizar lista")+chrome<=half?"Actualizar lista":ink.measureText("Actualizar")+chrome<=half?"Actualizar":null;
+            strip=ui.row();strip.setMinimumHeight(ui.dp(56));strip.addView(when);strip.addView(again);
+            s.add(strip);box=ui.column();s.add(box);
+        }
+        void show(){
+            modelSheet=this;if(!catalogLoading)catalogFailed=false;
+            fill();paint(false);s.onDismiss(()->{if(modelSheet==this)modelSheet=null;}).show();
+            if(Models.stale(SettingsActivity.this))loadCatalog();
+        }
+        /**
+         * Estado de la lista: gris claro normalmente; en tono de error si no se pudo actualizar, con «Reintentar».
+         * justDone: acaba de llegar una lista nueva; el indicador de carga del botón se transforma en ✓ (queda hasta la
+         * próxima actualización, como confirmación junto a «Lista actualizada recién»).
+         */
+        void paint(boolean justDone){
+            long at=Models.fetchedAt(SettingsActivity.this);int n=Models.cached(SettingsActivity.this).size();boolean error=catalogFailed&&!catalogLoading;
+            when.setText(catalogLoading?(at==0?"Descargando la lista de OpenRouter…":"Buscando modelos nuevos…")
+                :error?(at==0?"No se pudo descargar la lista. Revisa tu conexión a internet. Mientras tanto puedes elegir entre los modelos ya probados.":"No se pudo actualizar la lista. Revisa tu conexión a internet.")
+                :at==0?"Aún no se descarga la lista de OpenRouter.":"Lista actualizada "+ago(at)+" · "+n+(n==1?" modelo":" modelos"));
+            when.setTextColor(error?p.onErrorContainer:p.onSurfaceVariant);strip.setBackground(error?shape(SettingsActivity.this,p.errorContainer,R_CONTROL):inset(R_CONTROL));
+            // El error trae un texto largo y su salida («Reintentar»): va apilado, con el texto a todo el ancho.
+            boolean side=sideLabel!=null&&!error;
+            strip.setOrientation(side?LinearLayout.HORIZONTAL:LinearLayout.VERTICAL);strip.setGravity(side?Gravity.CENTER_VERTICAL:Gravity.START);
+            strip.setPadding(ui.dp(S4),ui.dp(side?S1:S3),ui.dp(side?S1:S4),ui.dp(S1));
+            when.setLayoutParams(side?new LinearLayout.LayoutParams(0,-2,1):Ui.fill());
+            // Apilado, el botón de solo texto se corre a la izquierda lo que mide su relleno: su letra queda alineada con el texto.
+            LinearLayout.LayoutParams ap=Ui.wrap();if(!side)ap.setMarginStart(-ui.dp(S3));again.setLayoutParams(ap);
+            again.setText(error?"Reintentar":side?sideLabel:"Actualizar lista");if(!error)again.setContentDescription("Actualizar lista");
+            again.setColors(error?p.onErrorContainer:p.primary,0);
+            if(justDone)again.showDone();else{again.setIcon(R.drawable.ic_refresh);again.setBusy(catalogLoading);}
+        }
+        /** Arma (o rehace, al llegar una lista nueva) «Automático» y los modelos. */
+        void fill(){
+            box.removeAllViews();
+            List<Models.Model> saved=Models.cached(SettingsActivity.this),all=saved.isEmpty()?Models.builtin():saved;
+            String pick=speakers?settings.orSpeakersModel():settings.orTextModel();boolean auto=pick.isEmpty()||Models.AUTO.equals(pick);
+            box.addView(autoCard(all,auto),ui.top(S3));
+            // «Modelo con voces» solo ofrece los que Verbapp sabe pedir con voces. Los probados van en el orden de la tabla
+            // (del recomendado al respaldo); los nuevos, como llegan: del más reciente al más antiguo.
+            List<Models.Model> tested=new ArrayList<>(),fresh=new ArrayList<>();
+            for(Models.Model m:all){if(speakers&&!m.recipe.diarizes)continue;(m.known?tested:fresh).add(m);}
+            java.util.Collections.sort(tested,(a,b)->Integer.compare(Models.rank(a.id),Models.rank(b.id)));
+            // El elegido a mano que ya no está en la lista se muestra igual, marcado: si no, la hoja quedaría sin nada elegido.
+            Models.Model gone=!auto&&Models.find(all,pick)==null?new Models.Model(pick,Models.name(SettingsActivity.this,pick),0,-1,Models.recipe(pick),Models.known(pick),0):null;
+            if(gone!=null)tested.add(0,gone);
+            section(speakers?"Modelos que separan voces":"Probados por Verbapp",tested,auto?null:pick,gone);
+            section("Nuevos en OpenRouter",fresh,auto?null:pick,null);
+            TextView foot=ui.text("Precios por hora de audio según OpenRouter; con «≈», aproximados. "
+                +(speakers?"Los modelos nuevos llegan primero a «Modelo solo texto» y pasan a esta lista cuando Verbapp aprende a pedirles que separen voces."
+                    :"Los modelos nuevos aparecen aquí solos. Verbapp todavía no los prueba: pueden fallar o costar distinto."),Type.BODY_SMALL,p.onSurfaceVariant);
+            foot.setPadding(ui.dp(S1),ui.dp(S4),ui.dp(S1),0);box.addView(foot,Ui.fill());
+        }
+        private void section(String title,List<Models.Model> models,String pick,Models.Model gone){
+            if(models.isEmpty())return;
+            TextView t=ui.text(title,Type.TITLE_SMALL,p.primary);t.setPadding(ui.dp(S1),ui.dp(S5),ui.dp(S1),ui.dp(S2));if(Build.VERSION.SDK_INT>=28)t.setAccessibilityHeading(true);box.addView(t,Ui.fill());
+            // Los modelos van juntos en un panel claro, como las voces conocidas; el divisor empieza donde empieza el nombre.
+            LinearLayout list=ui.column();list.setBackground(inset(R_CARD));list.setClipToOutline(true);
+            for(int i=0;i<models.size();i++){Models.Model m=models.get(i);if(i>0)list.addView(ui.separator(S4+24+S3));list.addView(modelRow(m,m.id.equals(pick),m==gone),Ui.fill());}
+            box.addView(list,Ui.fill());
+        }
+        /**
+         * «Automático»: la opción recomendada, en menta para que se distinga de la lista. Dice qué hace y qué modelo usa
+         * hoy con su precio; elegida, lleva el radio lleno y un borde verde.
+         */
+        private View autoCard(List<Models.Model> all,boolean selected){
+            String id=Models.automatic(settings,speakers),price=priceText(Models.find(all,id));
+            String today="Hoy usa "+Models.name(SettingsActivity.this,id)+(price.isEmpty()?"":" · "+price+" por hora");
+            LinearLayout card=ui.row();card.setGravity(Gravity.TOP);card.setPadding(ui.dp(S4),ui.dp(S4),ui.dp(S4),ui.dp(S4));
+            GradientDrawable fill=shape(SettingsActivity.this,p.primaryContainer,R_CARD);if(selected)fill.setStroke(ui.dp(2),p.primary);card.setBackground(ui.ripple(fill,R_CARD));
+            card.addView(ui.icon(selected?R.drawable.ic_radio_on:R.drawable.ic_radio_off,selected?p.primary:p.onPrimaryContainer,24));card.addView(ui.space(S3));
+            LinearLayout texts=ui.column();Flow head=new Flow(SettingsActivity.this,ui.dp(S2),ui.dp(S1));
+            head.addView(ui.text("Automático",Type.TITLE_MEDIUM,p.onPrimaryContainer));head.addView(pill("Recomendado",p.onPrimary,p.primary,0,R.drawable.ic_star_fill));texts.addView(head,Ui.fill());
+            TextView what=ui.text("El mejor modelo ya probado. Si OpenRouter lo retira, Verbapp pasa solo al siguiente.",Type.BODY_MEDIUM,p.onPrimaryContainer);what.setPadding(0,ui.dp(S1),0,0);texts.addView(what);
+            TextView now=Ui.tabular(ui.text(today,Type.LABEL_LARGE,p.onPrimaryContainer));now.setPadding(0,ui.dp(S2),0,0);texts.addView(now);
+            card.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
+            card.setClickable(true);card.setFocusable(true);card.setAccessibilityDelegate(Ui.buttonRole());Ui.pressable(card);
+            card.setContentDescription("Automático, recomendado. "+today+(selected?", seleccionado":""));
+            card.setOnClickListener(v->pick(Models.AUTO));
+            return card;
+        }
+        /**
+         * Un modelo, en dos líneas que comparten columnas: arriba el nombre y, a la derecha, el precio en cifras fijas
+         * (todas las filas alinean sus precios, así se comparan de un vistazo); abajo quién lo hace y sus píldoras, con
+         * «por hora» bajo el precio. El elegido lleva un fondo menta tenue. Sin precio conocido, no se muestra ninguno.
+         */
+        private View modelRow(Models.Model m,boolean selected,boolean gone){
+            LinearLayout row=ui.row();row.setGravity(Gravity.TOP);row.setMinimumHeight(ui.dp(64));row.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),ui.dp(S3));
+            row.addView(ui.icon(selected?R.drawable.ic_radio_on:R.drawable.ic_radio_off,selected?p.primary:p.onSurfaceVariant,24));row.addView(ui.space(S3));
+            String label=Models.label(m),vendor=Models.vendor(m),price=priceText(m);StringBuilder said=new StringBuilder(label);
+            LinearLayout texts=ui.column(),top=ui.row(),under=ui.row();top.setGravity(Gravity.TOP);under.setGravity(Gravity.TOP);
+            TextView name=ui.text(label,Type.ITEM,p.onSurface);name.setMaxLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);top.addView(name,new LinearLayout.LayoutParams(0,-2,1));
+            Flow tags=new Flow(SettingsActivity.this,ui.dp(6),ui.dp(S1));int neutral=p.dark?p.surfaceContainerHighest:p.surfaceContainerHigh;
+            if(!vendor.isEmpty()){TextView by=ui.oneLine(ui.text(vendor,Type.LABEL_MEDIUM,p.onSurfaceVariant));by.setIncludeFontPadding(false);by.setPadding(0,ui.dp(S1),ui.dp(2),ui.dp(S1));tags.addView(by);said.append(", de ").append(vendor);}
+            // Menta = separa voces y está documentado cómo pedirlo. Con borde = debería poder, pero falta confirmarlo con
+            // audio real (se dice al lado). Gris = solo texto.
+            if(!m.recipe.diarizes){tags.addView(pill("Solo texto",p.onSurfaceVariant,neutral,0,0));said.append(". Solo texto");}
+            else if(m.recipe.verified){tags.addView(pill("Separa voces",p.onPrimaryContainer,p.primaryContainer,0,R.drawable.ic_people));said.append(". Separa voces");}
+            else{tags.addView(pill("Separa voces",p.onSurfaceVariant,0,p.outline,R.drawable.ic_people));tags.addView(pill("Sin confirmar",p.onSurfaceVariant,0,p.outline,0));said.append(". Separa voces, sin confirmar");}
+            if(gone){tags.addView(pill("Ya no aparece en OpenRouter",p.onErrorContainer,p.errorContainer,0,0));said.append(". Ya no aparece en OpenRouter");}
+            else{
+                if(!m.known){tags.addView(pill("Nuevo · sin probar",p.onSurfaceVariant,0,p.outline,0));said.append(". Nuevo, sin probar");}
+                if(m.expires>0){
+                    // En menos de 30 días es una alerta (Automático ya no lo elige); más lejos, solo un dato.
+                    boolean soon=Models.retiresSoon(m,System.currentTimeMillis());String leaves="Se retira el "+retireDate(m.expires);
+                    tags.addView(soon?pill(leaves,p.onErrorContainer,p.errorContainer,0,0):pill(leaves,p.onSurfaceVariant,0,p.outline,0));said.append(". ").append(leaves);
+                }
+            }
+            under.addView(tags,new LinearLayout.LayoutParams(0,-2,1));
+            if(!price.isEmpty()){
+                LinearLayout.LayoutParams pp=Ui.wrap();pp.setMarginStart(ui.dp(S3));top.addView(ui.oneLine(Ui.tabular(ui.text(price,Type.TITLE_MEDIUM,p.onSurface))),pp);
+                // «por hora» con el mismo relleno vertical de las píldoras: queda a su altura.
+                TextView per=ui.text("por hora",Type.LABEL_SMALL,p.onSurfaceVariant);per.setIncludeFontPadding(false);per.setPadding(0,ui.dp(S1),0,ui.dp(S1));
+                LinearLayout.LayoutParams hp=Ui.wrap();hp.setMarginStart(ui.dp(S2));under.addView(per,hp);
+                said.append(". ").append(m.approx?"Cerca de ":"").append(hourPrice(m.perHour)).append(" por hora");
+            }else said.append(". Precio no disponible");
+            texts.addView(top,Ui.fill());texts.addView(under,ui.top(S1));row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
+            if(selected)said.append(", seleccionado");
+            // Tenue a propósito: la píldora «Separa voces» (menta llena) tiene que seguir distinguiéndose sobre la fila elegida.
+            row.setBackground(selected?ui.ripple(shape(SettingsActivity.this,withAlpha(p.primaryContainer,p.dark?0x59:0x73),0),0):ui.ripple(null,0));
+            row.setClickable(true);row.setFocusable(true);row.setAccessibilityDelegate(Ui.buttonRole());row.setContentDescription(said);
+            row.setOnClickListener(v->pick(m.id));
+            return row;
+        }
+        /** Guarda la elección y cierra. En el diagnóstico queda solo si fue «Automático» o un modelo elegido a mano. */
+        private void pick(String value){
+            String before=speakers?settings.orSpeakersModel():settings.orTextModel();s.dismiss();
+            if(value.equals(before.isEmpty()?Models.AUTO:before))return;
+            settings.prefs.edit().putString(key,value).apply();
+            Diagnostics.event("setting_changed",null,"action",key,"result",value.equals(Models.AUTO)?"auto":"manual");Pipeline.schedule(SettingsActivity.this,true);render();
+        }
+    }
+    /** Píldora chica de estado (12 sp). stroke distinto de 0: solo borde (algo por confirmar); icon: ícono inicial de 14 dp. */
+    private TextView pill(String text,int fg,int bg,int stroke,int icon){
+        TextView t=ui.oneLine(ui.text(text,Type.LABEL_MEDIUM,fg));t.setIncludeFontPadding(false);t.setGravity(Gravity.CENTER_VERTICAL);
+        t.setBackground(stroke!=0?outline(this,bg,stroke,R_FULL,false):shape(this,bg,R_FULL));t.setPadding(ui.dp(S2),ui.dp(S1),ui.dp(S2),ui.dp(S1));
+        if(icon!=0){Drawable d=getDrawable(icon).mutate();d.setTint(fg);d.setBounds(0,0,ui.dp(14),ui.dp(14));t.setCompoundDrawablesRelative(d,null,null,null);t.setCompoundDrawablePadding(ui.dp(S1));}
+        return t;
+    }
+    /**
+     * Fila que pasa a la línea siguiente lo que no cabe (las píldoras de un modelo). El kit no tiene una: con letra grande
+     * o nombres largos, una fila común cortaba la última píldora. Cada línea centra sus piezas en vertical.
+     */
+    private static final class Flow extends ViewGroup {
+        private final int gapX,gapY;
+        /** Línea de cada hijo y alto de cada línea (a lo más, una por hijo). Se dimensionan al agregar o quitar hijos, no al medir. */
+        private int[] lineOf=new int[0],lineHeight=new int[1];
+        Flow(Context c,int gapX,int gapY){super(c);this.gapX=gapX;this.gapY=gapY;}
+        @Override public void onViewAdded(View child){super.onViewAdded(child);resize();}
+        @Override public void onViewRemoved(View child){super.onViewRemoved(child);resize();}
+        private void resize(){int n=getChildCount();lineOf=new int[n];lineHeight=new int[n+1];}
+        @Override protected void onMeasure(int wSpec,int hSpec){
+            boolean free=MeasureSpec.getMode(wSpec)==MeasureSpec.UNSPECIFIED;int max=free?Integer.MAX_VALUE:Math.max(0,MeasureSpec.getSize(wSpec)-getPaddingLeft()-getPaddingRight());
+            int n=Math.min(getChildCount(),lineOf.length),x=0,line=0,widest=0;java.util.Arrays.fill(lineHeight,0);
+            for(int i=0;i<n;i++){
+                View v=getChildAt(i);lineOf[i]=line;if(v.getVisibility()==GONE)continue;
+                v.measure(free?MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED):MeasureSpec.makeMeasureSpec(max,MeasureSpec.AT_MOST),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED));
+                int w=v.getMeasuredWidth();if(x>0&&x+w>max){line++;x=0;}
+                lineOf[i]=line;lineHeight[line]=Math.max(lineHeight[line],v.getMeasuredHeight());x+=w+gapX;widest=Math.max(widest,x-gapX);
+            }
+            int total=0;for(int l=0;l<=line;l++)total+=lineHeight[l]+(l>0?gapY:0);
+            setMeasuredDimension(resolveSize(widest+getPaddingLeft()+getPaddingRight(),wSpec),resolveSize(total+getPaddingTop()+getPaddingBottom(),hSpec));
+        }
+        @Override protected void onLayout(boolean changed,int l,int t,int r,int b){
+            boolean rtl=getLayoutDirection()==LAYOUT_DIRECTION_RTL;int width=r-l,x=0,y=getPaddingTop(),line=0;
+            for(int i=0;i<getChildCount()&&i<lineOf.length;i++){
+                View v=getChildAt(i);if(v.getVisibility()==GONE)continue;
+                if(lineOf[i]!=line){y+=lineHeight[line]+gapY;line=lineOf[i];x=0;}
+                int w=v.getMeasuredWidth(),h=v.getMeasuredHeight(),top=y+(lineHeight[line]-h)/2,left=rtl?width-getPaddingRight()-x-w:getPaddingLeft()+x;
+                v.layout(left,top,left+w,top+h);x+=w+gapX;
+            }
+        }
     }
 
     // ---------- Carpetas ----------
@@ -529,7 +875,7 @@ public class SettingsActivity extends Screen {
             catch(Exception e){message("Carpeta","No se obtuvo permiso de escritura. Elige otra carpeta.");}
         }
     }
-    @Override protected void onDestroy(){if(http!=null)http.cancel();io.shutdown();stopVoice(false);releaseVoicePlayer();super.onDestroy();}
+    @Override protected void onDestroy(){if(http!=null)http.cancel();if(catalogHttp!=null)catalogHttp.cancel();io.shutdown();stopVoice(false);releaseVoicePlayer();super.onDestroy();}
 
     // ---------- Voces conocidas ----------
     private static final int MIC_FOR_VOICE=62;
@@ -560,7 +906,9 @@ public class SettingsActivity extends Screen {
         }
         int used=Voices.used(this).size();
         TextView note=ui.text("Se usan hasta "+Transcriber.MAX_KNOWN+" voces por audio"+(used>Transcriber.MAX_KNOWN?": tienes "+used+" activas, así que van tu voz y las primeras por nombre.":".")
-            +" Quedan en este teléfono y se envían a OpenAI solo junto con los audios que transcribes.",Type.BODY_SMALL,p.onSurfaceVariant);
+            +" Quedan en este teléfono y se envían a "+settings.providerName()+" solo junto con los audios que transcribes."
+            // OpenRouter no tiene «voces conocidas»: las muestras van delante del audio y la app deduce quién es quién. Es nuevo y puede fallar.
+            +(settings.openRouter()?" Con OpenRouter este reconocimiento es nuevo: revisa los nombres al terminar.":""),Type.BODY_SMALL,p.onSurfaceVariant);
         note.setPadding(0,ui.dp(all.isEmpty()?0:S3),0,ui.dp(S2));s.add(note);
         if(!Voices.has(this))s.action(R.drawable.ic_mic_fill,"Grabar mi voz",false,this::myVoiceSheet);
         s.action(R.drawable.ic_person,"Agregar otra voz",false,this::addVoiceSheet);
@@ -644,7 +992,7 @@ public class SettingsActivity extends Screen {
     }
     /** Grabar tu voz: tu nombre y 10 s leyendo en voz alta. */
     private void myVoiceSheet(){
-        Sheet s=sheet("Grabar mi voz","Graba 10 segundos leyendo en voz alta. Al separar voces, tu voz va como muestra en todo el audio para que la app te reconozca desde el inicio y ponga tu nombre. Queda en este teléfono y se envía a OpenAI solo junto con los audios que transcribes.");
+        Sheet s=sheet("Grabar mi voz","Graba 10 segundos leyendo en voz alta. Al separar voces, tu voz va como muestra en todo el audio para que la app te reconozca desde el inicio y ponga tu nombre. Queda en este teléfono y se envía a "+settings.providerName()+" solo junto con los audios que transcribes.");
         EditText name=nameField("Tu nombre (p. ej. Konrad)","Tu nombre",settings.prefs.getString("myVoiceName",""));s.add(name);
         s.primary("Grabar mi voz",Ui.Style.PRIMARY,()->{
             String n=Voices.clean(name.getText().toString());if(n.isEmpty()){name.setError("Escribe tu nombre");return false;}

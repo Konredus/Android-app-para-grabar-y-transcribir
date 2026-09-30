@@ -11,6 +11,11 @@ public class VozApp extends Application {
             if(!old.equals("gpt-4o-transcribe-diarize")){e.putString("openaiTextModel",old).putString("speakersMode","never");}
             e.apply();
         }
+        // 0.8.0 (OpenRouter): no hay migración. Las preferencias nuevas tienen valor por defecto y nadie cambia de proveedor
+        // solo: quien usa OpenAI o su servidor sigue igual, con su clave y su modelo. Lo único que se hace al abrir es poner
+        // al día la lista de modelos (una vez al día, en segundo plano) de quien ya eligió OpenRouter, para que «Automático»
+        // pase solo a otro modelo si OpenRouter retira el que usaba.
+        Models.refreshIfStale(this);
         Thread.UncaughtExceptionHandler prior=Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread,error)->{Diagnostics.crash(error);if(prior!=null)prior.uncaughtException(thread,error);});
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks(){
