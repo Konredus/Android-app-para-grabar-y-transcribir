@@ -1,0 +1,5 @@
+<!-- Bienvenida (0.8.0), tarjeta «OpenRouter»: una entrada que se abre hacia varias salidas (una sola clave, muchos modelos). Trazo redondeado, a juego con los íconos de contorno. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M6.5,12 H11 M11,12 C14,12 13,6 17,6 M11,12 H17 M11,12 C14,12 13,18 17,18"/>
+    <path android:fillColor="#FF000000" android:pathData="M2.5,12 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0 Z M17,6 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0 Z M17,12 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0 Z M17,18 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0 Z"/>
+</vector>

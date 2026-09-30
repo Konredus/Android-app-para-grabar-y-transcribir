@@ -1,0 +1,5 @@
+<!-- Bienvenida (0.8.0), botón «Pegar»: un portapapeles (tabla con su pinza). Trazo redondeado, a juego con los íconos de contorno. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M8,5 H7 a2,2 0 0,0 -2,2 V19 a2,2 0 0,0 2,2 H17 a2,2 0 0,0 2,-2 V7 a2,2 0 0,0 -2,-2 H16"/>
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M9,3.5 H15 a1,1 0 0,1 1,1 V6 a1,1 0 0,1 -1,1 H9 a1,1 0 0,1 -1,-1 V4.5 a1,1 0 0,1 1,-1 Z"/>
+</vector>

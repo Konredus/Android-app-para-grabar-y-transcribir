@@ -63,7 +63,13 @@ public class MainActivity extends Screen {
     private static final Map<String,Meta> METAS=new ConcurrentHashMap<>();
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final ExecutorService disk=Executors.newSingleThreadExecutor();
-    private boolean showLibrary,welcomedNow;private int homeScroll,libraryScroll;
+    private boolean showLibrary;private int homeScroll,libraryScroll;
+    /**
+     * Bienvenida de la primera instalación (0.8.0). welcoming: OnboardingActivity está abierta encima y Grabar espera
+     * debajo, armada pero transparente. welcomeLeft: esta pantalla ya cedió el lugar, así que el próximo onResume es la
+     * vuelta de la bienvenida (el primero, antes de que aparezca, no cuenta).
+     */
+    private boolean welcoming,welcomeLeft;
 
     // Grabar: dos composiciones apiladas (reposo y grabando) que se funden al cambiar de estado.
     private FrameLayout homePanel;private LinearLayout idleLayer,recLayer;private Flex center,waveZone;
@@ -159,20 +165,26 @@ public class MainActivity extends Screen {
         // Tras cada medición: el teclado de la búsqueda y un ajuste de Grabar que esperaba a estar medido (no se sondea).
         root.getViewTreeObserver().addOnGlobalLayoutListener(()->{checkIme();if(fitPending&&homePanel.getVisibility()==View.VISIBLE)homePanel.post(this::fitHome);});
         section(showLibrary);root.requestFocus();
-        if(saved==null)welcomedNow=welcome();
+        // Primera instalación: la bienvenida va en su propia pantalla, encima de esta (nunca sobre una grabación en curso).
+        if(saved==null&&RecorderService.activeId==null&&OnboardingActivity.shouldShow(this))startWelcome();
     }
     @Override void navigate(int tab){if(tab==2)super.navigate(2);else section(tab==1);}
     @Override protected void onResume(){
         super.onResume();lastState="";if(search!=null&&search.hasFocus()){search.clearFocus();root.requestFocus();}
+        boolean fromWelcome=welcoming&&welcomeLeft;if(fromWelcome)endWelcome();
         handler.post(tick);load();if(!Pipeline.startForeground(this))Pipeline.schedule(this,false);renderChip();renderGreeting();
-        // Novedades de la versión: después de la bienvenida (nunca las dos juntas).
-        if(!welcomedNow)try{Novedades.maybeShow(this);}catch(RuntimeException e){Diagnostics.event("novedades_failed",null,"error_class",e.getClass().getSimpleName());}
-        welcomedNow=false;
+        // Novedades de la versión: nunca junto con la bienvenida (ni mientras se abre ni al volver de ella).
+        if(!welcoming&&!fromWelcome)try{Novedades.maybeShow(this);}catch(RuntimeException e){Diagnostics.event("novedades_failed",null,"error_class",e.getClass().getSimpleName());}
     }
-    @Override protected void onPause(){handler.removeCallbacks(tick);if(namePlayer!=null)namePlayer.release();super.onPause();}
+    @Override protected void onPause(){handler.removeCallbacks(tick);if(namePlayer!=null)namePlayer.release();if(welcoming)welcomeLeft=true;super.onPause();}
     @Override protected void onDestroy(){if(namePlayer!=null)namePlayer.release();handler.removeCallbacksAndMessages(null);disk.shutdown();super.onDestroy();}
     @Override protected void onSaveInstanceState(Bundle out){out.putBoolean("library",showLibrary);out.putString("query",query);out.putInt("filter",filter);if(showLibrary)libraryScroll=scroll.getScrollY();else homeScroll=scroll.getScrollY();out.putInt("homeScroll",homeScroll);out.putInt("libraryScroll",libraryScroll);super.onSaveInstanceState(out);}
-    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);section(intent.getBooleanExtra("library",false));}
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);setIntent(intent);
+        // Si algo trae esta pantalla al frente por encima de la bienvenida (una pestaña de Ajustes, una notificación), Grabar se muestra.
+        if(welcoming)endWelcome();
+        section(intent.getBooleanExtra("library",false));
+    }
     @Override public void onBackPressed(){if(showLibrary)section(false);else super.onBackPressed();}
 
     private void section(boolean library){
@@ -683,24 +695,25 @@ public class MainActivity extends Screen {
         }
     }
     private void send(String action){startService(new Intent(this,RecorderService.class).setAction(action));}
-    /** Bienvenida de la primera instalación: logo, lema y lo esencial en tres filas. Devuelve true si se mostró. */
-    private boolean welcome(){
-        Settings settings=new Settings(this);if(settings.prefs.getBoolean("welcomed",false))return false;settings.prefs.edit().putBoolean("welcomed",true).apply();
-        Sheet s=sheet("Bienvenido a Verbapp",null);
-        // El logo en un círculo menta, sobre el título.
-        FrameLayout logo=new FrameLayout(this);logo.setBackground(oval(p.primaryContainer));logo.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        logo.addView(new Glass.BrandMark(this,p.onPrimaryContainer,p.brand),new FrameLayout.LayoutParams(ui.dp(30),ui.dp(30),Gravity.CENTER));
-        LinearLayout.LayoutParams ll=new LinearLayout.LayoutParams(ui.dp(56),ui.dp(56));ll.bottomMargin=ui.dp(S4);s.body.addView(logo,0,ll);
-        // El lema, levemente inclinado como el nombre.
-        TextView motto=ui.text("Tus palabras, para siempre",Type.TITLE_MEDIUM,p.primary);motto.getPaint().setTextSkewX(-0.12f);motto.setPadding(0,0,0,ui.dp(S3));
-        LinearLayout.LayoutParams ml=Ui.fill();ml.topMargin=-ui.dp(S1);s.body.addView(motto,ml);
-        TextView intro=ui.text("Graba o importa audio y transcríbelo con tu propia clave: pagas centavos por uso, sin suscripción.",Type.BODY_MEDIUM,p.onSurfaceVariant);intro.setPadding(0,0,0,ui.dp(S2));s.add(intro);
-        int[] icons={R.drawable.ic_mic_fill,R.drawable.ic_sparkle,R.drawable.ic_folder};
-        String[][] rows={{"Graba sin internet","El audio queda en tu teléfono, incluso con la pantalla bloqueada."},{"Transcribe cuando quieras","Con separación de voces: Persona 1, Persona 2… y nombres editables."},{"Tus archivos son tuyos","Copias opcionales en una carpeta del teléfono o de Drive."}};
-        for(int i=0;i<3;i++){LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(0,ui.dp(S2),0,ui.dp(S2));r.addView(ui.tile(icons[i],p.onPrimaryContainer,p.primaryContainer,44,22));r.addView(ui.space(S3));LinearLayout t=ui.column();t.addView(ui.text(rows[i][0],Type.TITLE_MEDIUM,p.onSurface));TextView d=ui.text(rows[i][1],Type.BODY_MEDIUM,p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);t.addView(d);r.addView(t,new LinearLayout.LayoutParams(0,-2,1));s.add(r);}
-        if(settings.hasKey())s.primary("Empezar",()->{});
-        else s.primary("Configurar transcripción",()->startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true))).secondary("Solo grabar por ahora",null);
-        s.show();return true;
+    /**
+     * Bienvenida de la primera instalación (0.8.0): OnboardingActivity se abre encima, sin animación de entrada. Reemplaza
+     * a la hoja «Bienvenido a Verbapp». Mientras tanto Grabar queda armada pero transparente: detrás se ve el mismo fondo
+     * verde, así esta pantalla no asoma antes de la bienvenida y, al volver, su contenido aparece sobre el fondo que ya estaba.
+     */
+    private void startWelcome(){
+        welcoming=true;welcomeLeft=false;for(int i=0;i<root.getChildCount();i++)root.getChildAt(i).setAlpha(0f);
+        OnboardingActivity.open(this,false);overridePendingTransition(0,0);
+    }
+    /**
+     * Vuelta de la bienvenida (terminada o saltada; si se salió con Atrás en su primer paso, la app se cerró y esto no
+     * corre): Grabar aparece con un fundido, el saludo toma el nombre recién escrito y la versión instalada se da por
+     * vista, para que «Novedades» no salga encima de quien recién instaló.
+     */
+    private void endWelcome(){
+        welcoming=false;welcomeLeft=false;boolean motion=AppTheme.motion();
+        for(int i=0;i<root.getChildCount();i++){View v=root.getChildAt(i);v.animate().cancel();if(motion)v.animate().alpha(1f).setStartDelay(0).setDuration(MOTION_SLOW).setInterpolator(EMPHASIZED_DECELERATE).start();else v.setAlpha(1f);}
+        Settings settings=new Settings(this);int code=Novedades.versionCode(this);if(code>settings.lastSeenVersion())settings.setLastSeenVersion(code);
+        myName=settings.prefs.getString("myVoiceName","");
     }
 
     // ---------- Última grabación ----------
