@@ -2,7 +2,11 @@ package cl.vozlocal.app;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.InsetDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.media.*;
 import android.os.Handler;
 import android.os.Looper;
@@ -23,6 +27,8 @@ import static cl.vozlocal.app.AppTheme.*;
  * su color e inicial, ▶ para escuchar un tramo limpio de 3–8 s, sus primeras palabras, cuánto habla y nombres
  * sugeridos con un toque («Yo», tus nombres recientes y, si casi no habla, «Es <otra voz>» para unirla).
  * Todo se guarda de una vez al cerrar («Listo») y se puede deshacer. Mismo nombre = misma persona.
+ * 0.7.0 (Verbapp): cada voz va en su propia tarjeta suave, con su círculo de color, una barra de cuánto habla y el ▶
+ * redondo en menta que pasa a tinta mientras suena; al unir una voz con otra, su círculo toma el color de esa persona.
  */
 final class NameVoices {
     private NameVoices(){}
@@ -37,6 +43,8 @@ final class NameVoices {
     private static final class Voice {
         String key,label,initial,firstWords;int color;double share;double[] sample;
         EditText field;TextView avatar;ImageButton play;LinearLayout chips;LinearLayout row;
+        /** Rellenos que cambian: el círculo de la inicial (toma el color de la voz a la que se une), el ▶ y la tarjeta. */
+        GradientDrawable avatarFill,playFill,cardFill;
         /** Si no es null, esta voz se une a esa otra al guardar («Es Persona 1»). */
         String mergeInto;
         String typed(){return field.getText().toString().trim();}
@@ -77,10 +85,10 @@ final class NameVoices {
         Sheet sheet=s.sheet("Nombrar voces",(canListen?"Escucha cada voz y ponle su nombre. ":"Ponle nombre a cada voz. ")+"Si dos voces son la misma persona, dales el mismo nombre y se unen.");
         Runnable[] refresh={null};
         refresh[0]=()->{for(Voice v:voices)renderRow(s,v,voices,mine,myName,recent,refresh[0]);};
+        // Una tarjeta por voz, separadas por 8 dp (en vez de divisores): cada persona se lee como un bloque.
         for(int i=0;i<voices.size();i++){
             Voice v=voices.get(i);boolean last=i==voices.size()-1;
-            if(i>0)sheet.body.addView(ui.separator(40+S3));
-            sheet.add(row(s,v,last,canListen,sampler,refresh));
+            sheet.body.addView(row(s,v,last,canListen,sampler,refresh),ui.top(i==0?0:S2));
         }
         refresh[0].run();
 
@@ -103,37 +111,58 @@ final class NameVoices {
     }
 
     // ---------- Filas ----------
+    /**
+     * Tarjeta de una voz (0.7.0), en este orden:
+     * 1. su círculo de color con la inicial, «Persona 1», cuánto habla (barra en su color + «58 % del tiempo», en Outfit
+     *    con cifras fijas) y el ▶ redondo de la muestra (menta; en tinta mientras suena);
+     * 2. sus primeras palabras, para reconocerla sin escuchar;
+     * 3. el campo del nombre y los nombres sugeridos.
+     */
     private static View row(Screen s,Voice v,boolean last,boolean canListen,Sampler sampler,Runnable[] refresh){
         Ui ui=s.ui;Palette p=s.p;
-        LinearLayout row=ui.row();row.setGravity(Gravity.TOP);row.setPadding(0,ui.dp(S3),0,ui.dp(S3));v.row=row;
+        LinearLayout card=ui.column();v.cardFill=SheetParts.card(s,p,R_CARD);card.setBackground(v.cardFill);card.setPadding(ui.dp(S4),ui.dp(S4),ui.dp(S4),ui.dp(S4));v.row=card;
+        LinearLayout head=ui.row();
         // Círculo con el color de la voz (el mismo punto que en la transcripción) y su inicial o número.
-        TextView avatar=ui.text("",Type.TITLE_MEDIUM,p.surface);avatar.setGravity(Gravity.CENTER);avatar.setBackground(oval(v.color));avatar.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LinearLayout.LayoutParams alp=new LinearLayout.LayoutParams(ui.dp(40),ui.dp(40));alp.topMargin=ui.dp(S2);row.addView(avatar,alp);v.avatar=avatar;
-        row.addView(ui.space(S3));
-        LinearLayout col=ui.column();
-        LinearLayout top=ui.row();
+        v.avatarFill=oval(v.color);
+        TextView avatar=ui.text("",Type.TITLE_MEDIUM,p.surface);avatar.setTypeface(outfit(s,Weight.SEMIBOLD));avatar.setGravity(Gravity.CENTER);avatar.setIncludeFontPadding(false);avatar.setBackground(v.avatarFill);avatar.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        head.addView(avatar,new LinearLayout.LayoutParams(ui.dp(40),ui.dp(40)));v.avatar=avatar;
+        head.addView(ui.space(S3));
+        LinearLayout who=ui.column();
+        who.addView(ui.oneLine(ui.text(v.label,Type.TITLE_MEDIUM,p.onSurface)));
+        // Cuánto habla: barra fina en su color (un vistazo) y el porcentaje escrito (el dato exacto).
+        LinearLayout share=ui.row();
+        LinearLayout track=ui.row();track.setBackground(shape(s,p.surfaceContainerHighest,R_FULL));track.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        float part=v.share<=0?0f:(float)Math.max(0.03,Math.min(1.0,v.share));
+        View fill=new View(s);fill.setBackground(shape(s,v.color,R_FULL));track.addView(fill,new LinearLayout.LayoutParams(0,-1,part));track.addView(new View(s),new LinearLayout.LayoutParams(0,-1,1f-part));
+        share.addView(track,new LinearLayout.LayoutParams(0,ui.dp(6),1));share.addView(ui.space(S2));
+        share.addView(Ui.tabular(ui.oneLine(ui.text(percent(v.share)+" del tiempo",Type.LABEL_MEDIUM,p.onSurfaceVariant))));
+        LinearLayout.LayoutParams slp=Ui.fill();slp.topMargin=ui.dp(S1);who.addView(share,slp);
+        head.addView(who,new LinearLayout.LayoutParams(0,-2,1));
+        if(canListen){
+            // ▶ redondo menta de 40 dp (se toca en 48 dp); mientras suena pasa a tinta con ❚❚ (Sampler.paint).
+            ImageButton play=ui.iconButton(R.drawable.ic_play,"Escuchar a "+v.label,p.onPrimaryContainer,0,48);v.play=play;
+            int in=ui.dp(S1);v.playFill=oval(p.primaryContainer);
+            play.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.stateLayer(p.onPrimaryContainer)),new InsetDrawable(v.playFill,in),new InsetDrawable(oval(0xFF000000),in)));
+            if(v.sample==null){play.setEnabled(false);play.setAlpha(0.38f);play.setContentDescription("Muestra no disponible para "+v.label);}
+            else play.setOnClickListener(x->sampler.toggle(v));
+            LinearLayout.LayoutParams plp=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));plp.setMarginStart(ui.dp(S2));plp.setMarginEnd(-ui.dp(S1));head.addView(play,plp);
+        }
+        card.addView(head,Ui.fill());
+        // Qué dijo primero y si hay muestra: para saber quién es sin salir de la hoja.
+        StringBuilder meta=new StringBuilder();
+        if(!v.firstWords.isEmpty())meta.append("«").append(v.firstWords).append("»");
+        if(canListen&&v.sample==null)meta.append(meta.length()>0?" · muestra no disponible":"Muestra no disponible");
+        if(meta.length()>0){TextView m=ui.text(meta.toString(),Type.BODY_MEDIUM,p.onSurfaceVariant);m.setMaxLines(2);m.setEllipsize(android.text.TextUtils.TruncateAt.END);m.setPaddingRelative(ui.dp(S1),0,0,0);card.addView(m,ui.top(S3));}
         EditText f=ui.field(v.label,"Nombre para "+v.label);f.setText(v.initial);f.setFilters(new InputFilter[]{new InputFilter.LengthFilter(80)});
         f.setImeOptions(last?EditorInfo.IME_ACTION_DONE:EditorInfo.IME_ACTION_NEXT);f.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         f.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence a,int b,int c,int d){}public void onTextChanged(CharSequence a,int b,int c,int d){}
             public void afterTextChanged(Editable e){if(v.mergeInto!=null&&e.length()>0)v.mergeInto=null;if(refresh[0]!=null)refresh[0].run();}});
-        v.field=f;top.addView(f,new LinearLayout.LayoutParams(0,-2,1));
-        if(canListen){
-            ImageButton play=ui.iconButton(R.drawable.ic_play,"Escuchar a "+v.label,p.onSurfaceVariant,0,48);v.play=play;
-            if(v.sample==null){play.setEnabled(false);play.setAlpha(0.38f);play.setContentDescription("Muestra no disponible para "+v.label);}
-            else play.setOnClickListener(x->sampler.toggle(v));
-            LinearLayout.LayoutParams plp=Ui.wrap();plp.setMarginStart(ui.dp(S1));plp.topMargin=ui.dp(S1);top.addView(play,plp);
-        }
-        col.addView(top,Ui.fill());
-        // Qué dijo primero, cuánto habla y si hay muestra: para saber quién es sin salir de la hoja.
-        StringBuilder meta=new StringBuilder();
-        if(!v.firstWords.isEmpty())meta.append("«").append(v.firstWords).append("»");
-        if(meta.length()>0)meta.append(" · ");meta.append(percent(v.share)).append(" del tiempo");
-        if(canListen&&v.sample==null)meta.append(" · muestra no disponible");
-        TextView m=ui.text(meta.toString(),Type.BODY_SMALL,p.onSurfaceVariant);m.setMaxLines(2);m.setEllipsize(android.text.TextUtils.TruncateAt.END);m.setPadding(ui.dp(S1),ui.dp(S2),0,0);col.addView(m,Ui.fill());
+        v.field=f;card.addView(f,ui.top(S3));
+        // Los chips traen 8 dp de margen táctil arriba y abajo: el de abajo se come parte del relleno de la tarjeta.
         HorizontalScrollView hs=new HorizontalScrollView(s);hs.setHorizontalScrollBarEnabled(false);hs.setClipToPadding(false);
-        LinearLayout chips=ui.row();hs.addView(chips);v.chips=chips;col.addView(hs,Ui.fill());
-        row.addView(col,new LinearLayout.LayoutParams(0,-2,1));
-        return row;
+        LinearLayout chips=ui.row();hs.addView(chips);v.chips=chips;
+        LinearLayout.LayoutParams hlp=ui.top(S1);hlp.bottomMargin=-ui.dp(S2);card.addView(hs,hlp);
+        return card;
     }
     /** Actualiza inicial, estado del campo y chips de una fila según lo escrito (y lo que se unirá). */
     private static void renderRow(Screen s,Voice v,List<Voice> all,boolean mine,String myName,List<String> recent,Runnable refresh){
@@ -141,6 +170,8 @@ final class NameVoices {
         Voice target=v.mergeInto==null?null:find(all,v.mergeInto);
         String shown=target!=null?display(target):typed.isEmpty()?v.label:typed;
         v.avatar.setText(initial(shown));
+        // Al unirla («Es Persona 1»), su círculo toma el color y la inicial de esa persona: se ve cómo quedará.
+        if(v.avatarFill!=null)v.avatarFill.setColor(target!=null?target.color:v.color);
         v.field.setAlpha(target!=null?0.38f:1f);v.field.setHint(target!=null?"Se une con "+display(target):v.label);
         if(v.play!=null&&v.sample!=null)v.play.setContentDescription((v.play.getTag()!=null?"Detener muestra de ":"Escuchar a ")+(typed.isEmpty()?v.label:typed));
         v.chips.removeAllViews();
@@ -324,7 +355,7 @@ final class NameVoices {
                 if(s.getSystemService(AudioManager.class).requestAudioFocus(focus)!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED){focus=null;return;}
                 player.seekTo((long)(v.sample[0]*1000),MediaPlayer.SEEK_CLOSEST);player.start();
                 until=(long)(v.sample[1]*1000)+150;playing=v;
-                v.play.setImageResource(R.drawable.ic_pause);v.play.setTag(Boolean.TRUE);v.play.setContentDescription("Detener muestra de "+display(v));
+                v.play.setImageResource(R.drawable.ic_pause);v.play.setTag(Boolean.TRUE);v.play.setContentDescription("Detener muestra de "+display(v));paint(v,true);
                 handler.removeCallbacks(tick);handler.postDelayed(tick,100);
                 Diagnostics.event("voice_sample_played",null,"seconds",Math.round(v.sample[1]-v.sample[0]));
             }catch(Exception e){release();s.toast("No se pudo reproducir la muestra");}
@@ -333,9 +364,19 @@ final class NameVoices {
             handler.removeCallbacks(tick);
             try{if(player!=null&&player.isPlaying())player.pause();}catch(IllegalStateException ignored){}
             if(focus!=null){s.getSystemService(AudioManager.class).abandonAudioFocusRequest(focus);focus=null;}
-            if(playing!=null&&playing.play!=null){playing.play.setImageResource(R.drawable.ic_play);playing.play.setTag(null);playing.play.setContentDescription("Escuchar a "+display(playing));}
+            if(playing!=null&&playing.play!=null){playing.play.setImageResource(R.drawable.ic_play);playing.play.setTag(null);playing.play.setContentDescription("Escuchar a "+display(playing));paint(playing,false);}
             playing=null;
         }
         void release(){stop();if(player!=null){try{player.release();}catch(Exception ignored){}player=null;}}
+        /**
+         * La voz que suena se nota: su ▶ pasa de menta a tinta (❚❚) y su tarjeta se enmarca con su color.
+         * Al detenerse vuelve a menta y al borde de siempre (vidrio en oscuro, ninguno en claro).
+         */
+        void paint(Voice v,boolean on){
+            Palette p=s.p;int fg=on?p.onInk:p.onPrimaryContainer;
+            if(v.playFill!=null)v.playFill.setColor(on?p.ink:p.primaryContainer);
+            if(v.play!=null){v.play.setImageTintList(ColorStateList.valueOf(fg));if(v.play.getBackground() instanceof RippleDrawable)((RippleDrawable)v.play.getBackground()).setColor(ColorStateList.valueOf(Ui.stateLayer(fg)));}
+            if(v.cardFill!=null){if(on)v.cardFill.setStroke(s.ui.dp(2),v.color);else if(p.dark)v.cardFill.setStroke(Math.max(1,s.ui.dp(1)),p.glassStroke);else v.cardFill.setStroke(0,0);}
+        }
     }
 }

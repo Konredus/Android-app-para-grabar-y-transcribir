@@ -13,6 +13,8 @@ import static cl.vozlocal.app.AppTheme.*;
  * Hojas «¿Cómo quieres volver a transcribir?» y «Nueva versión lista» (0.6.0).
  * Repetir exactamente lo mismo no sirve: cada opción cambia algo que importa, de la más recomendada a la menos.
  * La versión actual se guarda como anterior hasta que eliges con cuál quedarte.
+ * 0.7.0 (Verbapp): las alternativas llevan círculos menta y sus datos (recomendada, costo) en píldoras; «Nueva versión
+ * lista» compara las dos versiones en dos tarjetas lado a lado. Las piezas comunes están en {@link SheetParts}.
  */
 final class RetranscribeSheet {
     private RetranscribeSheet(){}
@@ -55,50 +57,28 @@ final class RetranscribeSheet {
         // Con una versión anterior sin elegir, otra transcripción la reemplazaría sin preguntar (solo se guarda una):
         // primero se elige con cuál quedarse y después se ofrecen las alternativas.
         if(Retranscribe.hasPrevious(s,r.id)){offerKeep(s,r,changed,true,kept->show(s,r,changed));return;}
-        Ui ui=s.ui;Palette p=s.p;
         boolean paid=new Settings(s).provider().equals("openai");
         Sheet sheet=s.sheet("¿Cómo quieres volver a transcribir?","Audio de "+Ui.humanDuration(r.duration)+". "+(paid?"Se cobra de nuevo el audio completo.":"Se envía de nuevo el audio completo.")+" Tu versión actual se guarda por si prefieres volver.");
-        LinearLayout list=ui.column();LinearLayout.LayoutParams lp=Ui.fill();lp.setMargins(-ui.dp(S6),0,-ui.dp(S6),0);sheet.body.addView(list,lp);
+        // Las 4 alternativas con su círculo menta (0.7.0): la recomendada lleva «✦ Recomendada» y el costo va en su
+        // píldora con cifras fijas, así se comparan de un vistazo. La que no se puede usar se ve atenuada con su motivo.
+        LinearLayout list=SheetParts.list(sheet);
         Retranscribe.Mode[] modes={Retranscribe.Mode.CORRECTIONS,Retranscribe.Mode.SINGLE,Retranscribe.Mode.SPEAKERS,Retranscribe.Mode.TEXT};
         StringBuilder log=new StringBuilder();
         for(Retranscribe.Mode mode:modes){
             boolean ok=available(s,r,mode);log.append(mode.name()).append(ok?"+":"-");
-            String cost=cost(s,r,mode);
-            String detail=ok?explain(s,mode)+(cost.isEmpty()?"":" · "+cost):reason(s,r,mode);
-            list.addView(option(s,icon(mode),title(s,mode),detail,ok,ok&&mode==Retranscribe.Mode.CORRECTIONS,()->{sheet.dismiss();confirm(s,r,mode,changed);}),Ui.fill());
+            boolean recommended=ok&&mode==Retranscribe.Mode.CORRECTIONS;String label=title(s,mode),cost=cost(s,r,mode);
+            List<SheetParts.Fact> facts=new ArrayList<>();if(recommended)facts.add(SheetParts.recommended());if(!cost.isEmpty())facts.add(SheetParts.cost(cost));
+            String detail=ok?explain(s,mode):reason(s,r,mode);
+            String spoken=ok?label+(recommended?", recomendada":"")+". "+detail+(cost.isEmpty()?"":" · "+cost):label+". No disponible: "+detail;
+            list.addView(SheetParts.option(s,icon(mode),label,detail,facts,ok,spoken,()->{sheet.dismiss();confirm(s,r,mode,changed);}),Ui.fill());
         }
         // Sin «Mi voz», la separación se equivoca más al inicio: conviene grabarla antes de repetir (una sola vez).
-        if(paid&&!Voices.has(s))sheet.action(R.drawable.ic_mic_fill,"Grabar mi voz antes de repetir",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true)));
+        if(paid&&!Voices.has(s))list.addView(SheetParts.item(s,sheet,R.drawable.ic_mic_fill,"Grabar mi voz antes de repetir",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true))));
         sheet.secondary("Cancelar",null).show();
         Diagnostics.event("retranscribe_sheet",r.id,"modes",log.toString());
     }
 
-    /**
-     * Opción grande de dos líneas, como {@link Sheet#option}, pero que puede mostrarse desactivada con su motivo
-     * (no se esconde: así se entiende por qué no se puede) y destacar la recomendada.
-     */
-    private static View option(Screen s,int icon,String label,String detail,boolean enabled,boolean recommended,Runnable run){
-        Ui ui=s.ui;Palette p=s.p;
-        LinearLayout row=ui.row();row.setGravity(Gravity.TOP);row.setMinimumHeight(ui.dp(72));row.setPadding(ui.dp(S6),ui.dp(S3),ui.dp(S6),ui.dp(S3));
-        FrameLayout tile=recommended?ui.tile(icon,p.onPrimaryContainer,p.primaryContainer,40,22):ui.tile(icon,p.onSecondaryContainer,p.secondaryContainer,40,22);
-        row.addView(tile);row.addView(ui.space(S4));
-        LinearLayout texts=ui.column();
-        LinearLayout head=ui.row();TextView t=ui.text(label,Type.TITLE_MEDIUM,p.onSurface);head.addView(t,new LinearLayout.LayoutParams(0,-2,1));
-        if(recommended){TextView badge=ui.text("Recomendada",Type.LABEL_MEDIUM,p.onPrimaryContainer);badge.setBackground(shape(s,p.primaryContainer,R_SMALL));badge.setPadding(ui.dp(S2),ui.dp(2),ui.dp(S2),ui.dp(2));LinearLayout.LayoutParams blp=Ui.wrap();blp.setMarginStart(ui.dp(S2));head.addView(badge,blp);}
-        texts.addView(head,Ui.fill());
-        TextView d=ui.text(detail,Type.BODY_MEDIUM,p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);texts.addView(d);
-        row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
-        if(enabled){
-            row.setBackground(ui.ripple(null,0));row.setClickable(true);row.setFocusable(true);row.setContentDescription(label+(recommended?", recomendada":"")+". "+detail);row.setAccessibilityDelegate(Ui.buttonRole());
-            row.setOnClickListener(v->{Diagnostics.event("ui_action",null,"screen",s.getClass().getSimpleName(),"action",label);run.run();});
-        }else{
-            // Desactivada: el título y el ícono se atenúan; el motivo se lee completo.
-            tile.setAlpha(0.38f);t.setAlpha(0.38f);row.setContentDescription(label+". No disponible: "+detail);
-        }
-        return row;
-    }
-
-    /** Confirma con el costo y lo que pasa con tu versión actual y tus correcciones. */
+    /** Confirma con el costo y lo que pasa con tu versión actual y tus correcciones. Lleva el ícono de la alternativa. */
     private static void confirm(Screen s,Recording r,Retranscribe.Mode mode,Runnable changed){
         String cost=cost(s,r,mode);boolean corrected=false;
         try{Transcript t=Transcript.load(s,r.id);corrected=t.edited()||t.reviewed();}catch(Exception ignored){}
@@ -106,8 +86,8 @@ final class RetranscribeSheet {
         m.append(cost.isEmpty()?"Se envía de nuevo el audio completo.":"Se cobra de nuevo el audio completo ("+cost+").");
         m.append(" Tu versión actual se guarda por si prefieres volver.");
         if(corrected&&mode!=Retranscribe.Mode.CORRECTIONS)m.append(" Tus correcciones de voces y nombres no pasan a la nueva versión.");
-        s.sheet(title(s,mode),m.toString())
-            .primary("Volver a transcribir",()->start(s,r,mode,changed))
+        Sheet sheet=s.sheet(title(s,mode),m.toString());SheetParts.hero(sheet,icon(mode),false);
+        sheet.primary("Volver a transcribir",()->start(s,r,mode,changed))
             .secondary("Cancelar",null).show();
     }
     private static void start(Screen s,Recording r,Retranscribe.Mode mode,Runnable changed){
@@ -143,10 +123,12 @@ final class RetranscribeSheet {
      */
     static Sheet offerKeep(Screen s,Recording r,Runnable changed,boolean beforeAgain,java.util.function.Consumer<Boolean> then){
         if(r==null||!Retranscribe.hasPrevious(s,r.id)||!Transcript.exists(s,r.id))return null;
-        String compare=compare(s,r.id);
+        Version[] both=versions(s,r.id);
         String why=beforeAgain?"Antes de volver a transcribir, elige con cuál te quedas: solo se puede guardar una versión anterior a la vez."
             :"Revisa la nueva y elige con cuál te quedas. Mientras no elijas, la anterior sigue guardada.";
-        Sheet sheet=s.sheet(beforeAgain?"Antes, elige una versión":"Nueva versión lista",(compare.isEmpty()?"":compare+"\n\n")+why);
+        Sheet sheet=s.sheet(beforeAgain?"Antes, elige una versión":"Nueva versión lista",why);
+        // La comparación va en dos tarjetas lado a lado (0.7.0): la nueva en menta, la anterior en gris suave.
+        if(both!=null)sheet.add(comparison(s,both[0],both[1]));
         sheet.primary("Quedarme con la nueva",()->{
             boolean chosen=false;
             try{Retranscribe.keepNew(s,r.id);chosen=!Retranscribe.hasPrevious(s,r.id);Diagnostics.event("retranscribe_kept",r.id,"choice","new");Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);s.toast("Te quedaste con la nueva versión");}
@@ -160,20 +142,50 @@ final class RetranscribeSheet {
         Diagnostics.event("retranscribe_offer",r.id,"source",beforeAgain?"retranscribe":"ready");
         return sheet;
     }
-    /** «Ahora: 3 voces (Konrad, Fran, Persona 3) · Antes: 2 voces (…)», si ambas versiones se pueden leer. */
-    static String compare(Context c,String id){
+    /** Dos tarjetas iguales, lado a lado: «✦ Nueva» (menta) y «Anterior» (gris suave), con lo que tiene cada una. */
+    private static View comparison(Screen s,Version now,Version before){
+        LinearLayout row=s.ui.row();row.setGravity(Gravity.TOP);
+        row.addView(versionCard(s,true,now),new LinearLayout.LayoutParams(0,-1,1));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-1,1);lp.setMarginStart(s.ui.dp(S2));row.addView(versionCard(s,false,before),lp);
+        return row;
+    }
+    private static View versionCard(Screen s,boolean isNew,Version v){
+        Ui ui=s.ui;Palette p=s.p;int accent=isNew?p.primary:p.onSurfaceVariant;
+        LinearLayout c=ui.column();c.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),ui.dp(S4));
+        c.setBackground(isNew?shape(s,p.highlight,R_CARD-4):SheetParts.card(s,p,R_CARD-4));
+        LinearLayout head=ui.row();head.addView(ui.icon(isNew?R.drawable.ic_sparkle:R.drawable.ic_history,accent,16));head.addView(ui.space(6));
+        head.addView(ui.text(isNew?"Nueva":"Anterior",Type.LABEL_LARGE,accent));c.addView(head);
+        TextView big=Ui.tabular(ui.oneLine(ui.text(v.headline,Type.TITLE_LARGE,p.onSurface)));big.setPadding(0,ui.dp(S2),0,0);c.addView(big);
+        if(!v.detail.isEmpty()){TextView d=ui.text(v.detail,Type.BODY_SMALL,p.onSurfaceVariant);d.setMaxLines(3);d.setEllipsize(android.text.TextUtils.TruncateAt.END);d.setPadding(0,ui.dp(2),0,0);c.addView(d);}
+        // Para el lector de pantalla, cada tarjeta se lee de una vez: «Nueva: 3 voces (Konrad, Fran, Persona 3)».
+        c.setContentDescription((isNew?"Nueva: ":"Anterior: ")+v.summary);c.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);c.setFocusable(true);
+        for(int i=0;i<c.getChildCount();i++)c.getChildAt(i).setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        return c;
+    }
+
+    /** Lo que tiene una versión: el dato grande («3 voces», «Solo texto»), el detalle y el resumen de una línea. */
+    private static final class Version {
+        final String headline,detail,summary;
+        Version(String headline,String detail,String summary){this.headline=headline;this.detail=detail;this.summary=summary;}
+    }
+    private static Version version(Transcript t)throws Exception{
+        if(!t.diarized()){int words=0;org.json.JSONArray s=t.segments();for(int i=0;i<s.length();i++){String x=s.getJSONObject(i).optString("text").trim();if(!x.isEmpty())words+=x.split("\\s+").length;}
+            String w=String.format(Locale.ROOT,"%,d",words).replace(',','.')+" palabras";return new Version("Solo texto",w,"solo texto · "+w);}
+        List<String> names=new ArrayList<>(t.speakers().values());int n=names.size();
+        String list=n<=3?String.join(", ",names):String.join(", ",names.subList(0,3))+" y "+(n-3)+" más";
+        String count=n+(n==1?" voz":" voces");
+        return new Version(count,n==0?"":list,count+(n==0?"":" ("+list+")"));
+    }
+    /** La versión en uso y la anterior, o null si alguna no se puede leer (entonces no se muestra la comparación). */
+    private static Version[] versions(Context c,String id){
         try{
             Transcript now=Transcript.load(c,id);
             JSONObject prevData;synchronized(FilesStore.LOCK){prevData=FilesStore.read(FilesStore.file(c,id,".transcript.prev.json"));}
             Transcript before=new Transcript(prevData);before.clean();
-            return "Nueva: "+summary(now)+"\nAnterior: "+summary(before);
-        }catch(Exception e){return "";}
+            return new Version[]{version(now),version(before)};
+        }catch(Exception e){return null;}
     }
-    static String summary(Transcript t)throws Exception{
-        if(!t.diarized()){int words=0;org.json.JSONArray s=t.segments();for(int i=0;i<s.length();i++){String x=s.getJSONObject(i).optString("text").trim();if(!x.isEmpty())words+=x.split("\\s+").length;}
-            return "solo texto · "+String.format(Locale.ROOT,"%,d",words).replace(',','.')+" palabras";}
-        List<String> names=new ArrayList<>(t.speakers().values());int n=names.size();
-        String list=n<=3?String.join(", ",names):String.join(", ",names.subList(0,3))+" y "+(n-3)+" más";
-        return n+(n==1?" voz":" voces")+(n==0?"":" ("+list+")");
-    }
+    /** «Nueva: 3 voces (Konrad, Fran, Persona 3)\nAnterior: 2 voces (…)», si ambas versiones se pueden leer. */
+    static String compare(Context c,String id){Version[] v=versions(c,id);return v==null?"":"Nueva: "+v[0].summary+"\nAnterior: "+v[1].summary;}
+    static String summary(Transcript t)throws Exception{return version(t).summary;}
 }
