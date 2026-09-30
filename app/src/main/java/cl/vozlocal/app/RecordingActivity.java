@@ -753,7 +753,8 @@ public class RecordingActivity extends Screen {
                 // Filtro activo en una franja menta, con la salida a mano.
                 LinearLayout f=ui.row();f.setBackground(shape(this,p.primaryContainer,R_FULL));f.setPadding(ui.dp(S4),0,ui.dp(S1),0);f.setMinimumHeight(ui.dp(48));
                 View dot=new View(this);Integer only=colors.get(onlySpeaker);dot.setBackground(oval(only==null?p.primary:only));f.addView(dot,new LinearLayout.LayoutParams(ui.dp(8),ui.dp(8)));f.addView(ui.space(S2));
-                f.addView(ui.oneLine(ui.text("Mostrando solo a "+names.get(onlySpeaker),Type.LABEL_LARGE,p.onPrimaryContainer)),new LinearLayout.LayoutParams(0,-2,1));
+                // Sin cortar: un nombre largo baja a una segunda línea (la franja crece) en vez de perderse con «…».
+                f.addView(ui.text("Mostrando solo a "+names.get(onlySpeaker),Type.LABEL_LARGE,p.onPrimaryContainer),new LinearLayout.LayoutParams(0,-2,1));
                 f.addView(ui.button("Ver todo",0,Ui.Style.PLAIN,v->{onlySpeaker=null;reload(true);}));
                 LinearLayout.LayoutParams fl=Ui.fill();fl.setMargins(ui.dp(S2),ui.dp(S1),ui.dp(S2),ui.dp(S2));doc.addView(f,fl);}
             if(segments.length()==0){TextView none=ui.text("No se detectó habla en este audio.",Type.BODY_LARGE,p.onSurfaceVariant);none.setPadding(ui.dp(S3),ui.dp(S2),ui.dp(S3),ui.dp(S3));doc.addView(none);}
@@ -800,7 +801,8 @@ public class RecordingActivity extends Screen {
         LinearLayout head=cardHeader(card,R.drawable.ic_people,"Personas",null);
         boolean reviewed=transcript.reviewed();
         TextView status=chip(reviewed?"Voces revisadas":"Voces sin revisar",reviewed?R.drawable.ic_check:R.drawable.ic_voice,p.primary,reviewed?p.onSurfaceVariant:p.onPrimaryContainer,reviewed?0:p.primaryContainer,reviewed);
-        status.setContentDescription((reviewed?"Voces revisadas":"Voces sin revisar")+". Nombrar voces");status.setOnClickListener(v->openNameVoices());head.addView(status,Ui.wrap());
+        // El estado va al final de la fila de personas (como en 0.6), no junto al título: con letra grande le quitaba el ancho y partía «Personas».
+        status.setContentDescription((reviewed?"Voces revisadas":"Voces sin revisar")+". Nombrar voces");status.setOnClickListener(v->openNameVoices());
         Map<String,Double> share=transcript.talkShare();
         float[] parts=new float[names.size()];int[] tones=new int[names.size()];int n=0;
         for(String key:names.keySet()){Double v=share.get(key);parts[n]=v==null?0f:v.floatValue();tones[n]=colors.get(key);n++;}
@@ -814,6 +816,7 @@ public class RecordingActivity extends Screen {
             if(!pct.isEmpty()){TextView pc=Ui.tabular(ui.text(pct,Type.LABEL_LARGE,only?withAlpha(p.onInk,0xB3):p.onSurfaceVariant));pc.setPadding(ui.dp(6),0,0,0);c.addView(pc);}
             c.setClickable(true);c.setFocusable(true);c.setContentDescription(names.get(key)+(pct.isEmpty()?"":", "+pct+" del tiempo")+". Opciones");c.setAccessibilityDelegate(Ui.buttonRole());c.setOnClickListener(v->personSheet(key));Ui.pressable(c);
             LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginEnd(ui.dp(S2));chips.addView(c,lp);}
+        chips.addView(status,Ui.wrap());
         LinearLayout.LayoutParams hl=Ui.fill();hl.topMargin=ui.dp(S2);hl.setMarginStart(-ui.dp(S4));hl.setMarginEnd(-ui.dp(S4));card.addView(hs,hl);
         return card;
     }
@@ -957,7 +960,7 @@ public class RecordingActivity extends Screen {
         quotes(body,note.optJSONArray("quotes"),who);
         // Etiquetas como píldoras menta que se reparten en líneas como palabras (nunca se cortan por la mitad).
         JSONArray tags=note.optJSONArray("tags");if(tags!=null&&tags.length()>0){SpannableStringBuilder b=new SpannableStringBuilder();
-            for(int i=0;i<tags.length();i++){String tag=tags.optString(i).trim().replaceFirst("^#","");if(tag.isEmpty())continue;if(b.length()>0)b.append("  ");int from=b.length();b.append('#').append(tag);b.setSpan(new TagSpan(p.primaryContainer,p.onPrimaryContainer,ui.dp(10),ui.dp(5)),from,b.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);}
+            for(int i=0;i<tags.length();i++){String tag=tags.optString(i).trim().replaceFirst("^#","");if(tag.isEmpty())continue;if(b.length()>0)b.append("  ");int from=b.length();b.append('#').append(tag);b.setSpan(new TagSpan(p.primaryContainer,p.onPrimaryContainer,ui.dp(10),ui.dp(5),getResources().getDisplayMetrics().widthPixels-ui.dp(72)),from,b.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);}
             if(b.length()>0){TextView t=ui.text("",Type.LABEL_MEDIUM,p.onPrimaryContainer);t.setText(b);t.setLineSpacing(ui.dp(S2),1f);t.setPadding(0,ui.dp(S4),0,0);body.addView(t,Ui.fill());}}
         if(error!=null&&!error.isEmpty()){TextView e=ui.text("No se pudo volver a armar: "+error,Type.BODY_SMALL,p.error);e.setPadding(0,ui.dp(S3),0,0);body.addView(e);}
         card.addView(body,Ui.fill());
@@ -1370,16 +1373,18 @@ public class RecordingActivity extends Screen {
      * grande), aquí la píldora tiene aire arriba y abajo, y la línea crece para que dos filas de etiquetas no se toquen.
      */
     private static final class TagSpan extends ReplacementSpan {
-        private final int bg,fg;private final float padH,padV;private final RectF rect=new RectF();
-        TagSpan(int bg,int fg,float padH,float padV){this.bg=bg;this.fg=fg;this.padH=padH;this.padV=padV;}
+        private final int bg,fg;private final float padH,padV,maxW;private final RectF rect=new RectF();
+        /** maxW: ancho de la línea. Una etiqueta más larga (p. ej. con letra muy grande) se acorta con «…» en vez de salirse. */
+        TagSpan(int bg,int fg,float padH,float padV,float maxW){this.bg=bg;this.fg=fg;this.padH=padH;this.padV=padV;this.maxW=maxW;}
         @Override public int getSize(Paint paint,CharSequence text,int start,int end,Paint.FontMetricsInt fm){
             if(fm!=null){Paint.FontMetricsInt m=paint.getFontMetricsInt();int v=Math.round(padV);fm.ascent=m.ascent-v;fm.top=m.top-v;fm.descent=m.descent+v;fm.bottom=m.bottom+v;}
-            return Math.round(paint.measureText(text,start,end)+2*padH);
+            return Math.round(Math.min(maxW,paint.measureText(text,start,end)+2*padH));
         }
         @Override public void draw(Canvas canvas,CharSequence text,int start,int end,float x,int top,int y,int bottom,Paint paint){
-            Paint.FontMetrics m=paint.getFontMetrics();float w=paint.measureText(text,start,end);int old=paint.getColor();
+            Paint.FontMetrics m=paint.getFontMetrics();CharSequence shown=text.subSequence(start,end);float w=paint.measureText(shown,0,shown.length());int old=paint.getColor();
+            if(w+2*padH>maxW&&paint instanceof android.text.TextPaint){shown=TextUtils.ellipsize(shown,(android.text.TextPaint)paint,Math.max(0,maxW-2*padH),TextUtils.TruncateAt.END);w=paint.measureText(shown,0,shown.length());}
             rect.set(x,y+m.ascent-padV*0.5f,x+w+2*padH,y+m.descent+padV*0.5f);float r=rect.height()/2f;
-            paint.setColor(bg);canvas.drawRoundRect(rect,r,r,paint);paint.setColor(fg);canvas.drawText(text,start,end,x+padH,y,paint);paint.setColor(old);
+            paint.setColor(bg);canvas.drawRoundRect(rect,r,r,paint);paint.setColor(fg);canvas.drawText(shown,0,shown.length(),x+padH,y,paint);paint.setColor(old);
         }
     }
     /**
