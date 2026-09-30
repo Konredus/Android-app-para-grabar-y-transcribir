@@ -80,6 +80,12 @@ public class MainActivity extends Screen {
     /** Niveles de la grabación en curso: de aquí sale la onda chica de la hoja al terminar. */
     private final Levels levels=new Levels();
     /**
+     * Cuánto de la grabación cubren esos niveles (ms de grabación, sin pausas): solo se juntan con Grabar a la vista, así
+     * que bloquear el teléfono o salir de la app deja un tramo sin niveles. levelsLast: tiempo de grabación del último
+     * nivel (-1 = ninguno aún). Con cobertura parcial, la onda chica va plana en vez de estirar lo poco que hay.
+     */
+    private long levelsMs,levelsLast=-1;
+    /**
      * Ajuste de la pantalla fija. fitPending: hay que volver a medir si todo cabe (se resuelve con Grabar a la vista y ya
      * medida; nunca en bucle). weekMode: 0 = «Tu semana» completa, 1 = en una franja, 2 = oculta. Cada composición
      * recuerda el alto con que se ajustó (idleFitH / recFitH).
@@ -225,13 +231,26 @@ public class MainActivity extends Screen {
         record=new RecordButton(this,p);record.setContentDescription("Grabar");record.setOnClickListener(this::onRecordTap);micFrame.addView(record,new FrameLayout.LayoutParams(ui.dp(MIC_BOX),ui.dp(MIC_BOX),Gravity.CENTER));
         // Las ondas llegan hasta el borde de la pantalla (se desvanecen antes).
         LinearLayout.LayoutParams fl=new LinearLayout.LayoutParams(-1,ui.dp(MIC_BOX));fl.setMarginStart(-ui.dp(S4));fl.setMarginEnd(-ui.dp(S4));mid.addView(micFrame,fl);
-        prompt=ui.text("Toca para grabar",Type.ITEM,p.onSurface);prompt.setTextSize(15);prompt.setGravity(Gravity.CENTER);LinearLayout.LayoutParams pp=Ui.wrap();pp.topMargin=ui.dp(S1);mid.addView(prompt,pp);
+        prompt=ui.text("",Type.ITEM,p.onSurface);prompt.setTextSize(15);prompt.setGravity(Gravity.CENTER);prompt.setText(promptText());prompt.setContentDescription("Toca para grabar. Funciona sin internet.");LinearLayout.LayoutParams pp=Ui.wrap();pp.topMargin=ui.dp(S1);mid.addView(prompt,pp);
         importPill=buildImportPill();LinearLayout.LayoutParams ip=Ui.wrap();ip.topMargin=ui.dp(S1);mid.addView(importPill,ip);
         center.addView(mid,new FrameLayout.LayoutParams(-1,-2,Gravity.CENTER));
         idleLayer.addView(center,new LinearLayout.LayoutParams(-1,0,1));
 
         lastCard=buildLastCard();idleLayer.addView(lastCard,Ui.fill());
         weekCard=buildWeekCard();idleLayer.addView(weekCard,ui.top(S3));
+    }
+    /**
+     * Línea bajo el micrófono: «Toca para grabar» y, más tenue, «funciona sin internet» (0.6 lo decía en su línea de ayuda
+     * en reposo y 0.7 lo había perdido). Va en la MISMA línea, así no suma alto a la pantalla fija; si no cabe (letra
+     * grande o pantalla angosta) pasa a dos líneas enteras en vez de partirse a mitad de frase. El tono tenue es la misma
+     * tinta con transparencia y no onSurfaceVariant: aquí el fondo ya empieza a ponerse verde y el gris perdería contraste.
+     */
+    private CharSequence promptText(){
+        String first="Toca para grabar",line=first+" · funciona sin internet";
+        boolean fits=prompt.getPaint().measureText(line)<=getResources().getDisplayMetrics().widthPixels-2*ui.dp(S4)-ui.dp(S2);
+        SpannableString s=new SpannableString(fits?line:first+"\nFunciona sin internet");
+        s.setSpan(new ForegroundColorSpan(withAlpha(p.onSurface,0xB8)),first.length(),s.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return s;
     }
     /** Píldora de vidrio (40 dp visibles dentro de un área táctil de 48 dp) con borde fino, para que se vea sobre el blanco. Ponerla ANTES de setPadding: el InsetDrawable trae su propio relleno y lo reemplazaría. */
     private Drawable pill(){int inset=ui.dp(S1);return new RippleDrawable(ColorStateList.valueOf(p.ripple),new InsetDrawable(outline(this,p.glass,p.outlineVariant,R_FULL,false),0,inset,0,inset),new InsetDrawable(shape(this,0xFF000000,R_FULL),0,inset,0,inset));}
@@ -274,7 +293,8 @@ public class MainActivity extends Screen {
         LinearLayout.LayoutParams pl=new LinearLayout.LayoutParams(0,ui.dp(52),1);pl.setMarginStart(ui.dp(S3));controls.addView(pause,pl);
         LinearLayout.LayoutParams ml=new LinearLayout.LayoutParams(ui.dp(52),ui.dp(52));ml.setMarginStart(ui.dp(S3));controls.addView(markButton(),ml);
         recLayer.addView(controls,Ui.fill());
-        hint=ui.text("",Type.BODY_SMALL,p.onVividVariant);hint.setTextSize(13);hint.setGravity(Gravity.CENTER);hint.setMaxLines(2);hint.setEllipsize(TextUtils.TruncateAt.END);hint.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),0);recLayer.addView(hint,Ui.fill());
+        // Hasta 3 líneas: con la letra grande del sistema, la ayuda que también explica la ★ no cabe en 2 y se cortaría.
+        hint=ui.text("",Type.BODY_SMALL,p.onVividVariant);hint.setTextSize(13);hint.setGravity(Gravity.CENTER);hint.setMaxLines(3);hint.setEllipsize(TextUtils.TruncateAt.END);hint.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),0);recLayer.addView(hint,Ui.fill());
         renderRecTitle(null);
     }
     /** ★ Marcar: un toque deja un momento con vibración; mantenerlo permite anotar una palabra. El globito dice cuántos van. */
@@ -303,7 +323,9 @@ public class MainActivity extends Screen {
         lastTitle=ui.oneLine(ui.text("",Type.TITLE_MEDIUM,p.onSurface));texts.addView(lastTitle);
         lastStatus=Ui.tabular(ui.oneLine(ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant)));lastStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);texts.addView(lastStatus);
         top.addView(texts,new LinearLayout.LayoutParams(0,-2,1));card.addView(top,Ui.fill());
-        lastActions=ui.row();LinearLayout.LayoutParams al=Ui.fill();al.topMargin=ui.dp(S3);card.addView(lastActions,al);
+        // El botón llega con la primera lectura del disco: su alto (48 dp) se reserva desde ya, así la tarjeta no crece
+        // después de medir si todo cabe ni empuja «Tu semana» al abrir.
+        lastActions=ui.row();lastActions.setMinimumHeight(ui.dp(48));LinearLayout.LayoutParams al=Ui.fill();al.topMargin=ui.dp(S3);card.addView(lastActions,al);
         card.setBackground(ui.ripple(glass(this,p,R_CARD),R_CARD));card.setClickable(true);card.setFocusable(true);card.setAccessibilityDelegate(Ui.buttonRole());
         return card;
     }
@@ -410,7 +432,7 @@ public class MainActivity extends Screen {
      * compacta por niveles: 1) el nombre más chico y sin el rótulo «Última grabación»; 2) sin «Toca para grabar» y el
      * micrófono un poco menor; 3) la tarjeta queda en una fila (tocarla abre).
      * Grabando: 1) cronómetro de 52 y título en 2 líneas; 2) título en 1 línea y sin la línea de ayuda; 3) sin el título
-     * grande (sigue en la píldora ✎).
+     * grande (sigue en la píldora ✎). Al cambiar el título (y al empezar cada grabación) se vuelve a medir desde 0.
      * Cada composición se ajusta al alto con que se ve (reposo con la barra de pestañas; grabando, sin ella) y lo recuerda:
      * esconder o mostrar la barra al grabar y al detener no rehace lo ya medido (nada parpadea).
      */
@@ -451,7 +473,12 @@ public class MainActivity extends Screen {
             // «● Grabando» late suave; en pausa el tiempo parpadea. Con «Quitar animaciones», todo queda quieto.
             float beat=motion?0.3f+0.7f*(0.5f+0.5f*(float)Math.cos(2*Math.PI*(now%1400)/1400.0)):1f;
             if(paused){timer.setAlpha(motion?((now/600)%2==0?1f:0.35f):0.55f);statusDot.setAlpha(1f);}
-            else{timer.setAlpha(1f);float level=Waveform.normalize(RecorderService.amplitude());wave.push(level);levels.add(level);statusDot.setAlpha(beat);}
+            else{
+                timer.setAlpha(1f);float level=Waveform.normalize(RecorderService.amplitude());wave.push(level);levels.add(level);statusDot.setAlpha(beat);
+                // Cobertura: cuenta el tramo desde el nivel anterior solo si fue seguido (menos de 1 s). Un salto mayor es
+                // tiempo con la pantalla apagada o la app atrás, del que no hay niveles.
+                long gap=elapsed-levelsLast;if(levelsLast>=0&&gap>0&&gap<1000)levelsMs+=gap;levelsLast=elapsed;
+            }
             int marks=RecorderService.marksCount();if(marks!=shownMarks){boolean added=marks>shownMarks;shownMarks=marks;if(added)wave.mark();renderMarks(added);}
             String t=RecorderService.activeTitle;if(!Objects.equals(t,shownTitle)){shownTitle=t;renderRecTitle(t);}
             if(recPill.getVisibility()==View.VISIBLE){setText(pillTime,Recording.time(elapsed)+(paused?" · En pausa":" · Grabando"));pillDot.setAlpha(paused?1f:beat);}
@@ -467,6 +494,8 @@ public class MainActivity extends Screen {
         shownActive=active;
         record.setRecording(active,animate);record.setContentDescription(active?"Detener y guardar":"Grabar");
         if(active!=was||!animate)swapLayers(active,animate);
+        // Solo cuando el cambio pasa a la vista (no al volver a la app a mitad de una grabación).
+        if(active!=was&&animate&&!showLibrary)moveReaderFocus(active);
         // En pausa, «Reanudar» se destaca (píldora blanca); la onda se congela atenuada y el tiempo parpadea.
         pause.label.setTextSize(15);pause.setText(paused?"Reanudar":"Pausa");pause.setIcon(paused?R.drawable.ic_play:R.drawable.ic_pause);pause.setContentDescription(paused?"Reanudar grabación":"Pausar");
         pause.setColors(paused?p.brandDeep:p.onVivid,paused?p.onVivid:p.glassOnVivid);
@@ -476,7 +505,7 @@ public class MainActivity extends Screen {
         if(active&&!was){
             shownMarks=RecorderService.marksCount();shownTitle=null;renderRecTitle(null);renderMarks(false);
             // Los niveles son de ESTA grabación: al volver a la app a mitad de una grabación se conservan.
-            if(!Objects.equals(levelsId,RecorderService.activeId)){levels.clear();levelsId=RecorderService.activeId;}
+            if(!Objects.equals(levelsId,RecorderService.activeId)){levels.clear();levelsMs=0;levelsLast=-1;levelsId=RecorderService.activeId;}
         }
         renderHint(paused);
         setNavHidden(active&&!showLibrary);nav.badge(0,active);renderPill();
@@ -493,18 +522,37 @@ public class MainActivity extends Screen {
         in.setAlpha(0f);in.setTranslationY(ui.dp(S4));in.animate().alpha(1f).translationY(0f).setStartDelay(MOTION_FAST).setDuration(MOTION_SLOW).setInterpolator(EMPHASIZED_DECELERATE).start();
         out.animate().alpha(0f).translationY(-ui.dp(S2)).setStartDelay(0).setDuration(MOTION_BASE).setInterpolator(EMPHASIZED_ACCELERATE).withEndAction(()->{out.setVisibility(View.INVISIBLE);out.setAlpha(1f);out.setTranslationY(0f);}).start();
     }
+    /**
+     * Lector de pantalla: al cambiar de composición, la capa que sale queda oculta para accesibilidad y el foco que estaba
+     * en «Grabar» (o en «Detener») se pierde; además la región en vivo no avisa, porque «Grabando» ya era su texto. En 0.6
+     * era el mismo botón y el estado se anunciaba solo. Aquí el foco pasa al control equivalente de la capa nueva y, al
+     * empezar, se dice «Grabando» (después del foco, para que TalkBack no lo corte al leer el botón).
+     * Se espera al fundido: con alfa 0 la capa aún no cuenta como visible. Al detener se espera igual sin animaciones y se
+     * mira el foco de la ventana: si se abrió «Nombra esta grabación», el foco es de la hoja. Sin lector, no hace nada.
+     */
+    private void moveReaderFocus(boolean active){
+        handler.postDelayed(()->{
+            if(active!=shownActive||showLibrary||!homePanel.hasWindowFocus())return;
+            (active?stop:record).performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS,null);
+            if(active&&!RecorderService.paused)stop.announceForAccessibility("Grabando");
+        },active&&!AppTheme.motion()?0:MOTION_FAST+MOTION_SLOW);
+    }
     /** Título en la píldora ✎ y en grande (con la última palabra destacada). Sin título: «Añadir título» y «Nueva grabación». */
     private void renderRecTitle(String t){
         titlePillText.setText(t==null?"Añadir título":t);titlePill.setContentDescription(t==null?"Añadir título a la grabación":"Título: "+t+". Toca para cambiarlo");
         String big=t==null?"Nueva grabación":t;bigTitle.setContentDescription(null);
         // Un título muy largo va sin recuadro: con «…» al final, la palabra destacada quedaría cortada.
         if(big.length()>48)bigTitle.setText(big);else ui.highlightLast(bigTitle,big);
+        // fitHome solo sube de nivel: lo compactado por un título largo se deshace aquí, así un título más corto (o la
+        // grabación siguiente) recupera el cronómetro grande y la línea de ayuda. fitHome nunca llama aquí: no hay bucle.
+        if(recCompact!=0){recCompact=0;applyRecCompact();}
         requestFit();
     }
+    /** Línea de ayuda al grabar. Sin marcas también explica la ★ (en 0.6 llevaba el rótulo «Marcar»; ahora es solo un ícono). */
     private void renderHint(boolean paused){
         String text=paused?"En pausa · toca Reanudar para seguir o Detener para guardar."
             :shownMarks>0?shownMarks+(shownMarks==1?" momento ★":" momentos ★")+" · mantén ★ para anotar una palabra."
-            :"Puedes bloquear el teléfono: la grabación sigue.";
+            :"Puedes bloquear el teléfono: la grabación sigue. Toca ★ para marcar un momento.";
         setText(hint,text);
     }
     private void renderMarks(boolean pop){
@@ -557,8 +605,11 @@ public class MainActivity extends Screen {
      */
     private void afterSave(String id){
         Recording r=FilesStore.recording(this,id);if(r==null)return;Settings settings=new Settings(this);
-        // La onda chica sale de lo que se dibujó en vivo (reducida a ~40 barras), sin volver a leer el audio.
-        float[] bars=levels.bars(40);levels.clear();levelsId=null;
+        // La onda chica sale de lo que se dibujó en vivo (reducida a ~40 barras), sin volver a leer el audio. Solo si esos
+        // niveles cubren la grabación (falta a lo más 1 s o un 10 %): si bloqueaste el teléfono o saliste de la app, lo
+        // juntado es de un tramo y estirarlo sobre todo el audio mostraría una onda que no es la que suena. Ahí va plana.
+        boolean whole=r.duration-levelsMs<=Math.max(1000,r.duration/10);
+        float[] bars=whole?levels.bars(40):new float[0];levels.clear();levelsMs=0;levelsLast=-1;levelsId=null;
         if(!settings.askTitle()){toast("Guardado en Biblioteca · "+Recording.time(r.duration));return;}
         boolean auto=settings.automatic()&&settings.hasKey();int marks=0;try{marks=Marks.list(this,r.id).length();}catch(RuntimeException ignored){}
         String prefix="",rest=r.title==null?"":r.title;
@@ -688,10 +739,14 @@ public class MainActivity extends Screen {
     }
     /** Siguiente paso si Next no respondió (misma lógica: revisar → guardar → actualizar → guardada). */
     private static Next.Step derivedStep(Item i){if(i.toReview())return Next.Step.REVIEW;if(!i.inbox)return Next.Step.CHOOSE_FOLDER;if(i.savedAt==0)return Next.Step.SAVE;if(i.outdated)return Next.Step.UPDATE;return Next.Step.SAVED;}
-    /** Un solo botón: se reconstruye solo si cambia el paso (así no parpadea con cada actualización). */
+    /**
+     * Un solo botón: se reconstruye solo si cambia el paso (así no parpadea con cada actualización). El primero llega con
+     * la lectura del disco, a veces después de que fitHome ya midió: con letra grande mide más que los 48 dp reservados,
+     * así que se vuelve a medir si todo cabe (si no, la tarjeta crece y aplasta «Importar audio»).
+     */
     private void lastAction(String label,int icon,Ui.Style style,View.OnClickListener click){
         String key=label+"|"+icon+"|"+style;
-        if(lastButton==null||!key.equals(lastKey)){lastKey=key;lastActions.removeAllViews();lastButton=ui.button(label,icon,style,click);lastButton.setMinimumHeight(ui.dp(48));lastButton.label.setSingleLine(true);lastButton.label.setEllipsize(TextUtils.TruncateAt.END);lastActions.addView(lastButton,Ui.fill());}
+        if(lastButton==null||!key.equals(lastKey)){lastKey=key;lastActions.removeAllViews();lastButton=ui.button(label,icon,style,click);lastButton.setMinimumHeight(ui.dp(48));lastButton.label.setSingleLine(true);lastButton.label.setEllipsize(TextUtils.TruncateAt.END);lastActions.addView(lastButton,Ui.fill());requestFit();}
         else{lastButton.setOnClickListener(click);if(!savingInbox&&!label.contentEquals(lastButton.label.getText()))lastButton.setText(label);}
         lastButton.setEnabled(!savingInbox);
     }
@@ -739,9 +794,12 @@ public class MainActivity extends Screen {
         pillDot=new View(this);pillDot.setBackground(oval(p.record));recPill.addView(pillDot,new LinearLayout.LayoutParams(ui.dp(10),ui.dp(10)));recPill.addView(ui.space(S3));
         pillTime=Ui.tabular(ui.oneLine(ui.text("00:00",Type.LABEL_LARGE,p.onInk)));pillTime.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);recPill.addView(pillTime,new LinearLayout.LayoutParams(0,-2,1));
         // «Detener»: píldora translúcida dentro de la cápsula (36 dp visibles, 48 dp para tocar).
-        TextView stopPill=ui.text("Detener",Type.LABEL_LARGE,p.onInk);stopPill.setGravity(Gravity.CENTER);stopPill.setMinHeight(ui.dp(48));stopPill.setMinWidth(ui.dp(48));stopPill.setPadding(ui.dp(S4),0,ui.dp(S4),0);
+        TextView stopPill=ui.text("Detener",Type.LABEL_LARGE,p.onInk);stopPill.setGravity(Gravity.CENTER);stopPill.setMinHeight(ui.dp(48));stopPill.setMinWidth(ui.dp(48));
         Drawable square=getDrawable(R.drawable.ic_stop).mutate();square.setTint(p.onInk);square.setBounds(0,0,ui.dp(16),ui.dp(16));stopPill.setCompoundDrawablesRelative(square,null,null,null);stopPill.setCompoundDrawablePadding(ui.dp(6));
         int inset=ui.dp(6);stopPill.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.stateLayer(p.onInk)),new InsetDrawable(shape(this,withAlpha(p.onInk,0x29),R_FULL),0,inset,0,inset),new InsetDrawable(shape(this,0xFF000000,R_FULL),0,inset,0,inset)));
+        // El relleno va DESPUÉS del fondo (igual que con pill()): el InsetDrawable trae su propio relleno y setBackground
+        // reemplaza el que hubiera; antes los lados quedaban en 0 (el ■ y la «r» pegados al borde redondeado).
+        stopPill.setPadding(ui.dp(S4),0,ui.dp(S4),0);
         stopPill.setClickable(true);stopPill.setFocusable(true);stopPill.setAccessibilityDelegate(Ui.buttonRole());stopPill.setContentDescription("Detener y guardar la grabación");
         stopPill.setOnClickListener(v->{if(RecorderService.activeId!=null)onRecordTap(v);});recPill.addView(stopPill);
         recPill.setClickable(true);recPill.setFocusable(true);recPill.setAccessibilityDelegate(Ui.buttonRole());recPill.setContentDescription("Grabación en curso. Toca para ir a Grabar");recPill.setOnClickListener(v->section(false));
