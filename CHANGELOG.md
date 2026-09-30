@@ -1,5 +1,45 @@
 # Historial de versiones
 
+## 0.7.0 — 2026-09-30 · «Verbapp: nueva cara, el mismo cerebro»
+
+La app pasa a llamarse **Verbapp** («las palabras vuelan, lo escrito permanece»; lema: «Tus palabras, para siempre»). Esta versión **solo cambia la interfaz**: grabar, transcribir, voces, notas, 0-Inbox y todo lo demás funciona igual. Diseño en `docs/diseno/PROPUESTA-0.7.md`, basado en la referencia que eligió el usuario (`docs/diseno/referencias/`).
+
+**Identidad nueva: «Bosque de vidrio»**
+- **Verde de marca** (`#2F6B58`) con fondo en degradado de blanco a verde y una textura de puntitos arriba. Es **intenso** en Grabar y **suave** en listas y documentos.
+- **Tarjetas de vidrio:** blanco translúcido con borde fino y esquinas de 24 dp.
+- **Botón principal en tinta** (negro verdoso) y secundario en gris suave, como «Guardar / Cancelar» de la referencia.
+- **Letra Outfit** (geométrica, licencia OFL) en títulos, botones, números y el cronómetro. El texto largo sigue en Roboto, porque se lee mejor. Los números que cambian usan cifras de ancho fijo.
+- **Palabra destacada:** la última palabra de los títulos grandes va sobre un recuadro menta.
+- **Ícono nuevo:** barras de onda blancas y un destello menta sobre verde. Las notificaciones salen en verde.
+- **Barra de navegación flotante:** una cápsula de vidrio donde la pestaña activa se abre como píldora negra con su nombre.
+- **Modo oscuro «bosque de noche»**, con los mismos degradados.
+- Se retira «Colores de tu fondo de pantalla» (Material You): la identidad verde es parte de la app.
+
+**Pantallas**
+- **Grabar en reposo:**
+  - saludo según la hora con tu nombre (de «Mi voz»);
+  - micrófono verde con halo que respira entre ondas;
+  - «Importar audio» como píldora;
+  - «Última grabación» con su siguiente paso;
+  - **«Tu semana»**: grabaciones, tiempo grabado y notas de los últimos 7 días.
+  - El estado (clave, transcribiendo, error, por revisar) va en un botón redondo arriba y en una píldora bajo el saludo.
+- **Grabando, a pantalla completa:**
+  - título grande con la palabra destacada;
+  - «● Grabando»;
+  - **cronómetro gigante**;
+  - onda blanca que nace en un cabezal, sobre el verde;
+  - píldoras de vidrio [■ Detener] [❚❚ Pausa] y ★ con contador.
+- **«Nombra esta grabación»:** hoja con **mini reproductor** para escuchar lo recién grabado antes de ponerle nombre, y los botones [Listo] · [Ver grabación].
+- **Biblioteca, Detalle, Ajustes, Importar y todas las hojas** con la nueva estética:
+  - en el Detalle, un reproductor flotante y una barra de cuánto habló cada persona;
+  - en Ajustes, una tarjeta con la marca y el tema elegido con vistas previas;
+  - un menú de acciones con accesos rápidos;
+  - hojas con el fondo desenfocado (Android 12+).
+- Pantallas de borde a borde: el degradado pasa por detrás de las barras del sistema.
+
+**Para la próxima versión**
+- Investigación verificada para transcribir y armar notas con **una sola key de OpenRouter**, con una lista de modelos que se actualiza sola: `docs/PLAN-openrouter.md`.
+
 ## 0.6.0 — 2026-09-29 · «Del botón rojo a tu segundo cerebro»
 
 Rediseño de la experiencia basado en el uso real: 999 acciones registradas, una auditoría de cada pantalla y apps de referencia. Detalle en `docs/diseno/PROPUESTA-0.6.md`; contratos técnicos en `docs/diseno/SPEC-0.6.md`.
