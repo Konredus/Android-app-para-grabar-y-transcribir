@@ -7,34 +7,49 @@ import android.view.View;
 
 /**
  * Selector de tramo con dos manijas (inicio / final) para recortar un audio sin escribir segundos.
- * Manijas en el color de acción, con un halo mientras se arrastran; todo sale de los roles de AppTheme (modo oscuro incluido).
- * Los campos numéricos de la pantalla siguen disponibles para ajuste preciso y lectores de pantalla.
+ * 0.7.0 (Verbapp): el riel es una regla de marcas finas en gris (p.waveIdle); el tramo elegido se vuelve verde de marca,
+ * más alto y sobre una banda menta. Las manijas son píldoras verticales verdes con borde claro y un halo mientras se
+ * arrastran. Las marcas son parejas, una regla de tiempo: no dibujan el audio (no inventan actividad).
+ * Todo sale de los roles de AppTheme (modo oscuro incluido). Los campos numéricos de la pantalla siguen disponibles para
+ * el ajuste preciso y para los lectores de pantalla.
  */
 final class RangeView extends View {
     interface Listener{void changed(long from,long to);}
-    private final Paint track=new Paint(Paint.ANTI_ALIAS_FLAG),selected=new Paint(Paint.ANTI_ALIAS_FLAG),thumb=new Paint(Paint.ANTI_ALIAS_FLAG),border=new Paint(Paint.ANTI_ALIAS_FLAG),halo=new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mark=new Paint(Paint.ANTI_ALIAS_FLAG),band=new Paint(Paint.ANTI_ALIAS_FLAG),thumb=new Paint(Paint.ANTI_ALIAS_FLAG),border=new Paint(Paint.ANTI_ALIAS_FLAG),halo=new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final int idle,selected;
     private long duration=1,from,to=1;private int dragging=-1;private Listener listener;
     static final long MIN_GAP=500;
 
     RangeView(Context c,AppTheme.Palette p){
-        super(c);track.setColor(p.surfaceContainerHighest);selected.setColor(p.primary);thumb.setColor(p.primary);
-        border.setStyle(Paint.Style.STROKE);border.setStrokeWidth(dp(2.5f));border.setColor(p.card);
-        halo.setColor(p.primary);halo.setAlpha(0x33);
+        super(c);idle=p.waveIdle;selected=p.brand;
+        band.setColor(p.primaryContainer);thumb.setColor(p.brand);
+        border.setStyle(Paint.Style.STROKE);border.setStrokeWidth(dp(2.5f));border.setColor(p.surfaceContainerLowest);
+        halo.setColor(p.brand);halo.setAlpha(0x33);
         setMinimumHeight((int)dp(48));
     }
     void setListener(Listener l){listener=l;}
     void set(long duration,long from,long to){this.duration=Math.max(1,duration);this.from=clamp(from,0,this.duration);this.to=clamp(to,this.from,this.duration);describe();invalidate();}
-    private float pad(){return dp(16);}
+    /** Margen a cada lado: deja espacio para el halo de la manija en los extremos. */
+    private float pad(){return dp(20);}
     private float x(long ms){return pad()+(getWidth()-2*pad())*ms/(float)duration;}
     private long ms(float x){return clamp((long)((x-pad())/(getWidth()-2*pad())*duration),0,duration);}
     private static long clamp(long v,long lo,long hi){return Math.max(lo,Math.min(hi,v));}
     @Override protected void onDraw(Canvas canvas){
-        float mid=getHeight()/2f,h=dp(6);
-        canvas.drawRoundRect(pad(),mid-h/2,getWidth()-pad(),mid+h/2,h/2,h/2,track);
-        canvas.drawRoundRect(x(from),mid-h/2,x(to),mid+h/2,h/2,h/2,selected);
-        drawThumb(canvas,x(from),mid,dragging==0);drawThumb(canvas,x(to),mid,dragging==1);
+        float mid=getHeight()/2f,a=x(from),b=x(to),w=dp(2),step=dp(5);
+        // Banda menta detrás del tramo elegido.
+        float bh=dp(30);canvas.drawRoundRect(a,mid-bh/2f,b,mid+bh/2f,dp(10),dp(10),band);
+        // Regla de marcas: grises fuera del tramo; verdes y más altas dentro.
+        for(float x=pad();x<=getWidth()-pad()+0.5f;x+=step){
+            boolean in=x>=a&&x<=b;float h=in?dp(16):dp(10);
+            mark.setColor(in?selected:idle);canvas.drawRoundRect(x-w/2f,mid-h/2f,x+w/2f,mid+h/2f,w/2f,w/2f,mark);
+        }
+        drawThumb(canvas,a,mid,dragging==0);drawThumb(canvas,b,mid,dragging==1);
     }
-    private void drawThumb(Canvas canvas,float cx,float cy,boolean active){if(active)canvas.drawCircle(cx,cy,dp(20),halo);canvas.drawCircle(cx,cy,dp(11),thumb);canvas.drawCircle(cx,cy,dp(11),border);}
+    /** Manija: píldora vertical verde con borde claro; mientras se arrastra, un halo la agranda (más fácil de ver bajo el dedo). */
+    private void drawThumb(Canvas canvas,float cx,float cy,boolean active){
+        if(active)canvas.drawCircle(cx,cy,dp(20),halo);
+        float hw=dp(5),hh=dp(16);canvas.drawRoundRect(cx-hw,cy-hh,cx+hw,cy+hh,hw,hw,thumb);canvas.drawRoundRect(cx-hw,cy-hh,cx+hw,cy+hh,hw,hw,border);
+    }
     @Override public boolean onTouchEvent(MotionEvent e){
         float ex=e.getX();
         switch(e.getActionMasked()){
