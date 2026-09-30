@@ -2,6 +2,10 @@ package cl.vozlocal.app;
 
 import android.content.Context;
 import android.content.pm.PackageInfo;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.view.*;
 import android.widget.*;
@@ -18,6 +22,7 @@ import static cl.vozlocal.app.AppTheme.*;
  *   nunca en la primera instalación, donde ya está la bienvenida.
  * - showAll: historial (la más nueva arriba), cada versión con su fecha y plegable.
  * Convención de cada punto: «Titular: detalle.» El titular va destacado y el detalle debajo.
+ * 0.7.0 (Verbapp): titulares en Outfit, viñeta ✦ verde (el destello del logo) y la versión en una píldora.
  */
 final class Novedades {
     private Novedades(){}
@@ -80,7 +85,8 @@ final class Novedades {
             Entry e=entry(s,versionName(s));
             settings.setLastSeenVersion(code); // antes de mostrar: nunca dos veces, aunque Android cierre la app
             if(fresh||e==null||e.items.isEmpty())return;
-            Sheet sheet=s.sheet("Novedades de la "+e.version,e.title.isEmpty()?null:e.title+".");
+            // 0.7.0: sin título de hoja; arriba va la píldora menta «Novedades de la X» y el titular grande en Outfit.
+            Sheet sheet=s.sheet(null,null);sheet.add(hero(s,e));
             for(String item:e.items)sheet.add(bullet(s,item));
             sheet.primary("Entendido",()->{}).secondary("Ver todas las versiones",()->showAll(s)).show();
             Diagnostics.event("ui_action",null,"screen","Novedades","action","shown","result",code);
@@ -104,40 +110,67 @@ final class Novedades {
         sheet.secondary("Cerrar",null).show();
     }
 
-    /** Bloque plegable de una versión: cabecera tocable (versión, fecha, «Actual») y sus puntos. */
+    /**
+     * Cabecera de las novedades de una versión (0.7.0): píldora menta con ✦ «Novedades de la X» y, debajo, el titular grande
+     * en Outfit con su última palabra destacada en menta (como los títulos de la referencia). El titular es el encabezado.
+     */
+    private static View hero(Screen s,Entry e){
+        Ui ui=s.ui;Palette p=s.p;
+        LinearLayout box=ui.column();box.setPadding(0,0,0,ui.dp(S2));
+        TextView pill=ui.chip("Novedades de la "+e.version,p.onPrimaryContainer,p.primaryContainer);Ui.tabular(pill);pill.setPadding(ui.dp(S3),ui.dp(6),ui.dp(S4),ui.dp(6));
+        Drawable spark=s.getDrawable(R.drawable.ic_sparkle).mutate();spark.setTint(p.primary);spark.setBounds(0,0,ui.dp(16),ui.dp(16));pill.setCompoundDrawablesRelative(spark,null,null,null);pill.setCompoundDrawablePadding(ui.dp(6));
+        if(e.title.isEmpty()){if(Build.VERSION.SDK_INT>=28)pill.setAccessibilityHeading(true);}
+        box.addView(pill,Ui.wrap());
+        if(!e.title.isEmpty()){TextView t=ui.heading("",Type.HEADLINE_SMALL);ui.highlightLast(t,e.title);t.setPadding(0,ui.dp(S3),0,ui.dp(S1));box.addView(t,Ui.fill());}
+        return box;
+    }
+
+    /**
+     * Bloque plegable de una versión (0.7.0): la versión en una píldora (de tinta si es la que usas, con «Actual» en menta),
+     * el titular en Outfit y la fecha; al abrirlo, sus puntos. La flecha gira al plegar y desplegar.
+     */
     private static View versionBlock(Screen s,Entry e,boolean isCurrent,boolean open){
         Ui ui=s.ui;Palette p=s.p;
         LinearLayout block=ui.column();
-        LinearLayout head=ui.row();head.setMinimumHeight(ui.dp(64));head.setPadding(ui.dp(S6),ui.dp(S2),ui.dp(S5),ui.dp(S2));
+        LinearLayout head=ui.row();head.setMinimumHeight(ui.dp(72));head.setPadding(ui.dp(S6),ui.dp(S3),ui.dp(S5),ui.dp(S3));
         LinearLayout texts=ui.column();
-        LinearLayout line=ui.row();line.addView(ui.text("Versión "+e.version,Type.TITLE_MEDIUM,p.onSurface));
-        if(isCurrent){line.addView(ui.space(S2));TextView chip=ui.chip("Actual",p.onSecondaryContainer,p.secondaryContainer);AppTheme.type(chip,Type.LABEL_MEDIUM);chip.setPadding(ui.dp(S2),ui.dp(2),ui.dp(S2),ui.dp(2));line.addView(chip);}
-        texts.addView(line);
+        LinearLayout line=ui.row();
+        TextView version=Ui.tabular(ui.text(e.version,Type.LABEL_LARGE,isCurrent?p.onInk:p.onSurface));version.setPadding(ui.dp(S3),ui.dp(S1),ui.dp(S3),ui.dp(S1));
+        version.setBackground(isCurrent?shape(s,p.ink,R_FULL):outline(s,p.dark?p.surfaceContainerHigh:p.surfaceContainerLow,p.outlineVariant,R_FULL,false));line.addView(version,Ui.wrap());
+        if(isCurrent){TextView chip=ui.chip("Actual",p.onPrimaryContainer,p.primaryContainer);AppTheme.type(chip,Type.LABEL_MEDIUM);chip.setPadding(ui.dp(S2),ui.dp(S1),ui.dp(S2),ui.dp(S1));LinearLayout.LayoutParams cp=Ui.wrap();cp.setMarginStart(ui.dp(S2));line.addView(chip,cp);}
+        texts.addView(line,Ui.wrap());
+        if(!e.title.isEmpty()){TextView t=ui.text(e.title,Type.TITLE_MEDIUM,p.onSurface);t.setPadding(0,ui.dp(S2),0,0);texts.addView(t);}
         String date=date(e.date);
-        if(!date.isEmpty()){TextView d=ui.text(date,Type.BODY_MEDIUM,p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);texts.addView(d);}
+        if(!date.isEmpty()){TextView d=ui.text(date,Type.BODY_SMALL,p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);texts.addView(d);}
         head.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
-        ImageView arrow=ui.icon(R.drawable.ic_arrow_back,p.onSurfaceVariant,24);head.addView(arrow);
+        FrameLayout arrow=ui.tile(R.drawable.ic_chevron_down,p.onSurfaceVariant,p.dark?p.surfaceContainerHigh:p.surfaceContainerLow,32,20);
+        LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(ui.dp(32),ui.dp(32));ap.setMarginStart(ui.dp(S3));head.addView(arrow,ap);
         block.addView(head,Ui.fill());
 
-        LinearLayout body=ui.column();body.setPadding(ui.dp(S6),0,ui.dp(S6),ui.dp(S3));
-        if(!e.title.isEmpty()){TextView t=ui.text(e.title+".",Type.BODY_MEDIUM,p.onSurfaceVariant);t.setPadding(0,0,0,ui.dp(S1));body.addView(t);}
+        LinearLayout body=ui.column();body.setPadding(ui.dp(S6),0,ui.dp(S6),ui.dp(S4));
         for(String item:e.items)body.addView(bullet(s,item),Ui.fill());
         block.addView(body,Ui.fill());
 
-        String label="Versión "+e.version+(date.isEmpty()?"":", "+date)+(isCurrent?", la que usas":"");
+        String label="Versión "+e.version+(e.title.isEmpty()?"":", "+e.title)+(date.isEmpty()?"":", "+date)+(isCurrent?", la que usas":"");
         head.setBackground(ui.ripple(null,0));head.setClickable(true);head.setFocusable(true);head.setAccessibilityDelegate(Ui.buttonRole());
-        Runnable apply=()->{boolean shown=body.getVisibility()==View.VISIBLE;arrow.setRotation(shown?90:270);head.setContentDescription(label+(shown?", abierta. Toca para plegar":", plegada. Toca para ver sus novedades"));};
-        body.setVisibility(open?View.VISIBLE:View.GONE);apply.run();
-        head.setOnClickListener(v->{boolean show=body.getVisibility()!=View.VISIBLE;body.setVisibility(show?View.VISIBLE:View.GONE);if(show)ui.fadeIn(body);apply.run();Ui.haptic(v,Ui.Haptic.TICK);});
+        // Flecha ▾ plegada y ▴ abierta; al tocar gira (sin animaciones del sistema, cambia de golpe).
+        Runnable apply=()->{boolean shown=body.getVisibility()==View.VISIBLE;head.setContentDescription(label+(shown?", abierta. Toca para plegar":", plegada. Toca para ver sus novedades"));};
+        body.setVisibility(open?View.VISIBLE:View.GONE);arrow.setRotation(open?180:0);apply.run();
+        head.setOnClickListener(v->{boolean show=body.getVisibility()!=View.VISIBLE;body.setVisibility(show?View.VISIBLE:View.GONE);if(show)ui.fadeIn(body);
+            arrow.animate().cancel();if(AppTheme.motion())arrow.animate().rotation(show?180:0).setStartDelay(0).setDuration(MOTION_BASE).setInterpolator(EMPHASIZED).start();else arrow.setRotation(show?180:0);
+            apply.run();Ui.haptic(v,Ui.Haptic.TICK);});
         return block;
     }
 
-    /** Un punto: marca de color + titular destacado + detalle (o un solo texto si no sigue la convención «Titular: detalle»). */
+    /**
+     * Un punto: viñeta ✦ verde (el destello del logo) + titular destacado en Outfit + detalle (o un solo texto si no sigue
+     * la convención «Titular: detalle»).
+     */
     private static View bullet(Screen s,String item){
         Ui ui=s.ui;Palette p=s.p;
         LinearLayout row=ui.row();row.setGravity(Gravity.TOP);row.setPadding(0,ui.dp(S2),0,ui.dp(S2));
-        View dot=new View(s);dot.setBackground(oval(p.primary));dot.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LinearLayout.LayoutParams dp=new LinearLayout.LayoutParams(ui.dp(8),ui.dp(8));dp.topMargin=ui.dp(8);dp.setMarginEnd(ui.dp(S3));row.addView(dot,dp);
+        // La viñeta de 16 dp queda centrada en la primera línea (unos 24 dp de alto).
+        LinearLayout.LayoutParams dp=new LinearLayout.LayoutParams(ui.dp(16),ui.dp(16));dp.topMargin=ui.dp(S1);dp.setMarginEnd(ui.dp(S3));row.addView(new Spark(s,p.primary),dp);
         LinearLayout texts=ui.column();int cut=headline(item);
         if(cut>0){
             texts.addView(ui.text(item.substring(0,cut).trim(),Type.TITLE_MEDIUM,p.onSurface));
@@ -145,6 +178,12 @@ final class Novedades {
         }else texts.addView(ui.text(item,Type.BODY_LARGE,p.onSurface));
         row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
         return row;
+    }
+    /** Viñeta ✦: el destello de cuatro puntas del logo (Glass.sparkle), en verde. Es solo dibujo. */
+    private static final class Spark extends View {
+        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);private final Path path=new Path();
+        Spark(Context c,int color){super(c);paint.setColor(color);setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
+        @Override protected void onDraw(Canvas canvas){float w=getWidth(),h=getHeight();canvas.drawPath(Glass.sparkle(path,w/2f,h/2f,Math.min(w,h)*0.46f),paint);}
     }
     /** Posición de los «:» que cierran el titular, o -1 si el punto no tiene titular corto. */
     static int headline(String item){int i=item.indexOf(": ");return i>0&&i<=48?i:-1;}

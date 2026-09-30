@@ -1,7 +1,15 @@
 package cl.vozlocal.app;
 
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.app.job.JobScheduler;
 import android.content.*;
+import android.graphics.Canvas;
+import android.graphics.LinearGradient;
+import android.graphics.Paint;
+import android.graphics.RectF;
+import android.graphics.Shader;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.*;
@@ -19,6 +27,10 @@ import static cl.vozlocal.app.AppTheme.*;
  * Ajustes en el orden de tu recorrido (0.6.0): «Tu flujo» (0-Inbox, nota, automatización, voces conocidas) → servicio de
  * transcripción → energía y red → copias → apariencia → ayuda. Cada fila muestra su valor a la derecha y a lo más
  * una línea de apoyo; las explicaciones largas viven en «Más información». Ver docs/diseno/PROPUESTA-0.6.md (#3).
+ *
+ * 0.7.0 (Verbapp, PROPUESTA-0.7 §3.6): fondo suave, tarjeta de marca y estado (logo, lema y «¿está funcionando?»),
+ * grupos de vidrio con cada ícono en un círculo menta, el tema elegido con miniaturas y un pie con la marca.
+ * Se quitó «Colores de tu fondo de pantalla» (Verbapp tiene su propio verde); todo lo demás hace lo mismo que en 0.6.
  *
  * Extras del intent: focusKey (pedir la clave si falta), voice (grabar tu voz, o ver las voces conocidas, y volver), back (Atrás vuelve a
  * la pantalla anterior), inbox (elegir la carpeta de guardado rápido y volver) y noteAi (abrir «IA de la nota»).
@@ -67,20 +79,20 @@ public class SettingsActivity extends Screen {
 
         // 1. Tu flujo: lo que pasa con cada grabación, de principio a fin.
         page.addView(ui.section("Tu flujo"));LinearLayout flow=ui.group();page.addView(flow,Ui.fill());
-        saveRow=ui.listRow(R.drawable.ic_inbox,"Guardado rápido","Donde guarda el botón de cada grabación",inboxValue());saveRow.onClick(v->saveSheet());ui.addRow(flow,saveRow);
+        saveRow=row(R.drawable.ic_inbox,"Guardado rápido","Donde guarda el botón de cada grabación",inboxValue());saveRow.onClick(v->saveSheet());add(flow,saveRow);
         View[] note={null};
-        note[0]=ui.switchRow(R.drawable.ic_doc,"Nota para tu segundo cerebro",noteSubtitle(settings.noteAuto()),settings.noteAuto(),on->{
+        note[0]=toggleRow(R.drawable.ic_doc,"Nota para tu segundo cerebro",noteSubtitle(settings.noteAuto()),settings.noteAuto(),on->{
             settings.prefs.edit().putBoolean("noteAuto",on).apply();Diagnostics.event("setting_changed",null,"action","note_auto","result",on);
             subtitle(note[0],noteSubtitle(on));if(on&&!noteReady())page.post(this::noteMissingKey);});
-        ui.addRow(flow,note[0]);
-        Ui.Row noteAi=ui.listRow(R.drawable.ic_sparkle,"IA de la nota",noteReady()?null:noteMissing(),noteAiValue());noteAi.onClick(v->noteAiSheet());ui.addRow(flow,noteAi);
-        ui.addRow(flow,ui.switchRow(R.drawable.ic_bolt,"Transcribir automáticamente","Al guardar una grabación o importar un audio",settings.automatic(),on->{toggle("automatic",on);if(on&&Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},101);}));
-        ui.addRow(flow,ui.switchRow(R.drawable.ic_title,"Nombrar al terminar de grabar","Una hoja para poner el título y seguir",settings.askTitle(),on->toggle("askTitle",on)));
-        Ui.Row dates=ui.listRow(R.drawable.ic_edit,"Agregar fecha a las existentes","Para las grabaciones anteriores a esta opción",null);dates.onClick(v->offerDatesForExisting());
-        ui.addRow(flow,ui.switchRow(R.drawable.ic_calendar,"Fecha delante del nombre","Ej.: "+Recording.isoDate(System.currentTimeMillis())+" Reunión",settings.datePrefix(),on->{settings.prefs.edit().putBoolean("datePrefix",on).apply();Diagnostics.event("setting_changed",null,"action","date_prefix","result",on);showRow(dates,on);if(on)offerDatesForExisting();}));
-        ui.addRow(flow,dates);showRow(dates,settings.datePrefix());
+        add(flow,note[0]);
+        Ui.Row noteAi=row(R.drawable.ic_sparkle,"IA de la nota",noteReady()?null:noteMissing(),noteAiValue());noteAi.onClick(v->noteAiSheet());add(flow,noteAi);
+        add(flow,toggleRow(R.drawable.ic_bolt,"Transcribir automáticamente","Al guardar una grabación o importar un audio",settings.automatic(),on->{toggle("automatic",on);if(on&&Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},101);}));
+        add(flow,toggleRow(R.drawable.ic_title,"Nombrar al terminar de grabar","Una hoja para poner el título y seguir",settings.askTitle(),on->toggle("askTitle",on)));
+        Ui.Row dates=row(R.drawable.ic_edit,"Agregar fecha a las existentes","Para las grabaciones anteriores a esta opción",null);dates.onClick(v->offerDatesForExisting());
+        add(flow,toggleRow(R.drawable.ic_calendar,"Fecha delante del nombre","Ej.: "+Recording.isoDate(System.currentTimeMillis())+" Reunión",settings.datePrefix(),on->{settings.prefs.edit().putBoolean("datePrefix",on).apply();Diagnostics.event("setting_changed",null,"action","date_prefix","result",on);showRow(dates,on);if(on)offerDatesForExisting();}));
+        add(flow,dates);showRow(dates,settings.datePrefix());
         voiceRow=null;
-        if(openai&&settings.canSeparate()){voiceRow=ui.listRow(R.drawable.ic_voice,"Voces conocidas","Para reconocer a cada persona al separar voces",voiceValue());voiceRow.onClick(v->voiceSheet());ui.addRow(flow,voiceRow);}
+        if(openai&&settings.canSeparate()){voiceRow=row(R.drawable.ic_voice,"Voces conocidas","Para reconocer a cada persona al separar voces",voiceValue());voiceRow.onClick(v->voiceSheet());add(flow,voiceRow);}
         page.addView(more("Guarda la nota o el texto con un toque desde cada grabación.","Tu flujo",
             "Guardado rápido: la carpeta donde el botón de cada grabación deja la nota (.md) o el texto (.txt), por ejemplo tu 0-Inbox de Google Drive. Si después corriges voces o nombres, «Actualizar» reemplaza el mismo archivo, sin crear copias.\n\n"
             +"Nota para tu segundo cerebro: una IA arma un resumen con decisiones, tareas y frases clave a partir del texto de la transcripción (no se vuelve a enviar el audio). Automática, se arma al terminar cada transcripción; si la apagas, la pides con un toque desde la grabación. Revísala antes de guardarla: puede tener errores.\n\n"
@@ -88,13 +100,13 @@ public class SettingsActivity extends Screen {
 
         // 2. Servicio de transcripción: quién transcribe y con qué clave. El resultado de la comprobación queda en su fila.
         page.addView(ui.section("Servicio de transcripción"));LinearLayout api=ui.group();page.addView(api,Ui.fill());
-        ui.addRow(api,ui.listRow(R.drawable.ic_globe,"Proveedor",null,openai?"OpenAI":"Tu servidor").onClick(v->providerSheet()));
-        if(openai)ui.addRow(api,ui.listRow(R.drawable.ic_wave,"Modelo de texto",null,modelName(settings)).onClick(v->modelSheet()));
-        else{Ui.Row server=ui.listRow(R.drawable.ic_server,"Servidor y modelo",settings.prefs.getString("customBase","Sin configurar"),null);ui.oneLine(server.subtitle);ui.addRow(api,server.onClick(v->custom()));}
-        if(settings.canSeparate())ui.addRow(api,ui.listRow(R.drawable.ic_people,"Separar voces",null,SPEAKER_NAMES[Math.max(0,Arrays.asList(SPEAKER_MODES).indexOf(settings.speakersMode()))]).onClick(v->speakersSheet()));
-        ui.addRow(api,ui.listRow(R.drawable.ic_key,"Clave de API",null,settings.hasKey()?"Configurada":"Falta").onClick(v->keySheet()));
-        verifyRow=ui.listRow(R.drawable.ic_network_check,"Comprobar conexión",verifyText(),null);verifyRow.subtitle.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);verifyRow.onClick(v->verify());ui.addRow(api,verifyRow);paintVerify();
-        ui.addRow(api,ui.listRow(R.drawable.ic_translate,"Idioma del audio",null,settings.language().equals("es")?"Español":"Automático").onClick(v->
+        add(api,row(R.drawable.ic_globe,"Proveedor",null,openai?"OpenAI":"Tu servidor").onClick(v->providerSheet()));
+        if(openai)add(api,row(R.drawable.ic_wave,"Modelo de texto",null,modelName(settings)).onClick(v->modelSheet()));
+        else{Ui.Row server=row(R.drawable.ic_server,"Servidor y modelo",settings.prefs.getString("customBase","Sin configurar"),null);ui.oneLine(server.subtitle);add(api,server.onClick(v->custom()));}
+        if(settings.canSeparate())add(api,row(R.drawable.ic_people,"Separar voces",null,SPEAKER_NAMES[Math.max(0,Arrays.asList(SPEAKER_MODES).indexOf(settings.speakersMode()))]).onClick(v->speakersSheet()));
+        add(api,row(R.drawable.ic_key,"Clave de API",null,settings.hasKey()?"Configurada":"Falta").onClick(v->keySheet()));
+        verifyRow=row(R.drawable.ic_network_check,"Comprobar conexión",verifyText(),null);verifyRow.subtitle.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);verifyRow.onClick(v->verify());add(api,verifyRow);paintVerify();
+        add(api,row(R.drawable.ic_translate,"Idioma del audio",null,settings.language().equals("es")?"Español":"Automático").onClick(v->
             sheet("Idioma del audio","Indicar el idioma mejora la precisión.").choice("Español",null,settings.language().equals("es"),()->set("language","es"))
                 .choice("Detección automática","Para audios en otros idiomas o mezclados",!settings.language().equals("es"),()->set("language","")).show()));
         page.addView(openai
@@ -103,53 +115,73 @@ public class SettingsActivity extends Screen {
 
         // 3. Energía y red: cuándo se envía el audio.
         page.addView(ui.section("Energía y red"));LinearLayout energy=ui.group();page.addView(energy,Ui.fill());
-        ui.addRow(energy,ui.listRow(R.drawable.ic_wifi,"Red para enviar audio",null,settings.wifiOnly()?"Solo Wi-Fi":"Wi-Fi y datos").onClick(v->
+        add(energy,row(R.drawable.ic_wifi,"Red para enviar audio",null,settings.wifiOnly()?"Solo Wi-Fi":"Wi-Fi y datos").onClick(v->
             sheet("Red para enviar audio","Los audios pueden pesar varios MB.").choice("Solo Wi-Fi","O cualquier red no medida",settings.wifiOnly(),()->{settings.prefs.edit().putBoolean("wifi",true).apply();changed("wifi");})
                 .choice("Wi-Fi y datos móviles","Empieza antes, usa tu plan de datos",!settings.wifiOnly(),()->{settings.prefs.edit().putBoolean("wifi",false).apply();changed("wifi");}).show()));
-        ui.addRow(energy,ui.switchRow(R.drawable.ic_battery,"Solo mientras carga",null,settings.charging(),on->toggle("charging",on)));
-        batteryRow=ui.listRow(R.drawable.ic_battery,"Con la pantalla bloqueada",null,batteryValue());batteryRow.onClick(v->RecordingActions.allowBackground(this));ui.addRow(energy,batteryRow);
+        add(energy,toggleRow(R.drawable.ic_battery,"Solo mientras carga",null,settings.charging(),on->toggle("charging",on)));
+        batteryRow=row(R.drawable.ic_battery,"Con la pantalla bloqueada",null,batteryValue());batteryRow.onClick(v->RecordingActions.allowBackground(this));add(energy,batteryRow);
         page.addView(more("Aplica también cuando transcribes a mano.","Energía y red","Con batería baja, el trabajo espera. Android puede retrasarlo unos minutos.\n\nPara que transcriba con el teléfono bloqueado, permite a Verbapp usar batería en segundo plano («Con la pantalla bloqueada»). Solo la usa mientras transcribe."));
 
         // 4. Copias
         page.addView(ui.section("Copias"));LinearLayout storage=ui.group();page.addView(storage,Ui.fill());
-        folderRow=ui.listRow(R.drawable.ic_folder,"Carpeta de copias",null,"Desactivada");folderRow.onClick(v->folderSheet());ui.addRow(storage,folderRow);refreshFolder();
+        folderRow=row(R.drawable.ic_folder,"Carpeta de copias",null,"Desactivada");folderRow.onClick(v->folderSheet());add(storage,folderRow);refreshFolder();
         page.addView(more("Cada grabación se copia con su audio y su texto.","Carpeta de copias","Cada grabación se copia a esa carpeta con su audio, su información y su transcripción, y la copia se actualiza sola.\n\nPuedes elegir una carpeta del teléfono o de Google Drive (si tienes su app): en el selector, abre el menú ☰.\n\nBorrar una grabación en Verbapp no borra sus copias."));
 
-        // 5. Apariencia
-        String mode=AppTheme.appearance(this);String[] modes={"system","light","dark"},modeNames={"Automático","Claro","Oscuro"};
-        page.addView(ui.section("Apariencia"));LinearLayout look=ui.group();page.addView(look,Ui.fill());
-        ui.addRow(look,ui.listRow(R.drawable.ic_palette,"Tema",null,modeNames[Math.max(0,Arrays.asList(modes).indexOf(mode))]).onClick(v->{
-            Sheet s=sheet("Tema",null);for(int i=0;i<3;i++){int k=i;s.choice(modeNames[i],i==0?"Igual que el teléfono":null,modes[i].equals(mode),()->{settings.prefs.edit().putString("appearance",modes[k]).apply();Diagnostics.event("setting_changed",null,"action","appearance","result",k);recreate();});}s.show();}));
-        if(Build.VERSION.SDK_INT>=31){
-            View dynamic=ui.switchRow(R.drawable.ic_sparkle,"Colores de tu fondo de pantalla","Adapta la app a los colores de tu teléfono",AppTheme.dynamicColor(this),on->{settings.prefs.edit().putBoolean("dynamicColor",on).apply();Diagnostics.event("setting_changed",null,"action","dynamic_color","result",on);page.postDelayed(this::recreate,200);});
-            if(dynamic instanceof Ui.Row&&((Ui.Row)dynamic).subtitle.getParent() instanceof ViewGroup)((ViewGroup)((Ui.Row)dynamic).subtitle.getParent()).addView(palettePreview());
-            ui.addRow(look,dynamic);
-        }
+        // 5. Apariencia: el tema se elige mirando cómo queda. «Colores de tu fondo de pantalla» se quitó en 0.7.0: Verbapp
+        // tiene su propio verde (AppTheme.dynamicColor ya devuelve false) y la preferencia antigua queda guardada, sin leerse.
+        page.addView(ui.section("Apariencia"));page.addView(themePicker(),Ui.fill());
+        page.addView(ui.footnote("Automático usa el mismo tema que tu teléfono."));
 
         // 6. Ayuda y soporte
         page.addView(ui.section("Ayuda y soporte"));LinearLayout help=ui.group();page.addView(help,Ui.fill());
         String version=versionName();
-        ui.addRow(help,ui.listRow(R.drawable.ic_info,"Novedades y versiones",null,version).onClick(v->Novedades.showAll(this)));
-        ui.addRow(help,ui.listRow(R.drawable.ic_people,"Probar edición de voces","Un ejemplo que no usa tu clave",null).onClick(v->startActivity(new Intent(this,RecordingActivity.class).putExtra("demo",true))));
-        ui.addRow(help,ui.listRow(R.drawable.ic_lifebuoy,"Compartir informe de soporte","Sin claves, títulos, audio ni texto",null).onClick(v->report()));
-        ui.addRow(help,ui.listRow(R.drawable.ic_trash,"Borrar registros de diagnóstico",null,null).onClick(v->confirm("¿Borrar los registros locales?","Las grabaciones y transcripciones se conservan.","Borrar",true,()->{Diagnostics.clear(this);toast("Registros borrados");})));
+        Ui.Row news=row(R.drawable.ic_info,"Novedades y versiones",null,version).onClick(v->Novedades.showAll(this));versionPill(news.value);add(help,news);
+        add(help,row(R.drawable.ic_people,"Probar edición de voces","Un ejemplo que no usa tu clave",null).onClick(v->startActivity(new Intent(this,RecordingActivity.class).putExtra("demo",true))));
+        add(help,row(R.drawable.ic_lifebuoy,"Compartir informe de soporte","Sin claves, títulos, audio ni texto",null).onClick(v->report()));
+        add(help,row(R.drawable.ic_trash,"Borrar registros de diagnóstico",null,null).onClick(v->confirm("¿Borrar los registros locales?","Las grabaciones y transcripciones se conservan.","Borrar",true,()->{Diagnostics.clear(this);toast("Registros borrados");})));
         page.addView(ui.footnote("El registro técnico queda solo en este teléfono (máx. ~4 MB, 30 días) y se comparte únicamente si tú lo envías."));
-        TextView footer=ui.text("Verbapp "+version+" · Software libre · Licencia MIT",Type.BODY_MEDIUM,p.outline);footer.setGravity(Gravity.CENTER);footer.setPadding(0,ui.dp(S8),0,0);page.addView(footer,Ui.fill());
+        page.addView(footer(version),Ui.fill());
     }
 
-    /** Tarjeta de estado: responde «¿está funcionando?». Tonal si falta un paso o falló la última comprobación; neutra si todo está listo. */
+    /**
+     * Tarjeta de marca y estado (0.7.0). Arriba, el logo con el lema y unas ondas decorativas (las mismas barras grises que
+     * rodean el micrófono en Grabar); abajo, un panel que responde «¿está funcionando?», con las mismas acciones de 0.6:
+     * - listo: panel blanco con ✓ en verde de marca (no se toca: no hay nada que hacer);
+     * - falta un paso (la clave o la dirección del servidor): panel menta con una flecha de tinta, que lleva a configurarlo;
+     * - falló la última comprobación: panel en tono de error, que muestra qué pasó y permite reintentar.
+     * El panel va a 8 dp del borde con esquinas de 16 dp: concéntrico con la tarjeta (24 dp), como los datos de «Tu semana».
+     */
     private View statusCard(){
         // Servidor propio sin dirección: falta ese paso aunque la clave esté (sin dirección no se envía nada).
         boolean hasKey=settings.hasKey(),server=hasKey&&settings.needsServer(),failed=hasKey&&!server&&verifyFailed(),ready=hasKey&&!server&&!failed;
-        LinearLayout card=ui.card();card.setOrientation(LinearLayout.HORIZONTAL);card.setGravity(Gravity.CENTER_VERTICAL);
-        int fg=ready?p.onSurface:p.onSecondaryContainer,fg2=ready?p.onSurfaceVariant:p.onSecondaryContainer;
-        int icon=ready?R.drawable.ic_check:failed?R.drawable.ic_alert:server?R.drawable.ic_server:R.drawable.ic_key;
-        card.addView(ui.tile(icon,ready?p.onPrimaryContainer:p.onSecondaryContainer,ready?p.primaryContainer:p.surfaceContainerLowest,40,22));card.addView(ui.space(S4));
+        LinearLayout card=ui.card();card.setPadding(ui.dp(S2),ui.dp(S2),ui.dp(S2),ui.dp(S2));
+        LinearLayout head=ui.row();head.setPadding(ui.dp(S3),ui.dp(S3),ui.dp(S3),ui.dp(S4));
+        LinearLayout brand=ui.column();brand.addView(ui.brand(22),Ui.wrap());
+        TextView motto=ui.text("Tus palabras, para siempre",Type.ITEM,p.onSurfaceVariant);motto.setPadding(0,ui.dp(S1),0,0);brand.addView(motto,Ui.wrap());
+        head.addView(brand,Ui.wrap());
+        LinearLayout.LayoutParams wp=new LinearLayout.LayoutParams(0,ui.dp(40),1);wp.setMarginStart(ui.dp(S4));head.addView(new WaveDeco(this,p.waveIdle),wp);
+        card.addView(head,Ui.fill());
+
+        int icon=ready?R.drawable.ic_check:failed?R.drawable.ic_alert:server?R.drawable.ic_server:R.drawable.ic_key,panel,fg,fg2,dotFg,dotBg;
+        // Listo: blanco con alfa, el mismo panel de los datos de «Tu semana» (Ui.stat), un poco más claro que el vidrio de la tarjeta.
+        if(ready){panel=p.dark?p.glass:0xB3FFFFFF;fg=p.onSurface;fg2=p.onSurfaceVariant;dotFg=p.onBrand;dotBg=p.brand;}
+        else if(failed){panel=p.errorContainer;fg=fg2=p.onErrorContainer;dotFg=p.error;dotBg=p.surfaceContainerLowest;}
+        else{panel=p.primaryContainer;fg=fg2=p.onPrimaryContainer;dotFg=p.onPrimaryContainer;dotBg=p.surfaceContainerLowest;}
         String title=ready?"Listo para transcribir":failed?"No se pudo conectar":"Falta un paso para transcribir";
         String detail=ready?modelSummary(settings):failed?"Toca para ver qué pasó y reintentar":server?"Configura la dirección de tu servidor.":"Agrega tu clave de API. Grabar funciona igual sin ella.";
-        LinearLayout t=ui.column();t.addView(ui.text(title,Type.TITLE_MEDIUM,fg));TextView d=ui.text(detail,Type.BODY_MEDIUM,fg2);d.setPadding(0,ui.dp(2),0,0);t.addView(d);card.addView(t,new LinearLayout.LayoutParams(0,-2,1));
-        if(!ready){card.setBackground(ui.ripple(shape(this,p.secondaryContainer,R_CARD),R_CARD));card.setClickable(true);card.setAccessibilityDelegate(Ui.buttonRole());card.setContentDescription(title+". "+detail);
-            card.setOnClickListener(v->{if(failed)verifyError(settings.prefs.getString("verifyMsg",""));else if(server)custom();else keySheet();});}
+        LinearLayout status=ui.row();status.setMinimumHeight(ui.dp(72));status.setPadding(ui.dp(S3),ui.dp(S3),ui.dp(S3),ui.dp(S3));
+        status.addView(ui.tile(icon,dotFg,dotBg,40,22));status.addView(ui.space(S3));
+        LinearLayout t=ui.column();t.addView(ui.text(title,Type.TITLE_MEDIUM,fg));TextView d=ui.text(detail,Type.BODY_MEDIUM,fg2);d.setPadding(0,ui.dp(2),0,0);t.addView(d);status.addView(t,new LinearLayout.LayoutParams(0,-2,1));
+        GradientDrawable fill=shape(this,panel,R_CONTROL);
+        if(ready)status.setBackground(fill);
+        else{
+            // Flecha de tinta: la llamada a configurar. El panel entero es el botón, como la tarjeta de 0.6.
+            FrameLayout go=ui.tile(R.drawable.ic_arrow_back,p.onInk,p.ink,36,20);go.getChildAt(0).setRotation(180);
+            LinearLayout.LayoutParams gp=new LinearLayout.LayoutParams(ui.dp(36),ui.dp(36));gp.setMarginStart(ui.dp(S3));status.addView(go,gp);
+            status.setBackground(ui.ripple(fill,R_CONTROL));status.setClickable(true);status.setFocusable(true);status.setAccessibilityDelegate(Ui.buttonRole());status.setContentDescription(title+". "+detail);
+            status.setOnClickListener(v->{if(failed)verifyError(settings.prefs.getString("verifyMsg",""));else if(server)custom();else keySheet();});Ui.pressable(status);
+        }
+        card.addView(status,Ui.fill());
         return card;
     }
     private String versionName(){String v=Novedades.versionName(this);if(!v.isEmpty())return v;try{return getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception e){return "";}}
@@ -168,15 +200,134 @@ public class SettingsActivity extends Screen {
         Ui.Btn b=ui.button("Más información",0,Ui.Style.PLAIN,v->message(title,detail));b.setMinimumHeight(ui.dp(48));b.setContentDescription("Más información: "+title);
         LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginStart(ui.dp(S1));box.addView(b,lp);return box;
     }
-    /** Vista previa en vivo de los colores que Android sacaría de tu fondo de pantalla. */
-    private View palettePreview(){
-        LinearLayout r=ui.row();r.setPadding(0,ui.dp(S2),0,0);r.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
-        try{Palette sys=new Palette(this,p.dark,true);
-            for(int color:new int[]{sys.primary,sys.primaryContainer,sys.secondaryContainer,sys.surfaceContainerHighest}){
-                View dot=new View(this);GradientDrawable o=oval(color);o.setStroke(Math.max(1,ui.dp(1)),p.outlineVariant);dot.setBackground(o);
-                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(ui.dp(16),ui.dp(16));lp.setMarginEnd(ui.dp(S1));r.addView(dot,lp);}
-        }catch(Exception e){r.setVisibility(View.GONE);}
-        return r;
+    /** Pie con la marca: el logo, la versión con la licencia de la app y, aparte, la de la letra Outfit (OFL). */
+    private View footer(String version){
+        LinearLayout f=ui.column();f.setGravity(Gravity.CENTER_HORIZONTAL);f.setPadding(ui.dp(S4),ui.dp(S10),ui.dp(S4),ui.dp(S2));
+        f.addView(new Glass.BrandMark(this,p.onSurfaceVariant,p.primary),new LinearLayout.LayoutParams(ui.dp(28),ui.dp(28)));
+        TextView app=ui.text("Verbapp"+(version.isEmpty()?"":" "+version)+" · Software libre · Licencia MIT",Type.LABEL_LARGE,p.onSurfaceVariant);app.setGravity(Gravity.CENTER);app.setPadding(0,ui.dp(S2),0,0);f.addView(app,Ui.fill());
+        TextView font=ui.text("Tipografía Outfit · SIL Open Font License",Type.LABEL_MEDIUM,p.onSurfaceVariant);font.setGravity(Gravity.CENTER);font.setPadding(0,ui.dp(2),0,0);f.addView(font,Ui.fill());
+        return f;
+    }
+
+    // ---------- Piezas propias de Ajustes (0.7.0) ----------
+    /** Diámetro del círculo menta que lleva el ícono de cada fila. */
+    private static final int LEAD=36;
+    /**
+     * Fila de lista del kit con su ícono en un círculo menta (verde de marca sobre menta), como los íconos en círculo de la
+     * referencia: da color y ritmo a los grupos de vidrio sin competir con los valores. Solo cambia el ícono inicial.
+     */
+    private Ui.Row row(int icon,String title,String subtitle,String value){Ui.Row r=ui.listRow(0,title,subtitle,value);lead(r,icon);return r;}
+    private Ui.SwitchRow toggleRow(int icon,String title,String subtitle,boolean initial,Ui.Toggle toggle){Ui.SwitchRow r=ui.switchRow(0,title,subtitle,initial,toggle);lead(r,icon);return r;}
+    private void lead(LinearLayout row,int icon){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(ui.dp(LEAD),ui.dp(LEAD));lp.setMarginEnd(ui.dp(S3));row.addView(ui.tile(icon,p.primary,p.primaryContainer,LEAD,20),0,lp);}
+    /** Agrega una fila al grupo; el divisor empieza donde empieza el texto (16 de margen + 36 del círculo + 12). */
+    private void add(LinearLayout group,View row){if(group.getChildCount()>0)group.addView(ui.separator(S4+LEAD+S3));group.addView(row,Ui.fill());}
+    /** La versión como píldora menta con cifras fijas (en vez de texto gris), igual que en el historial de versiones. */
+    private void versionPill(TextView value){
+        AppTheme.type(value,Type.LABEL_MEDIUM);Ui.tabular(value);value.setTextColor(p.onPrimaryContainer);value.setBackground(shape(this,p.primaryContainer,R_FULL));
+        value.setPadding(ui.dp(S2),ui.dp(S1),ui.dp(S2),ui.dp(S1));if(value.getLayoutParams() instanceof LinearLayout.LayoutParams)((LinearLayout.LayoutParams)value.getLayoutParams()).setMarginStart(ui.dp(S2));
+    }
+    /** Panel claro sobre una hoja blanca (el «vidrio» de las hojas): gris verdoso muy suave; en oscuro, un tono más claro que la hoja. */
+    private GradientDrawable inset(int radius){return shape(this,p.dark?p.surfaceContainerHigh:p.surfaceContainerLow,radius);}
+
+    /**
+     * Tema con miniaturas (0.7.0): Automático, Claro y Oscuro dibujados con sus colores reales, así se ve el resultado
+     * antes de elegir. Reemplaza la fila «Tema» y su hoja: tocar una guarda la preferencia y rehace la pantalla, igual que
+     * antes (la elegida no hace nada). Cada miniatura es un botón que anuncia su nombre y si está elegida.
+     */
+    private View themePicker(){
+        String mode=AppTheme.appearance(this);String[] modes={"system","light","dark"},names={"Automático","Claro","Oscuro"},details={"igual que el teléfono","siempre claro","siempre oscuro"};
+        Palette light=new Palette(this,false,false),dark=new Palette(this,true,false);
+        LinearLayout card=ui.card();card.setOrientation(LinearLayout.HORIZONTAL);card.setPadding(ui.dp(S2),ui.dp(S3),ui.dp(S2),ui.dp(S2));
+        for(int i=0;i<modes.length;i++){
+            int k=i;boolean on=modes[i].equals(mode);
+            LinearLayout tile=ui.column();tile.setGravity(Gravity.CENTER_HORIZONTAL);tile.setPadding(ui.dp(S1),ui.dp(S1),ui.dp(S1),ui.dp(S2));
+            tile.addView(new ThemePreview(this,p,light,dark,i,on),new LinearLayout.LayoutParams(-1,ui.dp(112)));
+            // Con letra grande «Automático» no cabe en un tercio: se achica hasta 10 sp en vez de cortarse.
+            TextView name=ui.text(names[i],Type.LABEL_LARGE,on?p.primary:p.onSurface);name.setGravity(Gravity.CENTER);name.setMaxLines(1);name.setIncludeFontPadding(false);
+            name.setAutoSizeTextTypeUniformWithConfiguration(10,14,1,android.util.TypedValue.COMPLEX_UNIT_SP);
+            LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(-1,ui.dp(24));np.topMargin=ui.dp(S2);tile.addView(name,np);
+            tile.setBackground(ui.ripple(null,R_CONTROL));tile.setClickable(true);tile.setFocusable(true);tile.setAccessibilityDelegate(Ui.buttonRole());
+            tile.setContentDescription("Tema "+names[i].toLowerCase(CL)+", "+details[i]+(on?", seleccionado":""));
+            tile.setOnClickListener(v->{if(on)return;Ui.haptic(v,Ui.Haptic.CONFIRM);settings.prefs.edit().putString("appearance",modes[k]).apply();Diagnostics.event("setting_changed",null,"action","appearance","result",k);recreate();});
+            Ui.pressable(tile);
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);if(i>0)lp.setMarginStart(ui.dp(S1));card.addView(tile,lp);
+        }
+        return card;
+    }
+
+    /**
+     * Miniatura de Verbapp con un tema: el degradado blanco → verde de Grabar, el título, una tarjeta de vidrio, el botón
+     * verde de grabar y la barra flotante con su píldora de tinta, con los colores reales de ese tema. «Automático» es mitad
+     * clara y mitad oscura. La elegida lleva un anillo verde y un ✓. Es solo dibujo: el botón que la contiene la describe.
+     * Medidas en una grilla de 80 × 100 que se escala al tamaño real.
+     */
+    private static final class ThemePreview extends View {
+        private final Palette current,light,dark;private final int mode;private final boolean selected;private final float d;
+        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);private final RectF box=new RectF(),r=new RectF();private final Drawable check;
+        private LinearGradient lightBg,darkBg;
+        ThemePreview(Context c,Palette current,Palette light,Palette dark,int mode,boolean selected){
+            super(c);this.current=current;this.light=light;this.dark=dark;this.mode=mode;this.selected=selected;d=c.getResources().getDisplayMetrics().density;
+            check=c.getDrawable(R.drawable.ic_check).mutate();check.setTint(current.onPrimary);setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        }
+        @Override protected void onSizeChanged(int w,int h,int oldW,int oldH){
+            super.onSizeChanged(w,h,oldW,oldH);float inset=4*d;box.set(inset,inset,w-inset,h-inset);lightBg=gradient(light);darkBg=gradient(dark);
+        }
+        /** El mismo reparto del fondo intenso de Grabar (Glass.Backdrop): blanco arriba y verde desde la mitad. */
+        private LinearGradient gradient(Palette q){return new LinearGradient(0,box.top,0,box.bottom,new int[]{q.gradTop,q.gradTop,q.gradMid,blend(q.gradMid,q.gradBottom,0.55f),q.gradBottom},new float[]{0f,0.16f,0.44f,0.72f,1f},Shader.TileMode.CLAMP);}
+        @Override protected void onDraw(Canvas canvas){
+            if(box.isEmpty()||lightBg==null)return;float radius=14*d;
+            mock(canvas,mode==2?dark:light,mode==2?darkBg:lightBg,radius);
+            if(mode==0){canvas.save();canvas.clipRect(box.centerX(),0,getWidth(),getHeight());mock(canvas,dark,darkBg,radius);canvas.restore();}
+            // Borde fino: separa la miniatura clara de la tarjeta de vidrio, que también es clara.
+            paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(Math.max(1f,d));paint.setColor(current.outlineVariant);canvas.drawRoundRect(box,radius,radius,paint);
+            if(selected){
+                paint.setStrokeWidth(2*d);paint.setColor(current.primary);r.set(d,d,getWidth()-d,getHeight()-d);canvas.drawRoundRect(r,radius+3*d,radius+3*d,paint);
+                float cx=box.right-12*d,cy=box.top+12*d;paint.setStyle(Paint.Style.FILL);paint.setColor(current.surfaceContainerLowest);canvas.drawCircle(cx,cy,10.5f*d,paint);
+                paint.setColor(current.primary);canvas.drawCircle(cx,cy,9*d,paint);
+                int half=Math.round(6*d);check.setBounds(Math.round(cx)-half,Math.round(cy)-half,Math.round(cx)+half,Math.round(cy)+half);check.draw(canvas);
+            }
+        }
+        private void mock(Canvas c,Palette q,LinearGradient bg,float radius){
+            float x=box.left,y=box.top,ux=box.width()/80f,uy=box.height()/100f;
+            paint.setStyle(Paint.Style.FILL);paint.setShader(bg);c.drawRoundRect(box,radius,radius,paint);paint.setShader(null);
+            // Título y bajada.
+            bar(c,q.onSurface,x+8*ux,y+11*uy,30*ux,5*uy);bar(c,withAlpha(q.onSurfaceVariant,150),x+8*ux,y+20*uy,20*ux,3.5f*uy);
+            // Tarjeta de vidrio con un círculo menta y dos líneas de texto.
+            r.set(x+6*ux,y+29*uy,x+74*ux,y+53*uy);paint.setColor(q.glass);c.drawRoundRect(r,7*ux,7*ux,paint);
+            paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(Math.max(1f,0.8f*d));paint.setColor(withAlpha(q.outlineVariant,190));c.drawRoundRect(r,7*ux,7*ux,paint);paint.setStyle(Paint.Style.FILL);
+            paint.setColor(q.primaryContainer);c.drawCircle(x+15*ux,y+41*uy,4.5f*ux,paint);
+            bar(c,withAlpha(q.onSurfaceVariant,130),x+23*ux,y+37.5f*uy,30*ux,3*uy);bar(c,withAlpha(q.onSurfaceVariant,90),x+23*ux,y+42.5f*uy,18*ux,3*uy);
+            // Botón de grabar: verde de marca con halo.
+            float mx=x+40*ux,my=y+68*uy;paint.setColor(withAlpha(q.brand,70));c.drawCircle(mx,my,11*ux,paint);paint.setColor(q.brand);c.drawCircle(mx,my,7.5f*ux,paint);
+            paint.setColor(q.onBrand);r.set(mx-1.4f*ux,my-3.2f*uy,mx+1.4f*ux,my+1.6f*uy);c.drawRoundRect(r,1.4f*ux,1.4f*ux,paint);
+            // Barra flotante: cápsula clara con la píldora de tinta del destino activo.
+            r.set(x+20*ux,y+84*uy,x+60*ux,y+95*uy);paint.setColor(q.dark?q.surfaceContainerHigh:q.surfaceContainerLowest);c.drawRoundRect(r,r.height()/2f,r.height()/2f,paint);
+            bar(c,q.ink,x+22*ux,y+86*uy,16*ux,7*uy);paint.setColor(q.onSurfaceVariant);c.drawCircle(x+45*ux,y+89.5f*uy,1.6f*ux,paint);c.drawCircle(x+53*ux,y+89.5f*uy,1.6f*ux,paint);
+        }
+        private void bar(Canvas c,int color,float left,float top,float w,float h){paint.setColor(color);r.set(left,top,left+w,top+h);c.drawRoundRect(r,h/2f,h/2f,paint);}
+    }
+
+    /**
+     * Ondas decorativas: barras redondeadas de alto variable, más altas al centro y desvanecidas hacia los extremos (como
+     * las que rodean el micrófono en Grabar). Son fijas y el lector de pantalla las ignora; setColor las tiñe (p. ej. de
+     * verde mientras suena una muestra).
+     */
+    private static final class WaveDeco extends View {
+        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);private final float d;private int color;
+        WaveDeco(Context c,int color){super(c);d=c.getResources().getDisplayMetrics().density;this.color=color;paint.setStrokeCap(Paint.Cap.ROUND);paint.setStrokeWidth(2.5f*d);setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
+        void setColor(int color){this.color=color;invalidate();}
+        @Override protected void onDraw(Canvas canvas){
+            float w=getWidth(),h=getHeight(),step=6*d;int n=(int)(w/step);if(n<4)return;
+            float x0=(w-(n-1)*step)/2f,cy=h/2f,max=h/2f-1.5f*d;
+            for(int i=0;i<n;i++){
+                float env=(float)Math.sin(Math.PI*(i+0.5f)/n);
+                // Alturas fijas pero irregulares, para que parezca voz y no un patrón.
+                float noise=0.35f+0.65f*Math.abs((float)(Math.sin(i*1.9)*Math.cos(i*0.7+0.4)));
+                float half=Math.max(1.25f*d,max*(0.3f+0.7f*env)*noise);
+                paint.setColor(withAlpha(color,Math.round(255*(0.2f+0.8f*env))));
+                canvas.drawLine(x0+i*step,cy-half,x0+i*step,cy+half,paint);
+            }
+        }
     }
 
     // ---------- Guardado rápido (0-Inbox) ----------
@@ -393,7 +544,12 @@ public class SettingsActivity extends Screen {
         Sheet s=sheet("Voces conocidas",all.isEmpty()
             ?"Graba 10 segundos de tu voz y de las personas con que más hablas. Al separar voces, estas muestras van en todo el audio para reconocer a cada una desde el inicio y ponerle su nombre."
             :"Al separar voces, estas muestras van en todo el audio para reconocer a cada persona desde el inicio y ponerle su nombre.");
-        for(int i=0;i<all.size();i++)voiceItem(s,all.get(i),i);
+        if(!all.isEmpty()){
+            // Las voces van juntas en un panel claro (el «vidrio» de las hojas blancas), como un grupo de Ajustes.
+            LinearLayout list=ui.column();list.setBackground(inset(R_CARD));list.setClipToOutline(true);
+            for(int i=0;i<all.size();i++){if(i>0)list.addView(ui.separator(S4+40+S3));voiceItem(s,list,all.get(i),i);}
+            s.add(list);
+        }
         int used=Voices.used(this).size();
         TextView note=ui.text("Se usan hasta "+Transcriber.MAX_KNOWN+" voces por audio"+(used>Transcriber.MAX_KNOWN?": tienes "+used+" activas, así que van tu voz y las primeras por nombre.":".")
             +" Quedan en este teléfono y se envían a OpenAI solo junto con los audios que transcribes.",Type.BODY_SMALL,p.onSurfaceVariant);
@@ -402,34 +558,46 @@ public class SettingsActivity extends Screen {
         s.action(R.drawable.ic_person,"Agregar otra voz",false,this::addVoiceSheet);
         s.secondary("Cerrar",null).show();
     }
-    /** Fila de una voz: su color e inicial, su nombre (con «tú» si es la tuya) y si se usa al transcribir. No registra nombres en el diagnóstico. */
-    private void voiceItem(Sheet s,Voices.Voice v,int index){
-        LinearLayout row=ui.row();row.setMinimumHeight(ui.dp(64));row.setPadding(ui.dp(S6),ui.dp(S2),ui.dp(S6),ui.dp(S2));
+    /**
+     * Fila de una voz: su color e inicial, su nombre (con «tú» en menta si es la tuya), si se usa al transcribir y una
+     * flecha que invita a ver sus opciones. No registra nombres en el diagnóstico.
+     */
+    private void voiceItem(Sheet s,LinearLayout list,Voices.Voice v,int index){
+        LinearLayout row=ui.row();row.setMinimumHeight(ui.dp(64));row.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S3),ui.dp(S3));
         TextView avatar=ui.text(NameVoices.initial(v.name),Type.TITLE_MEDIUM,p.surface);avatar.setGravity(Gravity.CENTER);avatar.setBackground(oval(p.speaker(index)));
         avatar.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);if(!v.use)avatar.setAlpha(0.38f);
-        row.addView(avatar,new LinearLayout.LayoutParams(ui.dp(40),ui.dp(40)));row.addView(ui.space(S4));
+        row.addView(avatar,new LinearLayout.LayoutParams(ui.dp(40),ui.dp(40)));row.addView(ui.space(S3));
         LinearLayout texts=ui.column();LinearLayout top=ui.row();
-        TextView name=ui.oneLine(ui.text(v.name,Type.BODY_LARGE,p.onSurface));name.setMaxWidth(ui.dp(200));top.addView(name,Ui.wrap());
-        if(v.me){TextView tag=ui.chip("tú",p.onSecondaryContainer,p.secondaryContainer);tag.setPadding(ui.dp(S2),ui.dp(2),ui.dp(S2),ui.dp(2));LinearLayout.LayoutParams tp=Ui.wrap();tp.setMarginStart(ui.dp(S2));top.addView(tag,tp);}
+        TextView name=ui.oneLine(ui.text(v.name,Type.ITEM,p.onSurface));name.setMaxWidth(ui.dp(160));top.addView(name,Ui.wrap());
+        if(v.me){TextView tag=ui.chip("tú",p.onPrimaryContainer,p.primaryContainer);AppTheme.type(tag,Type.LABEL_MEDIUM);tag.setPadding(ui.dp(S2),ui.dp(2),ui.dp(S2),ui.dp(2));LinearLayout.LayoutParams tp=Ui.wrap();tp.setMarginStart(ui.dp(S2));top.addView(tag,tp);}
         texts.addView(top);
         String status=v.use?"Se usa al transcribir":"No se usa";TextView st=ui.text(status,Type.BODY_MEDIUM,p.onSurfaceVariant);st.setPadding(0,ui.dp(2),0,0);texts.addView(st);
         row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
+        ImageView go=ui.icon(R.drawable.ic_chevron_down,p.onSurfaceVariant,20);go.setRotation(-90);LinearLayout.LayoutParams gp=new LinearLayout.LayoutParams(ui.dp(20),ui.dp(20));gp.setMarginStart(ui.dp(S2));row.addView(go,gp);
         row.setBackground(ui.ripple(null,0));row.setClickable(true);row.setFocusable(true);row.setAccessibilityDelegate(Ui.buttonRole());
         row.setContentDescription(v.name+(v.me?", tu voz":"")+". "+status+". Ver opciones");
         row.setOnClickListener(x->{s.dismiss();voiceDetail(v.id);});
-        LinearLayout.LayoutParams lp=Ui.fill();lp.setMargins(-ui.dp(S6),0,-ui.dp(S6),0);s.body.addView(row,lp);
+        list.addView(row,Ui.fill());
     }
     /** Opciones de una voz: escuchar, usarla o no al transcribir, cambiar nombre, grabar de nuevo y eliminar. */
     private void voiceDetail(String id){
         Voices.Voice v=Voices.get(this,id);if(v==null){voiceSheet();return;}
         String when=savedOn(v.createdAt);
         Sheet s=sheet(v.name,v.me?"Tu voz · "+when:Character.toUpperCase(when.charAt(0))+when.substring(1));
-        Ui.Btn listen=ui.button("Escuchar",R.drawable.ic_play,Ui.Style.TONAL,null);
-        listen.setOnClickListener(x->{
+        // La muestra como mini reproductor (0.7.0): ▶ redondo de tinta y unas ondas que se tiñen de verde mientras suena.
+        // Toda la fila es el botón; se anuncia «Escuchar» o «Detener», igual que el botón de 0.6.
+        LinearLayout player=ui.row();player.setMinimumHeight(ui.dp(64));player.setPadding(ui.dp(S2),ui.dp(S2),ui.dp(S4),ui.dp(S2));
+        FrameLayout knob=ui.tile(R.drawable.ic_play,p.onInk,p.ink,48,22);ImageView glyph=(ImageView)knob.getChildAt(0);player.addView(knob);player.addView(ui.space(S3));
+        TextView what=ui.oneLine(ui.text("Escuchar la muestra",Type.TITLE_MEDIUM,p.onSurface));player.addView(what,Ui.wrap());
+        WaveDeco wave=new WaveDeco(this,p.waveIdle);LinearLayout.LayoutParams wl=new LinearLayout.LayoutParams(0,ui.dp(28),1);wl.setMarginStart(ui.dp(S3));player.addView(wave,wl);
+        player.setBackground(ui.ripple(inset(R_CARD),R_CARD));player.setClickable(true);player.setFocusable(true);player.setAccessibilityDelegate(Ui.buttonRole());player.setContentDescription("Escuchar");Ui.pressable(player);
+        Runnable idle=()->{glyph.setImageResource(R.drawable.ic_play);what.setText("Escuchar la muestra");player.setContentDescription("Escuchar");wave.setColor(p.waveIdle);};
+        player.setOnClickListener(x->{
+            Diagnostics.event("ui_action",null,"screen",getClass().getSimpleName(),"action",String.valueOf(player.getContentDescription()));
             if(voicePlayer!=null){releaseVoicePlayer();return;}
-            if(playVoice(v.id,()->{listen.setText("Escuchar");listen.setIcon(R.drawable.ic_play);})){listen.setText("Detener");listen.setIcon(R.drawable.ic_stop);}
+            if(playVoice(v.id,idle)){glyph.setImageResource(R.drawable.ic_stop);what.setText("Detener");player.setContentDescription("Detener");wave.setColor(p.primary);}
         });
-        LinearLayout.LayoutParams lp=Ui.wrap();lp.bottomMargin=ui.dp(S2);s.body.addView(listen,lp);
+        LinearLayout.LayoutParams lp=Ui.fill();lp.bottomMargin=ui.dp(S2);s.body.addView(player,lp);
         Ui.SwitchRow[] use={null};
         use[0]=ui.switchRow(R.drawable.ic_voice,"Usar al transcribir",useText(v.use),v.use,on->{
             if(!Voices.setUse(this,v.id,on)){toast("No se pudo guardar el cambio");return;}
@@ -487,30 +655,70 @@ public class SettingsActivity extends Screen {
             recordVoice(new VoiceTake(n,null,false));return true;});
         s.secondary("Cancelar",null).show();
     }
-    /** Hoja de grabación de 10 s con un texto para leer (dirigido a quien habla). Cerrarla guarda; «Cancelar» descarta. */
+    /**
+     * Hoja de grabación de 10 s con un texto para leer (dirigido a quien habla). Cerrarla guarda; «Cancelar» descarta.
+     * 0.7.0: el guion va en una tarjeta clara con letra de lectura grande (se lee con el teléfono a un brazo de distancia);
+     * debajo, el cronómetro en Outfit con cifras fijas, una barra que se llena hasta el máximo y el estado (región en vivo,
+     * con el punto naranja que late mientras graba). «Grabar» (verde) pasa a «Detener y guardar» (tinta) al empezar.
+     * Los botones van apilados a lo ancho: «Detener y guardar» no cabe en medio ancho.
+     */
     private void recordVoice(VoiceTake t){
         if(t==null)return;
         if(RecorderService.activeId!=null){message("Voces conocidas","Termina la grabación en curso antes de grabar una voz.");return;}
         if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){pendingVoice=t;requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},MIC_FOR_VOICE);return;}
         releaseVoicePlayer();
         String who=t.name==null||t.name.trim().isEmpty()?(t.me?Voices.name(this):"esa persona"):t.name.trim();
-        TextView status=ui.text(t.me?"Toca Grabar y lee el texto con tu voz normal.":"Toca Grabar y pásale el teléfono a "+who+" para que lea con su voz normal.",Type.BODY_MEDIUM,p.onSurfaceVariant);
-        status.setFontFeatureSettings("tnum");status.setPadding(0,ui.dp(S3),0,0);status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        LinearLayout paper=ui.column();paper.setBackground(inset(R_CARD));paper.setPadding(ui.dp(S5),ui.dp(S4),ui.dp(S5),ui.dp(S5));
         TextView script=ui.text(t.me?"«Hola, soy "+who+". Estoy grabando mi voz para que Verbapp me reconozca en mis conversaciones y reuniones. Hoy es un buen día para ordenar ideas.»"
             :"«Hola, soy "+who+". Estoy grabando mi voz para que Verbapp me reconozca en las conversaciones y reuniones. Hoy es un buen día para ordenar ideas.»",Type.BODY_LARGE,p.onSurface);
-        Sheet s=sheet(t.me?"Lee en voz alta":"Que "+who+" lea en voz alta",null);s.add(script);s.add(status);voiceRecording=s;
-        Ui.Btn go=ui.button("Grabar",R.drawable.ic_mic_fill,Ui.Style.RECORD,null);LinearLayout.LayoutParams lp=Ui.fill();lp.topMargin=ui.dp(S4);s.body.addView(go,lp);
+        script.setTextSize(18);script.setLineSpacing(ui.dp(4),1f);paper.addView(script);
+        // Cronómetro: la cifra de DISPLAY_LARGE (68) a 56 sp, para que la hoja entera quepa en un teléfono de 360 × 740 dp.
+        TextView clock=Ui.tabular(ui.text(mmss(0),Type.DISPLAY_LARGE,p.onSurface));clock.setTextSize(56);clock.setIncludeFontPadding(false);clock.setGravity(Gravity.CENTER);
+        clock.setPadding(0,ui.dp(S5),0,ui.dp(S3));clock.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO); // el estado de abajo lo anuncia
+        VoiceProgress bar=new VoiceProgress(this,p);
+        LinearLayout line=ui.row();line.setGravity(Gravity.CENTER);line.setPadding(0,ui.dp(S3),0,0);
+        View dot=new View(this);dot.setBackground(oval(p.record));dot.setVisibility(View.GONE);dot.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams dl=new LinearLayout.LayoutParams(ui.dp(8),ui.dp(8));dl.setMarginEnd(ui.dp(S2));line.addView(dot,dl);
+        TextView status=ui.text(t.me?"Toca Grabar y lee el texto con tu voz normal.":"Toca Grabar y pásale el teléfono a "+who+" para que lea con su voz normal.",Type.BODY_MEDIUM,p.onSurfaceVariant);
+        status.setFontFeatureSettings("tnum");status.setGravity(Gravity.CENTER);status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);line.addView(status,Ui.wrap());
+        Sheet s=sheet(t.me?"Lee en voz alta":"Que "+who+" lea en voz alta",null);s.add(paper);s.add(clock);
+        s.body.addView(bar,new LinearLayout.LayoutParams(-1,ui.dp(6)));
+        s.add(line);voiceRecording=s;
+        Ui.Btn go=ui.button("Grabar",R.drawable.ic_mic_fill,Ui.Style.RECORD,null);LinearLayout.LayoutParams lp=Ui.fill();lp.topMargin=ui.dp(S5);s.body.addView(go,lp);
+        ObjectAnimator[] pulse={null};
         go.setOnClickListener(v->{
             if(voiceRecorder==null){
-                if(startVoice()){voiceTake=t;go.setText("Detener y guardar");Ui.haptic(go,Ui.Haptic.CONFIRM);
-                    voiceTimer.post(new Runnable(){public void run(){long ms=android.os.SystemClock.elapsedRealtime()-voiceStarted;status.setText("Grabando · "+(ms/1000)+" s de "+(Voices.MAX_MS/1000));if(ms>=Voices.MAX_MS){s.dismiss();return;}voiceTimer.postDelayed(this,250);}});}
+                if(startVoice()){voiceTake=t;go.setText("Detener y guardar");go.setIcon(R.drawable.ic_stop);go.setColors(p.onInk,p.ink);Ui.haptic(go,Ui.Haptic.CONFIRM);
+                    bar.start(voiceStarted);dot.setVisibility(View.VISIBLE);
+                    if(AppTheme.motion()){pulse[0]=ObjectAnimator.ofFloat(dot,View.ALPHA,1f,0.25f);pulse[0].setDuration(600);pulse[0].setRepeatMode(ValueAnimator.REVERSE);pulse[0].setRepeatCount(ValueAnimator.INFINITE);pulse[0].start();}
+                    voiceTimer.post(new Runnable(){public void run(){long ms=android.os.SystemClock.elapsedRealtime()-voiceStarted;status.setText("Grabando · "+(ms/1000)+" s de "+(Voices.MAX_MS/1000));clock.setText(mmss(ms));bar.invalidate();if(ms>=Voices.MAX_MS){s.dismiss();return;}voiceTimer.postDelayed(this,250);}});}
                 else{s.dismiss();message("Voces conocidas","No se pudo usar el micrófono. Revisa el permiso y vuelve a intentarlo.");}
             }else s.dismiss();
         });
         // Cerrar la hoja guarda lo grabado; "Cancelar" lo descarta (la marca se pone antes de cerrar).
         boolean[] cancel={false};
-        Ui.Btn no=ui.button("Cancelar",0,Ui.Style.PLAIN,v->{cancel[0]=true;s.dismiss();});LinearLayout.LayoutParams np=Ui.fill();np.topMargin=ui.dp(S1);s.body.addView(no,np);
-        s.onDismiss(()->stopVoice(!cancel[0])).show();
+        Ui.Btn no=ui.button("Cancelar",0,Ui.Style.SECONDARY,v->{cancel[0]=true;s.dismiss();});LinearLayout.LayoutParams np=Ui.fill();np.topMargin=ui.dp(S2);s.body.addView(no,np);
+        s.onDismiss(()->{if(pulse[0]!=null)pulse[0].cancel();bar.stop();stopVoice(!cancel[0]);}).show();
+    }
+    /** «0:07»: minutos y segundos del cronómetro de la muestra. */
+    private static String mmss(long ms){long s=Math.max(0,ms)/1000;return String.format(Locale.ROOT,"%d:%02d",s/60,s%60);}
+    /**
+     * Barra de la muestra de voz: riel gris y relleno verde que llega al final en Voices.MAX_MS. Mientras graba avanza a
+     * cada cuadro (se ve continua aunque el texto cambie cada 250 ms); con «Quitar animaciones» avanza a saltos, con el reloj.
+     */
+    private static final class VoiceProgress extends View {
+        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);private final RectF r=new RectF();private final int track,fill;
+        private long started;private boolean running;private float value;
+        VoiceProgress(Context c,Palette p){super(c);track=p.dark?p.surfaceContainerHighest:p.surfaceContainerHigh;fill=p.primary;setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
+        void start(long startedAt){started=startedAt;running=true;invalidate();}
+        void stop(){running=false;}
+        @Override protected void onDraw(Canvas canvas){
+            float w=getWidth(),h=getHeight(),rad=h/2f;if(w<=0||h<=0)return;
+            if(running)value=Math.min(1f,(SystemClock.elapsedRealtime()-started)/(float)Voices.MAX_MS);
+            paint.setColor(track);r.set(0,0,w,h);canvas.drawRoundRect(r,rad,rad,paint);
+            if(value>0f){paint.setColor(fill);r.set(0,0,Math.max(h,w*value),h);canvas.drawRoundRect(r,rad,rad,paint);}
+            if(running&&value<1f&&AppTheme.motion())postInvalidateOnAnimation();
+        }
     }
     private boolean startVoice(){
         try{voiceTmp=new java.io.File(getCacheDir(),"voice-take.m4a");voiceTmp.delete();
