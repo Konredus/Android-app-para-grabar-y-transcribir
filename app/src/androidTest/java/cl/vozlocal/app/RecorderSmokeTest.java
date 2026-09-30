@@ -32,6 +32,8 @@ public class RecorderSmokeTest extends Instrumentation {
         Settings prefixSettings = new Settings(c); boolean prefix = prefixSettings.datePrefix();
         prefixSettings.prefs.edit().putBoolean("datePrefix", false).commit();
         try {
+            // La bienvenida (0.8.0) solo aparece en la primera instalación: aquí se da por vista para probar Grabar.
+            new Settings(c).prefs.edit().putBoolean("welcomed", true).commit();
             Activity activity = startActivitySync(new Intent(c, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             waitForIdleSync(); Thread.sleep(700);
             command(c, "START"); Thread.sleep(3000);
@@ -87,6 +89,10 @@ public class RecorderSmokeTest extends Instrumentation {
             UiChecks.run(c,r);
             IntegrationChecks.run(c,r);
             VoicesChecks.run(c,r);
+            OrAudioChecks.run(c,r);
+            OpenRouterChecks.run(c,r);
+            ModelsChecks.run(c,r);
+            OnboardingChecks.run(c,r);
             long longStarted = SystemClock.elapsedRealtime();
             if (longChecks) LongImportChecks.run(c,r);
             String longResult = longChecks ? "one-hour AAC import/crop/cancel, WAV import, interrupted-import recovery (" + (SystemClock.elapsedRealtime() - longStarted) / 1000 + " s)" : "one-hour import checks SKIPPED (-e long false)";

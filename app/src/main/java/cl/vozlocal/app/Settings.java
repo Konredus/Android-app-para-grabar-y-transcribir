@@ -16,7 +16,10 @@ final class Settings {
     boolean askTitle() { return prefs.getBoolean("askTitle", true); }
     String language() { return prefs.getString("language", "es"); }
     String provider(){return prefs.getString("provider","openai");}
-    String prefix(){return provider().equals("openai")?"":"custom_";}
+    /** Prefijo de las preferencias de la clave: "" (OpenAI), "openrouter_" u "custom_" (servidor propio). Cada proveedor guarda la suya. */
+    String prefix(){return prefix(provider());}
+    static String prefix(String provider){return provider.equals("openai")?"":provider.equals("openrouter")?"openrouter_":"custom_";}
+    boolean openRouter(){return provider().equals("openrouter");}
     boolean hasKey() { return prefs.contains(prefix()+"keyEncrypted"); }
     /** Agregar la fecha (2026-09-27) delante de cada nombre. Activado por defecto (pedido del usuario, 0.4.3). */
     boolean datePrefix(){return prefs.getBoolean("datePrefix",true);}
@@ -25,26 +28,38 @@ final class Settings {
     /** Modelo para transcribir sin separar voces (OpenAI). */
     String textModel(){return prefs.getString("openaiTextModel","gpt-transcribe");}
     /** ¿El proveedor configurado puede separar voces? */
-    boolean canSeparate(){return provider().equals("openai")||prefs.getBoolean("customSpeakers",false);}
+    boolean canSeparate(){return provider().equals("openai")||(openRouter()?Models.recipe(Models.chosen(this,true)).diarizes:prefs.getBoolean("customSpeakers",false));}
     /** Elección por defecto cuando no se puede preguntar (p. ej. transcripción automática). */
     boolean defaultSpeakers(){return canSeparate()&&!speakersMode().equals("never");}
     ProviderConfig config()throws Exception{return config(defaultSpeakers());}
     /** Dirección del servidor propio ("" si aún no se configura). */
     String customBase(){return prefs.getString("customBase","").trim();}
     /** Con «Servidor compatible» sin dirección no se puede transcribir (ni comprobar la clave). */
-    boolean needsServer(){return !provider().equals("openai")&&customBase().isEmpty();}
+    boolean needsServer(){return !provider().equals("openai")&&!openRouter()&&customBase().isEmpty();}
     static final String NO_SERVER="Configura la dirección de tu servidor en Ajustes.";
     ProviderConfig config(boolean speakers)throws Exception{
         boolean openai=provider().equals("openai");
         if(openai)return new ProviderConfig("openai","https://api.openai.com/v1",speakers?"gpt-4o-transcribe-diarize":textModel(),apiKey(),speakers);
+        // OpenRouter (0.8.0): el modelo sale de la elección del usuario o de «Automático»; solo separa voces si su receta sabe pedirlo.
+        if(openRouter()){String model=Models.chosen(this,speakers);return new ProviderConfig("openrouter",Models.BASE,model,apiKey(),speakers&&Models.recipe(model).diarizes);}
         // Sin dirección no hay a dónde enviar: nunca una por defecto (la clave y el audio irían a un tercero).
         if(customBase().isEmpty())throw new HttpApi.UserAction(NO_SERVER);
         return new ProviderConfig(provider(),customBase(),prefs.getString("customModel","whisper-1"),apiKey(),speakers&&prefs.getBoolean("customSpeakers",false));
     }
+    // ---------- 0.8.0: OpenRouter ----------
+    /** Modelo de OpenRouter para transcribir separando voces: un id del catálogo o Models.AUTO («Automático (recomendado)»). */
+    String orSpeakersModel(){return prefs.getString("orSpeakersModel",Models.AUTO);}
+    /** Modelo de OpenRouter para transcribir solo el texto: un id del catálogo o Models.AUTO. */
+    String orTextModel(){return prefs.getString("orTextModel",Models.AUTO);}
+    /** Clave de OpenRouter aunque el proveedor activo sea otro (la usan la nota y la bienvenida). */
+    boolean hasOpenRouterKey(){return prefs.contains("openrouter_keyEncrypted");}
+    String openRouterKey()throws Exception{return hasOpenRouterKey()?decrypt("openrouter_"):"";}
+    /** Guarda la clave de un proveedor ("openai", "openrouter", "custom" o "anthropic") sin cambiar el proveedor activo. Vacía = borrarla. */
+    void saveKeyFor(String provider,String value)throws Exception{encrypt(provider.equals("anthropic")?"anthropic_":prefix(provider),value);}
     // ---------- 0.6.0 ----------
     /** Armar la «Nota para tu segundo cerebro» al terminar cada transcripción. */
     boolean noteAuto(){return prefs.getBoolean("noteAuto",true);}
-    /** IA que arma la nota: "openai" (usa la clave de OpenAI) o "anthropic" (Claude, requiere su clave). */
+    /** IA que arma la nota: "openai" (clave de OpenAI), "anthropic" (Claude, su clave) u "openrouter" (clave de OpenRouter; 0.8.0). */
     String noteProvider(){return prefs.getString("noteProvider","openai");}
     /** Modelo de la nota; vacío = el recomendado del proveedor (ver Notes). */
     String noteModel(){return prefs.getString("noteModel","");}
