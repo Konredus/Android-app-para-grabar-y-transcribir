@@ -274,6 +274,9 @@ final class OpenRouterChecks {
         JSONObject byWord=new JSONObject().put("words",list(word(0,0.5,1.5,"Muestra"),word(0,1.6,2.8,"larga"),word(0,9.5,10.0,"Hola"),word(0,10.1,10.6,"equipo"),word(1,10.9,11.4,"Buenas")));
         out=OpenRouterClient.finish(OpenRouterClient.read(byWord,true,40_000),9000,new long[][]{{0,8000}},Collections.singletonList(refs.get(0)));s=contract(out);
         check(s.length()==2&&speaker(s,0).equals(Voices.MINE)&&text(s,0).equals("Hola equipo")&&near(start(s,0),0.5)&&near(end(s,0),1.6)&&speaker(s,1).equals("1")&&text(s,1).equals("Buenas"),"Word-level anchors wrong: "+out);
+        // 9. El corte se mide con el silencio real entre la última ancla y el audio, aunque no sea de 1 s.
+        out=OpenRouterClient.finish(OpenRouterClient.read(new JSONObject().put("segments",list(seg(0,0.5,7.9,"Muestra de voz"),seg(0,8.5,10.0,"Hola"))),true,20_000),8400,new long[][]{{0,8000}},fran);s=contract(out);
+        check(s.length()==1&&speaker(s,0).equals("voz_abc12345")&&text(s,0).equals("Hola")&&near(start(s,0),0.1)&&near(end(s,0),1.6),"Cut not placed in the real gap after the last anchor: "+out);
     }
 
     // ---------- Uso y costo real ----------

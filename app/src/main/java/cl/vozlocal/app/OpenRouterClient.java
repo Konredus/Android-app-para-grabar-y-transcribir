@@ -330,8 +330,10 @@ final class OpenRouterClient implements TranscribeClient {
      */
     static JSONObject finish(Parsed p,long leadMs,long[][] windows,List<String[]> refs)throws JSONException{
         double lead=Math.max(0,leadMs)/1000d;
-        // El corte va a mitad del último segundo de silencio: tolera tiempos del modelo corridos hacia cualquier lado.
-        double cut=leadMs>0?Math.max(0,lead-OrAudio.GAP_MS/2000d):0;
+        // El corte va a mitad del silencio que separa la última ancla del audio: tolera tiempos del modelo corridos hacia
+        // cualquier lado. Se mide con el fin real de la última ancla; si no se conoce, medio silencio antes del audio.
+        long lastEnd=-1;if(windows!=null)for(long[] w:windows)if(w!=null&&w.length>=2&&w[0]>=0&&w[1]>w[0]&&w[1]<=leadMs)lastEnd=Math.max(lastEnd,w[1]);
+        double cut=leadMs<=0?0:lastEnd>0?(lastEnd+leadMs)/2000d:Math.max(0,lead-OrAudio.GAP_MS/2000d);
         Map<String,String> rename=new HashMap<>();Set<String> people=new LinkedHashSet<>(),got=new HashSet<>();
         if(leadMs>0&&windows!=null&&refs!=null){
             int n=Math.min(windows.length,refs.size());String[] best=new String[n];double[] score=new double[n];
