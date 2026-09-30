@@ -19,29 +19,34 @@ import static cl.vozlocal.app.AppTheme.*;
 final class RetranscribeSheet {
     private RetranscribeSheet(){}
 
+    /** «Mi voz» solo cuenta si el servicio la recibe: OpenAI (muestras) u OpenRouter (anclas); un servidor propio no. */
+    private static boolean myVoice(Context c){return RecordingActions.knownVoices(new Settings(c))&&Voices.has(c);}
     /** Texto de cada alternativa: título y para qué sirve (sin jerga). */
     static String title(Context c,Retranscribe.Mode mode){
         switch(mode){
             case CORRECTIONS:return "Segunda pasada con tus correcciones";
             case SINGLE:return "Separar voces sin cortar el audio";
-            case SPEAKERS:return Voices.has(c)?"Separar voces de nuevo, con Mi voz":"Separar voces de nuevo";
+            case SPEAKERS:return myVoice(c)?"Separar voces de nuevo, con Mi voz":"Separar voces de nuevo";
             default:return "Solo el texto";
         }
     }
     static String explain(Context c,Retranscribe.Mode mode){
+        boolean router=new Settings(c).openRouter();
         switch(mode){
             case CORRECTIONS:return "Usa las voces que ya corregiste o nombraste como muestra en todo el audio, desde el inicio. Es la que más mejora quién habla.";
-            case SINGLE:return "Todo el audio de una vez, sin uniones donde las voces se crucen. Más parejo, pero más lento. Hasta 23 min.";
-            case SPEAKERS:return Voices.has(c)?"Te reconoce como "+Voices.name(c)+" desde el inicio; las demás, Persona 2…":"Otra pasada separando voces: Persona 1, Persona 2…";
+            // El tope de 23 min es de OpenAI; con OpenRouter depende del modelo, y si no cabe la opción lo dice en su motivo.
+            case SINGLE:return "Todo el audio de una vez, sin uniones donde las voces se crucen. Más parejo, pero más lento."+(router?" Solo si el audio cabe en un envío.":" Hasta 23 min.");
+            // Con OpenRouter el reconocimiento usa «anclas», una técnica nueva: se promete el intento, no el resultado.
+            case SPEAKERS:return myVoice(c)?(router?"Busca tu voz para ponerte como "+Voices.name(c):"Te reconoce como "+Voices.name(c)+" desde el inicio")+"; las demás, Persona 2…":"Otra pasada separando voces: Persona 1, Persona 2…";
             default:return "Para cuando fallaron las palabras, no las voces. Más rápido, pero sin separar voces.";
         }
     }
     static int icon(Retranscribe.Mode mode){
         switch(mode){case CORRECTIONS:return R.drawable.ic_sparkle;case SINGLE:return R.drawable.ic_wave;case SPEAKERS:return R.drawable.ic_people;default:return R.drawable.ic_doc;}
     }
-    /** «≈ US$0,048», o "" si no se conoce la tarifa (p. ej. servidor propio). */
+    /** «≈ US$0,048», o "" si no se conoce la tarifa (p. ej. servidor propio, o un modelo de OpenRouter sin precio por minuto). */
     static String cost(Context c,Recording r,Retranscribe.Mode mode){
-        try{Settings s=new Settings(c);double v=Pricing.estimate(s.provider(),s.config(mode!=Retranscribe.Mode.TEXT).model,r.duration);return v<0?"":"≈ "+Pricing.usd(v);}
+        try{Settings s=new Settings(c);double v=RecordingActions.estimate(c,s.provider(),s.config(mode!=Retranscribe.Mode.TEXT).model,r.duration);return v<0?"":"≈ "+Pricing.usd(v);}
         catch(Exception e){return "";}
     }
     private static boolean available(Context c,Recording r,Retranscribe.Mode mode){try{return Retranscribe.available(c,r,mode);}catch(Exception e){return false;}}
@@ -57,7 +62,8 @@ final class RetranscribeSheet {
         // Con una versión anterior sin elegir, otra transcripción la reemplazaría sin preguntar (solo se guarda una):
         // primero se elige con cuál quedarse y después se ofrecen las alternativas.
         if(Retranscribe.hasPrevious(s,r.id)){offerKeep(s,r,changed,true,kept->show(s,r,changed));return;}
-        boolean paid=new Settings(s).provider().equals("openai");
+        // OpenAI y OpenRouter cobran cada envío; un servidor propio puede no cobrar (ahí se dice «se envía»).
+        Settings settings=new Settings(s);boolean paid=RecordingActions.paid(settings);
         Sheet sheet=s.sheet("¿Cómo quieres volver a transcribir?","Audio de "+Ui.humanDuration(r.duration)+". "+(paid?"Se cobra de nuevo el audio completo.":"Se envía de nuevo el audio completo.")+" Tu versión actual se guarda por si prefieres volver.");
         // Las 4 alternativas con su círculo menta (0.7.0): la recomendada lleva «✦ Recomendada» y el costo va en su
         // píldora con cifras fijas, así se comparan de un vistazo. La que no se puede usar se ve atenuada con su motivo.
@@ -73,7 +79,7 @@ final class RetranscribeSheet {
             list.addView(SheetParts.option(s,icon(mode),label,detail,facts,ok,spoken,()->{sheet.dismiss();confirm(s,r,mode,changed);}),Ui.fill());
         }
         // Sin «Mi voz», la separación se equivoca más al inicio: conviene grabarla antes de repetir (una sola vez).
-        if(paid&&!Voices.has(s))list.addView(SheetParts.item(s,sheet,R.drawable.ic_mic_fill,"Grabar mi voz antes de repetir",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true))));
+        if(RecordingActions.knownVoices(settings)&&settings.canSeparate()&&!Voices.has(s))list.addView(SheetParts.item(s,sheet,R.drawable.ic_mic_fill,"Grabar mi voz antes de repetir",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true))));
         sheet.secondary("Cancelar",null).show();
         Diagnostics.event("retranscribe_sheet",r.id,"modes",log.toString());
     }
@@ -83,7 +89,8 @@ final class RetranscribeSheet {
         String cost=cost(s,r,mode);boolean corrected=false;
         try{Transcript t=Transcript.load(s,r.id);corrected=t.edited()||t.reviewed();}catch(Exception ignored){}
         StringBuilder m=new StringBuilder(explain(s,mode)).append("\n\n");
-        m.append(cost.isEmpty()?"Se envía de nuevo el audio completo.":"Se cobra de nuevo el audio completo ("+cost+").");
+        // Sin tarifa conocida igual se avisa que se cobra, si el proveedor cobra (OpenRouter con un modelo sin precio por minuto).
+        m.append(!cost.isEmpty()?"Se cobra de nuevo el audio completo ("+cost+").":RecordingActions.paid(new Settings(s))?"Se cobra de nuevo el audio completo.":"Se envía de nuevo el audio completo.");
         m.append(" Tu versión actual se guarda por si prefieres volver.");
         if(corrected&&mode!=Retranscribe.Mode.CORRECTIONS)m.append(" Tus correcciones de voces y nombres no pasan a la nueva versión.");
         Sheet sheet=s.sheet(title(s,mode),m.toString());SheetParts.hero(sheet,icon(mode),false);

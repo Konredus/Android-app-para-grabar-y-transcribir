@@ -121,7 +121,9 @@ public class RecordingActivity extends Screen {
             if(lastSettings!=null&&!settingsKey().equals(lastSettings))reload();else refreshPrimary();}
     }
     private String lastSettings;
-    private String settingsKey(){Settings s=new Settings(this);return s.inboxTree()+"|"+s.hasKey()+"|"+s.provider()+"|"+s.textModel()+"|"+s.noteProvider()+"|"+s.hasAnthropicKey()+"|"+s.noteAuto();}
+    /** Incluye lo de OpenRouter (0.8.0): su clave y sus modelos cambian los costos, las voces conocidas y la IA de la nota. */
+    private String settingsKey(){Settings s=new Settings(this);return s.inboxTree()+"|"+s.hasKey()+"|"+s.provider()+"|"+s.textModel()+"|"+Notes.provider(s)+"|"+s.hasAnthropicKey()+"|"+s.noteAuto()
+        +"|"+s.hasOpenRouterKey()+"|"+s.hasOpenAiKey()+"|"+s.orSpeakersModel()+"|"+s.orTextModel();}
     @Override protected void onPause(){handler.removeCallbacks(progress);if(player!=null&&player.isPlaying()){player.pause();setPlaying(false);}super.onPause();}
     @Override protected void onDestroy(){
         handler.removeCallbacksAndMessages(null);releasePlayer();
@@ -500,12 +502,14 @@ public class RecordingActivity extends Screen {
         card.addView(sparkTile(44));
         TextView h=ui.heading("Transcribe este audio",Type.TITLE_LARGE);h.setPadding(0,ui.dp(S4),0,ui.dp(S1));card.addView(h);
         card.addView(ui.text(s.hasKey()?"Toca «Transcribir» abajo. Al transcribir eliges si separar voces. Proveedor: "+SettingsActivity.modelSummary(s)+".":"Agrega tu clave de API para transcribir: toca «Transcribir» abajo. Solo pagas lo que usas en tu cuenta del proveedor.",Type.BODY_MEDIUM,p.onSurfaceVariant));
-        if(s.hasKey()&&s.provider().equals("openai")){double voices=Pricing.estimate("openai","gpt-4o-transcribe-diarize",recording.duration),text=Pricing.estimate("openai",s.textModel(),recording.duration);
+        // Costos con el proveedor y los modelos reales (0.8.0: también OpenRouter, con el precio de su catálogo). Un servidor
+        // propio no tiene tarifa conocida y no muestra nada; un modelo que no separa voces muestra solo el del texto.
+        if(s.hasKey()){String provider=s.provider();
+            double voices=s.canSeparate()?RecordingActions.estimate(this,provider,RecordingActions.model(s,true),recording.duration):-1,text=RecordingActions.estimate(this,provider,RecordingActions.model(s,false),recording.duration);
             // Los dos costos como píldoras, una bajo la otra (juntas no caben en un teléfono angosto): se comparan de un vistazo.
-            if(voices>=0&&text>=0){
-                TextView both=Ui.tabular(ui.chip("≈ "+Pricing.usd(voices)+" separando voces",p.onPrimaryContainer,p.primaryContainer)),plain=Ui.tabular(ui.chip("≈ "+Pricing.usd(text)+" solo el texto",p.onSurfaceVariant,0));
-                plain.setBackground(outline(this,chipFill(),p.outlineVariant,R_FULL,false));
-                LinearLayout.LayoutParams bl=Ui.wrap();bl.topMargin=ui.dp(S3);card.addView(both,bl);LinearLayout.LayoutParams pl=Ui.wrap();pl.topMargin=ui.dp(S2);card.addView(plain,pl);}}
+            if(voices>=0){TextView both=Ui.tabular(ui.chip("≈ "+Pricing.usd(voices)+" separando voces",p.onPrimaryContainer,p.primaryContainer));LinearLayout.LayoutParams bl=Ui.wrap();bl.topMargin=ui.dp(S3);card.addView(both,bl);}
+            if(text>=0){TextView plain=Ui.tabular(ui.chip("≈ "+Pricing.usd(text)+" solo el texto",p.onSurfaceVariant,0));plain.setBackground(outline(this,chipFill(),p.outlineVariant,R_FULL,false));
+                LinearLayout.LayoutParams pl=Ui.wrap();pl.topMargin=ui.dp(voices>=0?S2:S3);card.addView(plain,pl);}}
         content.addView(card,gap());
     }
 
@@ -659,8 +663,12 @@ public class RecordingActivity extends Screen {
         if(live)cells.add(new String[]{"Restante (aprox.)",remaining(st)});
         cells.add(new String[]{"Audio procesado",Recording.time(live?doneAudio:audio)+" de "+Recording.time(audio)});
         long speedBase=live?doneAudio:audio;if(speedBase>0&&elapsed>0)cells.add(new String[]{"Velocidad",String.format(Locale.ROOT,"%.1f",speedBase/(double)elapsed).replace('.',',')+"× tiempo real"});
-        String provider=st.optString("provider","openai");double spent=Pricing.estimate(provider,model,live?doneAudio:audio),total=Pricing.estimate(provider,model,audio);
-        if(total>=0)cells.add(new String[]{live?"Costo hasta ahora":"Costo estimado",Pricing.usd(spent)+(live?" · total ≈"+Pricing.usd(total):"")});
+        String provider=st.optString("provider","openai");double spent=RecordingActions.estimate(this,provider,model,live?doneAudio:audio),total=RecordingActions.estimate(this,provider,model,audio);
+        // Costo real (0.8.0): OpenRouter informa lo que cobró cada envío y el motor lo suma en "costUsd". Si existe, va en
+        // vez del estimado (sin «≈»); mientras se transcribe, junto al total estimado si se conoce.
+        double real=RecordingActions.realCost(st);
+        if(real>=0)cells.add(new String[]{live?"Costo hasta ahora":"Costo",Pricing.usd(real)+(live&&total>=0?" · total ≈"+Pricing.usd(total):"")});
+        else if(total>=0)cells.add(new String[]{live?"Costo hasta ahora":"Costo estimado",Pricing.usd(spent)+(live?" · total ≈"+Pricing.usd(total):"")});
         long in=st.optLong("inTokens"),out=st.optLong("outTokens");double secs=st.optDouble("usageSec",0);
         if(in+out>0)cells.add(new String[]{"Tokens",String.format(Locale.ROOT,"%,d",in+out).replace(',','.')+" ("+String.format(Locale.ROOT,"%,d",in).replace(',','.')+" entrada)"});
         else if(secs>0)cells.add(new String[]{"Audio facturado",Recording.time((long)(secs*1000))});
@@ -673,7 +681,9 @@ public class RecordingActivity extends Screen {
                 if(live&&k==0)liveTotal=v;if(live&&k==1)liveRemaining=v;}
             if(cells.size()-i==1)line.addView(ui.flex());grid.addView(line,Ui.fill());
         }
-        if(!model.isEmpty()){TextView m=ui.text("Modelo: "+model+(st.optBoolean("speakers")?" · separa voces":"")+(total>=0?" · tarifa pública al "+Pricing.REVIEWED+", el cobro real puede variar":""),Type.BODY_SMALL,p.onSurfaceVariant);m.setPadding(0,ui.dp(S2),0,0);grid.addView(m);}
+        // De dónde sale el costo: informado por el proveedor (real), del catálogo de OpenRouter o de la tabla pública de OpenAI.
+        String priced=real>=0?" · costo informado por "+RecordingActions.providerName(provider):total<0?"":"openrouter".equals(provider)?" · precio del catálogo de OpenRouter, el cobro real puede variar":" · tarifa pública al "+Pricing.REVIEWED+", el cobro real puede variar";
+        if(!model.isEmpty()){TextView m=ui.text("Modelo: "+model+(st.optBoolean("speakers")?" · separa voces":"")+priced,Type.BODY_SMALL,p.onSurfaceVariant);m.setPadding(0,ui.dp(S2),0,0);grid.addView(m);}
         if(live)liveState=st;return grid;
     }
     /** Estimación: promedio por bloque × rondas restantes (bloques de a PARALLEL en paralelo). */
@@ -779,11 +789,15 @@ public class RecordingActivity extends Screen {
             updateStrip(segments,diarized);
         }catch(Exception e){content.addView(ui.text("No se pudo leer la transcripción.",Type.BODY_LARGE,p.error));}
     }
-    /** Pie en palabras simples: «Transcrito el 23 sept · tardó 2 min · ≈ US$0,02». El modelo queda en los detalles. */
+    /**
+     * Pie en palabras simples: «Transcrito el 23 sept · tardó 2 min · ≈ US$0,02». El modelo queda en los detalles.
+     * Con el costo real del proveedor (estado "costUsd", 0.8.0) va sin «≈»: es lo que se cobró, no un estimado.
+     */
     private String footer(JSONObject st){
         List<String> parts=new ArrayList<>();long at=transcribedAt(st);if(at>0)parts.add("Transcrito el "+dayLabel(at));
         long took=st.optLong("doneIn");if(took>0)parts.add("tardó "+Ui.humanDuration(took));
-        double cost=Pricing.estimate(transcript.data.optString("provider","openai"),transcript.data.optString("model"),recording.duration);if(cost>=0&&took>0)parts.add("≈ "+Pricing.usd(cost));
+        double real=RecordingActions.realCost(st),cost=real>=0?real:RecordingActions.estimate(this,transcript.data.optString("provider","openai"),transcript.data.optString("model"),recording.duration);
+        if(cost>=0&&took>0)parts.add((real>=0?"":"≈ ")+Pricing.usd(cost));
         return TextUtils.join(" · ",parts);
     }
     private long transcribedAt(JSONObject st){
@@ -968,6 +982,10 @@ public class RecordingActivity extends Screen {
             for(int i=0;i<tags.length();i++){String tag=tags.optString(i).trim().replaceFirst("^#","");if(tag.isEmpty())continue;if(b.length()>0)b.append("  ");int from=b.length();b.append('#').append(tag);b.setSpan(new TagSpan(p.primaryContainer,p.onPrimaryContainer,ui.dp(10),ui.dp(5),getResources().getDisplayMetrics().widthPixels-ui.dp(72)),from,b.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);}
             if(b.length()>0){TextView t=ui.text("",Type.LABEL_MEDIUM,p.onPrimaryContainer);t.setText(b);t.setLineSpacing(ui.dp(S2),1f);t.setPadding(0,ui.dp(S4),0,0);body.addView(t,Ui.fill());}}
         if(error!=null&&!error.isEmpty()){TextView e=ui.text("No se pudo volver a armar: "+error,Type.BODY_SMALL,p.error);e.setPadding(0,ui.dp(S3),0,0);body.addView(e);}
+        // Con qué IA se armó (0.8.0): el modelo que respondió de verdad (con OpenRouter se pide un alias «el más nuevo» y así
+        // se sabe qué versión fue) y lo que costó. Discreto, al pie de la nota.
+        String credit=Notes.credit(note);
+        if(!credit.isEmpty()){TextView made=Ui.tabular(ui.text(credit,Type.BODY_SMALL,p.onSurfaceVariant));made.setPadding(0,ui.dp(S4),0,0);body.addView(made,Ui.fill());}
         card.addView(body,Ui.fill());
         TextView collapsed=ui.text(summary.isEmpty()?"Toca para ver la nota":summary,Type.BODY_MEDIUM,p.onSurfaceVariant);collapsed.setMaxLines(2);collapsed.setEllipsize(TextUtils.TruncateAt.END);collapsed.setPadding(0,0,ui.dp(S2),0);card.addView(collapsed);
         // ⌄ para abrir y ⌃ para cerrar; al tocarla, la flecha gira (sin animación si están quitadas).
@@ -1046,7 +1064,7 @@ public class RecordingActivity extends Screen {
     /** Arma la nota en segundo plano; mientras tanto se ve «Armando la nota…». */
     private void generateNote(){
         if(noteBusy||demo)return;
-        if(!Notes.canGenerate(this)){sheet("Falta configurar la IA de la nota","Elige en Ajustes con qué IA se arma la nota (tu clave de OpenAI o Claude).").primary("Ir a Ajustes",this::openNoteAi).secondary("Ahora no",null).show();return;}
+        if(!Notes.canGenerate(this)){sheet("Falta configurar la IA de la nota","Elige en Ajustes con qué IA se arma la nota y agrega su clave (OpenRouter, OpenAI o Claude).").primary("Ir a Ajustes",this::openNoteAi).secondary("Ahora no",null).show();return;}
         noteBusy=true;reload();Diagnostics.event("note_requested",id);
         Context app=getApplicationContext();Recording r=recording;
         new Thread(()->{String error=null;
@@ -1208,9 +1226,10 @@ public class RecordingActivity extends Screen {
         boolean only=key.equals(onlySpeaker);s.action(R.drawable.ic_filter,only?"Ver todas las intervenciones":"Ver solo sus intervenciones",false,()->{onlySpeaker=only?null:key;reload(true);});
         s.action(R.drawable.ic_voice,"Nombrar todas las voces",false,this::openNameVoices);
         // Guardar su voz para reconocerla en los próximos audios: con un nombre puesto por el usuario, si aún no es una voz
-        // conocida y hay un tramo limpio (sin otra voz encima) de 3 s o más.
+        // conocida y hay un tramo limpio (sin otra voz encima) de 3 s o más. Solo si el servicio usa voces conocidas:
+        // OpenAI (muestras) u OpenRouter (anclas, 0.8.0); con un servidor propio no servirían de nada.
         double[] clean=!demo&&transcript.diarized()&&!key.startsWith(Voices.TARGET)&&!name.equals(transcript.defaultLabel(key))&&!name.trim().isEmpty()
-            &&new Settings(this).provider().equals("openai")&&recording.audio(this).isFile()?NameVoices.sample(segs,key):null;
+            &&RecordingActions.knownVoices(new Settings(this))&&recording.audio(this).isFile()?NameVoices.sample(segs,key):null;
         if(clean!=null&&(clean[1]-clean[0])*1000>=Voices.MIN_MS)privateAction(s,R.drawable.ic_mic_fill,"Guardar la voz","Guardar la voz de "+name,()->saveVoice(name,clean));
         s.show();
     }catch(Exception e){message("Transcripción","No se pudo abrir esta voz.");}}
