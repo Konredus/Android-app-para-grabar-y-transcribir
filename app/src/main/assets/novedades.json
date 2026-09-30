@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.7.0",
+    "date": "2026-09-29",
+    "title": "Verbapp: nueva cara, el mismo cerebro",
+    "items": [
+      "Nuevo nombre e ícono: Voz local ahora se llama Verbapp, porque las palabras vuelan y lo escrito permanece. Tus grabaciones y ajustes siguen tal cual.",
+      "Verde, vidrio y letra nueva: tarjetas de vidrio sobre un fondo verde y la letra Outfit, también en modo oscuro.",
+      "Grabar a pantalla completa: un cronómetro gigante y la onda de tu voz en vivo, con Detener, Pausa y ★ siempre a mano.",
+      "Nombra esta grabación: al detener aparece una hoja con un mini reproductor, para ponerle nombre de inmediato.",
+      "Barra flotante: Grabar, Biblioteca y Ajustes van en una cápsula que flota abajo, al alcance del pulgar.",
+      "Nada de lo que ya hacía cambió: grabar, marcar momentos, transcribir, reconocer voces, armar tu nota y guardar en 0-Inbox funcionan igual que antes."
+    ]
+  },
+  {
     "version": "0.6.0",
     "date": "2026-09-29",
     "title": "Del botón rojo a tu segundo cerebro",
