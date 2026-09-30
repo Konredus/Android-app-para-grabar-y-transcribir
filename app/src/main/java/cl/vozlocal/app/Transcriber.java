@@ -20,6 +20,11 @@ import java.util.concurrent.*;
  * 0.6.0: «Volver a transcribir» (ver {@link Retranscribe}): la segunda pasada con tus correcciones envía muestras de la
  * versión anterior a TODAS las partes desde el inicio; «sin cortar» manda el audio completo en un solo envío. Al terminar,
  * la «Nota para tu segundo cerebro» se arma sola (si está activada) y la notificación «lista» abre esa grabación.
+ *
+ * 0.8.0: el motor no sabe de proveedores. Cada envío lo hace el cliente que corresponde ({@link TranscribeClient#of}):
+ * OpenAI (y servidor compatible) u OpenRouter. Con OpenRouter cambian cuatro cosas, todas aquí a la vista: el tamaño de
+ * los bloques sale de la receta del modelo, las muestras de voz viajan como «anclas» (mismo flujo de voces conocidas),
+ * el costo real de cada envío se suma en el estado ("costUsd") y un 413 baja los bloques a la mitad una vez ("orHalf").
  */
 final class Transcriber {
     static final java.util.concurrent.locks.ReentrantLock RUNNING=new java.util.concurrent.locks.ReentrantLock();
@@ -35,6 +40,23 @@ final class Transcriber {
      */
     static final long SPEAKER_BLOCK_MAX_MS=12*60_000;
     static long speakerBlockMs(long totalMs,long bytes){int n=(int)Math.max(Math.ceil(totalMs/(double)SPEAKER_BLOCK_MAX_MS),Math.ceil(bytes/19_000_000d));return n<=1?Math.max(1,totalMs):totalMs/n;}
+    // ---------- 0.8.0: OpenRouter ----------
+    /** Lugar que se deja a las anclas (hasta 4 muestras de ~10 s más sus silencios) dentro del tope del modelo. */
+    static final long OR_ANCHOR_ROOM_MS=60_000;
+    /**
+     * OpenRouter: duración máxima de un bloque. Con voces, 12 min como con OpenAI; sin voces, 8. Nunca más de lo que
+     * acepta el modelo según su receta (p. ej. un modelo que solo recibe 10 min), dejando lugar para las anclas.
+     */
+    static long orBlockMax(Models.Recipe recipe,boolean speakers){return Math.max(60_000L,Math.min(speakers?SPEAKER_BLOCK_MAX_MS:BLOCK_TEXT_MS,recipe.maxMs-OR_ANCHOR_ROOM_MS));}
+    /**
+     * OpenRouter: bloques parejos de hasta maxMs. El peso del m4a no cuenta (se envía FLAC, cuyo peso depende solo de la
+     * duración). half: el proveedor respondió 413 (envío muy grande) y los bloques bajan a la mitad.
+     */
+    static long orBlockMs(long totalMs,long maxMs,boolean half){
+        // Sin duración conocida se usa el tope (AudioParts.plan mide el audio y corta igual).
+        if(totalMs<=0)return half?Math.max(1,maxMs/2):maxMs;
+        int n=(int)Math.ceil(totalMs/(double)Math.max(1,maxMs));long block=n<=1?totalMs:totalMs/n;return half?Math.max(1,block/2):block;
+    }
     /** Máximo de voces conocidas por envío (límite de la API). */
     static final int MAX_KNOWN=4;
     /** La tarea diferida cede el turno antes de este tiempo para que Android no la corte a mitad de un envío. */
@@ -62,6 +84,11 @@ final class Transcriber {
     static final long UPLOAD_STALL_MS=90_000;
     /** Espera máxima de la respuesta tras el envío: lo que dura el audio más 1 min (mín. 3, máx. 20). OpenAI suele tardar la mitad. */
     static long responseLimit(long partMs){return Math.min(20*60_000L,Math.max(3*60_000L,partMs+60_000L));}
+    /**
+     * Con OpenRouter la espera no pasa de 5 min: sus proveedores cortan a los ~60 s de proceso, así que una respuesta que
+     * no llegó en ese tiempo ya no va a llegar (esperar 13 min por un bloque de 12 solo demoraría el reintento).
+     */
+    static long responseLimit(String provider,long partMs){long limit=responseLimit(partMs);return "openrouter".equals(provider)?Math.min(limit,5*60_000L):limit;}
     /** Grabación que se está transcribiendo: la notificación de avance abre su detalle. */
     static volatile String currentId;
     /** En la última ronda hubo un corte del propio teléfono (el servicio reintenta pronto, sin esperas largas). */
@@ -72,7 +99,7 @@ final class Transcriber {
 
     private final Context c;private final HttpApi http;private final long budgetMs;private final long started=System.currentTimeMillis();
     private final Map<Integer,long[]> uploads=new ConcurrentHashMap<>();private volatile long lastProgress;
-    Transcriber(Context c,HttpApi http,long budgetMs){this.c=c;this.http=http;this.budgetMs=budgetMs;}
+    Transcriber(Context c,HttpApi http,long budgetMs){this.c=c;this.http=http;this.budgetMs=budgetMs;Pricing.attach(c);}
 
     /** Procesa todas las grabaciones en cola. Devuelve true si queda trabajo pendiente para más tarde. */
     boolean runAll(){
@@ -153,39 +180,66 @@ final class Transcriber {
     /** Perfil de un intento: si cambia, no se reutilizan partes ya transcritas. Cada «Volver a transcribir» suma un intento. */
     static String profile(String base,int attempt,Retranscribe.Mode mode){return attempt>0?base+"|a"+attempt+(mode==null?"":"|"+mode.name()):base;}
 
-    private void process(Recording r)throws Exception{
+    /**
+     * OpenRouter: si el proveedor responde 413 (el envío pesa más de lo que acepta; su tope para el JSON no está
+     * documentado), los bloques bajan a la mitad y se repite de inmediato, sin gastar un intento. Una sola vez por
+     * transcripción (clave de estado "orHalf"): si con la mitad tampoco cabe, el error llega al usuario.
+     * (Visible en el paquete para probar el motor con un proveedor simulado, sin pasar por la cola.)
+     */
+    void process(Recording r)throws Exception{
+        try{transcribe(r);}
+        catch(HttpApi.TooLarge e){
+            JSONObject st=FilesStore.state(c,r.id);
+            if(!"openrouter".equals(st.optString("provider"))||st.optBoolean("orHalf"))throw e;
+            check(r);FilesStore.update(c,r.id,s->s.put("orHalf",true));
+            Pipeline.log(c,r.id,"El proveedor no aceptó un envío tan grande · se repite con partes de la mitad (no gasta un intento)");
+            Diagnostics.event("job_halved",r.id,"provider","openrouter","model",st.optString("model"));
+            transcribe(r);
+        }
+    }
+    private void transcribe(Recording r)throws Exception{
         check(r);long start=System.currentTimeMillis();Settings settings=new Settings(c);
         JSONObject initial=FilesStore.state(c,r.id);boolean wantSpeakers=initial.has("speakers")?initial.optBoolean("speakers"):settings.defaultSpeakers();
         Retranscribe.Mode mode=Retranscribe.mode(initial);
         if(!Transcript.exists(c,r.id)){
             ProviderConfig config=settings.config(wantSpeakers);if(config.key.isEmpty())throw new HttpApi.UserAction("Agrega una clave de API en Ajustes y pulsa Reintentar.");
-            long bytes=r.audio(c).length(),audioMs=r.duration>0||!config.speakers?r.duration:AudioConvert.duration(r.audio(c));
+            // OpenRouter (0.8.0): el tamaño de los bloques sale de la receta del modelo y no del peso del m4a.
+            boolean router=config.provider.equals("openrouter"),half=router&&initial.optBoolean("orHalf");Models.Recipe recipe=router?Models.recipe(config.model):null;
+            long bytes=r.audio(c).length(),audioMs=r.duration>0||!(config.speakers||router)?r.duration:AudioConvert.duration(r.audio(c));
             // «Separar voces sin cortar el audio»: un solo envío, sin uniones donde las voces se crucen.
-            boolean single=mode==Retranscribe.Mode.SINGLE&&config.speakers&&Retranscribe.fitsSingle(audioMs,bytes);
+            boolean single=mode==Retranscribe.Mode.SINGLE&&config.speakers&&!half&&(router?Retranscribe.fitsSingle(recipe,audioMs):Retranscribe.fitsSingle(audioMs,bytes));
             // Tarea de fondo: un envío único que no alcanza a volver antes del corte de Android se deja al primer plano.
             if(single&&budgetMs>0&&sendEstimate(audioMs)>JOB_SEND_LIMIT_MS)throw new NeedsForeground("Sin cortar: el envío del audio completo");
-            long target=single?audioMs:config.speakers?speakerBlockMs(audioMs,bytes):BLOCK_TEXT_MS;
+            long blockMax=router?orBlockMax(recipe,config.speakers):0;
+            long target=single?audioMs:router?orBlockMs(audioMs,blockMax,half):config.speakers?speakerBlockMs(audioMs,bytes):BLOCK_TEXT_MS;
+            // Hasta qué duración el audio va entero. Con OpenRouter partido a la mitad, el propio bloque es el tope.
+            long wholeMax=router?Math.min(AudioParts.SINGLE_MAX_MS,half?target:blockMax):AudioParts.SINGLE_MAX_MS;
             // Voces conocidas («Mi voz» y las demás guardadas) van en todos los bloques (también el primero), la tuya primero y
             // a lo más MAX_KNOWN. Si cambia alguna muestra, no se reutilizan bloques ya transcritos.
-            List<String[]> saved=config.speakers&&config.provider.equals("openai")?Voices.references(c):Collections.emptyList();
+            // OpenAI las recibe como voces conocidas; OpenRouter, como anclas antes del audio. Un servidor propio, no.
+            boolean samples=config.speakers&&TranscribeClient.knowsVoices(config.provider);
+            List<String[]> saved=samples?Voices.references(c):Collections.emptyList();
             // Nombre de cada voz conocida (voz destino → nombre), para no sacarle otra muestra en la segunda pasada.
             Map<String,String> savedNames=new LinkedHashMap<>();for(String[] ref:saved){String name=Voices.nameFor(c,ref[2]);savedNames.put(ref[2],name==null?"":name);}
-            // «Segunda pasada con tus correcciones»: muestras de la versión anterior (solo OpenAI acepta voces conocidas).
-            JSONArray fixed=mode==Retranscribe.Mode.CORRECTIONS&&config.speakers&&config.provider.equals("openai")?initial.optJSONArray("fixedRefs"):null;
+            // «Segunda pasada con tus correcciones»: muestras de la versión anterior (solo si el proveedor acepta muestras).
+            JSONArray fixed=mode==Retranscribe.Mode.CORRECTIONS&&samples?initial.optJSONArray("fixedRefs"):null;
             int attempt=initial.optInt("attempt",0);
-            String profile=profile(config.fingerprint()+settings.language()+"|v3|"+target+"|"+(saved.isEmpty()?"none":Voices.fingerprint(c)),attempt,mode);
+            // Con OpenRouter el perfil lleva además el formato del audio y el tope de bloque: así no se mezclan puntos de
+            // control hechos con otro formato o con otro tamaño. Para los demás proveedores queda igual que antes.
+            String profile=profile(config.fingerprint()+settings.language()+"|v3|"+target+"|"+(saved.isEmpty()?"none":Voices.fingerprint(c))
+                +(router?"|"+OpenRouterClient.PROFILE+"|"+blockMax+(half?"|half":""):""),attempt,mode);
             if(!profile.equals(FilesStore.state(c,r.id).optString("profile"))){
                 Retranscribe.clearCheckpoints(c,r.id);
                 AudioParts.clearBlocks(c,r.id);
                 FilesStore.update(c,r.id,s->s.put("profile",profile).remove("cuts"));
-                FilesStore.update(c,r.id,s->s.put("blocksDone",0).put("doneAudioMs",0).put("bytesSent",0).put("inTokens",0).put("outTokens",0).put("usageSec",0).put("blockMsSum",0).put("blockCount",0));
+                FilesStore.update(c,r.id,s->s.put("blocksDone",0).put("doneAudioMs",0).put("bytesSent",0).put("inTokens",0).put("outTokens",0).put("usageSec",0).put("blockMsSum",0).put("blockCount",0).remove("costUsd"));
             }
             FilesStore.update(c,r.id,s->s.put("model",config.model).put("speakers",config.speakers).put("audioMs",r.duration).put("provider",config.provider));
             Diagnostics.event("job_start",r.id,"provider",config.provider,"model",config.model,"bytes",bytes,"duration_ms",r.duration,"net",Pipeline.networkName(c),"runner",budgetMs>0?"job":"fgs","mode",mode==null?"":mode.name());
             stage(r,"Preparando audio",-1);long prepStart=System.currentTimeMillis();
             List<Long> cuts=new ArrayList<>();List<AudioParts.Part> parts;
             if(single){parts=Collections.singletonList(new AudioParts.Part(r.audio(c),0,audioMs));cuts.add(0L);cuts.add(audioMs);Pipeline.log(c,r.id,"Sin cortar: el audio completo va en un solo envío · tarda más, pero no hay uniones donde las voces se crucen");}
-            else parts=AudioParts.plan(c,r,http,target,FilesStore.state(c,r.id).optJSONArray("cuts"),cuts,line->Pipeline.log(c,r.id,line));
+            else parts=AudioParts.plan(c,r,http,target,FilesStore.state(c,r.id).optJSONArray("cuts"),cuts,line->Pipeline.log(c,r.id,line),wholeMax);
             JSONArray savedCuts=new JSONArray();for(Long cut:cuts)savedCuts.put(cut);FilesStore.update(c,r.id,s->s.put("cuts",savedCuts));
             Diagnostics.event("prepare_done",r.id,"parts",parts.size(),"elapsed_ms",System.currentTimeMillis()-prepStart);
             int n=parts.size();FilesStore.update(c,r.id,s->s.put("blocks",n));
@@ -215,7 +269,8 @@ final class Transcriber {
                         // Las voces conocidas que la parte 1 ya reconoció (con su nombre enviado) no necesitan muestra automática;
                         // las automáticas usan los lugares que quedan.
                         Set<String> exclude=new HashSet<>();for(String[] ref:saved)exclude.add(ref[0]);
-                        List<String[]> auto=AudioParts.references(c,r,responses[0],http,MAX_KNOWN-saved.size(),exclude);
+                        // Si la parte 1 volvió sin voces (OpenRouter: el modelo no las entregó), no hay de quién sacar muestras.
+                        List<String[]> auto=responses[0].optBoolean("_diarized",true)?AudioParts.references(c,r,responses[0],http,MAX_KNOWN-saved.size(),exclude):new ArrayList<>();
                         references=new ArrayList<>(saved);references.addAll(auto);
                         if(!auto.isEmpty()){StringBuilder which=new StringBuilder();for(String[] ref:auto)which.append(which.length()==0?"":", ").append(ref[3]);
                             Pipeline.log(c,r.id,"Muestras de voz de la parte 1: "+which+" · se usan para reconocer a las mismas personas en las demás partes");}
@@ -346,12 +401,14 @@ final class Transcriber {
         sentThisRun.set(true);
         HttpApi h=http.child();h.jobId=r.id;long partMs=part.durationMs>0?part.durationMs:r.duration;
         // La espera escala con la duración: un bloque con separación de voces puede tardar varios minutos.
-        h.readTimeoutMs=(int)Math.min(20*60_000L,Math.max(240_000L,120_000L+partMs));
+        // (Con OpenRouter no pasa de 6 min: ver responseLimit.)
+        boolean router=config.provider.equals("openrouter");
+        h.readTimeoutMs=(int)Math.min(router?6*60_000L:20*60_000L,Math.max(240_000L,120_000L+partMs));
         long blockStart=System.currentTimeMillis();
         stage(r,"Enviando "+label,0);
         h.onProgress=(sent,total)->progress(r,i,sent,total,label);
-        java.util.concurrent.atomic.AtomicBoolean uploaded=new java.util.concurrent.atomic.AtomicBoolean();long limit=responseLimit(partMs);
-        h.onUploaded=()->{uploaded.set(true);uploads.remove(i);publishUploads(r);Pipeline.log(c,r.id,(n>1?"Parte "+(i+1)+" enviada":"Audio enviado")+(config.provider.equals("openai")?" · OpenAI está transcribiendo":" · el servidor está transcribiendo"));};
+        java.util.concurrent.atomic.AtomicBoolean uploaded=new java.util.concurrent.atomic.AtomicBoolean();long limit=responseLimit(config.provider,partMs);
+        h.onUploaded=()->{uploaded.set(true);uploads.remove(i);publishUploads(r);Pipeline.log(c,r.id,(n>1?"Parte "+(i+1)+" enviada":"Audio enviado")+(config.provider.equals("openai")?" · OpenAI está transcribiendo":router?" · OpenRouter está transcribiendo":" · el servidor está transcribiendo"));};
         OpenAiClient.Delta delta=chars->liveText(r,i,chars);
         JSONObject response;
         // Vigilante: si el envío deja de avanzar o la respuesta tarda mucho más de lo normal (p. ej. el teléfono congeló
@@ -365,11 +422,12 @@ final class Transcriber {
             else if(uploaded.get()&&idle>limit)h.abortStalled("sin respuesta en "+Recording.time(idle)+", lo normal es menos de "+Recording.time(limit));
         },5,5,TimeUnit.SECONDS);
         try{
-            try{response=new OpenAiClient(h).transcribe(part.file,config,settings.language(),refs,delta);}
+            // El cliente sale del proveedor: OpenAI (y servidor compatible) u OpenRouter. El motor no distingue la respuesta.
+            try{response=TranscribeClient.of(c,h,config).transcribe(part.file,config,settings.language(),refs,delta);}
             catch(HttpApi.UserAction e){
                 if(refs==null||refs.isEmpty()||!String.valueOf(e.getMessage()).contains("known_speaker"))throw e;
                 Pipeline.log(c,r.id,"El proveedor rechazó las muestras de voz · se reenvía "+(n>1?"la "+label:"el audio")+" sin ellas");
-                uploaded.set(false);response=new OpenAiClient(h).transcribe(part.file,config,settings.language(),null,delta);refs=null;
+                uploaded.set(false);response=TranscribeClient.of(c,h,config).transcribe(part.file,config,settings.language(),null,delta);refs=null;
             }
         }finally{guard.cancel(false);}
         check(r);
@@ -378,7 +436,10 @@ final class Transcriber {
         if(fresh!=null)response.put("_prefix",fresh);
         String voices=describeVoices(response,known);
         synchronized(FilesStore.LOCK){if(r.audio(c).exists())FilesStore.write(checkpoint,response);}
-        long took=System.currentTimeMillis()-blockStart;long bytes=part.file.length();JSONObject usage=response.optJSONObject("usage");
+        // OpenRouter informa lo que pesó de verdad el envío (FLAC en base64), que no es el peso del m4a.
+        long took=System.currentTimeMillis()-blockStart;long bytes=response.optLong("_bytes",part.file.length());JSONObject usage=response.optJSONObject("usage");
+        // Costo real del envío en US$ (OpenRouter lo informa en usage.cost); -1 si el proveedor no lo dice.
+        double cost=usage==null||usage.isNull("cost")?-1:usage.optDouble("cost",-1);
         FilesStore.update(c,r.id,s->{
             s.put("localCuts",0).put("blocksDone",s.optInt("blocksDone")+1).put("doneAudioMs",s.optLong("doneAudioMs")+partMs).put("bytesSent",s.optLong("bytesSent")+bytes)
              .put("blockMsSum",s.optLong("blockMsSum")+took).put("blockCount",s.optInt("blockCount")+1);
@@ -386,9 +447,12 @@ final class Transcriber {
                 if("duration".equals(usage.optString("type")))s.put("usageSec",s.optDouble("usageSec",0)+usage.optDouble("seconds",0));
                 else s.put("inTokens",s.optLong("inTokens")+usage.optLong("input_tokens")).put("outTokens",s.optLong("outTokens")+usage.optLong("output_tokens"));
             }
+            // "costUsd" solo existe si el proveedor informó el costo: las pantallas muestran ese y no el estimado.
+            if(cost>=0)s.put("costUsd",s.optDouble("costUsd",0)+cost);
         });
         Pipeline.log(c,r.id,(n>1?"Parte "+(i+1)+" de "+n+" lista":"Respuesta recibida")+" · tardó "+Recording.time(took)+voices);
-        Diagnostics.event("part_complete",r.id,"part",i+1,"parts",n,"elapsed_ms",took);
+        if(cost>=0)Diagnostics.event("part_complete",r.id,"part",i+1,"parts",n,"elapsed_ms",took,"cost",cost);
+        else Diagnostics.event("part_complete",r.id,"part",i+1,"parts",n,"elapsed_ms",took);
         JSONObject st=FilesStore.state(c,r.id);notice(n>1?"Transcribiendo · "+st.optInt("blocksDone")+" de "+n+" partes listas":"Transcribiendo · respuesta recibida",true,(int)(st.optLong("doneAudioMs")*100/Math.max(1,r.duration)));
         return response;
     }
@@ -398,6 +462,10 @@ final class Transcriber {
         Set<String> recognized=new HashSet<>(),fresh=new HashSet<>();
         for(int k=0;k<s.length();k++){JSONObject seg=s.optJSONObject(k);if(seg==null||seg.optString("text").trim().isEmpty())continue;String sp=seg.optString("speaker");if(known.has(sp))recognized.add(known.optString(sp));else fresh.add(sp);}
         if(known.length()==0)return fresh.isEmpty()?"":" · "+fresh.size()+(fresh.size()==1?" voz":" voces");
+        // OpenRouter: las muestras van como anclas antes del audio y el cliente cuenta cuántas personas emparejó (cantidades,
+        // nunca nombres). Sirve para medir cuánto acierta la técnica, que todavía no se probó con audio real.
+        if(response.has("_anchors")){int sent=response.optInt("_anchors"),matched=response.optInt("_matched");
+            return " · reconoció "+matched+" de "+sent+(sent==1?" voz conocida":" voces conocidas")+(fresh.isEmpty()?"":", "+fresh.size()+(fresh.size()==1?" nueva":" nuevas"));}
         return " · reconoció "+recognized.size()+(recognized.size()==1?" voz":" voces")+(fresh.isEmpty()?"":", "+fresh.size()+(fresh.size()==1?" nueva":" nuevas"));
     }
     /** Progreso de subida sumado entre bloques en paralelo; se guarda cada ~0,7 s. */

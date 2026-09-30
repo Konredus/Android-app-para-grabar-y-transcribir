@@ -24,7 +24,17 @@ final class Retranscribe {
     static final long SINGLE_MAX_BYTES=24_000_000;
     /** Datos del estado que describen la versión anterior; vuelven con ella al restaurarla. */
     private static final String[] BEFORE={"model","speakers","provider","audioMs","blocks","blocksDone","cuts","doneIn","doneAt","doneAudioMs","bytesSent",
-        "inTokens","outTokens","usageSec","blockMsSum","blockCount","retries","localCuts","noteState","noteError","suggestedTitle"};
+        "inTokens","outTokens","usageSec","costUsd","blockMsSum","blockCount","retries","localCuts","noteState","noteError","suggestedTitle"};
+    /**
+     * OpenRouter: el audio viaja como FLAC mono de 16 kHz (WAV si el teléfono no codifica FLAC). Para saber si cabe en un
+     * solo envío se estima su peso por duración: ~20 KB por segundo (el WAV son 32; el FLAC de voz ronda el 60 %).
+     */
+    static final long OR_BYTES_PER_MS=20;
+    /** OpenRouter, un solo envío: lo que acepta el modelo (su receta) y no más de 24 MB de FLAC estimado (20 min). */
+    static long singleMaxMs(Models.Recipe recipe){return Math.min(recipe.maxMs,SINGLE_MAX_BYTES/OR_BYTES_PER_MS);}
+    static boolean fitsSingle(Models.Recipe recipe,long durationMs){return durationMs>0&&durationMs<=singleMaxMs(recipe);}
+    /** Tope de «sin cortar» con el proveedor elegido en Ajustes, en ms (para los textos de las pantallas). */
+    static long singleMaxMs(Context c){Settings s=new Settings(c);return s.openRouter()?singleMaxMs(Models.recipe(Models.chosen(s,true))):SINGLE_MAX_MS;}
 
     // ---------- Textos (para la hoja «¿Cómo quieres volver a transcribir?») ----------
     static String label(Mode m){
@@ -41,7 +51,7 @@ final class Retranscribe {
             case CORRECTIONS:return "Reconoce desde el inicio a las personas que nombraste o corregiste. La que más mejora.";
             case SINGLE:return "Todo el audio en un solo envío: sin uniones donde las voces se crucen. Más lento.";
             case SPEAKERS:{
-                List<Voices.Voice> known=new Settings(c).provider().equals("openai")?Voices.selected(c):Collections.emptyList();
+                List<Voices.Voice> known=TranscribeClient.knowsVoices(new Settings(c).provider())?Voices.selected(c):Collections.emptyList();
                 if(known.isEmpty())return "Otra pasada completa.";
                 if(known.size()==1&&known.get(0).me)return "Otra pasada completa, reconociéndote como "+known.get(0).name+".";
                 return "Otra pasada completa, "+(known.get(0).me?"reconociéndote ":"reconociendo ")+Voices.people(known)+".";
@@ -52,7 +62,7 @@ final class Retranscribe {
     static boolean speakers(Mode m){return m!=Mode.TEXT;}
     /** Costo estimado en US$ de volver a transcribir todo el audio con esta alternativa (-1 si no se conoce). */
     static double cost(Context c,Recording r,Mode m){
-        try{Settings s=new Settings(c);ProviderConfig config=s.config(speakers(m));return Pricing.estimate(config.provider,config.model,r.duration);}catch(Exception e){return -1;}
+        try{Settings s=new Settings(c);ProviderConfig config=s.config(speakers(m));return Pricing.estimate(c,config.provider,config.model,r.duration);}catch(Exception e){return -1;}
     }
     /** Alternativa en curso (o pendiente de elegir versión) según el estado; null si no es una repetición. */
     static Mode mode(JSONObject state){
@@ -66,7 +76,11 @@ final class Retranscribe {
     static final class Facts{
         /** noteWorking: se está armando la nota de la versión actual (ver {@link Notes#working}). */
         boolean exists=true,demo,busy,noteWorking,transcribed,previous,hasKey,openai,canSeparate,diarized,confirmed;
+        /** OpenRouter (0.8.0): también acepta muestras de voz (van como anclas antes del audio). */
+        boolean openrouter;
         long durationMs,bytes;int parts=1;
+        /** Topes de «sin cortar»: los de OpenAI por defecto; con OpenRouter, los de la receta del modelo (sin tope de peso del m4a: se envía FLAC). */
+        long singleMaxMs=SINGLE_MAX_MS,singleMaxBytes=SINGLE_MAX_BYTES;
         /** Voces conocidas que ya van en cada envío (ocupan lugares de las muestras). */
         int saved;
         /** Muestras limpias para la segunda pasada; -1 si aún no se calculan. */
@@ -77,8 +91,10 @@ final class Retranscribe {
         Facts f=new Facts();Settings s=new Settings(c);JSONObject st=FilesStore.state(c,r.id);File audio=r.audio(c);
         f.exists=audio.isFile();f.demo=st.optBoolean("demo");f.busy=st.optBoolean("requested");f.noteWorking=Notes.working(st);
         f.transcribed=Transcript.exists(c,r.id);f.previous=hasPrevious(c,r.id);
-        f.hasKey=s.hasKey();f.openai=s.provider().equals("openai");f.canSeparate=s.canSeparate();f.saved=f.openai?Voices.selected(c).size():0;
+        Pricing.attach(c);
+        f.hasKey=s.hasKey();f.openai=s.provider().equals("openai");f.openrouter=s.openRouter();f.canSeparate=s.canSeparate();f.saved=f.openai||f.openrouter?Voices.selected(c).size():0;
         f.bytes=audio.length();f.durationMs=r.duration;
+        if(f.openrouter){f.singleMaxMs=singleMaxMs(Models.recipe(Models.chosen(s,true)));f.singleMaxBytes=Long.MAX_VALUE;}
         if(f.durationMs<=0&&f.exists)try{f.durationMs=AudioConvert.duration(audio);}catch(Exception ignored){}
         if(f.transcribed)try{Transcript t=Transcript.load(c,r.id);f.transcript=t;f.diarized=t.diarized();f.confirmed=t.reviewed()||t.edited()||t.named();f.parts=t.data.optInt("parts",1);}catch(Exception ignored){}
         return f;
@@ -100,15 +116,17 @@ final class Retranscribe {
         if(!f.hasKey)return "Agrega tu clave de API en Ajustes para volver a transcribir.";
         switch(mode){
             case CORRECTIONS:
-                if(!f.openai)return "Solo funciona con OpenAI: tu servicio de transcripción no acepta muestras de voz.";
+                if(!f.openai&&!f.openrouter)return "Solo funciona con OpenRouter u OpenAI: tu servicio de transcripción no acepta muestras de voz.";
+                // OpenRouter con un modelo que solo entrega texto: las muestras no servirían de nada.
+                if(!f.canSeparate)return "El modelo elegido no separa voces. Elige uno que separe voces en Ajustes.";
                 if(!f.diarized)return "Esta versión no tiene voces separadas.";
                 if(!f.confirmed)return "Primero nombra o corrige las voces: la segunda pasada aprende de eso.";
                 if(f.samples==0)return f.saved>=Transcriber.MAX_KNOWN?"Ya van "+Transcriber.MAX_KNOWN+" voces conocidas en cada envío: no queda lugar para muestras de esta grabación.":"No hay tramos claros de cada persona para usar como muestra.";
                 return null;
             case SINGLE:
                 if(!f.canSeparate)return "Tu servicio de transcripción no separa voces.";
-                if(f.durationMs>SINGLE_MAX_MS)return "Solo para audios de hasta 23 min. Este dura "+Recording.time(f.durationMs)+".";
-                if(f.bytes>SINGLE_MAX_BYTES)return "El archivo es muy pesado para enviarlo de una vez (más de 24 MB).";
+                if(f.durationMs>f.singleMaxMs)return "Solo para audios de hasta "+(f.singleMaxMs/60_000)+" min. Este dura "+Recording.time(f.durationMs)+".";
+                if(f.bytes>f.singleMaxBytes)return "El archivo es muy pesado para enviarlo de una vez (más de 24 MB).";
                 if(f.diarized&&f.parts<=1)return "La versión actual ya separó voces sin cortar el audio.";
                 return null;
             case SPEAKERS:
@@ -136,7 +154,7 @@ final class Retranscribe {
     }
     /** Voces conocidas que irán en cada envío (voz destino → nombre); vacío si el proveedor no acepta muestras. */
     static Map<String,String> savedVoices(Context c){
-        Map<String,String> out=new LinkedHashMap<>();if(!new Settings(c).provider().equals("openai"))return out;
+        Map<String,String> out=new LinkedHashMap<>();if(!TranscribeClient.knowsVoices(new Settings(c).provider()))return out;
         for(Voices.Voice v:Voices.selected(c))out.put(v.target(),v.name);
         return out;
     }
@@ -215,7 +233,8 @@ final class Retranscribe {
                 s.put("attempt",attempt).put("retranscribe",new JSONObject().put("mode",mode.name()).put("at",now).put("before",before));
                 if(fixed!=null&&fixed.length()>0)s.put("fixedRefs",fixed);else s.remove("fixedRefs");
                 // Nada del intento anterior se reutiliza: ni cortes ni perfil; la nota y el comienzo son de la nueva versión.
-                s.remove("cuts");s.remove("profile");s.remove("noteState");s.remove("noteError");s.remove("noteStartedAt");s.remove("suggestedTitle");s.remove("snippet");s.remove("notePending");s.remove("opened");
+                // (Tampoco «orHalf»: que un envío fuera muy grande para el proveedor es cosa de ese intento y de ese modelo.)
+                s.remove("cuts");s.remove("profile");s.remove("orHalf");s.remove("noteState");s.remove("noteError");s.remove("noteStartedAt");s.remove("suggestedTitle");s.remove("snippet");s.remove("notePending");s.remove("opened");
             });
         }
         clearCheckpoints(c,id);AudioParts.clearBlocks(c,id);Transcriber.clearDone(c,id);

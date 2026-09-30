@@ -1,18 +1,409 @@
 package cl.vozlocal.app;
 
 import android.content.Context;
-import java.io.File;
-import java.util.List;
-import org.json.JSONObject;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.json.*;
 
 /**
- * Cliente de transcripción de OpenRouter (0.8.0): POST BASE+"/audio/transcriptions" con JSON y el audio en base64.
- * FASE 0 (contrato): lo implementa la parte «engine». Ver docs/diseno/SPEC-0.8.md.
+ * Cliente de transcripción de OpenRouter (0.8.0): POST BASE+"/audio/transcriptions" con JSON y el audio en base64
+ * (en multipart OpenRouter descarta provider.options y la separación de voces falla sin avisar).
+ *
+ * Qué hace con cada envío (ver docs/diseno/SPEC-0.8.md, decisiones 2 a 6 y 8):
+ * 1. Convierte el bloque a FLAC/WAV mono de 16 kHz con OrAudio. Si hay muestras de voz (references), van ANTES del audio
+ *    como «anclas», separadas por 1 s de silencio: OpenRouter no tiene «voces conocidas», así que se le pide separar
+ *    voces y después se mira qué hablante suena en la ventana de cada ancla.
+ * 2. Pide voces según la receta del modelo (Models.Recipe): Azure, Deepgram, genérico o marcas dentro del texto.
+ * 3. Normaliza la respuesta al contrato de TranscribeClient: tramos {speaker,start,end,text}. Al hablante de cada ancla
+ *    lo devuelve con el NOMBRE ENVIADO de su muestra (así el motor lo une con _known, igual que con OpenAI), borra lo
+ *    que cae en la zona de anclas y resta ese tiempo.
+ * 4. Devuelve usage {"type":"duration","seconds":N,"cost":US$} con el costo real del envío.
+ *
+ * Nada de esto se probó con audio real ni con una clave (no había): por eso es defensivo. Las anclas nunca hacen fallar
+ * una transcripción; a lo más, una voz conocida queda sin reconocer. En la bitácora y en Diagnostics solo van cantidades.
  */
 final class OpenRouterClient implements TranscribeClient {
+    /**
+     * Versión de este cliente dentro del perfil del motor (Transcriber): si cambia el audio que se envía o la forma de
+     * normalizar la respuesta, los puntos de control hechos con la versión anterior no se reutilizan.
+     */
+    static final String PROFILE="or1|flac16k";
+    /** Página pública de la app: OpenRouter la pide para identificar de qué app viene cada llamada (no lleva datos del usuario). */
+    static final String REFERER="https://github.com/Konredus/Android-app-para-grabar-y-transcribir";
+    /** Encabezados que identifican a Verbapp ante OpenRouter. «X-Title» es el nombre anterior del mismo encabezado. */
+    static Map<String,String> headers(){Map<String,String> h=new LinkedHashMap<>();h.put("HTTP-Referer",REFERER);h.put("X-OpenRouter-Title","Verbapp");h.put("X-Title","Verbapp");return h;}
+    /** Una pausa más larga que esto (s) corta el tramo al agrupar palabras. */
+    static final double PAUSE_S=1.2;
+    /** Un tramo armado con palabras no pasa de esto (s). */
+    static final double TURN_MAX_S=45;
+    /** Lugar del audio dentro del JSON: el cuerpo se parte ahí y el archivo va en base64, en streaming. */
+    private static final String AUDIO="@@VERBAPP_AUDIO@@";
+    /** Marca de cambio de voz dentro del texto (Fish Audio): «<|speaker:2|>». */
+    private static final Pattern MARK=Pattern.compile("<\\|\\s*speaker\\s*:\\s*(\\d+)\\s*\\|>");
+    /** Modelos que en esta sesión respondieron sin tiempos: con ellos no se pueden usar anclas (no se sabría dónde terminan). */
+    static final Set<String> NO_TIMES=ConcurrentHashMap.newKeySet();
+
+    /** Costura de prueba: quién arma el audio. Por defecto OrAudio.build; las pruebas ponen uno falso con anclas en tiempos conocidos. */
+    interface Builder{OrAudio.Built build(File audio,List<File> anchors,File outBase,HttpApi cancel)throws Exception;}
+    /** El que usan los clientes nuevos (el motor crea el suyo por dentro: las pruebas del motor cambian este). */
+    static volatile Builder defaultBuilder=OrAudio::build;
+    /** Líneas para la bitácora de la grabación (cantidades y avisos; nunca nombres ni texto). */
+    interface Log{void line(String message);}
+
     final Context c;final HttpApi http;
-    OpenRouterClient(Context c,HttpApi http){this.c=c.getApplicationContext();this.http=http;}
+    Builder builder=defaultBuilder;
+    Log log;
+    OpenRouterClient(Context c,HttpApi http){
+        this.c=c.getApplicationContext();this.http=http;Pricing.attach(this.c);
+        // El motor pone en jobId la grabación que se está transcribiendo; sin ella (pruebas) no hay bitácora donde escribir.
+        this.log=message->{String id=this.http.jobId;if(id!=null)Pipeline.log(this.c,id,message);};
+    }
+
     @Override public JSONObject transcribe(File audio,ProviderConfig config,String language,List<String[]> references,OpenAiClient.Delta delta)throws Exception{
-        throw new UnsupportedOperationException("OpenRouter pendiente (fase engine).");
+        Models.Recipe recipe=Models.recipe(config.model);
+        // Solo se piden voces si el motor las pidió y la receta del modelo sabe cómo.
+        boolean voices=config.speakers&&recipe.diarizes;
+        File dir=new File(c.getCacheDir(),"openrouter");dir.mkdirs();sweep(dir);
+        String tag=UUID.randomUUID().toString();List<File> temps=new ArrayList<>();
+        try{
+            // 1. Muestras de voz (data URL) → archivos temporales, en el mismo orden. Una que no se pueda leer se omite.
+            List<String[]> refs=new ArrayList<>();List<File> anchors=new ArrayList<>();
+            if(voices&&references!=null&&!NO_TIMES.contains(config.model))for(String[] ref:references){
+                if(ref==null||ref.length<2)continue;File clip=new File(dir,tag+"-voz"+anchors.size()+".m4a");
+                if(decode(ref[1],clip)){refs.add(ref);anchors.add(clip);temps.add(clip);}
+            }
+            // plain: modo simple (json, sin voces ni tiempos) tras un 400 por formato. before: costo de un envío descartado.
+            boolean plain=false;double before=0;OrAudio.Built built=null;
+            for(int round=0;round<3;round++){
+                http.check();
+                // 2. Audio: se arma una vez; de nuevo solo si hay que quitarle las anclas.
+                if(built==null||(built.leadMs>0&&anchors.isEmpty())){
+                    if(built!=null)built.file.delete();
+                    built=build(audio,anchors,new File(dir,tag+"-"+round));temps.add(built.file);
+                    if(built.leadMs<=0)anchors=Collections.emptyList();
+                }
+                boolean ask=voices&&!plain,verbose=!plain&&(recipe.verbose||ask);
+                // 3. Envío.
+                long[] size={0};HttpApi.Response response=send(built,config,body(config.model,built.format,language,recipe,ask,verbose),size);
+                JSONObject json=null;int code=response.code;
+                if(code>=200&&code<300){
+                    try{json=response.json();}catch(JSONException e){throw new IOException("OpenRouter devolvió una respuesta que no se pudo leer.");}
+                    // OpenRouter a veces responde 200 con el error del proveedor adentro: se trata como el error que es.
+                    JSONObject error=json.optJSONObject("error");
+                    if(error!=null&&!json.has("text")&&!json.has("segments")){int inner=error.optInt("code",502);code=inner>=400&&inner<600?inner:502;}
+                }
+                // 6. El modelo no acepta verbose_json, los tiempos o la separación de voces: una vez más, en modo simple.
+                if(code==400&&(verbose||ask)&&formatRejected(response.text)){
+                    plain=true;anchors=Collections.emptyList();
+                    log.line(ask?"El modelo no aceptó separar voces en este envío · se reenvía para obtener solo el texto":"El modelo no aceptó el formato con tiempos · se reenvía para obtener solo el texto");
+                    Diagnostics.event("or_fallback",http.jobId,"provider","openrouter","model",config.model,"reason","format","http",400);
+                    continue;
+                }
+                if(code!=response.code){HttpApi.Response inner=new HttpApi.Response(code,response.text,null,response.requestId);inner.jobId=response.jobId;response=inner;}
+                HttpApi.require(response,HttpApi.OPENROUTER);
+                // Una respuesta sin texto, tramos ni palabras no es «silencio» (eso llega como texto vacío): es un formato que
+                // la app no conoce. No se guarda como transcripción vacía ni se reintenta (cada reintento se cobraría): se
+                // avisa, y en Diagnostics quedan los nombres de los campos que sí vinieron (son de la API, no del usuario).
+                if(!json.has("text")&&!json.has("segments")&&!json.has("words")){
+                    StringBuilder fields=new StringBuilder();for(Iterator<String> it=json.keys();it.hasNext()&&fields.length()<80;)fields.append(fields.length()>0?",":"").append(it.next().replaceAll("[^A-Za-z0-9_]",""));
+                    Diagnostics.event("or_fallback",http.jobId,"provider","openrouter","model",config.model,"reason","shape:"+fields);
+                    throw new HttpApi.UserAction("OpenRouter respondió en un formato que Verbapp no reconoce. Prueba con otro modelo en Ajustes.");
+                }
+                // 4. Respuesta → tramos.
+                Parsed parsed=read(json,ask,built.durationMs);
+                if(built.leadMs>0&&!parsed.timed){
+                    // Sin tiempos reales no se sabe dónde terminan las anclas: su texto contaminaría el comienzo. Se repite sin ellas.
+                    NO_TIMES.add(config.model);anchors=Collections.emptyList();before+=cost(json);
+                    log.line("El modelo no devolvió tiempos · se reenvía sin las muestras de voz");
+                    Diagnostics.event("or_fallback",http.jobId,"provider","openrouter","model",config.model,"reason","no_times");
+                    continue;
+                }
+                if(ask&&!parsed.diarized)log.line("El modelo no devolvió voces separadas en este envío · queda solo el texto");
+                JSONObject out=finish(parsed,built.leadMs,built.anchors,refs);
+                JSONObject usage=usage(json,built.durationMs,before);
+                out.put("usage",usage).put("_bytes",size[0]).put("_format",built.format);
+                Diagnostics.event("or_transcribed",http.jobId,"provider","openrouter","model",config.model,"format",built.format,"bytes",size[0],"duration_ms",built.durationMs,
+                    "anchors",out.optInt("_anchors"),"matched",out.optInt("_matched"),"cost",usage.optDouble("cost",-1),"count",out.getJSONArray("segments").length());
+                return out;
+            }
+            throw new IOException("OpenRouter no devolvió una transcripción utilizable.");
+        }finally{
+            // 5. Temporales: el audio convertido y las muestras no quedan en el teléfono.
+            for(File f:temps)f.delete();
+        }
+    }
+    /** Arma el audio. Si falla por las anclas, se repite sin ellas: una muestra de voz nunca hace fallar la transcripción. */
+    private OrAudio.Built build(File audio,List<File> anchors,File outBase)throws Exception{
+        if(anchors.isEmpty())return builder.build(audio,null,outBase,http);
+        try{return builder.build(audio,anchors,outBase,http);}
+        catch(InterruptedIOException cancelled){throw cancelled;}
+        catch(Exception e){
+            http.check();
+            Diagnostics.event("or_fallback",http.jobId,"provider","openrouter","reason","anchors","error_class",e.getClass().getSimpleName());
+            return builder.build(audio,null,outBase,http);
+        }
+    }
+    /** Carpeta de trabajo: lo que quedó de un envío que Android cortó a la mitad se borra en la siguiente pasada. */
+    private static void sweep(File dir){File[] old=dir.listFiles();long limit=System.currentTimeMillis()-3*3600_000L;if(old!=null)for(File f:old)if(f.lastModified()<limit)f.delete();}
+    /** «data:audio/mp4;base64,…» → archivo. false si no es una data URL o no se pudo escribir. */
+    private static boolean decode(String url,File target){
+        try{
+            int comma=url==null?-1:url.indexOf(',');if(comma<0||!url.startsWith("data:"))return false;
+            byte[] data=android.util.Base64.decode(url.substring(comma+1),android.util.Base64.DEFAULT);if(data.length==0)return false;
+            try(FileOutputStream out=new FileOutputStream(target)){out.write(data);}
+            return true;
+        }catch(Exception e){target.delete();return false;}
+    }
+
+    // ---------- Envío ----------
+    /**
+     * Cuerpo del envío (con un marcador donde va el audio). voices: pedir separación de voces según la receta.
+     * verbose: verbose_json con tiempos por tramo y por palabra (las palabras permiten cortar justo donde terminan las anclas).
+     */
+    static JSONObject body(String model,String format,String language,Models.Recipe recipe,boolean voices,boolean verbose)throws JSONException{
+        JSONObject b=new JSONObject().put("model",model).put("input_audio",new JSONObject().put("data",AUDIO).put("format",format));
+        // Idioma vacío = detección automática: el campo no se envía.
+        if(language!=null&&!language.isEmpty())b.put("language",language);
+        b.put("response_format",verbose?"verbose_json":"json");
+        if(verbose)b.put("timestamp_granularities",new JSONArray().put("segment").put("word"));
+        if(voices)switch(recipe.diarize){
+            case AZURE:b.put("provider",new JSONObject().put("options",new JSONObject().put("azure",new JSONObject().put("diarization",new JSONObject().put("enabled",true)))));break;
+            case DEEPGRAM:b.put("provider",new JSONObject().put("options",new JSONObject().put("deepgram",new JSONObject().put("diarize",true))));break;
+            case GENERIC:b.put("diarize",true);break;
+            // INLINE: el modelo siempre marca las voces dentro del texto; no hay nada que pedir.
+            default:break;
+        }
+        return b;
+    }
+    private HttpApi.Response send(OrAudio.Built built,ProviderConfig config,JSONObject body,long[] size)throws Exception{
+        String json=body.toString(),mark="\""+AUDIO+"\"";int at=json.indexOf(mark);
+        if(at<0)throw new IllegalStateException("Cuerpo sin audio");
+        // El prefijo termina en la comilla que abre el audio y el sufijo empieza en la que lo cierra.
+        byte[] prefix=json.substring(0,at+1).getBytes(StandardCharsets.UTF_8),suffix=json.substring(at+mark.length()-1).getBytes(StandardCharsets.UTF_8);
+        HttpApi.Body content=http.base64(prefix,built.file,suffix);size[0]=content.length();
+        return http.request("POST",config.base+"/audio/transcriptions",config.key,"application/json",content,headers());
+    }
+    /**
+     * ¿El 400 es por el formato de respuesta, los tiempos o la separación de voces? (mensaje de OpenRouter o del proveedor
+     * final). También cuenta un parámetro que el modelo no reconoce: lo único opcional que se envía es justamente eso.
+     * Un 400 por otra causa (audio dañado, muy largo…) no se reintenta: repetirlo solo volvería a subir el audio.
+     */
+    static boolean formatRejected(String text){
+        String t=text==null?"":text.toLowerCase(Locale.ROOT);
+        return t.contains("response_format")||t.contains("verbose_json")||t.contains("timestamp_granularit")||t.contains("diariz")
+            ||t.contains("unrecognized")||t.contains("unknown param")||t.contains("unsupported param");
+    }
+
+    // ---------- Respuesta → tramos ----------
+    /** Un trozo de la respuesta (tramo o palabra) con tiempos en segundos del archivo enviado, anclas incluidas. */
+    static final class Piece{
+        String who,text;double start,end;
+        Piece(String who,double start,double end,String text){this.who=who;this.start=start;this.end=end;this.text=text;}
+    }
+    /** Respuesta leída, antes de quitar las anclas. */
+    static final class Parsed{
+        final List<Piece> pieces=new ArrayList<>();
+        /** Palabras con tiempo (y hablante, si vino): con ellas se mide cada ancla y se corta justo donde terminan. */
+        final List<Piece> words=new ArrayList<>();
+        /** diarized: vinieron voces. timed: los tiempos son reales (no repartidos ni en cero). */
+        boolean diarized,timed;
+    }
+    private static double time(JSONObject o,String key){return o.isNull(key)?Double.NaN:o.optDouble(key,Double.NaN);}
+    /** optString de Android devuelve "null" para un null de JSON: aquí es texto vacío. */
+    private static String str(JSONObject o,String key){return o.isNull(key)?"":o.optString(key,"");}
+    /** Hablante de un tramo o palabra como texto: los índices enteros (0, 1…) pasan a "0", "1". null si no viene. */
+    private static String who(JSONObject o){
+        for(String key:new String[]{"speaker","speaker_label","speaker_id"}){
+            if(o.isNull(key))continue;Object v=o.opt(key);
+            String s=v instanceof Number?String.valueOf(((Number)v).longValue()):String.valueOf(v).trim();
+            if(!s.isEmpty())return s;
+        }
+        return null;
+    }
+    private static String strip(String text){return text==null?"":MARK.matcher(text).replaceAll(" ").replaceAll("\\s+"," ").trim();}
+    /** Agrega una palabra al tramo: con espacio, salvo que sea un signo que va pegado a la palabra anterior. */
+    private static void join(StringBuilder b,String token){if(b.length()>0&&!token.matches("^[,.;:!?%)\\]»…].*"))b.append(' ');b.append(token);}
+
+    /**
+     * Lee la respuesta de cualquiera de los proveedores (decisión 5):
+     * - tramos con hablante → tal cual;
+     * - hablantes solo en las palabras → se agrupan palabras seguidas de la misma voz (corta en pausas y a los ~45 s);
+     * - marcas «<|speaker:N|>» en el texto → se parte por marcas;
+     * - sin voces → tramos "text" con sus tiempos reales si vienen.
+     * voices: se pidieron voces (si no, cualquier dato de hablante se ignora). durationMs: duración del archivo enviado.
+     */
+    static Parsed read(JSONObject json,boolean voices,long durationMs){
+        Parsed p=new Parsed();double total=durationMs/1000d;
+        JSONArray segs=json.optJSONArray("segments"),top=json.optJSONArray("words");String text=str(json,"text");
+        // Las palabras vienen arriba (OpenAI, Deepgram) o dentro de cada tramo.
+        List<JSONObject> rawWords=new ArrayList<>();
+        if(top!=null){for(int i=0;i<top.length();i++){JSONObject o=top.optJSONObject(i);if(o!=null)rawWords.add(o);}}
+        else if(segs!=null)for(int i=0;i<segs.length();i++){JSONObject s=segs.optJSONObject(i);JSONArray inner=s==null?null:s.optJSONArray("words");if(inner!=null)for(int k=0;k<inner.length();k++){JSONObject o=inner.optJSONObject(k);if(o!=null)rawWords.add(o);}}
+        // Los tiempos se esperan en segundos. Si el mayor pasa por lejos de la duración del archivo, vienen en milisegundos.
+        double max=0;
+        if(segs!=null)for(int i=0;i<segs.length();i++){JSONObject o=segs.optJSONObject(i);if(o!=null){double e=time(o,"end");if(!Double.isNaN(e))max=Math.max(max,e);}}
+        for(JSONObject o:rawWords){double e=time(o,"end");if(!Double.isNaN(e))max=Math.max(max,e);}
+        double scale=total>0&&max>total*50?0.001:1;
+        boolean segWho=false,wordWho=false,marks=MARK.matcher(text).find(),segTimed=false,segMarks=false;
+        List<Piece> raw=new ArrayList<>();
+        if(segs!=null){
+            segTimed=segs.length()>0;double last=0;
+            for(int i=0;i<segs.length();i++){
+                JSONObject o=segs.optJSONObject(i);if(o==null)continue;String w=who(o),t=str(o,"text");segWho|=w!=null;segMarks|=MARK.matcher(t).find();
+                double a=time(o,"start")*scale,b=time(o,"end")*scale;
+                // Un tramo sin tiempos no rompe nada: sigue donde terminó el anterior, pero ya no se confía en los tiempos.
+                if(Double.isNaN(a)||Double.isNaN(b)){segTimed=false;if(Double.isNaN(a))a=last;if(Double.isNaN(b))b=a;}
+                if(b<a)b=a;last=b;raw.add(new Piece(w,a,b,t));
+            }
+            if(max<=0)segTimed=false;
+        }
+        for(JSONObject o:rawWords){
+            String w=who(o),t=str(o,"punctuated_word");if(t.isEmpty())t=str(o,"word");if(t.isEmpty())t=str(o,"text");
+            double a=time(o,"start")*scale,b=time(o,"end")*scale;if(Double.isNaN(a))continue;if(Double.isNaN(b)||b<a)b=a;
+            wordWho|=w!=null;p.words.add(new Piece(w,a,b,t));
+        }
+        if(voices&&segWho){
+            for(Piece s:raw)p.pieces.add(new Piece(s.who==null?"unknown":s.who,s.start,s.end,strip(s.text)));
+            p.diarized=true;p.timed=segTimed;
+        }else if(voices&&wordWho){
+            p.pieces.addAll(group(p.words,true));p.diarized=true;p.timed=true;
+        }else if(voices&&(marks||segMarks)){
+            // Con tiempos por tramo, cada tramo se reparte entre sus marcas; si no, el texto entero se reparte en la duración.
+            List<Piece> units=raw;p.timed=segTimed&&segMarks;
+            if(!p.timed){
+                // Las marcas están en el texto completo, o solo en tramos sin tiempos: en ese caso se juntan los tramos.
+                StringBuilder all=new StringBuilder(marks?text:"");if(!marks)for(Piece s:raw)all.append(' ').append(s.text);
+                units=Collections.singletonList(new Piece(null,0,total,all.toString()));
+            }
+            String voice="unknown";
+            for(Piece u:units){
+                Matcher m=MARK.matcher(u.text);List<String[]> chunks=new ArrayList<>();int at=0;
+                while(m.find()){String said=u.text.substring(at,m.start()).trim();if(!said.isEmpty())chunks.add(new String[]{voice,said});voice=m.group(1);at=m.end();}
+                String tail=u.text.substring(at).trim();if(!tail.isEmpty())chunks.add(new String[]{voice,tail});
+                int chars=0;for(String[] chunk:chunks)chars+=chunk[1].length();
+                double t=u.start,span=Math.max(0,u.end-u.start);
+                for(String[] chunk:chunks){double d=chars==0?0:span*chunk[1].length()/chars;p.pieces.add(new Piece(chunk[0],t,t+d,chunk[1].replaceAll("\\s+"," ")));t+=d;}
+            }
+            p.diarized=true;
+        }else{
+            if(segTimed){for(Piece s:raw)p.pieces.add(new Piece("text",s.start,s.end,strip(s.text)));p.timed=true;}
+            else if(!p.words.isEmpty()){p.pieces.addAll(group(p.words,false));p.timed=true;}
+            else{
+                String all=strip(text);
+                if(all.isEmpty()){StringBuilder b=new StringBuilder();for(Piece s:raw){String t=strip(s.text);if(!t.isEmpty())b.append(b.length()>0?" ":"").append(t);}all=b.toString();}
+                p.pieces.add(new Piece("text",0,0,all));
+            }
+        }
+        return p;
+    }
+    /** Palabras → tramos: seguidas de la misma voz, cortando en pausas de más de 1,2 s y a los ~45 s. withWho=false: todo es "text". */
+    private static List<Piece> group(List<Piece> words,boolean withWho){
+        List<Piece> out=new ArrayList<>();Piece current=null;StringBuilder b=new StringBuilder();String last=withWho?"unknown":"text";
+        for(Piece w:words){
+            String token=strip(w.text);if(token.isEmpty())continue;
+            // Una palabra sin hablante (p. ej. un signo suelto) sigue con la voz anterior.
+            String voice=!withWho?"text":w.who!=null?w.who:last;last=voice;
+            if(current==null||!current.who.equals(voice)||w.start-current.end>PAUSE_S||w.end-current.start>TURN_MAX_S){
+                if(current!=null){current.text=b.toString();out.add(current);}
+                current=new Piece(voice,w.start,w.end,"");b=new StringBuilder();
+            }
+            join(b,token);current.end=Math.max(current.end,w.end);
+        }
+        if(current!=null){current.text=b.toString();out.add(current);}
+        return out;
+    }
+
+    // ---------- Anclas ----------
+    /** A quién corresponde una muestra: su id global si viene (varias muestras pueden ser de la misma persona) o su nombre enviado. */
+    private static String person(String[] ref){return ref.length>2&&ref[2]!=null?ref[2]:ref[0];}
+    /**
+     * Termina la respuesta (decisión 3): empareja cada ancla con el hablante que más suena en su ventana, le pone a ese
+     * hablante el nombre enviado de la muestra, borra lo que cae en la zona de anclas y resta leadMs a los tiempos.
+     * - Un ancla se empareja con el hablante que suma más segundos dentro de su ventana, con al menos 1 s o el 40 % del ancla.
+     * - Un hablante queda con una sola ancla (la de mayor coincidencia); las demás quedan sin emparejar. No es un error.
+     * windows: {inicio ms, fin ms} de cada ancla dentro del archivo ({-1,-1} si se omitió), en el orden de refs.
+     * Devuelve {"segments":[…],"_diarized":bool} y, si hubo anclas, "_anchors" (personas enviadas) y "_matched" (reconocidas).
+     */
+    static JSONObject finish(Parsed p,long leadMs,long[][] windows,List<String[]> refs)throws JSONException{
+        double lead=Math.max(0,leadMs)/1000d;
+        // El corte va a mitad del último segundo de silencio: tolera tiempos del modelo corridos hacia cualquier lado.
+        double cut=leadMs>0?Math.max(0,lead-OrAudio.GAP_MS/2000d):0;
+        Map<String,String> rename=new HashMap<>();Set<String> people=new LinkedHashSet<>(),got=new HashSet<>();
+        if(leadMs>0&&windows!=null&&refs!=null){
+            int n=Math.min(windows.length,refs.size());String[] best=new String[n];double[] score=new double[n];
+            boolean byWord=false;for(Piece w:p.words)if(w.who!=null){byWord=true;break;}
+            List<Piece> units=byWord?p.words:p.pieces;
+            for(int i=0;i<n;i++){
+                long[] w=windows[i];if(w==null||w.length<2||w[0]<0||w[1]<=w[0])continue;
+                people.add(person(refs.get(i)));if(!p.diarized)continue;
+                double a=w[0]/1000d,b=w[1]/1000d;Map<String,Double> talk=new LinkedHashMap<>();
+                for(Piece u:units){if(u.who==null||u.who.equals("unknown")||u.who.equals("text"))continue;double o=Math.min(u.end,b)-Math.max(u.start,a);if(o>0)talk.merge(u.who,o,Double::sum);}
+                double need=Math.min(1.0,0.4*(b-a));
+                for(Map.Entry<String,Double> e:talk.entrySet())if(e.getValue()>=need&&e.getValue()>score[i]){score[i]=e.getValue();best[i]=e.getKey();}
+            }
+            Map<String,Integer> winner=new LinkedHashMap<>();
+            for(int i=0;i<n;i++){if(best[i]==null)continue;Integer w=winner.get(best[i]);if(w==null||score[i]>score[w])winner.put(best[i],i);}
+            for(Map.Entry<String,Integer> e:winner.entrySet()){String[] ref=refs.get(e.getValue());rename.put(e.getKey(),ref[0]);got.add(person(ref));}
+        }
+        JSONArray segments=new JSONArray();
+        for(Piece piece:p.pieces){
+            double start=piece.start,end=Math.max(piece.start,piece.end);String text=piece.text;
+            if(leadMs>0){
+                // Entero dentro de la zona de anclas: es la muestra hablando, no la grabación.
+                if(end<=cut)continue;
+                // A caballo entre la última ancla y el audio: queda solo lo dicho después del corte.
+                if(start<cut){text=tail(p.words,piece,cut);start=cut;}
+                start=Math.max(0,start-lead);end=Math.max(start,end-lead);
+            }
+            text=text==null?"":text.trim();if(text.isEmpty())continue;
+            String voice=rename.containsKey(piece.who)?rename.get(piece.who):piece.who;
+            segments.put(new JSONObject().put("speaker",voice==null?"unknown":voice).put("start",round(start)).put("end",round(end)).put("text",text));
+        }
+        JSONObject out=new JSONObject().put("segments",segments).put("_diarized",p.diarized);
+        if(!people.isEmpty())out.put("_anchors",people.size()).put("_matched",got.size());
+        return out;
+    }
+    private static double round(double seconds){return Math.round(seconds*1000)/1000d;}
+    /** Lo que un tramo dice después del corte: con las palabras si tienen tiempo; si no, en proporción al tiempo. */
+    private static String tail(List<Piece> words,Piece piece,double cut){
+        StringBuilder b=new StringBuilder();boolean any=false;
+        for(Piece w:words){
+            double mid=(w.start+w.end)/2;if(mid<piece.start-0.01||mid>piece.end+0.01)continue;
+            if(w.who!=null&&piece.who!=null&&!w.who.equals(piece.who))continue;
+            any=true;String token=strip(w.text);if(mid>=cut&&!token.isEmpty())join(b,token);
+        }
+        if(any)return b.toString();
+        String[] tokens=piece.text.trim().split("\\s+");double span=piece.end-piece.start;
+        int skip=span<=0?0:(int)Math.round(tokens.length*(cut-piece.start)/span);skip=Math.max(0,Math.min(skip,tokens.length));
+        return String.join(" ",Arrays.copyOfRange(tokens,skip,tokens.length));
+    }
+
+    // ---------- Costo ----------
+    private static boolean bad(double v){return Double.isNaN(v)||Double.isInfinite(v)||v<0;}
+    /** US$ reales del envío (usage.cost); 0 si no viene. */
+    private static double cost(JSONObject json){JSONObject u=json.optJSONObject("usage");double v=u==null||u.isNull("cost")?Double.NaN:u.optDouble("cost",Double.NaN);return bad(v)?0:v;}
+    /**
+     * Uso en el formato del motor (decisión 6): segundos facturados (usage.seconds, usage.duration o duration; si no
+     * vienen, lo que dura el archivo enviado) y "cost" en US$ si OpenRouter lo informa. before: costo de un envío anterior
+     * de este mismo bloque que se descartó (también se cobró).
+     */
+    static JSONObject usage(JSONObject json,long durationMs,double before)throws JSONException{
+        JSONObject u=json.optJSONObject("usage");double seconds=Double.NaN;boolean priced=false;
+        if(u!=null){
+            seconds=u.isNull("seconds")?Double.NaN:u.optDouble("seconds",Double.NaN);
+            if(bad(seconds))seconds=u.isNull("duration")?Double.NaN:u.optDouble("duration",Double.NaN);
+            priced=!u.isNull("cost")&&!bad(u.optDouble("cost",Double.NaN));
+        }
+        if(bad(seconds))seconds=json.isNull("duration")?Double.NaN:json.optDouble("duration",Double.NaN);
+        if(bad(seconds))seconds=Math.max(0,durationMs)/1000d;
+        JSONObject out=new JSONObject().put("type","duration").put("seconds",seconds);
+        if(priced||before>0)out.put("cost",cost(json)+before);
+        if(u!=null&&u.has("input_tokens"))out.put("input_tokens",u.optLong("input_tokens"));
+        if(u!=null&&u.has("output_tokens"))out.put("output_tokens",u.optLong("output_tokens"));
+        return out;
     }
 }
