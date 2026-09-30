@@ -242,9 +242,12 @@ public class SettingsActivity extends Screen {
             int k=i;boolean on=modes[i].equals(mode);
             LinearLayout tile=ui.column();tile.setGravity(Gravity.CENTER_HORIZONTAL);tile.setPadding(ui.dp(S1),ui.dp(S1),ui.dp(S1),ui.dp(S2));
             tile.addView(new ThemePreview(this,p,light,dark,i,on),new LinearLayout.LayoutParams(-1,ui.dp(112)));
-            // Con letra grande «Automático» no cabe en un tercio: se achica hasta 10 sp en vez de cortarse.
+            // Con letra grande «Automático» no cabe en un tercio: se achica en vez de cortarse. El piso es 7 sp porque con
+            // la letra al 200 % 10 sp todavía no cabían (unos 105 dp de texto en 93 dp) y, cuando ningún tamaño cabe, el
+            // texto se parte dentro de la palabra («Automáti»). Al 200 % elige 8 sp, que se ven como 16 sp normales. Los
+            // puntos suspensivos quedan de respaldo para pantallas aún más angostas (sin setSingleLine, que anula el ajuste).
             TextView name=ui.text(names[i],Type.LABEL_LARGE,on?p.primary:p.onSurface);name.setGravity(Gravity.CENTER);name.setMaxLines(1);name.setIncludeFontPadding(false);
-            name.setAutoSizeTextTypeUniformWithConfiguration(10,14,1,android.util.TypedValue.COMPLEX_UNIT_SP);
+            name.setAutoSizeTextTypeUniformWithConfiguration(7,14,1,android.util.TypedValue.COMPLEX_UNIT_SP);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(-1,ui.dp(24));np.topMargin=ui.dp(S2);tile.addView(name,np);
             tile.setBackground(ui.ripple(null,R_CONTROL));tile.setClickable(true);tile.setFocusable(true);tile.setAccessibilityDelegate(Ui.buttonRole());
             tile.setContentDescription("Tema "+names[i].toLowerCase(CL)+", "+details[i]+(on?", seleccionado":""));
@@ -259,7 +262,8 @@ public class SettingsActivity extends Screen {
      * Miniatura de Verbapp con un tema: el degradado blanco → verde de Grabar, el título, una tarjeta de vidrio, el botón
      * verde de grabar y la barra flotante con su píldora de tinta, con los colores reales de ese tema. «Automático» es mitad
      * clara y mitad oscura. La elegida lleva un anillo verde y un ✓. Es solo dibujo: el botón que la contiene la describe.
-     * Medidas en una grilla de 80 × 100 que se escala al tamaño real.
+     * Medidas en una grilla de 80 × 100 que se escala al tamaño real; si la caja es mucho más ancha que alta (teléfono en
+     * horizontal, tableta), el dibujo no se estira más: queda centrado sobre el degradado (ver mock).
      */
     private static final class ThemePreview extends View {
         private final Palette current,light,dark;private final int mode;private final boolean selected;private final float d;
@@ -288,7 +292,11 @@ public class SettingsActivity extends Screen {
             }
         }
         private void mock(Canvas c,Palette q,LinearGradient bg,float radius){
-            float x=box.left,y=box.top,ux=box.width()/80f,uy=box.height()/100f;
+            // Los círculos y radios usan ux y las posiciones verticales uy: si el ancho manda sin tope (en horizontal ux
+            // llega a casi 3 veces uy), el botón de grabar pisa la tarjeta y la barra, y el micrófono queda aplastado.
+            // Por eso ux no pasa de 1,3 × uy (lo máximo de un teléfono en vertical, donde no cambia nada) y el dibujo se
+            // centra en la caja; el fondo y el borde siguen ocupando la caja completa.
+            float uy=box.height()/100f,ux=Math.min(box.width()/80f,1.3f*uy),x=box.left+(box.width()-80*ux)/2f,y=box.top;
             paint.setStyle(Paint.Style.FILL);paint.setShader(bg);c.drawRoundRect(box,radius,radius,paint);paint.setShader(null);
             // Título y bajada.
             bar(c,q.onSurface,x+8*ux,y+11*uy,30*ux,5*uy);bar(c,withAlpha(q.onSurfaceVariant,150),x+8*ux,y+20*uy,20*ux,3.5f*uy);
