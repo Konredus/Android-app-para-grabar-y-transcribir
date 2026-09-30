@@ -75,8 +75,10 @@ final class UiChecks {
         split.setLabel("Actualizar en 0-Inbox");
         check("Actualizar en 0-Inbox".equals(split.main.label.getText().toString())&&"Actualizar en 0-Inbox".contentEquals(split.main.getContentDescription()),"setLabel no cambió texto y descripción");
         split.setIcon(R.drawable.ic_refresh);split.setIcon(0);split.setIcon(R.drawable.ic_inbox);
-        split.setTonal(true);check(split.tonal()&&split.main.fg==p.onSecondaryContainer&&split.main.bg==p.secondaryContainer,"setTonal(true) no pasó a secondaryContainer");
-        split.setTonal(true);split.setTonal(false);check(!split.tonal()&&split.main.fg==p.onPrimary&&split.main.bg==p.primary,"setTonal(false) no volvió al relleno primary");
+        // 0.7.0: lo pendiente va en tinta; lo ya logrado, en menta (primaryContainer).
+        check(split.main.fg==p.onInk&&split.main.bg==p.ink,"El botón de dos partes debe partir en tinta");
+        split.setTonal(true);check(split.tonal()&&split.main.fg==p.onPrimaryContainer&&split.main.bg==p.primaryContainer,"setTonal(true) no pasó a menta (primaryContainer)");
+        split.setTonal(true);split.setTonal(false);check(!split.tonal()&&split.main.fg==p.onInk&&split.main.bg==p.ink,"setTonal(false) no volvió a la tinta");
         split.setBusy(true);check(split.main.busy()&&!split.main.isClickable(),"setBusy(true) debe bloquear el botón");
         split.setBusy(true);split.setBusy(false);check(!split.main.busy()&&split.main.isClickable()&&split.main.glyph.getVisibility()==View.VISIBLE,"setBusy(false) no restauró el botón");
         split.setBusy(true);split.showDone();
@@ -103,8 +105,44 @@ final class UiChecks {
         for(Ui.Style s:Ui.Style.values())draw(ui.button("Probar",R.drawable.ic_check,s,null),ui.dp(200));
         draw(split,ui.dp(360));
         ui.fadeIn(split);
+        verbapp(c,p,ui);
     }
 
+    /** Base visual de Verbapp (0.7.0, docs/diseno/SPEC-0.7.md): letra, fondo, palabra destacada, logo y barra flotante. */
+    static void verbapp(Context c,AppTheme.Palette p,Ui ui){
+        for(AppTheme.Weight w:AppTheme.Weight.values())check(AppTheme.outfit(c,w)!=null,"No se pudo cargar Outfit "+w);
+        check(AppTheme.font(c,AppTheme.Type.BODY_LARGE)!=AppTheme.outfit(c,AppTheme.Weight.REGULAR),"El texto de lectura debe seguir en Roboto");
+        check(AppTheme.font(c,AppTheme.Type.DISPLAY_LARGE)==AppTheme.outfit(c,AppTheme.Weight.MEDIUM),"El cronómetro debe ir en Outfit");
+        // Fondo: se dibuja en ambos niveles y el verde de abajo cambia entre suave e intenso.
+        Glass.Backdrop b=new Glass.Backdrop(c,p,false);int soft=b.bottomColor();b.setBounds(0,0,540,1200);
+        Bitmap bitmap=Bitmap.createBitmap(540,1200,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(bitmap);b.draw(canvas);
+        check(bitmap.getPixel(270,4)==(p.gradTop|0xFF000000)||AppTheme.luminance(bitmap.getPixel(270,4))>(p.dark?0f:0.9f),"El fondo debe partir claro arriba");
+        b.setVivid(1f);b.draw(canvas);check(b.bottomColor()!=soft&&b.bottomColor()==p.gradBottom,"El fondo intenso debe terminar en el verde de abajo");
+        if(!p.dark)check(AppTheme.luminance(bitmap.getPixel(270,1195))<0.6f,"Abajo el fondo intenso debe ser verde oscuro");
+        bitmap.recycle();
+        // Palabra destacada: solo la última palabra y solo si es corta.
+        android.widget.TextView t=new android.widget.TextView(c);ui.highlightLast(t,"Reunión con la Fran");
+        CharSequence s=t.getText();check(s instanceof android.text.Spanned&&((android.text.Spanned)s).getSpans(0,s.length(),Glass.Highlight.class).length==1,"highlightLast no destacó la última palabra");
+        check(((android.text.Spanned)s).getSpanStart(((android.text.Spanned)s).getSpans(0,s.length(),Glass.Highlight.class)[0])=="Reunión con la ".length(),"highlightLast destacó otra parte");
+        ui.highlightLast(t,"Otorrinolaringólogo");check(!(t.getText() instanceof android.text.Spanned)||((android.text.Spanned)t.getText()).getSpans(0,t.length(),Glass.Highlight.class).length==0,"Una palabra larga no debe destacarse");
+        ui.highlightLast(t,"");check(t.length()==0,"highlightLast con texto vacío");
+        t.setTextSize(36);ui.highlightLast(t,"Nueva grabación");draw(t,ui.dp(320));
+        // Logo, datos de resumen y botón redondo de vidrio.
+        android.widget.LinearLayout brand=ui.brand(20);check("Verbapp".contentEquals(brand.getContentDescription()),"El logo debe anunciarse como Verbapp");paint(brand,ui.dp(200));
+        View stat=ui.stat(R.drawable.ic_mic_fill,"12","Grabaciones");check(stat.getContentDescription()!=null&&stat.getContentDescription().toString().contains("12"),"El dato de resumen necesita descripción");draw(stat,ui.dp(110));
+        android.widget.ImageButton glass=ui.glassButton(R.drawable.ic_arrow_back,"Volver");check(glass.getLayoutParams().width==ui.dp(48),"El botón de vidrio debe medir 48 dp");draw(glass,ui.dp(48));
+        // Barra flotante: el destino activo muestra su nombre; los demás, solo el ícono.
+        int[] chosen={-1};BottomNav nav=new BottomNav(c,p,0,i->chosen[0]=i);draw(nav,ui.dp(360));
+        nav.select(2);nav.badge(1,true);nav.badge(1,false);draw(nav,ui.dp(360));
+        check(p.ink!=p.primary&&p.onInk!=p.ink,"La tinta debe distinguirse del verde de marca");
+    }
+
+    /** Mide y dibuja sin exigir área táctil (piezas que no se tocan, como el logo). */
+    private static void paint(View v,int width){
+        v.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.AT_MOST),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));v.layout(0,0,v.getMeasuredWidth(),v.getMeasuredHeight());
+        check(v.getMeasuredWidth()>0&&v.getMeasuredHeight()>0,"No se pudo medir "+v.getClass().getSimpleName());
+        Bitmap b=Bitmap.createBitmap(v.getMeasuredWidth(),v.getMeasuredHeight(),Bitmap.Config.ARGB_8888);v.draw(new Canvas(b));b.recycle();
+    }
     private static void draw(View v,int width){
         v.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));
         v.layout(0,0,v.getMeasuredWidth(),v.getMeasuredHeight());
