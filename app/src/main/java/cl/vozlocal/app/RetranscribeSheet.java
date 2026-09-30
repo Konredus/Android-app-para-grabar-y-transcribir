@@ -155,8 +155,11 @@ final class RetranscribeSheet {
         c.setBackground(isNew?shape(s,p.highlight,R_CARD-4):SheetParts.card(s,p,R_CARD-4));
         LinearLayout head=ui.row();head.addView(ui.icon(isNew?R.drawable.ic_sparkle:R.drawable.ic_history,accent,16));head.addView(ui.space(6));
         head.addView(ui.text(isNew?"Nueva":"Anterior",Type.LABEL_LARGE,accent));c.addView(head);
-        TextView big=Ui.tabular(ui.oneLine(ui.text(v.headline,Type.TITLE_LARGE,p.onSurface)));big.setPadding(0,ui.dp(S2),0,0);c.addView(big);
-        if(!v.detail.isEmpty()){TextView d=ui.text(v.detail,Type.BODY_SMALL,p.onSurfaceVariant);d.setMaxLines(3);d.setEllipsize(android.text.TextUtils.TruncateAt.END);d.setPadding(0,ui.dp(2),0,0);c.addView(d);}
+        // Nada se corta (en 0.6.0 la comparación iba en el mensaje de la hoja, completa): con nombres largos o letra
+        // grande, el dato y los nombres bajan de línea y la tarjeta crece. Las dos siguen del mismo alto (comparison) y la
+        // hoja se desplaza si hace falta.
+        TextView big=Ui.tabular(ui.text(v.headline,Type.TITLE_LARGE,p.onSurface));big.setPadding(0,ui.dp(S2),0,0);c.addView(big);
+        if(!v.detail.isEmpty()){TextView d=ui.text(v.detail,Type.BODY_SMALL,p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);c.addView(d);}
         // Para el lector de pantalla, cada tarjeta se lee de una vez: «Nueva: 3 voces (Konrad, Fran, Persona 3)».
         c.setContentDescription((isNew?"Nueva: ":"Anterior: ")+v.summary);c.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);c.setFocusable(true);
         for(int i=0;i<c.getChildCount();i++)c.getChildAt(i).setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);

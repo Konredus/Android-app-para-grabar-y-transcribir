@@ -17,14 +17,11 @@ import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.inputmethod.EditorInfo;
 import android.widget.*;
 import org.json.JSONObject;
 import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import static cl.vozlocal.app.AppTheme.*;
 
 /**
@@ -220,48 +217,22 @@ final class RecordingActions {
         FilesStore.update(c,r.id,st->st.put("inboxUri",doc.toString()).put("inboxAt",System.currentTimeMillis()).put("inboxKind","txt"));
     }
 
-    /** «2026-09-27 » al inicio de un título (la fecha que se antepone si «Fecha delante del nombre» está activa). */
-    private static final Pattern DATE=Pattern.compile("^(\\d{4}-\\d{2}-\\d{2})(?:\\s+|$)");
     /**
-     * Cambiar título (0.7.0): igual que al nombrar una grabación nueva, la fecha (si está activa en Ajustes) va fija
-     * delante en un recuadro menta y solo se escribe el nombre. La fecha no se pierde por borrar de más; si quieres
-     * cambiarla, tocarla la pasa al campo y se edita como antes (así no se pierde esa posibilidad).
+     * Cambiar título: el mismo flujo de 0.6.0, porque en 0.7.0 solo cambia la interfaz. El campo trae el título completo
+     * (con su fecha, si la tiene) y se edita entero; un título que es solo la fecha se guarda tal cual; y la tecla de
+     * acción del teclado no guarda ni cierra la hoja: eso lo hace solo «Guardar». De 0.7.0 queda únicamente el estilo del
+     * campo, que ya viene del kit (ui.field con ui.fieldBackground). La fecha fija en una píldora es solo de «Nombra
+     * esta grabación» (PROPUESTA-0.7 §3.3), que ya la tenía en 0.6.0.
      */
     static void rename(Screen s,Recording r,Runnable changed){
-        Ui ui=s.ui;Palette p=s.p;
-        String[] date={""};String rest=r.title==null?"":r.title;
-        if(new Settings(s).datePrefix()){Matcher m=DATE.matcher(rest);if(m.find()){date[0]=m.group(1);rest=rest.substring(m.end()).trim();}}
-        LinearLayout box=ui.row();box.setBackground(ui.fieldBackground());box.setMinimumHeight(ui.dp(56));box.setPaddingRelative(ui.dp(date[0].isEmpty()?S4:S2),0,ui.dp(S4),0);
-        EditText input=ui.field("Título","Título de la grabación");input.setBackground(null);input.setPadding(0,ui.dp(S3),0,ui.dp(S3));input.setText(rest);input.setSelectAllOnFocus(true);input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(120)});input.setImeOptions(EditorInfo.IME_ACTION_DONE);
-        TextView hint=ui.text("La fecha queda fija. Tócala si quieres cambiarla.",Type.BODY_SMALL,p.onSurfaceVariant);hint.setPaddingRelative(ui.dp(S1),ui.dp(S2),0,0);
-        if(!date[0].isEmpty()){
-            // El recuadro se ve de 28 dp, pero se toca en 48 dp de alto.
-            FrameLayout hold=new FrameLayout(s);hold.setPaddingRelative(0,0,ui.dp(S2),0);
-            TextView pill=Ui.tabular(ui.text(date[0],Type.LABEL_LARGE,p.onPrimaryContainer));pill.setBackground(shape(s,p.highlight,R_FULL));pill.setPadding(ui.dp(10),ui.dp(S1),ui.dp(10),ui.dp(S1));pill.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            hold.addView(pill,new FrameLayout.LayoutParams(-2,-2,Gravity.CENTER_VERTICAL));
-            hold.setClickable(true);hold.setFocusable(true);hold.setContentDescription("Fecha "+date[0]+", fija. Toca para cambiarla");hold.setAccessibilityDelegate(Ui.buttonRole());
-            hold.setOnClickListener(v->{
-                String typed=input.getText().toString().trim(),d=date[0];date[0]="";
-                box.removeView(hold);box.setPaddingRelative(ui.dp(S4),0,ui.dp(S4),0);hint.setVisibility(View.GONE);
-                input.setText(typed.isEmpty()?d:d+" "+typed);input.requestFocus();input.setSelection(0,d.length());
-                input.announceForAccessibility("Ahora puedes cambiar la fecha");
-            });
-            box.addView(hold,new LinearLayout.LayoutParams(-2,ui.dp(48)));
-        }
-        box.addView(input,new LinearLayout.LayoutParams(0,-2,1));
-        Sheet sheet=s.sheet("Cambiar título",null).add(box);
-        if(!date[0].isEmpty())sheet.add(hint);
-        Sheet.Check save=()->{
-            String typed=input.getText().toString().trim();if(typed.isEmpty()){input.setError("Escribe un título");return false;}
-            // Si escribiste otra fecha al inicio, manda la tuya; si no, va la fija delante.
-            String title=date[0].isEmpty()||DATE.matcher(typed).find()?typed:date[0]+" "+typed;
+        EditText input=s.ui.field("Título","Título de la grabación");input.setText(r.title);input.setSelectAllOnFocus(true);input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(120)});
+        Sheet sheet=s.sheet("Cambiar título",null).add(input);
+        sheet.primary("Guardar",Ui.Style.PRIMARY,()->{
+            String title=input.getText().toString().trim();if(title.isEmpty()){input.setError("Escribe un título");return false;}
             String previous=r.title;r.title=title;
             try{r.save(s);Pipeline.edited(s,r.id);Diagnostics.event("title_edited",r.id);if(changed!=null)changed.run();return true;}
             catch(Exception e){r.title=previous;input.setError("No se pudo guardar el título");return false;}
-        };
-        sheet.primary("Guardar",Ui.Style.PRIMARY,save).secondary("Cancelar",null).show();
-        // «Listo» del teclado guarda igual que el botón.
-        input.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_DONE){if(save.run())sheet.dismiss();return true;}return false;});
+        }).secondary("Cancelar",null).show();
         input.requestFocus();sheet.dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }
     static void shareAudio(Screen s,Recording r){

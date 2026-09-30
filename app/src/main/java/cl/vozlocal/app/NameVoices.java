@@ -199,7 +199,14 @@ final class NameVoices {
     /** El chip se ve de 32 dp (Material) pero se toca en 48 dp: el fondo va con 8 dp de margen arriba y abajo. */
     private static void addChip(Screen s,LinearLayout chips,TextView chip){
         int inset=s.ui.dp(S2);chip.setMinHeight(s.ui.dp(48));chip.setMinimumHeight(s.ui.dp(48));
-        if(chip.getBackground()!=null)chip.setBackground(new android.graphics.drawable.InsetDrawable(chip.getBackground(),0,inset,0,inset));
+        if(chip.getBackground()!=null){
+            // Un fondo con relleno propio (el InsetDrawable lo trae: 0, 8, 0, 8) reemplaza los cuatro lados del relleno de
+            // la vista, así que el lateral que puso ui.filter quedaba en 0 y el texto tocaba los extremos redondos de la
+            // píldora. Se guarda antes y se repone después; arriba y abajo se deja el del margen táctil, como antes.
+            int start=chip.getPaddingStart(),end=chip.getPaddingEnd();
+            chip.setBackground(new InsetDrawable(chip.getBackground(),0,inset,0,inset));
+            chip.setPaddingRelative(start,chip.getPaddingTop(),end,chip.getPaddingBottom());
+        }
         LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginEnd(s.ui.dp(S2));chips.addView(chip,lp);
     }
     private static Voice find(List<Voice> all,String key){for(Voice v:all)if(v.key.equals(key))return v;return null;}
