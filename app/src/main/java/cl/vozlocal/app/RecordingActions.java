@@ -3,16 +3,28 @@ package cl.vozlocal.app;
 import android.Manifest;
 import android.content.*;
 import android.content.pm.PackageManager;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.DocumentsContract;
 import android.text.InputFilter;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
 import android.widget.*;
 import org.json.JSONObject;
 import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import static cl.vozlocal.app.AppTheme.*;
 
 /**
@@ -69,7 +81,7 @@ final class Next {
 /**
  * Estado visible de una grabación. Un solo lugar define texto, color e ícono de cada estado.
  * El color se reserva para lo que pide atención (0.6.0): lo terminado va en silencio (neutro); lo que está en curso,
- * en secondaryContainer; un error, en errorContainer; y lo que falta transcribir, en el azul de las acciones.
+ * en secondaryContainer; un error, en errorContainer; y lo que falta transcribir, en el verde de las acciones (menta).
  */
 final class RecState {
     enum Kind{NEW,QUEUED,FAILED,DONE}
@@ -93,28 +105,55 @@ final class RecState {
 
 /** Acciones sobre una grabación, compartidas por Biblioteca, Inicio y Detalle para que se comporten igual. */
 final class RecordingActions {
+    /**
+     * Menú de una grabación (0.7.0): arriba, la grabación misma (estado en su círculo, título en Outfit y «12 min ·
+     * Transcrito»); después, las tres acciones de siempre en tarjetas chicas (como «Tu semana» de la referencia); y al
+     * final la lista de lo que depende del estado, con cada ícono en un círculo menta. Eliminar va último y en rojo.
+     */
     static void menu(Screen s,Recording r,Runnable changed,Runnable beforeRelease){
         RecState state=RecState.of(s,r.id);boolean transcribed=Transcript.exists(s,r.id),queued=state.kind==RecState.Kind.QUEUED;
-        Sheet sheet=s.sheet(r.title,Ui.humanDuration(r.duration)+" · "+state.label);
-        sheet.action(R.drawable.ic_edit,"Cambiar título",false,()->rename(s,r,changed));
-        if(state.kind==RecState.Kind.NEW)sheet.action(R.drawable.ic_sparkle,"Transcribir",false,()->transcribe(s,r,changed));
+        Ui ui=s.ui;Sheet sheet=s.sheet(null,null);
+        sheet.add(header(s,r,state));
+        // Siempre disponibles: a un toque, sin leer la lista. Las tres miden lo mismo aunque un nombre ocupe dos líneas.
+        LinearLayout quick=ui.row();quick.setGravity(Gravity.TOP);
+        quick.addView(SheetParts.quick(s,sheet,R.drawable.ic_edit,"Cambiar título",()->rename(s,r,changed)),new LinearLayout.LayoutParams(0,-1,1));
+        LinearLayout.LayoutParams gap=new LinearLayout.LayoutParams(0,-1,1);gap.setMarginStart(ui.dp(S2));
+        quick.addView(SheetParts.quick(s,sheet,R.drawable.ic_share,"Compartir audio",()->shareAudio(s,r)),gap);
+        gap=new LinearLayout.LayoutParams(0,-1,1);gap.setMarginStart(ui.dp(S2));
+        quick.addView(SheetParts.quick(s,sheet,R.drawable.ic_cut,"Recortar una copia",()->{if(beforeRelease!=null)beforeRelease.run();s.startActivity(new Intent(s,ImportActivity.class).putExtra("sourceId",r.id));}),gap);
+        LinearLayout.LayoutParams qlp=ui.top(S5);qlp.bottomMargin=ui.dp(S2);sheet.body.addView(quick,qlp);
+        LinearLayout list=SheetParts.list(sheet);
+        if(state.kind==RecState.Kind.NEW)list.addView(SheetParts.item(s,sheet,R.drawable.ic_sparkle,"Transcribir",false,()->transcribe(s,r,changed)));
         if(state.kind==RecState.Kind.FAILED){
-            sheet.action(R.drawable.ic_refresh,"Reintentar transcripción",false,()->transcribe(s,r,changed));
+            list.addView(SheetParts.item(s,sheet,R.drawable.ic_refresh,"Reintentar transcripción",false,()->transcribe(s,r,changed)));
             // Si falló al volver a transcribir, la versión anterior sigue guardada: siempre hay una salida.
-            if(!transcribed&&Retranscribe.hasPrevious(s,r.id))sheet.action(R.drawable.ic_replay,"Volver a la versión anterior",false,()->restorePrevious(s,r,changed));
+            if(!transcribed&&Retranscribe.hasPrevious(s,r.id))list.addView(SheetParts.item(s,sheet,R.drawable.ic_replay,"Volver a la versión anterior",false,()->restorePrevious(s,r,changed)));
         }
         if(transcribed&&!queued){
             if(Inbox.configured(s)){String folder=Next.shortName(Inbox.folderName(s));long at=Inbox.savedAt(s,r.id);
-                sheet.action(R.drawable.ic_inbox,(at==0?"Guardar en ":Inbox.outdated(s,r.id)?"Actualizar en ":"Guardar de nuevo en ")+folder,false,()->saveToInbox(s,r,changed));}
-            sheet.action(R.drawable.ic_refresh,"Volver a transcribir…",false,()->RetranscribeSheet.show(s,r,changed));
-            if(Retranscribe.hasPrevious(s,r.id))sheet.action(R.drawable.ic_replay,"Elegir versión: nueva o anterior…",false,()->RetranscribeSheet.offerKeep(s,r,changed));
+                list.addView(SheetParts.item(s,sheet,R.drawable.ic_inbox,(at==0?"Guardar en ":Inbox.outdated(s,r.id)?"Actualizar en ":"Guardar de nuevo en ")+folder,false,()->saveToInbox(s,r,changed)));}
+            list.addView(SheetParts.item(s,sheet,R.drawable.ic_refresh,"Volver a transcribir…",false,()->RetranscribeSheet.show(s,r,changed)));
+            if(Retranscribe.hasPrevious(s,r.id))list.addView(SheetParts.item(s,sheet,R.drawable.ic_replay,"Elegir versión: nueva o anterior…",false,()->RetranscribeSheet.offerKeep(s,r,changed)));
         }
-        sheet.action(R.drawable.ic_share,"Compartir audio",false,()->shareAudio(s,r));
-        sheet.action(R.drawable.ic_cut,"Recortar una copia",false,()->{if(beforeRelease!=null)beforeRelease.run();s.startActivity(new Intent(s,ImportActivity.class).putExtra("sourceId",r.id));});
         // «Cancelar transcripción» queda lejos del resto (antes de Eliminar) y siempre se confirma.
-        if(queued)sheet.action(R.drawable.ic_close,"Cancelar transcripción",false,()->cancel(s,r,changed));
-        sheet.action(R.drawable.ic_trash,"Eliminar",true,()->delete(s,r,beforeRelease,changed));
+        if(queued)list.addView(SheetParts.item(s,sheet,R.drawable.ic_close,"Cancelar transcripción",false,()->cancel(s,r,changed)));
+        list.addView(SheetParts.item(s,sheet,R.drawable.ic_trash,"Eliminar",true,()->delete(s,r,beforeRelease,changed)));
         sheet.show();Diagnostics.event("recording_menu",r.id);
+    }
+    /** Cabecera del menú: el estado en su círculo tonal (el mismo de la Biblioteca), el título y «duración · estado». */
+    private static View header(Screen s,Recording r,RecState state){
+        Ui ui=s.ui;Palette p=s.p;
+        // Arriba y no al centro: con un título de 3 líneas el círculo queda junto a la primera, no flotando al medio.
+        LinearLayout h=ui.row();h.setGravity(Gravity.TOP);
+        h.addView(ui.tile(state.icon(),state.onBg(p),state.bg(p),48,24));h.addView(ui.space(S4));
+        LinearLayout texts=ui.column();
+        TextView t=ui.heading(r.title,Type.TITLE_LARGE);t.setMaxLines(3);t.setEllipsize(TextUtils.TruncateAt.END);texts.addView(t);
+        // El estado va en su color solo si pide atención (RecState.fg): lo terminado queda en gris, en silencio.
+        String duration=Ui.humanDuration(r.duration);SpannableString meta=new SpannableString(duration+" · "+state.label);
+        meta.setSpan(new ForegroundColorSpan(state.fg(p)),duration.length()+3,meta.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        TextView m=Ui.tabular(ui.text("",Type.LABEL_LARGE,p.onSurfaceVariant));m.setText(meta);m.setPadding(0,ui.dp(2),0,0);texts.addView(m);
+        h.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
+        return h;
     }
 
     /** El botón principal que avanza (ver {@link Next}): hace lo que corresponde al paso actual de la grabación. */
@@ -138,8 +177,9 @@ final class RecordingActions {
     /** Ya está en la carpeta rápida: explica cuándo se guardó y permite guardar de nuevo (reemplaza el mismo archivo). */
     private static void savedSheet(Screen s,Recording r,Runnable changed){
         String folder=Inbox.folderName(s);long at=Inbox.savedAt(s,r.id);
-        s.sheet("Ya está en "+folder,"Se guardó "+(Next.when(at).contains(":")?"hoy a las ":"el ")+Next.when(at)+". Si cambias algo, se reemplaza el mismo archivo, sin crear una copia.")
-            .primary("Guardar de nuevo",()->saveToInbox(s,r,changed)).secondary("Cerrar",null).show();
+        Sheet sheet=s.sheet("Ya está en "+folder,"Se guardó "+(Next.when(at).contains(":")?"hoy a las ":"el ")+Next.when(at)+". Si cambias algo, se reemplaza el mismo archivo, sin crear una copia.");
+        SheetParts.hero(sheet,R.drawable.ic_check_circle,false);
+        sheet.primary("Guardar de nuevo",()->saveToInbox(s,r,changed)).secondary("Cerrar",null).show();
     }
     /** Lleva a Ajustes para elegir la carpeta rápida (p. ej. Drive/0-Inbox). */
     static void chooseFolder(Screen s){
@@ -166,8 +206,9 @@ final class RecordingActions {
                 if(finished!=null)finished.accept(done);
                 if(done){Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);s.toast("Guardado en "+folder);if(changed!=null)changed.run();return;}
                 Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.REJECT);
-                s.sheet("No se pudo guardar en "+folder,reason!=null?reason:"Puede que Android haya retirado el permiso a esa carpeta. Elígela de nuevo y vuelve a intentarlo.")
-                    .primary("Elegir la carpeta de nuevo",()->chooseFolder(s)).secondary("Cerrar",null).show();
+                Sheet sheet=s.sheet("No se pudo guardar en "+folder,reason!=null?reason:"Puede que Android haya retirado el permiso a esa carpeta. Elígela de nuevo y vuelve a intentarlo.");
+                SheetParts.hero(sheet,R.drawable.ic_alert,true);
+                sheet.primary("Elegir la carpeta de nuevo",()->chooseFolder(s)).secondary("Cerrar",null).show();
             });
         }).start();
     }
@@ -179,15 +220,48 @@ final class RecordingActions {
         FilesStore.update(c,r.id,st->st.put("inboxUri",doc.toString()).put("inboxAt",System.currentTimeMillis()).put("inboxKind","txt"));
     }
 
+    /** «2026-09-27 » al inicio de un título (la fecha que se antepone si «Fecha delante del nombre» está activa). */
+    private static final Pattern DATE=Pattern.compile("^(\\d{4}-\\d{2}-\\d{2})(?:\\s+|$)");
+    /**
+     * Cambiar título (0.7.0): igual que al nombrar una grabación nueva, la fecha (si está activa en Ajustes) va fija
+     * delante en un recuadro menta y solo se escribe el nombre. La fecha no se pierde por borrar de más; si quieres
+     * cambiarla, tocarla la pasa al campo y se edita como antes (así no se pierde esa posibilidad).
+     */
     static void rename(Screen s,Recording r,Runnable changed){
-        EditText input=s.ui.field("Título","Título de la grabación");input.setText(r.title);input.setSelectAllOnFocus(true);input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(120)});
-        Sheet sheet=s.sheet("Cambiar título",null).add(input);
-        sheet.primary("Guardar",Ui.Style.PRIMARY,()->{
-            String title=input.getText().toString().trim();if(title.isEmpty()){input.setError("Escribe un título");return false;}
+        Ui ui=s.ui;Palette p=s.p;
+        String[] date={""};String rest=r.title==null?"":r.title;
+        if(new Settings(s).datePrefix()){Matcher m=DATE.matcher(rest);if(m.find()){date[0]=m.group(1);rest=rest.substring(m.end()).trim();}}
+        LinearLayout box=ui.row();box.setBackground(ui.fieldBackground());box.setMinimumHeight(ui.dp(56));box.setPaddingRelative(ui.dp(date[0].isEmpty()?S4:S2),0,ui.dp(S4),0);
+        EditText input=ui.field("Título","Título de la grabación");input.setBackground(null);input.setPadding(0,ui.dp(S3),0,ui.dp(S3));input.setText(rest);input.setSelectAllOnFocus(true);input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(120)});input.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        TextView hint=ui.text("La fecha queda fija. Tócala si quieres cambiarla.",Type.BODY_SMALL,p.onSurfaceVariant);hint.setPaddingRelative(ui.dp(S1),ui.dp(S2),0,0);
+        if(!date[0].isEmpty()){
+            // El recuadro se ve de 28 dp, pero se toca en 48 dp de alto.
+            FrameLayout hold=new FrameLayout(s);hold.setPaddingRelative(0,0,ui.dp(S2),0);
+            TextView pill=Ui.tabular(ui.text(date[0],Type.LABEL_LARGE,p.onPrimaryContainer));pill.setBackground(shape(s,p.highlight,R_FULL));pill.setPadding(ui.dp(10),ui.dp(S1),ui.dp(10),ui.dp(S1));pill.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            hold.addView(pill,new FrameLayout.LayoutParams(-2,-2,Gravity.CENTER_VERTICAL));
+            hold.setClickable(true);hold.setFocusable(true);hold.setContentDescription("Fecha "+date[0]+", fija. Toca para cambiarla");hold.setAccessibilityDelegate(Ui.buttonRole());
+            hold.setOnClickListener(v->{
+                String typed=input.getText().toString().trim(),d=date[0];date[0]="";
+                box.removeView(hold);box.setPaddingRelative(ui.dp(S4),0,ui.dp(S4),0);hint.setVisibility(View.GONE);
+                input.setText(typed.isEmpty()?d:d+" "+typed);input.requestFocus();input.setSelection(0,d.length());
+                input.announceForAccessibility("Ahora puedes cambiar la fecha");
+            });
+            box.addView(hold,new LinearLayout.LayoutParams(-2,ui.dp(48)));
+        }
+        box.addView(input,new LinearLayout.LayoutParams(0,-2,1));
+        Sheet sheet=s.sheet("Cambiar título",null).add(box);
+        if(!date[0].isEmpty())sheet.add(hint);
+        Sheet.Check save=()->{
+            String typed=input.getText().toString().trim();if(typed.isEmpty()){input.setError("Escribe un título");return false;}
+            // Si escribiste otra fecha al inicio, manda la tuya; si no, va la fija delante.
+            String title=date[0].isEmpty()||DATE.matcher(typed).find()?typed:date[0]+" "+typed;
             String previous=r.title;r.title=title;
             try{r.save(s);Pipeline.edited(s,r.id);Diagnostics.event("title_edited",r.id);if(changed!=null)changed.run();return true;}
             catch(Exception e){r.title=previous;input.setError("No se pudo guardar el título");return false;}
-        }).secondary("Cancelar",null).show();
+        };
+        sheet.primary("Guardar",Ui.Style.PRIMARY,save).secondary("Cancelar",null).show();
+        // «Listo» del teclado guarda igual que el botón.
+        input.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_DONE){if(save.run())sheet.dismiss();return true;}return false;});
         input.requestFocus();sheet.dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }
     static void shareAudio(Screen s,Recording r){
@@ -205,10 +279,14 @@ final class RecordingActions {
     }
     /** Falta la clave: el error trae su salida («Configurar ahora»). */
     static void missingKey(Screen s){
-        s.sheet("Falta tu clave de API","Para transcribir, Verbapp usa tu propia cuenta del proveedor (por ejemplo OpenAI). Solo pagas lo que usas.")
-            .primary("Configurar ahora",()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("focusKey",true))).secondary("Más tarde",null).show();
+        Sheet sheet=s.sheet("Falta tu clave de API","Para transcribir, Verbapp usa tu propia cuenta del proveedor (por ejemplo OpenAI). Solo pagas lo que usas.");
+        SheetParts.hero(sheet,R.drawable.ic_key,false);
+        sheet.primary("Configurar ahora",()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("focusKey",true))).secondary("Más tarde",null).show();
     }
-    /** Pregunta si separar voces, con el costo y la velocidad de cada opción para este audio. */
+    /**
+     * Pregunta si separar voces, con el costo y la velocidad de cada opción para este audio. La velocidad y el costo van
+     * en píldoras bajo la explicación (0.7.0): se comparan de un vistazo; el lector de pantalla lee la frase completa.
+     */
     static void askSpeakers(Screen s,Recording r,Runnable changed,Settings settings){
         try{
             String voices=settings.config(true).model,text=settings.config(false).model;
@@ -219,11 +297,17 @@ final class RecordingActions {
             String who=known.isEmpty()?"Para reuniones y conversaciones: Persona 1, Persona 2…"
                 :onlyMe?"Te reconoce como "+known.get(0).name+" desde el inicio; las demás, Persona 2…"
                 :(known.get(0).me?"Te reconoce ":"Reconoce ")+Voices.people(known)+"; las demás, Persona "+(known.size()+1)+"…";
-            Sheet sheet=s.sheet("¿Separar voces?","Audio de "+Ui.humanDuration(r.duration)+". Puedes cambiar esta pregunta en Ajustes.")
-                .option(R.drawable.ic_people,known.isEmpty()?"Sí, separar voces":onlyMe?"Sí, separar voces · con Mi voz":"Sí, separar voces · con voces conocidas",who+" · más lento"+(costVoices.equals("—")?"":" · ≈ "+costVoices),()->start(s,r,changed,true))
-                .option(R.drawable.ic_doc,"No, solo el texto","Para dictados y notas · más rápido"+(live?", el texto aparece en vivo":"")+(costText.equals("—")?"":" · ≈ "+costText),()->start(s,r,changed,false));
+            Sheet sheet=s.sheet("¿Separar voces?","Audio de "+Ui.humanDuration(r.duration)+". Puedes cambiar esta pregunta en Ajustes.");
+            LinearLayout list=SheetParts.list(sheet);
+            String yes=known.isEmpty()?"Sí, separar voces":onlyMe?"Sí, separar voces · con Mi voz":"Sí, separar voces · con voces conocidas";
+            String yesDetail=who+" · más lento"+(costVoices.equals("—")?"":" · ≈ "+costVoices);
+            List<SheetParts.Fact> yesFacts=new ArrayList<>();yesFacts.add(SheetParts.fact(R.drawable.ic_hourglass,"Más lento"));if(!costVoices.equals("—"))yesFacts.add(SheetParts.cost("≈ "+costVoices));
+            list.addView(SheetParts.option(s,R.drawable.ic_people,yes,who,yesFacts,true,yes+". "+yesDetail,()->{sheet.dismiss();start(s,r,changed,true);}));
+            String noDetail="Para dictados y notas · más rápido"+(live?", el texto aparece en vivo":"")+(costText.equals("—")?"":" · ≈ "+costText);
+            List<SheetParts.Fact> noFacts=new ArrayList<>();noFacts.add(SheetParts.fact(R.drawable.ic_bolt,"Más rápido"));if(live)noFacts.add(SheetParts.fact(R.drawable.ic_transcribe,"Texto en vivo"));if(!costText.equals("—"))noFacts.add(SheetParts.cost("≈ "+costText));
+            list.addView(SheetParts.option(s,R.drawable.ic_doc,"No, solo el texto","Para dictados y notas",noFacts,true,"No, solo el texto. "+noDetail,()->{sheet.dismiss();start(s,r,changed,false);}));
             // Sin "Mi voz", la separación se equivoca más al inicio: se sugiere grabarla (una sola vez).
-            if(provider.equals("openai")&&!Voices.has(s))sheet.action(R.drawable.ic_mic_fill,"Grabar mi voz para que me reconozca",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true)));
+            if(provider.equals("openai")&&!Voices.has(s))list.addView(SheetParts.item(s,sheet,R.drawable.ic_mic_fill,"Grabar mi voz para que me reconozca",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true))));
             sheet.show();
         }catch(Exception e){start(s,r,changed,settings.defaultSpeakers());}
     }
@@ -239,8 +323,9 @@ final class RecordingActions {
     /** Explica por qué conviene quitar la optimización de batería y abre el permiso del sistema. */
     static void allowBackground(Screen s){
         String hint=Battery.makerHint();
-        Sheet sheet=s.sheet("Trabajar con la pantalla bloqueada","Con la optimización de batería activa, Android puede congelar Verbapp al bloquear el teléfono y cortar el envío a OpenAI. Solo gasta batería mientras transcribe."+(hint.isEmpty()?"":"\n\n"+hint))
-            .primary("Permitir",()->{Diagnostics.event("ui_action",null,"action","battery_request");Battery.request(s);});
+        Sheet sheet=s.sheet("Trabajar con la pantalla bloqueada","Con la optimización de batería activa, Android puede congelar Verbapp al bloquear el teléfono y cortar el envío a OpenAI. Solo gasta batería mientras transcribe."+(hint.isEmpty()?"":"\n\n"+hint));
+        SheetParts.hero(sheet,R.drawable.ic_battery,false);
+        sheet.primary("Permitir",()->{Diagnostics.event("ui_action",null,"action","battery_request");Battery.request(s);});
         if(!hint.isEmpty())sheet.secondary("Abrir ajustes de la app",()->Battery.appSettings(s));
         sheet.secondary("Ahora no",null).show();
     }
@@ -250,9 +335,10 @@ final class RecordingActions {
      */
     static void cancel(Screen s,Recording r,Runnable changed){
         boolean again=!Transcript.exists(s,r.id)&&Retranscribe.hasPrevious(s,r.id);
-        s.sheet("¿Cancelar la transcripción?",again?"Se detiene el envío y vuelves a tu versión anterior, tal como estaba."
-                :"Se detiene el envío. Las partes ya listas no se vuelven a cobrar si la reanudas más tarde con la misma opción de voces.")
-            .primary("Cancelar transcripción",Ui.Style.DESTRUCTIVE,()->{
+        Sheet sheet=s.sheet("¿Cancelar la transcripción?",again?"Se detiene el envío y vuelves a tu versión anterior, tal como estaba."
+                :"Se detiene el envío. Las partes ya listas no se vuelven a cobrar si la reanudas más tarde con la misma opción de voces.");
+        SheetParts.hero(sheet,R.drawable.ic_close,true);
+        sheet.primary("Cancelar transcripción",Ui.Style.DESTRUCTIVE,()->{
                 try{Pipeline.cancel(s,r.id);
                     if(again&&Retranscribe.hasPrevious(s,r.id)&&!Transcript.exists(s,r.id)){try{Retranscribe.restorePrevious(s,r.id);}catch(Exception e){Diagnostics.event("retranscribe_restore_failed",r.id,"error_class",e.getClass().getSimpleName());}}
                     if(changed!=null)changed.run();}
@@ -264,10 +350,154 @@ final class RecordingActions {
         try{Retranscribe.restorePrevious(s,r.id);Diagnostics.event("retranscribe_restored",r.id);Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);s.toast("Volviste a la versión anterior");if(changed!=null)changed.run();}
         catch(Exception e){s.message("Versión anterior","No se pudo recuperar la versión anterior. Tu audio sigue intacto.");}
     }
+    /** Siempre se confirma, nombrando la grabación. Es lo mismo que Screen.confirm, más el ícono de aviso en rojo. */
     static void delete(Screen s,Recording r,Runnable before,Runnable after){
-        s.confirm("¿Eliminar «"+r.title+"»?","Se borrarán el audio y la transcripción de este teléfono. Las copias en tu carpeta elegida se conservan. No se puede deshacer.","Eliminar",true,()->{
+        Sheet sheet=s.sheet("¿Eliminar «"+r.title+"»?","Se borrarán el audio y la transcripción de este teléfono. Las copias en tu carpeta elegida se conservan. No se puede deshacer.");
+        SheetParts.hero(sheet,R.drawable.ic_trash,true);
+        sheet.primary("Eliminar",Ui.Style.DESTRUCTIVE,()->{
             if(before!=null)before.run();if(!r.delete(s))s.message("Eliminar","No se pudo eliminar el audio.");else{Diagnostics.event("recording_deleted",r.id);if(after!=null)after.run();}
-        });
+            return true;
+        }).secondary("Cancelar",null).show();
     }
     private RecordingActions(){}
+}
+
+/**
+ * Piezas de las hojas de acciones de Verbapp (0.7.0), compartidas por {@link RecordingActions}, {@link NameVoices} y
+ * {@link RetranscribeSheet}. Viven aquí porque el kit ({@link Sheet}, {@link Ui}) no se toca en esta versión; son
+ * candidatas a subir a él. Siguen la estética «Bosque de vidrio»: círculos menta, tarjetas suaves y píldoras.
+ */
+final class SheetParts {
+    private SheetParts(){}
+
+    /**
+     * Fondo de una tarjeta dentro de una hoja. La hoja es blanca: el vidrio blanco de las pantallas no se vería, así que
+     * en claro va un gris verdoso muy suave; en oscuro, el vidrio de siempre (translúcido con borde claro) sí se ve.
+     */
+    static GradientDrawable card(Context c,Palette p,int radius){return p.dark?glass(c,p,radius):shape(c,p.surfaceContainerLow,radius);}
+
+    /**
+     * Ícono protagonista de un aviso: círculo menta (o rojo, si el aviso es de error o destructivo) con un halo suave,
+     * como el botón de micrófono de Grabar. Va arriba, sobre el título y alineado con su borde izquierdo.
+     */
+    static void hero(Sheet sheet,int icon,boolean alert){
+        Ui ui=sheet.ui;Palette p=ui.p;int bg=alert?p.errorContainer:p.primaryContainer,fg=alert?p.error:p.onPrimaryContainer;
+        int ring=ui.dp(S2);LayerDrawable d=new LayerDrawable(new Drawable[]{oval(withAlpha(bg,p.dark?0x66:0x80)),oval(bg)});d.setLayerInset(1,ring,ring,ring,ring);
+        FrameLayout f=new FrameLayout(ui.c);f.setBackground(d);f.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        f.addView(ui.icon(icon,fg,26),new FrameLayout.LayoutParams(ui.dp(26),ui.dp(26),Gravity.CENTER));
+        // El halo sobresale 8 dp: el círculo sólido queda alineado con el texto.
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(ui.dp(64),ui.dp(64));lp.setMarginStart(-ring);lp.topMargin=-ui.dp(S1);lp.bottomMargin=ui.dp(S3);
+        sheet.body.addView(f,0,lp);
+    }
+
+    /** Lista de filas de borde a borde dentro de la hoja (el toque se ve en todo el ancho, como en Sheet.action). */
+    static LinearLayout list(Sheet sheet){
+        Ui ui=sheet.ui;LinearLayout l=ui.column();LinearLayout.LayoutParams lp=Ui.fill();lp.setMargins(-ui.dp(S6),0,-ui.dp(S6),0);sheet.body.addView(l,lp);return l;
+    }
+    /**
+     * Opción de menú con su ícono en un círculo menta; las destructivas, en círculo rojo claro y texto rojo.
+     * Hace lo mismo que Sheet.action: registra la acción, cierra la hoja y la ejecuta.
+     */
+    static View item(Screen s,Sheet sheet,int icon,String label,boolean destructive,Runnable run){
+        Ui ui=s.ui;Palette p=s.p;
+        LinearLayout row=ui.row();row.setMinimumHeight(ui.dp(56));row.setPadding(ui.dp(S6),ui.dp(S2),ui.dp(S6),ui.dp(S2));
+        row.addView(ui.tile(icon,destructive?p.error:p.onPrimaryContainer,destructive?p.errorContainer:p.primaryContainer,40,20));row.addView(ui.space(S4));
+        row.addView(ui.text(label,Type.ITEM,destructive?p.error:p.onSurface),new LinearLayout.LayoutParams(0,-2,1));
+        row.setBackground(ui.ripple(null,0));act(s,sheet,row,label,run);
+        return row;
+    }
+    /** Acción rápida en tarjeta chica: círculo menta arriba y el nombre abajo (hasta 3 líneas), como los datos de «Tu semana». */
+    static View quick(Screen s,Sheet sheet,int icon,String label,Runnable run){
+        Ui ui=s.ui;Palette p=s.p;
+        LinearLayout t=ui.column();t.setGravity(Gravity.CENTER_HORIZONTAL);t.setPadding(ui.dp(S2),ui.dp(S4),ui.dp(S2),ui.dp(S3));t.setMinimumHeight(ui.dp(96));
+        t.setBackground(ui.ripple(card(s,p,R_CARD-4),R_CARD-4));
+        t.addView(ui.tile(icon,p.onPrimaryContainer,p.primaryContainer,40,20));
+        TextView l=ui.text(label,Type.LABEL_LARGE,p.onSurface);l.setGravity(Gravity.CENTER);l.setMaxLines(3);l.setEllipsize(TextUtils.TruncateAt.END);l.setPadding(0,ui.dp(S2),0,0);l.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);t.addView(l,Ui.fill());
+        act(s,sheet,t,label,run);Ui.pressable(t);
+        return t;
+    }
+    /** Toque de una opción: el mismo registro que Sheet.action (pantalla y etiqueta), cierra la hoja y ejecuta. */
+    private static void act(Screen s,Sheet sheet,View v,String label,Runnable run){
+        v.setClickable(true);v.setFocusable(true);v.setContentDescription(label);v.setAccessibilityDelegate(Ui.buttonRole());
+        v.setOnClickListener(x->{Diagnostics.event("ui_action",null,"screen",s.getClass().getSimpleName(),"action",label);sheet.dismiss();run.run();});
+    }
+
+    /** Dato corto de una opción (velocidad, costo, «Recomendada»), que va en una píldora chica bajo la explicación. */
+    static final class Fact {
+        final int icon;final String text;final boolean accent,tabular;
+        Fact(int icon,String text,boolean accent,boolean tabular){this.icon=icon;this.text=text;this.accent=accent;this.tabular=tabular;}
+    }
+    static Fact fact(int icon,String text){return new Fact(icon,text,false,false);}
+    /** Costo estimado: cifras de ancho fijo. */
+    static Fact cost(String text){return new Fact(0,text,false,true);}
+    /** La alternativa recomendada: píldora en el verde de marca con ✦ (se distingue de los círculos menta). */
+    static Fact recommended(){return new Fact(R.drawable.ic_sparkle,"Recomendada",true,false);}
+
+    /**
+     * Opción grande de dos líneas, como Sheet.option (círculo menta de 44 dp, título y explicación), con sus datos en
+     * píldoras abajo. Puede mostrarse desactivada con su motivo: no se esconde, así se entiende por qué no se puede.
+     * spoken: lo que lee el lector de pantalla (la frase completa, con los datos de las píldoras).
+     * run: lo que hace al tocarla (quien la usa cierra su hoja).
+     */
+    static View option(Screen s,int icon,String label,String detail,List<Fact> facts,boolean enabled,String spoken,Runnable run){
+        Ui ui=s.ui;Palette p=s.p;
+        LinearLayout row=ui.row();row.setGravity(Gravity.TOP);row.setMinimumHeight(ui.dp(72));row.setPadding(ui.dp(S6),ui.dp(S3),ui.dp(S6),ui.dp(S3));
+        FrameLayout tile=ui.tile(icon,p.onPrimaryContainer,p.primaryContainer,44,22);row.addView(tile);row.addView(ui.space(S4));
+        LinearLayout texts=ui.column();texts.setPadding(0,ui.dp(2),0,0);
+        TextView t=ui.text(label,Type.TITLE_MEDIUM,p.onSurface);texts.addView(t);
+        TextView d=ui.text(detail,Type.BODY_MEDIUM,p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);texts.addView(d);
+        if(enabled&&facts!=null&&!facts.isEmpty()){
+            Flow f=new Flow(s,ui.dp(6),ui.dp(6));for(Fact x:facts)f.addView(pill(s,x));
+            LinearLayout.LayoutParams lp=Ui.fill();lp.topMargin=ui.dp(S2);texts.addView(f,lp);
+        }
+        row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
+        if(enabled){
+            row.setBackground(ui.ripple(null,0));row.setClickable(true);row.setFocusable(true);row.setContentDescription(spoken);row.setAccessibilityDelegate(Ui.buttonRole());
+            row.setOnClickListener(v->{Diagnostics.event("ui_action",null,"screen",s.getClass().getSimpleName(),"action",label);run.run();});
+        }else{
+            // Desactivada: el título y el círculo se atenúan; el motivo se lee completo.
+            tile.setAlpha(0.38f);t.setAlpha(0.38f);row.setContentDescription(spoken);
+        }
+        return row;
+    }
+    /** Píldora de 24 dp de un dato: gris suave; la recomendada, en verde de marca. */
+    private static TextView pill(Screen s,Fact f){
+        Ui ui=s.ui;Palette p=s.p;int fg=f.accent?p.onPrimary:p.onSurfaceVariant,bg=f.accent?p.primary:p.dark?p.surfaceContainerHighest:p.surfaceContainerHigh;
+        TextView t=ui.text(f.text,Type.LABEL_MEDIUM,fg);t.setBackground(shape(s,bg,R_FULL));t.setGravity(Gravity.CENTER_VERTICAL);t.setSingleLine(true);t.setEllipsize(TextUtils.TruncateAt.END);t.setMinHeight(ui.dp(24));
+        t.setPaddingRelative(ui.dp(f.icon!=0?S2:10),ui.dp(2),ui.dp(10),ui.dp(2));t.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        if(f.tabular)Ui.tabular(t);
+        if(f.icon!=0){Drawable d=s.getDrawable(f.icon).mutate();d.setTint(fg);d.setBounds(0,0,ui.dp(14),ui.dp(14));t.setCompoundDrawablesRelative(d,null,null,null);t.setCompoundDrawablePadding(ui.dp(S1));}
+        return t;
+    }
+
+    /**
+     * Fila que baja a la línea siguiente cuando lo que lleva no cabe (píldoras de datos). Así nada se corta en un
+     * teléfono angosto ni con la letra grande de Accesibilidad.
+     */
+    static final class Flow extends ViewGroup {
+        private final int gapH,gapV;
+        Flow(Context c,int gapH,int gapV){super(c);this.gapH=gapH;this.gapV=gapV;}
+        @Override protected void onMeasure(int widthSpec,int heightSpec){
+            int max=MeasureSpec.getSize(widthSpec);boolean bounded=MeasureSpec.getMode(widthSpec)!=MeasureSpec.UNSPECIFIED;
+            int x=0,y=0,line=0,widest=0;
+            for(int i=0;i<getChildCount();i++){
+                View v=getChildAt(i);if(v.getVisibility()==GONE)continue;
+                v.measure(bounded?MeasureSpec.makeMeasureSpec(max,MeasureSpec.AT_MOST):MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED));
+                int w=v.getMeasuredWidth(),h=v.getMeasuredHeight();
+                if(bounded&&x>0&&x+w>max){y+=line+gapV;x=0;line=0;}
+                x+=w;widest=Math.max(widest,x);x+=gapH;line=Math.max(line,h);
+            }
+            setMeasuredDimension(resolveSize(widest,widthSpec),resolveSize(y+line,heightSpec));
+        }
+        @Override protected void onLayout(boolean changed,int l,int t,int r,int b){
+            int max=r-l,x=0,y=0,line=0;boolean rtl=getLayoutDirection()==LAYOUT_DIRECTION_RTL;
+            for(int i=0;i<getChildCount();i++){
+                View v=getChildAt(i);if(v.getVisibility()==GONE)continue;
+                int w=v.getMeasuredWidth(),h=v.getMeasuredHeight();
+                if(x>0&&x+w>max){y+=line+gapV;x=0;line=0;}
+                int left=rtl?max-x-w:x;v.layout(left,y,left+w,y+h);
+                x+=w+gapH;line=Math.max(line,h);
+            }
+        }
+    }
 }
