@@ -240,6 +240,42 @@ final class RecordingActions {
         Intent share=new Intent(Intent.ACTION_SEND).setType("audio/mp4").putExtra(Intent.EXTRA_STREAM,uri).putExtra(Intent.EXTRA_SUBJECT,r.title).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         share.setClipData(ClipData.newRawUri(r.title,uri));s.startActivity(Intent.createChooser(share,"Compartir audio"));
     }
+    // ---------- Proveedor (0.8.0): lo que cambia en las pantallas según con quién se transcribe ----------
+    /** Nombre para los textos: «OpenAI», «OpenRouter» o «tu servidor» (cualquier otro valor es un servidor propio). */
+    static String providerName(String provider){return "openrouter".equals(provider)?"OpenRouter":"openai".equals(provider)?"OpenAI":"tu servidor";}
+    static String providerName(Settings s){return providerName(s.provider());}
+    /**
+     * ¿Las voces conocidas («Mi voz» y las guardadas) viajan con el audio? OpenAI las recibe como muestras; OpenRouter,
+     * como «anclas» antepuestas al audio (SPEC-0.8, decisión 3). Un servidor propio no las acepta.
+     */
+    static boolean knownVoices(Settings s){return s.provider().equals("openai")||s.openRouter();}
+    /** ¿El proveedor cobra cada audio? Con un servidor propio no se sabe: ahí se dice «se envía», no «se cobra». */
+    static boolean paid(Settings s){return s.provider().equals("openai")||s.openRouter();}
+    /** Modelo con que se transcribiría hoy. Igual que Settings.config(), pero sin leer la clave (sirve para armar pantallas). */
+    static String model(Settings s,boolean speakers){
+        if(s.provider().equals("openai"))return speakers?"gpt-4o-transcribe-diarize":s.textModel();
+        return s.openRouter()?Models.chosen(s,speakers):s.prefs.getString("customModel","whisper-1");
+    }
+    /** Precio por minuto de OpenRouter ya consultado: las métricas se redibujan con cada avance y el catálogo es un archivo. */
+    private static String rateModel;private static double rateValue;private static long rateAt;
+    private static synchronized double openRouterRate(Context c,String model){
+        long now=System.currentTimeMillis();
+        if(model.equals(rateModel)&&now-rateAt>=0&&now-rateAt<60_000)return rateValue;
+        double rate=-1;try{rate=Models.perMinute(c.getApplicationContext(),model);}catch(Throwable ignored){}
+        rateModel=model;rateValue=rate;rateAt=now;return rate;
+    }
+    /**
+     * Costo estimado en US$ de transcribir audioMs con ese modelo; -1 si no se conoce (nunca se inventa un precio).
+     * OpenAI: la tabla de Pricing. OpenRouter: el precio del catálogo guardado en el teléfono (Models.perMinute).
+     */
+    static double estimate(Context c,String provider,String model,long audioMs){
+        double v=Pricing.estimate(provider,model,audioMs);
+        if(v<0&&"openrouter".equals(provider)&&model!=null&&!model.isEmpty()){double rate=openRouterRate(c,model);if(rate>=0)v=rate*audioMs/60000d;}
+        return v;
+    }
+    /** Costo real en US$ que informó el proveedor (estado "costUsd": lo suma el motor con OpenRouter); -1 si no hay. */
+    static double realCost(JSONObject st){double v=st==null?-1:st.optDouble("costUsd",-1);return v>0?v:-1;}
+
     /** Encola la transcripción. Si falta la clave, lleva directo a configurarla; si ya está transcrita, ofrece volver a transcribir. */
     static void transcribe(Screen s,Recording r,Runnable changed){
         if(Transcript.exists(s,r.id)){RetranscribeSheet.show(s,r,changed);return;}
@@ -250,7 +286,8 @@ final class RecordingActions {
     }
     /** Falta la clave: el error trae su salida («Configurar ahora»). */
     static void missingKey(Screen s){
-        Sheet sheet=s.sheet("Falta tu clave de API","Para transcribir, Verbapp usa tu propia cuenta del proveedor (por ejemplo OpenAI). Solo pagas lo que usas.");
+        Settings settings=new Settings(s);boolean own=!paid(settings);
+        Sheet sheet=s.sheet("Falta tu clave de API",own?"Para transcribir, Verbapp necesita la clave de tu servidor.":"Para transcribir, Verbapp usa tu propia cuenta de "+providerName(settings)+". Solo pagas lo que usas.");
         SheetParts.hero(sheet,R.drawable.ic_key,false);
         sheet.primary("Configurar ahora",()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("focusKey",true))).secondary("Más tarde",null).show();
     }
@@ -261,13 +298,17 @@ final class RecordingActions {
     static void askSpeakers(Screen s,Recording r,Runnable changed,Settings settings){
         try{
             String voices=settings.config(true).model,text=settings.config(false).model;
-            String provider=settings.provider();String costVoices=Pricing.usd(Pricing.estimate(provider,voices,r.duration)),costText=Pricing.usd(Pricing.estimate(provider,text,r.duration));boolean live=provider.equals("openai")&&text.equals("gpt-transcribe");
+            String provider=settings.provider();String costVoices=Pricing.usd(estimate(s,provider,voices,r.duration)),costText=Pricing.usd(estimate(s,provider,text,r.duration));
+            // El texto en vivo solo existe con gpt-transcribe de OpenAI directo (OpenRouter responde todo al final).
+            boolean live=provider.equals("openai")&&text.equals("gpt-transcribe");
             // Voces conocidas que van en este audio (hasta 4, la tuya primero): se dice a quién reconoce desde el inicio.
-            List<Voices.Voice> known=provider.equals("openai")?Voices.selected(s):Collections.emptyList();
+            List<Voices.Voice> known=knownVoices(settings)?Voices.selected(s):Collections.emptyList();
             boolean onlyMe=known.size()==1&&known.get(0).me;
+            // Con OpenRouter el reconocimiento usa «anclas», una técnica nueva: se promete el intento, no el resultado.
+            boolean sure=!settings.openRouter();
             String who=known.isEmpty()?"Para reuniones y conversaciones: Persona 1, Persona 2…"
-                :onlyMe?"Te reconoce como "+known.get(0).name+" desde el inicio; las demás, Persona 2…"
-                :(known.get(0).me?"Te reconoce ":"Reconoce ")+Voices.people(known)+"; las demás, Persona "+(known.size()+1)+"…";
+                :onlyMe?(sure?"Te reconoce como "+known.get(0).name+" desde el inicio":"Busca tu voz para ponerte como "+known.get(0).name)+"; las demás, Persona 2…"
+                :(known.get(0).me?(sure?"Te reconoce ":"Busca reconocerte "):(sure?"Reconoce ":"Busca reconocer "))+Voices.people(known)+"; las demás, Persona "+(known.size()+1)+"…";
             Sheet sheet=s.sheet("¿Separar voces?","Audio de "+Ui.humanDuration(r.duration)+". Puedes cambiar esta pregunta en Ajustes.");
             LinearLayout list=SheetParts.list(sheet);
             String yes=known.isEmpty()?"Sí, separar voces":onlyMe?"Sí, separar voces · con Mi voz":"Sí, separar voces · con voces conocidas";
@@ -278,7 +319,7 @@ final class RecordingActions {
             List<SheetParts.Fact> noFacts=new ArrayList<>();noFacts.add(SheetParts.fact(R.drawable.ic_bolt,"Más rápido"));if(live)noFacts.add(SheetParts.fact(R.drawable.ic_transcribe,"Texto en vivo"));if(!costText.equals("—"))noFacts.add(SheetParts.cost("≈ "+costText));
             list.addView(SheetParts.option(s,R.drawable.ic_doc,"No, solo el texto","Para dictados y notas",noFacts,true,"No, solo el texto. "+noDetail,()->{sheet.dismiss();start(s,r,changed,false);}));
             // Sin "Mi voz", la separación se equivoca más al inicio: se sugiere grabarla (una sola vez).
-            if(provider.equals("openai")&&!Voices.has(s))list.addView(SheetParts.item(s,sheet,R.drawable.ic_mic_fill,"Grabar mi voz para que me reconozca",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true))));
+            if(knownVoices(settings)&&!Voices.has(s))list.addView(SheetParts.item(s,sheet,R.drawable.ic_mic_fill,"Grabar mi voz para que me reconozca",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true))));
             sheet.show();
         }catch(Exception e){start(s,r,changed,settings.defaultSpeakers());}
     }
@@ -294,7 +335,7 @@ final class RecordingActions {
     /** Explica por qué conviene quitar la optimización de batería y abre el permiso del sistema. */
     static void allowBackground(Screen s){
         String hint=Battery.makerHint();
-        Sheet sheet=s.sheet("Trabajar con la pantalla bloqueada","Con la optimización de batería activa, Android puede congelar Verbapp al bloquear el teléfono y cortar el envío a OpenAI. Solo gasta batería mientras transcribe."+(hint.isEmpty()?"":"\n\n"+hint));
+        Sheet sheet=s.sheet("Trabajar con la pantalla bloqueada","Con la optimización de batería activa, Android puede congelar Verbapp al bloquear el teléfono y cortar el envío a "+providerName(new Settings(s))+". Solo gasta batería mientras transcribe."+(hint.isEmpty()?"":"\n\n"+hint));
         SheetParts.hero(sheet,R.drawable.ic_battery,false);
         sheet.primary("Permitir",()->{Diagnostics.event("ui_action",null,"action","battery_request");Battery.request(s);});
         if(!hint.isEmpty())sheet.secondary("Abrir ajustes de la app",()->Battery.appSettings(s));
