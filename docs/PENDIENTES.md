@@ -2,6 +2,35 @@
 
 > Lista de mejoras acordadas con el usuario. Al implementar una, muévela al CHANGELOG y, si es una decisión de diseño, regístrala en `diseno/CRITERIOS.md`.
 
+## Para la 0.9: métricas de uso en Ajustes (pedido 2026-09-30)
+> «En Ajustes, alguna sección con métricas de uso, de conversión, de tokens usados y cuánto equivale en USD… un poco más de métricas en general, eso se ve bonito. El público objetivo es alguien que habla mucho y quiere cargar información transcrita en su segundo cerebro.»
+
+Todo se calcula en el teléfono con lo que la app ya guarda, sin enviar nada:
+- **Datos por grabación** (`.sync.json`): `audioMs`, `costUsd` (real, OpenRouter), `inTokens`/`outTokens`/`usageSec`, `provider`/`model`, `bytesSent`, `inboxAt`.
+- **Transcripciones**: palabras y personas.
+- **Notas** (`.note.json`): modelo y, si se guarda, su uso.
+- **Momentos ★.**
+
+Ideas de contenido:
+- **Tu voz en números:**
+  - horas grabadas y palabras transcritas (semana, mes, total);
+  - ritmo al hablar (palabras por minuto);
+  - «tiempo ahorrado» frente a escribir a mano (≈40 palabras por minuto al teclear);
+  - racha de días grabando.
+- **Embudo hacia tu segundo cerebro:** grabadas → transcritas → con nota → guardadas en 0-Inbox, con el % de cada paso y lo que quedó a medio camino (con acceso directo a esas grabaciones).
+- **Costos:**
+  - US$ del mes y del total;
+  - costo por hora de audio;
+  - desglose por proveedor y modelo;
+  - tokens de las notas;
+  - real (OpenRouter informa el costo) frente a estimado (tarifas públicas de OpenAI), siempre rotulado.
+  - Con OpenRouter, además el saldo de la clave.
+- **Gráficos:**
+  - barras por semana (minutos grabados y US$);
+  - mapa de días y horas en que más grabas;
+  - personas con las que más conversas (voces conocidas).
+- **Diseño:** una pantalla propia («Tus métricas»), a la que se entra desde una tarjeta resumen en Ajustes, con la estética Verbapp (tarjetas de vidrio, cifras grandes en Outfit, gráficos en verde). Cargar la guía `dataviz` antes de dibujar gráficos.
+
 ## Abierto tras integrar la 0.8.0 (OpenRouter y bienvenida)
 Nada de la 0.8.0 se probó contra OpenRouter real (no había clave) ni con audio real. Lo primero es la lista «qué probar con tu clave» de cada parte. Además quedó anotado:
 - **Etapa «Preparando audio» con OpenRouter.** La conversión a FLAC de cada bloque ocurre antes del envío y puede tardar decenas de segundos en un teléfono; mientras tanto la pantalla dice «Enviando…» en 0 %. Falta una etapa propia y contar ese tiempo en `Transcriber.sendEstimate` (tarea de fondo).
