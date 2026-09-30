@@ -244,11 +244,7 @@ final class RecordingActions {
     /** Nombre para los textos: «OpenAI», «OpenRouter» o «tu servidor» (cualquier otro valor es un servidor propio). */
     static String providerName(String provider){return "openrouter".equals(provider)?"OpenRouter":"openai".equals(provider)?"OpenAI":"tu servidor";}
     static String providerName(Settings s){return providerName(s.provider());}
-    /**
-     * ¿Las voces conocidas («Mi voz» y las guardadas) viajan con el audio? OpenAI las recibe como muestras; OpenRouter,
-     * como «anclas» antepuestas al audio (SPEC-0.8, decisión 3). Un servidor propio no las acepta.
-     */
-    static boolean knownVoices(Settings s){return s.provider().equals("openai")||s.openRouter();}
+    // ¿Las voces conocidas viajan con el audio? Lo decide el motor, en un solo lugar: TranscribeClient.knowsVoices(provider).
     /** ¿El proveedor cobra cada audio? Con un servidor propio no se sabe: ahí se dice «se envía», no «se cobra». */
     static boolean paid(Settings s){return s.provider().equals("openai")||s.openRouter();}
     /** Modelo con que se transcribiría hoy. Igual que Settings.config(), pero sin leer la clave (sirve para armar pantallas). */
@@ -256,25 +252,8 @@ final class RecordingActions {
         if(s.provider().equals("openai"))return speakers?"gpt-4o-transcribe-diarize":s.textModel();
         return s.openRouter()?Models.chosen(s,speakers):s.prefs.getString("customModel","whisper-1");
     }
-    /** Precio por minuto de OpenRouter ya consultado: las métricas se redibujan con cada avance y el catálogo es un archivo. */
-    private static String rateModel;private static double rateValue;private static long rateAt;
-    private static synchronized double openRouterRate(Context c,String model){
-        long now=System.currentTimeMillis();
-        if(model.equals(rateModel)&&now-rateAt>=0&&now-rateAt<60_000)return rateValue;
-        double rate=-1;try{rate=Models.perMinute(c.getApplicationContext(),model);}catch(Throwable ignored){}
-        rateModel=model;rateValue=rate;rateAt=now;return rate;
-    }
-    /**
-     * Costo estimado en US$ de transcribir audioMs con ese modelo; -1 si no se conoce (nunca se inventa un precio).
-     * OpenAI: la tabla de Pricing. OpenRouter: el precio del catálogo guardado en el teléfono (Models.perMinute).
-     */
-    static double estimate(Context c,String provider,String model,long audioMs){
-        double v=Pricing.estimate(provider,model,audioMs);
-        if(v<0&&"openrouter".equals(provider)&&model!=null&&!model.isEmpty()){double rate=openRouterRate(c,model);if(rate>=0)v=rate*audioMs/60000d;}
-        return v;
-    }
-    /** Costo real en US$ que informó el proveedor (estado "costUsd": lo suma el motor con OpenRouter); -1 si no hay. */
-    static double realCost(JSONObject st){double v=st==null?-1:st.optDouble("costUsd",-1);return v>0?v:-1;}
+    // Costos: el estimado sale de Pricing.estimate(Context, proveedor, modelo, ms) (OpenAI por su tabla; OpenRouter por el
+    // catálogo guardado, que Models ya recuerda en memoria) y el real, de Pricing.real(estado). Aquí no se repite esa lógica.
 
     /** Encola la transcripción. Si falta la clave, lleva directo a configurarla; si ya está transcrita, ofrece volver a transcribir. */
     static void transcribe(Screen s,Recording r,Runnable changed){
@@ -298,11 +277,11 @@ final class RecordingActions {
     static void askSpeakers(Screen s,Recording r,Runnable changed,Settings settings){
         try{
             String voices=settings.config(true).model,text=settings.config(false).model;
-            String provider=settings.provider();String costVoices=Pricing.usd(estimate(s,provider,voices,r.duration)),costText=Pricing.usd(estimate(s,provider,text,r.duration));
+            String provider=settings.provider();String costVoices=Pricing.usd(Pricing.estimate(s,provider,voices,r.duration)),costText=Pricing.usd(Pricing.estimate(s,provider,text,r.duration));
             // El texto en vivo solo existe con gpt-transcribe de OpenAI directo (OpenRouter responde todo al final).
             boolean live=provider.equals("openai")&&text.equals("gpt-transcribe");
             // Voces conocidas que van en este audio (hasta 4, la tuya primero): se dice a quién reconoce desde el inicio.
-            List<Voices.Voice> known=knownVoices(settings)?Voices.selected(s):Collections.emptyList();
+            List<Voices.Voice> known=TranscribeClient.knowsVoices(provider)?Voices.selected(s):Collections.emptyList();
             boolean onlyMe=known.size()==1&&known.get(0).me;
             // Con OpenRouter el reconocimiento usa «anclas», una técnica nueva: se promete el intento, no el resultado.
             boolean sure=!settings.openRouter();
@@ -319,7 +298,7 @@ final class RecordingActions {
             List<SheetParts.Fact> noFacts=new ArrayList<>();noFacts.add(SheetParts.fact(R.drawable.ic_bolt,"Más rápido"));if(live)noFacts.add(SheetParts.fact(R.drawable.ic_transcribe,"Texto en vivo"));if(!costText.equals("—"))noFacts.add(SheetParts.cost("≈ "+costText));
             list.addView(SheetParts.option(s,R.drawable.ic_doc,"No, solo el texto","Para dictados y notas",noFacts,true,"No, solo el texto. "+noDetail,()->{sheet.dismiss();start(s,r,changed,false);}));
             // Sin "Mi voz", la separación se equivoca más al inicio: se sugiere grabarla (una sola vez).
-            if(knownVoices(settings)&&!Voices.has(s))list.addView(SheetParts.item(s,sheet,R.drawable.ic_mic_fill,"Grabar mi voz para que me reconozca",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true))));
+            if(TranscribeClient.knowsVoices(provider)&&!Voices.has(s))list.addView(SheetParts.item(s,sheet,R.drawable.ic_mic_fill,"Grabar mi voz para que me reconozca",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true))));
             sheet.show();
         }catch(Exception e){start(s,r,changed,settings.defaultSpeakers());}
     }

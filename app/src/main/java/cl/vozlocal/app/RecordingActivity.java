@@ -499,13 +499,16 @@ public class RecordingActivity extends Screen {
     // ---------- Sin transcribir ----------
     private void showNew(){
         Settings s=new Settings(this);LinearLayout card=ui.card();card.setPadding(ui.dp(S5),ui.dp(S5),ui.dp(S5),ui.dp(S5));
+        // Con OpenRouter, «Proveedor: …» nombra el modelo según la lista guardada: se deja leída (queda en memoria) para
+        // que un modelo nuevo salga con su nombre y no con el final de su identificador.
+        if(s.openRouter())Models.cached(this);
         card.addView(sparkTile(44));
         TextView h=ui.heading("Transcribe este audio",Type.TITLE_LARGE);h.setPadding(0,ui.dp(S4),0,ui.dp(S1));card.addView(h);
         card.addView(ui.text(s.hasKey()?"Toca «Transcribir» abajo. Al transcribir eliges si separar voces. Proveedor: "+SettingsActivity.modelSummary(s)+".":"Agrega tu clave de API para transcribir: toca «Transcribir» abajo. Solo pagas lo que usas en tu cuenta del proveedor.",Type.BODY_MEDIUM,p.onSurfaceVariant));
         // Costos con el proveedor y los modelos reales (0.8.0: también OpenRouter, con el precio de su catálogo). Un servidor
         // propio no tiene tarifa conocida y no muestra nada; un modelo que no separa voces muestra solo el del texto.
         if(s.hasKey()){String provider=s.provider();
-            double voices=s.canSeparate()?RecordingActions.estimate(this,provider,RecordingActions.model(s,true),recording.duration):-1,text=RecordingActions.estimate(this,provider,RecordingActions.model(s,false),recording.duration);
+            double voices=s.canSeparate()?Pricing.estimate(this,provider,RecordingActions.model(s,true),recording.duration):-1,text=Pricing.estimate(this,provider,RecordingActions.model(s,false),recording.duration);
             // Los dos costos como píldoras, una bajo la otra (juntas no caben en un teléfono angosto): se comparan de un vistazo.
             if(voices>=0){TextView both=Ui.tabular(ui.chip("≈ "+Pricing.usd(voices)+" separando voces",p.onPrimaryContainer,p.primaryContainer));LinearLayout.LayoutParams bl=Ui.wrap();bl.topMargin=ui.dp(S3);card.addView(both,bl);}
             if(text>=0){TextView plain=Ui.tabular(ui.chip("≈ "+Pricing.usd(text)+" solo el texto",p.onSurfaceVariant,0));plain.setBackground(outline(this,chipFill(),p.outlineVariant,R_FULL,false));
@@ -663,10 +666,10 @@ public class RecordingActivity extends Screen {
         if(live)cells.add(new String[]{"Restante (aprox.)",remaining(st)});
         cells.add(new String[]{"Audio procesado",Recording.time(live?doneAudio:audio)+" de "+Recording.time(audio)});
         long speedBase=live?doneAudio:audio;if(speedBase>0&&elapsed>0)cells.add(new String[]{"Velocidad",String.format(Locale.ROOT,"%.1f",speedBase/(double)elapsed).replace('.',',')+"× tiempo real"});
-        String provider=st.optString("provider","openai");double spent=RecordingActions.estimate(this,provider,model,live?doneAudio:audio),total=RecordingActions.estimate(this,provider,model,audio);
+        String provider=st.optString("provider","openai");double spent=Pricing.estimate(this,provider,model,live?doneAudio:audio),total=Pricing.estimate(this,provider,model,audio);
         // Costo real (0.8.0): OpenRouter informa lo que cobró cada envío y el motor lo suma en "costUsd". Si existe, va en
         // vez del estimado (sin «≈»); mientras se transcribe, junto al total estimado si se conoce.
-        double real=RecordingActions.realCost(st);
+        double real=Pricing.real(st);
         if(real>=0)cells.add(new String[]{live?"Costo hasta ahora":"Costo",Pricing.usd(real)+(live&&total>=0?" · total ≈"+Pricing.usd(total):"")});
         else if(total>=0)cells.add(new String[]{live?"Costo hasta ahora":"Costo estimado",Pricing.usd(spent)+(live?" · total ≈"+Pricing.usd(total):"")});
         long in=st.optLong("inTokens"),out=st.optLong("outTokens");double secs=st.optDouble("usageSec",0);
@@ -796,7 +799,7 @@ public class RecordingActivity extends Screen {
     private String footer(JSONObject st){
         List<String> parts=new ArrayList<>();long at=transcribedAt(st);if(at>0)parts.add("Transcrito el "+dayLabel(at));
         long took=st.optLong("doneIn");if(took>0)parts.add("tardó "+Ui.humanDuration(took));
-        double real=RecordingActions.realCost(st),cost=real>=0?real:RecordingActions.estimate(this,transcript.data.optString("provider","openai"),transcript.data.optString("model"),recording.duration);
+        double real=Pricing.real(st),cost=real>=0?real:Pricing.estimate(this,transcript.data.optString("provider","openai"),transcript.data.optString("model"),recording.duration);
         if(cost>=0&&took>0)parts.add((real>=0?"":"≈ ")+Pricing.usd(cost));
         return TextUtils.join(" · ",parts);
     }
@@ -1229,7 +1232,7 @@ public class RecordingActivity extends Screen {
         // conocida y hay un tramo limpio (sin otra voz encima) de 3 s o más. Solo si el servicio usa voces conocidas:
         // OpenAI (muestras) u OpenRouter (anclas, 0.8.0); con un servidor propio no servirían de nada.
         double[] clean=!demo&&transcript.diarized()&&!key.startsWith(Voices.TARGET)&&!name.equals(transcript.defaultLabel(key))&&!name.trim().isEmpty()
-            &&RecordingActions.knownVoices(new Settings(this))&&recording.audio(this).isFile()?NameVoices.sample(segs,key):null;
+            &&TranscribeClient.knowsVoices(new Settings(this).provider())&&recording.audio(this).isFile()?NameVoices.sample(segs,key):null;
         if(clean!=null&&(clean[1]-clean[0])*1000>=Voices.MIN_MS)privateAction(s,R.drawable.ic_mic_fill,"Guardar la voz","Guardar la voz de "+name,()->saveVoice(name,clean));
         s.show();
     }catch(Exception e){message("Transcripción","No se pudo abrir esta voz.");}}

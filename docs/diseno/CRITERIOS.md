@@ -217,6 +217,16 @@ Los números que cambian usan **cifras de ancho fijo** (`Ui.tabular`, «tnum» d
 - Una línea de apoyo por fila; lo largo va en «Más información».
 - «Comprobar conexión» muestra el resultado en la misma fila, sin una hoja que haya que cerrar.
 - Los cambios se hacen en hojas con botones de radio.
+- **(0.8.0) Servicio de transcripción:** Proveedor (OpenRouter primero, OpenAI, Servidor compatible) → modelo(s) → Separar voces → Clave → Comprobar conexión → Idioma. Con OpenRouter hay dos filas de modelo («con voces» y «solo texto») y «Comprobar conexión» muestra el saldo («✓ Clave válida · quedan US$4,20»). Los montos se escriben siempre igual, sin espacio tras «US$» (`Pricing.usd`, `SettingsActivity.money`).
+- **(0.8.0) Hoja de modelos de OpenRouter:** arriba, una franja con el estado de la lista («Lista actualizada hace 2 h · 24 modelos», «Actualizar lista», carga, y el error en tono de error con «Reintentar»); después la tarjeta menta «Automático» con la píldora «Recomendado» y el modelo que usa hoy; luego «Probados por Verbapp» y «Nuevos en OpenRouter». Cada modelo lleva nombre, autor, una píldora («Separa voces» en menta, «Solo texto» en gris, «Sin confirmar» y «Nuevo · sin probar» solo con borde, «Se retira el…») y el precio por hora alineado a la derecha, con «≈» si es de referencia. Las píldoras bajan de línea si no caben (contenedor `Flow`).
+- **(0.8.0) IA de la nota:** OpenRouter, OpenAI o Claude. Con OpenRouter se elige una familia (alias «-latest», siempre la versión más nueva) u «Otro modelo de OpenRouter…» escrito a mano; la nota muestra cuál respondió.
+- **(0.8.0) Ayuda y soporte** suma «Ver la bienvenida».
+
+### Bienvenida (0.8.0)
+- Solo en la primera instalación (`welcomed=false`); quien actualiza ve «Novedades». Se repite desde Ajustes → Ayuda y soporte, sin tocar claves ni ajustes guardados.
+- Pantalla completa sobre el fondo intenso, sin barra de pestañas. Marco fijo: ← (desde el paso 2), puntos de avance y «Saltar» arriba; un solo botón de tinta abajo, que no cambia de lugar.
+- Cuatro pasos cortos: Bienvenida (tres beneficios en vidrio) → Tú (nombre opcional y permiso de micrófono) → Conecta tu IA (OpenRouter recomendada u OpenAI; campo oculto con «Pegar»; «Ahora no, solo grabar») → Listo (estado de la clave, «Grabar mi voz», «Elegir mi carpeta 0-Inbox»).
+- Nada bloquea: la clave se comprueba en segundo plano mientras ya se avanza, y el resultado queda también en Ajustes → «Comprobar conexión». La clave nunca se vuelve a mostrar ni se registra.
 
 ---
 
@@ -300,3 +310,7 @@ adb exec-out screencap -p > captura.png    # captura para comparar
 | 2026-09-29 | Grabar a pantalla completa (sin barra de pestañas) con cronómetro gigante | Mientras grabas, lo único importante es que está grabando y cuánto va; la barra vuelve al detener |
 | 2026-09-29 | Se retira Material You | Los colores del fondo de pantalla rompían la identidad verde y el degradado |
 | 2026-09-29 | «Tu semana» reemplaza a «Recientes» en Grabar | La Biblioteca está a un toque en la barra flotante; el resumen motiva y ocupa menos |
+| 2026-09-30 | **OpenRouter como tercer proveedor** (0.8.0), con «Automático (recomendado)» y una lista de modelos que se actualiza sola | Pedido del usuario: una sola clave para transcribir y para la nota, sin tener que seguir qué modelo es el mejor. OpenAI directo y el servidor compatible quedan igual |
+| 2026-09-30 | Con OpenRouter las voces conocidas van como «anclas» delante del audio, y los textos prometen el intento («Busca tu voz…»), no el resultado | OpenRouter no tiene voces conocidas. La técnica no se pudo probar con audio real: no se promete lo que no se ha visto funcionar |
+| 2026-09-30 | Se muestra el costo real cuando el proveedor lo informa; si no (o si informa 0), el estimado con «≈» | Un número real vale más que un estimado, pero un «US$0,000» de una respuesta sin probar escondería el estimado |
+| 2026-09-30 | Bienvenida de cuatro pasos solo para quien instala por primera vez | Pedido del usuario. Quien actualiza no la necesita: ve «Novedades» |

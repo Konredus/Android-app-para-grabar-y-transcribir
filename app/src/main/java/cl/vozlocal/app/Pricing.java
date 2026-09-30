@@ -52,9 +52,12 @@ final class Pricing {
     /**
      * Costo real de la transcripción en US$ (lo que informó OpenRouter en usage.cost, sumado entre partes), o -1 si el
      * estado no lo trae (OpenAI directo y servidor propio no lo informan): ahí se muestra el estimado.
+     * Un costo en cero tampoco cuenta: la respuesta de OpenRouter no está probada con audio real y un «0» sería más bien
+     * un dato que no vino; mostrar «US$0,000» como lo cobrado escondería el estimado. Es la única regla: las pantallas
+     * (detalle, métricas, pie) preguntan aquí y no leen "costUsd" por su cuenta.
      */
     static double real(org.json.JSONObject state){
-        if(state==null||!state.has("costUsd"))return -1;double v=state.optDouble("costUsd",-1);return Double.isNaN(v)||v<0?-1:v;
+        if(state==null||!state.has("costUsd"))return -1;double v=state.optDouble("costUsd",-1);return Double.isNaN(v)||v<=0?-1:v;
     }
     /** Formato chileno: US$0,012 (3 decimales bajo 1 dólar). */
     static String usd(double value){

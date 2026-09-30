@@ -15,6 +15,9 @@ public class VozApp extends Application {
         // solo: quien usa OpenAI o su servidor sigue igual, con su clave y su modelo. Lo único que se hace al abrir es poner
         // al día la lista de modelos (una vez al día, en segundo plano) de quien ya eligió OpenRouter, para que «Automático»
         // pase solo a otro modelo si OpenRouter retira el que usaba.
+        // Pricing.estimate("openrouter", …) lee el precio del catálogo guardado y necesita un Context: se deja desde el arranque,
+        // así la primera pantalla que muestre un costo ya lo tiene (antes dependía de que el motor o Transcript pasaran primero).
+        Pricing.attach(this);
         Models.refreshIfStale(this);
         Thread.UncaughtExceptionHandler prior=Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread,error)->{Diagnostics.crash(error);if(prior!=null)prior.uncaughtException(thread,error);});

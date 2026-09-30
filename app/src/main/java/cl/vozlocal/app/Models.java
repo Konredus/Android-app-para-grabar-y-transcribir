@@ -380,18 +380,25 @@ final class Models {
     }
     private static double number(JSONObject o,String key){return o==null||o.isNull(key)?Double.NaN:o.optDouble(key,Double.NaN);}
     /**
-     * Comprueba la clave; lanza HttpApi.UserAction si no es válida. Llamar fuera del hilo principal.
+     * Comprueba la clave; lanza HttpApi.UserAction si no es válida (o falta) y IOException si no se pudo saber (sin red,
+     * servicio caído, respuesta inesperada). Llamar fuera del hilo principal.
      * Hace una sola llamada (GET BASE+"/key") y lo único que decide es el código HTTP: si la respuesta trae otro
      * formato, la clave igual vale y los montos quedan en NaN. La etiqueta (label) es un dato de la cuenta: no se registra.
      */
     static KeyInfo checkKey(HttpApi http,String key)throws Exception{
         String k=key==null?"":key.trim();
-        if(k.isEmpty())throw new HttpApi.UserAction("Falta la clave de OpenRouter. Agrégala en Ajustes.");
-        HttpApi.Response res=http.request("GET",BASE+"/key",k,null,null,null);
-        // Los mensajes dicen «clave»: con esa palabra Ajustes ofrece «Revisar la clave» en vez de «Reintentar».
-        if(res.code==401||res.code==403)throw new HttpApi.UserAction("La clave de OpenRouter no es válida o fue revocada. Revísala en Ajustes.");
-        if(res.code==408||res.code==429||res.code>=500)throw new IOException("OpenRouter no está disponible temporalmente ("+res.code+").");
-        if(res.code<200||res.code>=300)throw new HttpApi.UserAction("OpenRouter no pudo comprobar la clave (HTTP "+res.code+"). Vuelve a intentarlo en un momento.");
+        // El nombre del servicio es el mismo de todos los errores de OpenRouter (HttpApi.OPENROUTER), y la app se identifica
+        // con los mismos encabezados que al transcribir y al armar la nota (OpenRouterClient.headers()).
+        String service=HttpApi.OPENROUTER;
+        if(k.isEmpty())throw new HttpApi.UserAction("Falta la clave de "+service+". Agrégala en Ajustes.");
+        HttpApi.Response res=http.request("GET",BASE+"/key",k,null,null,OpenRouterClient.headers());
+        // HttpApi.UserAction solo cuando OpenRouter rechaza la clave: la bienvenida y Ajustes muestran ese mensaje como
+        // «clave mala». Dice «clave»: con esa palabra Ajustes ofrece «Revisar la clave» en vez de «Reintentar».
+        if(res.code==401||res.code==403)throw new HttpApi.UserAction("La clave de "+service+" no es válida o fue revocada. Revísala en Ajustes.");
+        // Todo lo demás (servicio caído, límite de pedidos, una respuesta que no se esperaba) no dice nada de la clave: sale
+        // como IOException, igual que un corte de red, y quien llama lo muestra como «no se pudo comprobar ahora».
+        if(res.code==408||res.code==429||res.code>=500)throw new IOException(service+" no está disponible temporalmente ("+res.code+").");
+        if(res.code<200||res.code>=300)throw new IOException(service+" respondió algo inesperado (HTTP "+res.code+"). Vuelve a intentarlo en un momento.");
         JSONObject root;try{root=res.json();}catch(Exception e){root=new JSONObject();}
         JSONObject d=root.optJSONObject("data");if(d==null)d=root;
         double usage=number(d,"usage"),limit=number(d,"limit"),left=number(d,"limit_remaining");
@@ -405,7 +412,7 @@ final class Models {
      */
     static double credits(HttpApi http,String key){
         try{
-            HttpApi.Response res=http.request("GET",BASE+"/credits",key,null,null,null);if(res.code!=200)return Double.NaN;
+            HttpApi.Response res=http.request("GET",BASE+"/credits",key,null,null,OpenRouterClient.headers());if(res.code!=200)return Double.NaN;
             JSONObject d=res.json().optJSONObject("data");double total=number(d,"total_credits"),used=number(d,"total_usage");
             return Double.isNaN(total)||Double.isNaN(used)||total<=0?Double.NaN:total-used;
         }catch(Exception e){return Double.NaN;}

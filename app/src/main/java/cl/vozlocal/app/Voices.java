@@ -17,7 +17,7 @@ import java.util.*;
  * (escritura atómica). Tu voz tiene el id "me": es el mismo {@code me.m4a} de la 0.5, que se migra solo (con el nombre
  * de Ajustes, "myVoiceName"). Las demás llevan un id corto al azar ([a-z0-9]{8}), que es también el nombre con que se
  * envían ("voz_<id>"): único, para que no choque con las letras que el modelo da a las voces que no reconoce.
- * Las muestras quedan en este teléfono y viajan a OpenAI solo junto con los audios que se transcriben.
+ * Las muestras quedan en este teléfono y viajan al proveedor (OpenAI u OpenRouter) solo junto con los audios que se transcriben.
  */
 final class Voices {
     private Voices(){}

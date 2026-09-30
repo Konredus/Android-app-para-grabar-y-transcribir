@@ -53,7 +53,8 @@ final class OnboardingChecks {
     /** Textos que ve la persona: saldo, rechazo y saludo final. */
     static void texts(){
         String valid=OnboardingActivity.validText(new Models.KeyInfo("etiqueta-privada",1.5,4.2,false));
-        check("Clave válida · quedan US$ 4,20".equals(valid),"Saldo mal escrito: «"+valid+"»");
+        // El saldo se escribe igual que en Ajustes (SettingsActivity.money): «US$4,20», sin espacio.
+        check("Clave válida · quedan US$4,20".equals(valid)&&valid.endsWith(SettingsActivity.money(4.2)),"Saldo mal escrito: «"+valid+"»");
         check("Clave válida".equals(OnboardingActivity.validText(new Models.KeyInfo("",Double.NaN,Double.NaN,false)))&&"Clave válida".equals(OnboardingActivity.validText(null)),"Sin saldo informado, solo «Clave válida»");
         String empty=OnboardingActivity.validText(new Models.KeyInfo("",10,0,false));
         check(empty.startsWith("Clave válida")&&empty.contains("sin saldo"),"Una clave sin saldo debe avisarlo: «"+empty+"»");

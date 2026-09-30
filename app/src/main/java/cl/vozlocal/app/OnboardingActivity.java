@@ -49,7 +49,6 @@ import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.TextView;
 import java.util.ArrayList;
-import java.util.Locale;
 import java.util.Objects;
 import static cl.vozlocal.app.AppTheme.*;
 
@@ -83,7 +82,6 @@ public class OnboardingActivity extends Screen {
     static final int MIN_KEY=20;
     /** Lo que se dice cuando no se pudo preguntar al proveedor (sin red, servicio caído): la clave igual quedó guardada. */
     static final String UNCHECKED="Clave guardada. No se pudo comprobar ahora: puedes hacerlo después en Ajustes.";
-    private static final Locale CL=new Locale("es","CL");
 
     /**
      * La bienvenida terminó (o se saltó): no vuelve a aparecer sola y «Novedades» no sale encima de quien recién instaló
@@ -132,11 +130,15 @@ public class OnboardingActivity extends Screen {
     }
     static boolean hasKey(Settings s,String provider){return OPENROUTER.equals(provider)?s.hasOpenRouterKey():s.hasOpenAiKey();}
     static String providerName(String provider){return OPENROUTER.equals(provider)?"OpenRouter":OPENAI.equals(provider)?"OpenAI":"Tu servidor";}
-    /** «Clave válida · quedan US$ 4,20» (el saldo solo si OpenRouter lo informa). La etiqueta de la clave no se muestra. */
+    /**
+     * «Clave válida · quedan US$4,20» (el saldo solo si OpenRouter lo informa). La etiqueta de la clave no se muestra.
+     * El monto y el piso de «sin saldo» son los de Ajustes → «Comprobar conexión» (SettingsActivity.money y NO_BALANCE):
+     * la misma clave dice lo mismo en los dos lugares.
+     */
     static String validText(Models.KeyInfo info){
         if(info==null||Double.isNaN(info.remaining)||Double.isInfinite(info.remaining))return "Clave válida";
-        if(info.remaining<=0)return "Clave válida, pero sin saldo: carga créditos en openrouter.ai.";
-        return "Clave válida · quedan "+String.format(CL,"US$ %.2f",info.remaining);
+        if(info.remaining<=SettingsActivity.NO_BALANCE)return "Clave válida, pero sin saldo: carga créditos en openrouter.ai.";
+        return "Clave válida · quedan "+SettingsActivity.money(info.remaining);
     }
     /** El motivo del rechazo tal como lo dice el cliente, sin mandar a Ajustes: aquí la clave se corrige en el paso anterior. */
     static String rejected(String message){String m=message==null?"":message.replace(" Revísala en Ajustes.","").trim();return m.isEmpty()?"La clave no funcionó.":m;}
@@ -598,13 +600,28 @@ public class OnboardingActivity extends Screen {
         // La clave ya no se vuelve a mostrar: el campo queda vacío aunque se vuelva a este paso.
         kept.key="";guessed=null;if(keyInput!=null)keyInput.setText("");
         try{Pipeline.schedule(this,true);}catch(RuntimeException ignored){}
+        // Recién ahora el proveedor es OpenRouter (al abrir la app aún no lo era): se trae la lista de modelos en segundo
+        // plano, para que «Automático» y los precios estén al día desde la primera transcripción. Es pública: no viaja la clave.
+        if(OPENROUTER.equals(provider))try{Models.refreshIfStale(this);}catch(RuntimeException ignored){}
         startCheck(provider,raw);go(READY);
     }
     private void startCheck(String prov,String key){
         if(kept.check!=null)kept.check.http.cancel();
-        Check c=new Check(prov);kept.check=c;c.screen=this;Checker checker=checker(prov);
+        Check c=new Check(prov);kept.check=c;c.screen=this;
+        // El resultado queda también en las preferencias de Ajustes → «Comprobar conexión» (verify*): una clave comprobada
+        // aquí ya aparece comprobada allá, con su saldo, y una rechazada aparece con su motivo. Solo si aquí se comprobó lo
+        // mismo que comprobaría Ajustes: con OpenRouter siempre (GET /key); con OpenAI, cuando el modelo que se usaría hoy
+        // es el de voces, que es por el que pregunta la bienvenida. «No se pudo comprobar» (sin red) no se guarda.
+        Settings prefs=settings;String target=SettingsActivity.verifyTarget(prefs);boolean router=OPENROUTER.equals(prov),same=router||prefs.defaultSpeakers();
+        Models.KeyInfo[] info={null};
+        Checker checker=router?(h,k)->validText(info[0]=Models.checkKey(h,k)):checker(prov);
         new Thread(()->{
+            long began=SystemClock.elapsedRealtime();
             Verdict v=verify(checker,c.http,key);
+            if(same&&v.state!=Check.UNKNOWN&&!c.http.cancelled&&target.equals(SettingsActivity.verifyTarget(prefs))){
+                Models.KeyInfo k=info[0];
+                SettingsActivity.saveVerify(prefs,target,v.state==Check.VALID,SystemClock.elapsedRealtime()-began,v.message,k==null?Double.NaN:k.remaining,k!=null&&k.freeTier);
+            }
             Diagnostics.event("setting_changed",null,"action","verify","source","onboarding","provider",prov,"result",v.state==Check.VALID?"valid":v.state==Check.REJECTED?"rejected":"unknown");
             RESULTS.post(()->{c.state=v.state;c.message=v.message;OnboardingActivity s=c.screen;if(s!=null&&s.kept.check==c)s.checked();});
         },"Voz-bienvenida").start();

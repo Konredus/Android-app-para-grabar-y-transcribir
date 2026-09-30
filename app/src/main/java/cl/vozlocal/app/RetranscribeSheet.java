@@ -20,7 +20,7 @@ final class RetranscribeSheet {
     private RetranscribeSheet(){}
 
     /** «Mi voz» solo cuenta si el servicio la recibe: OpenAI (muestras) u OpenRouter (anclas); un servidor propio no. */
-    private static boolean myVoice(Context c){return RecordingActions.knownVoices(new Settings(c))&&Voices.has(c);}
+    private static boolean myVoice(Context c){return TranscribeClient.knowsVoices(new Settings(c).provider())&&Voices.has(c);}
     /** Texto de cada alternativa: título y para qué sirve (sin jerga). */
     static String title(Context c,Retranscribe.Mode mode){
         switch(mode){
@@ -33,9 +33,11 @@ final class RetranscribeSheet {
     static String explain(Context c,Retranscribe.Mode mode){
         boolean router=new Settings(c).openRouter();
         switch(mode){
-            case CORRECTIONS:return "Usa las voces que ya corregiste o nombraste como muestra en todo el audio, desde el inicio. Es la que más mejora quién habla.";
-            // El tope de 23 min es de OpenAI; con OpenRouter depende del modelo, y si no cabe la opción lo dice en su motivo.
-            case SINGLE:return "Todo el audio de una vez, sin uniones donde las voces se crucen. Más parejo, pero más lento."+(router?" Solo si el audio cabe en un envío.":" Hasta 23 min.");
+            // Con OpenRouter las muestras van delante del audio («anclas»): es nuevo, así que se pide revisar el resultado.
+            case CORRECTIONS:return "Usa las voces que ya corregiste o nombraste como muestra en todo el audio, desde el inicio. Es la que más mejora quién habla."+(router?" Con OpenRouter es una función nueva: revisa los nombres al terminar.":"");
+            // El tope lo da el motor (Retranscribe.singleMaxMs): 23 min con OpenAI; con OpenRouter, lo que acepta el modelo
+            // elegido (20 min como máximo). Es el mismo número que usa el motivo cuando el audio no cabe.
+            case SINGLE:return "Todo el audio de una vez, sin uniones donde las voces se crucen. Más parejo, pero más lento. Hasta "+(Retranscribe.singleMaxMs(c)/60_000)+" min.";
             // Con OpenRouter el reconocimiento usa «anclas», una técnica nueva: se promete el intento, no el resultado.
             case SPEAKERS:return myVoice(c)?(router?"Busca tu voz para ponerte como "+Voices.name(c):"Te reconoce como "+Voices.name(c)+" desde el inicio")+"; las demás, Persona 2…":"Otra pasada separando voces: Persona 1, Persona 2…";
             default:return "Para cuando fallaron las palabras, no las voces. Más rápido, pero sin separar voces.";
@@ -46,7 +48,8 @@ final class RetranscribeSheet {
     }
     /** «≈ US$0,048», o "" si no se conoce la tarifa (p. ej. servidor propio, o un modelo de OpenRouter sin precio por minuto). */
     static String cost(Context c,Recording r,Retranscribe.Mode mode){
-        try{Settings s=new Settings(c);double v=RecordingActions.estimate(c,s.provider(),s.config(mode!=Retranscribe.Mode.TEXT).model,r.duration);return v<0?"":"≈ "+Pricing.usd(v);}
+        // Retranscribe.cost ya resuelve proveedor y modelo de esta alternativa y pregunta a Pricing.estimate con el Context.
+        try{double v=Retranscribe.cost(c,r,mode);return v<0?"":"≈ "+Pricing.usd(v);}
         catch(Exception e){return "";}
     }
     private static boolean available(Context c,Recording r,Retranscribe.Mode mode){try{return Retranscribe.available(c,r,mode);}catch(Exception e){return false;}}
@@ -79,7 +82,7 @@ final class RetranscribeSheet {
             list.addView(SheetParts.option(s,icon(mode),label,detail,facts,ok,spoken,()->{sheet.dismiss();confirm(s,r,mode,changed);}),Ui.fill());
         }
         // Sin «Mi voz», la separación se equivoca más al inicio: conviene grabarla antes de repetir (una sola vez).
-        if(RecordingActions.knownVoices(settings)&&settings.canSeparate()&&!Voices.has(s))list.addView(SheetParts.item(s,sheet,R.drawable.ic_mic_fill,"Grabar mi voz antes de repetir",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true))));
+        if(TranscribeClient.knowsVoices(settings.provider())&&settings.canSeparate()&&!Voices.has(s))list.addView(SheetParts.item(s,sheet,R.drawable.ic_mic_fill,"Grabar mi voz antes de repetir",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true))));
         sheet.secondary("Cancelar",null).show();
         Diagnostics.event("retranscribe_sheet",r.id,"modes",log.toString());
     }

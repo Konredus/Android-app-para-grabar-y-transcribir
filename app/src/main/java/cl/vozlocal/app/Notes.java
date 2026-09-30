@@ -50,8 +50,6 @@ final class Notes {
      * qué versión respondió ("modelUsed"). La clave de OpenRouter solo viaja a esta dirección.
      */
     static final String OPENROUTER_URL=Models.BASE+"/chat/completions";
-    /** Con qué app se identifica el pedido ante OpenRouter: la página pública del proyecto (identifica a la app, no a quien la usa). */
-    static final String OPENROUTER_REFERER="https://github.com/Konredus/Android-app-para-grabar-y-transcribir",OPENROUTER_TITLE="Verbapp";
     /** Tope del texto enviado (≈ 10 h de conversación): protege de un pedido absurdo si algo sale mal. */
     static final int MAX_TRANSCRIPT_CHARS=400_000;
 
@@ -104,13 +102,19 @@ final class Notes {
     static String model(Settings s,String provider){
         String m=s.noteModel()==null?"":s.noteModel().trim();
         // OpenRouter: ids «autor/modelo» o alias «~autor/familia-latest». Sin «/» no es de OpenRouter (quedó de otra IA).
-        if("openrouter".equals(provider))return m.length()<=80&&m.matches("~?[A-Za-z0-9._-]+/[A-Za-z0-9._:/-]+")?m:defaultModel(provider);
+        if("openrouter".equals(provider))return routerModel(m)?m:defaultModel(provider);
         // OpenAI y Claude: nombres sin «/» ni «~», así un id de OpenRouter nunca llega a sus APIs.
         if(m.isEmpty()||!m.matches("[A-Za-z0-9._:-]{2,80}"))return defaultModel(provider);
         boolean claude=m.startsWith("claude");
         return "anthropic".equals(provider)==claude?m:defaultModel(provider);
     }
-    static String service(String provider){return "anthropic".equals(provider)?"Claude":"openrouter".equals(provider)?"OpenRouter":"OpenAI";}
+    /**
+     * ¿Sirve como modelo de OpenRouter para la nota? Un id «autor/modelo» o un alias «~autor/familia-latest», de hasta 80
+     * caracteres. Es la misma regla de {@link #model}: la hoja «Modelo de la nota» de Ajustes acepta justo lo que aquí se envía.
+     */
+    static boolean routerModel(String m){return m!=null&&m.length()<=80&&m.matches("~?[A-Za-z0-9._-]+/[A-Za-z0-9._:/-]+");}
+    /** Nombre del servicio en textos y errores. El de OpenRouter es HttpApi.OPENROUTER: con ese nombre HttpApi.require usa sus mensajes propios. */
+    static String service(String provider){return "anthropic".equals(provider)?"Claude":"openrouter".equals(provider)?HttpApi.OPENROUTER:"OpenAI";}
     /** Modelo que respondió de verdad (con un alias «…-latest», la versión concreta); si no se supo, el que se pidió. */
     static String modelShown(JSONObject note){if(note==null)return "";String used=note.optString("modelUsed","");return used.isEmpty()?note.optString("model",""):used;}
     /**
@@ -342,8 +346,12 @@ final class Notes {
         if(!model.contains("anthropic/"))body.put("reasoning",new JSONObject().put("effort","low"));
         return body;
     }
-    /** Encabezados con que la app se identifica ante OpenRouter. La clave va aparte, en Authorization (la pone HttpApi). */
-    static Map<String,String> openrouterHeaders(){Map<String,String> h=new LinkedHashMap<>();h.put("HTTP-Referer",OPENROUTER_REFERER);h.put("X-OpenRouter-Title",OPENROUTER_TITLE);return h;}
+    /**
+     * Encabezados con que la app se identifica ante OpenRouter: los mismos de la transcripción (una sola fuente,
+     * OpenRouterClient.headers()), así la nota y el audio aparecen como la misma app en la cuenta de OpenRouter.
+     * La clave va aparte, en Authorization (la pone HttpApi).
+     */
+    static Map<String,String> openrouterHeaders(){return OpenRouterClient.headers();}
     /**
      * Nota por OpenRouter. simpler (opcional) avisa que el primer pedido fue rechazado por una opción y se reintenta una
      * vez en modo simple (un 400 no se cobra). No se probó contra la API real: por eso es tolerante con lo que responda.
@@ -355,8 +363,8 @@ final class Notes {
             if(simpler!=null)simpler.run();
             res=inner(http.request("POST",OPENROUTER_URL,key,"application/json",HttpApi.json(openrouterBody(model,prompt,true)),headers));
         }
-        require(res,"OpenRouter",model);
-        return chatAnswer(res,"OpenRouter");
+        require(res,HttpApi.OPENROUTER,model);
+        return chatAnswer(res,HttpApi.OPENROUTER);
     }
     /**
      * ¿Un 400 que puede deberse a una opción del pedido? No lo es si habla del largo de la transcripción, del saldo o de
@@ -412,7 +420,7 @@ final class Notes {
         if(res.code>=200&&res.code<300)return;
         String message="",type="";
         try{JSONObject e=res.json().optJSONObject("error");if(e!=null){message=e.optString("message").toLowerCase(Locale.ROOT);type=e.optString("type");}}catch(Exception ignored){}
-        String why=null;boolean transientError=false,router="OpenRouter".equals(service);
+        String why=null;boolean transientError=false,router=HttpApi.OPENROUTER.equals(service);
         String broke=router?"No queda saldo en OpenRouter. Carga créditos en openrouter.ai y vuelve a armar la nota.":"Tu cuenta de "+service+" no tiene saldo. Revisa la facturación de tu API.";
         if(res.code==401)why="La clave de "+service+" no es válida o fue revocada. Revísala en Ajustes.";
         // 402 (0.8.0): así avisa OpenRouter que no quedan créditos. Sin esto, HttpApi.require hablaría del formato del audio.

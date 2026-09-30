@@ -2,6 +2,17 @@
 
 > Lista de mejoras acordadas con el usuario. Al implementar una, muévela al CHANGELOG y, si es una decisión de diseño, regístrala en `diseno/CRITERIOS.md`.
 
+## Abierto tras integrar la 0.8.0 (OpenRouter y bienvenida)
+Nada de la 0.8.0 se probó contra OpenRouter real (no había clave) ni con audio real. Lo primero es la lista «qué probar con tu clave» de cada parte. Además quedó anotado:
+- **Etapa «Preparando audio» con OpenRouter.** La conversión a FLAC de cada bloque ocurre antes del envío y puede tardar decenas de segundos en un teléfono; mientras tanto la pantalla dice «Enviando…» en 0 %. Falta una etapa propia y contar ese tiempo en `Transcriber.sendEstimate` (tarea de fondo).
+- **Si un proveedor rechaza el FLAC.** `OrAudio.build(…, false)` sabe armar WAV, pero el cliente no lo usa como respaldo ante un error de formato: hoy solo cae a WAV cuando el teléfono no puede codificar FLAC.
+- **Tres o más personas con MAI-Transcribe 2.** No se envía un máximo de hablantes; si con la clave real salen solo 2 voces, hay que agregarlo en `OpenRouterClient.body`.
+- **Tope del envío en JSON.** No está documentado; la única defensa es el 413, que baja los bloques a la mitad una vez (`orHalf`).
+- **`HTTP-Referer`.** Es la página pública del repositorio (`OpenRouterClient.REFERER`), la misma para transcribir, para la nota y para comprobar la clave. Confirmar que es la dirección que se quiere mostrar en OpenRouter.
+- **Clave de OpenAI comprobada en la bienvenida.** Queda como comprobada en Ajustes solo si el modelo que se usaría hoy es el de voces (lo normal en una instalación nueva); si no, Ajustes sigue pidiendo «Confirma que tu clave funciona».
+- **Saldo en «Comprobar conexión».** `/credits` puede exigir otra clase de clave: si OpenRouter no lo entrega, solo se ve «Clave válida».
+- **Pruebas instrumentadas.** Los empalmes entre partes (encabezados y nombre de servicio únicos, `Models.checkKey`, costo real, hoja del modelo de la nota, comprobación de la bienvenida en Ajustes) solo se compilaron: hay que volver a correr `ModelsChecks`, `NotesChecks`, `OnboardingChecks` y `OpenRouterChecks` en el emulador, y mirar a la vista la hoja «Modelo de la nota» con OpenRouter («Otro modelo de OpenRouter…»).
+
 ## Hechas en la 0.4.3
 - ✅ Confirmar antes de cancelar una transcripción.
 - ✅ Fecha delante del nombre (`2026-09-27 Nombre`), activada por defecto, con opción para aplicarla a las grabaciones existentes.

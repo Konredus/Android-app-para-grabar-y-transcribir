@@ -254,7 +254,9 @@ final class ModelsChecks {
             boolean retry=false;try{Models.checkKey(keyHttp(code,"","/key",key,calls),key);}catch(HttpApi.UserAction e){throw new AssertionError("Un "+code+" es pasajero: no debe culpar a la clave");}catch(IOException e){retry=true;}
             check(retry,"Un "+code+" de OpenRouter debe ser un error pasajero");
         }
-        boolean other=false;try{Models.checkKey(keyHttp(400,"{}","/key",key,calls),key);}catch(HttpApi.UserAction e){other=!e.getMessage().contains(key);}
+        // Un código que no se esperaba no dice nada de la clave: sale como IOException (la bienvenida lo muestra como «no se
+        // pudo comprobar ahora», no como «clave mala»), con un mensaje que nombra a OpenRouter y nunca repite la clave.
+        boolean other=false;try{Models.checkKey(keyHttp(400,"{}","/key",key,calls),key);}catch(HttpApi.UserAction e){throw new AssertionError("Un error no previsto no debe culpar a la clave");}catch(IOException e){other=String.valueOf(e.getMessage()).startsWith(HttpApi.OPENROUTER)&&!e.getMessage().contains(key);}
         check(other,"Un error no previsto debe avisarse sin mostrar la clave");
         int made=calls[0];
         for(String empty:new String[]{null,"","   "}){boolean missing=false;try{Models.checkKey(keyHttp(200,"{}","/key",key,calls),empty);}catch(HttpApi.UserAction e){missing=true;}check(missing,"Sin clave no hay nada que comprobar");}

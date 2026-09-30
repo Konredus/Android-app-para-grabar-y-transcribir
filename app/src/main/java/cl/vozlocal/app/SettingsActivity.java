@@ -79,7 +79,13 @@ public class SettingsActivity extends Screen {
     private void openFrom(Intent intent){
         if(isFinishing())return;
         if(intent.getBooleanExtra("focusKey",false)&&!settings.hasKey())keySheet();
-        else if(intent.getBooleanExtra("voice",false)&&voiceRow!=null){if(Voices.has(this))voiceSheet();else myVoiceSheet();}
+        else if(intent.getBooleanExtra("voice",false)){
+            if(voiceRow!=null){if(Voices.has(this))voiceSheet();else myVoiceSheet();}
+            // Sin fila «Voces conocidas» (el servicio no recibe muestras, o el modelo elegido no separa voces) no hay hoja que
+            // abrir: se dice por qué y cómo salir, en vez de dejar a quien venía a «Grabar mi voz» en Ajustes sin nada.
+            else message("Voces conocidas",settings.openRouter()?"El modelo con voces que elegiste en OpenRouter no separa voces, así que no usaría tu muestra. En «Modelo con voces» elige «Automático» u otro que separe voces."
+                :"Las voces conocidas funcionan con OpenRouter y con OpenAI. Tu servidor no recibe muestras de voz.");
+        }
         else if(intent.getBooleanExtra("inbox",false))saveSheet();
         else if(intent.getBooleanExtra("noteAi",false))noteAiSheet();
     }
@@ -107,8 +113,9 @@ public class SettingsActivity extends Screen {
         add(flow,toggleRow(R.drawable.ic_calendar,"Fecha delante del nombre","Ej.: "+Recording.isoDate(System.currentTimeMillis())+" Reunión",settings.datePrefix(),on->{settings.prefs.edit().putBoolean("datePrefix",on).apply();Diagnostics.event("setting_changed",null,"action","date_prefix","result",on);showRow(dates,on);if(on)offerDatesForExisting();}));
         add(flow,dates);showRow(dates,settings.datePrefix());
         voiceRow=null;
-        // Con OpenRouter las muestras van delante del audio (no hay «voces conocidas» del proveedor), así que también se ofrecen.
-        if((openai||router)&&settings.canSeparate()){voiceRow=row(R.drawable.ic_voice,"Voces conocidas","Para reconocer a cada persona al separar voces",voiceValue());voiceRow.onClick(v->voiceSheet());add(flow,voiceRow);}
+        // La misma compuerta del motor (TranscribeClient.knowsVoices): OpenAI recibe las muestras como voces conocidas y
+        // OpenRouter, delante del audio. Con OpenRouter solo si el modelo con voces elegido separa voces (canSeparate).
+        if(TranscribeClient.knowsVoices(settings.provider())&&settings.canSeparate()){voiceRow=row(R.drawable.ic_voice,"Voces conocidas","Para reconocer a cada persona al separar voces",voiceValue());voiceRow.onClick(v->voiceSheet());add(flow,voiceRow);}
         page.addView(more("Guarda la nota o el texto con un toque desde cada grabación.","Tu flujo",
             "Guardado rápido: la carpeta donde el botón de cada grabación deja la nota (.md) o el texto (.txt), por ejemplo tu 0-Inbox de Google Drive. Si después corriges voces o nombres, «Actualizar» reemplaza el mismo archivo, sin crear copias.\n\n"
             +"Nota para tu segundo cerebro: una IA arma un resumen con decisiones, tareas y frases clave a partir del texto de la transcripción (no se vuelve a enviar el audio). Automática, se arma al terminar cada transcripción; si la apagas, la pides con un toque desde la grabación. Revísala antes de guardarla: puede tener errores.\n\n"
@@ -368,22 +375,28 @@ public class SettingsActivity extends Screen {
     private String inboxValue(){return settings.inboxTree().isEmpty()?"Sin elegir":settings.prefs.getString("saveTreeName","Carpeta elegida");}
 
     // ---------- Nota para tu segundo cerebro ----------
-    /** IA de la nota: "openai", "anthropic" u "openrouter" (cualquier otro valor guardado cuenta como OpenAI, igual que en Notes). */
-    private String noteAi(){String v=settings.noteProvider();return v.equals("anthropic")||v.equals("openrouter")?v:"openai";}
+    /** IA de la nota: la que de verdad usa Notes ("openai", "anthropic" u "openrouter"), así Ajustes muestra lo mismo que se usa al armarla. */
+    private String noteAi(){return Notes.provider(settings);}
     private boolean claude(){return noteAi().equals("anthropic");}
     private boolean noteRouter(){return noteAi().equals("openrouter");}
     private static String noteSubtitle(boolean auto){return auto?"Se arma sola al terminar cada transcripción":"Con un toque, desde cada grabación";}
-    private boolean noteReady(){try{return noteRouter()?settings.hasOpenRouterKey():Notes.canGenerate(this);}catch(Throwable t){return true;}}
+    private boolean noteReady(){try{return Notes.canGenerate(this);}catch(Throwable t){return true;}}
     private String noteMissing(){
         if(claude())return "Falta la clave de Anthropic";if(noteRouter())return "Falta la clave de OpenRouter";
         return settings.provider().equals("openai")?"Falta la clave de OpenAI":settings.openRouter()?"Falta la clave de OpenAI · puedes usar OpenRouter":"Con tu servidor, elige Claude u OpenRouter";
     }
-    /** Alias de OpenRouter elegido para la nota (el recomendado si no hay uno válido guardado) y su nombre corto («Claude Sonnet»). */
-    private int noteAlias(){int i=Arrays.asList(Models.NOTE_MODELS).indexOf(settings.noteModel());return i<0?0:i;}
+    /**
+     * Modelo de OpenRouter elegido para la nota: la posición de su alias en Models.NOTE_MODELS (0 = el recomendado, también
+     * si no hay nada guardado o lo guardado no sirve) o -1 si es otro modelo escrito a mano, que Notes usa tal cual
+     * (Notes.routerModel es la regla de los dos: aquí se muestra justo lo que se envía).
+     */
+    private int noteAlias(){String m=settings.noteModel().trim();int i=Arrays.asList(Models.NOTE_MODELS).indexOf(m);return i>=0?i:Notes.routerModel(m)?-1:0;}
+    /** Nombre del modelo de la nota con OpenRouter: la familia del alias («Claude Sonnet»; full, con «(el más nuevo)») o el id escrito a mano. */
+    private String noteRouterModel(boolean full){int i=noteAlias();return i<0?settings.noteModel().trim():full?Models.NOTE_NAMES[i]:noteAliasName(i);}
     private static String noteAliasName(int i){return Models.NOTE_NAMES[i].replaceAll(" \\(.*\\)$","");}
-    private String noteAiValue(){if(noteRouter())return noteAliasName(noteAlias());String m=settings.noteModel();return (claude()?"Claude":"OpenAI")+(m.isEmpty()?"":" · "+m);}
-    /** Con OpenRouter el valor de la fila es el modelo; debajo se dice por dónde va y que no hay que actualizarlo. */
-    private String noteAiHint(){return noteRouter()?"Por OpenRouter · siempre la versión más nueva":null;}
+    private String noteAiValue(){if(noteRouter())return noteRouterModel(false);String m=settings.noteModel();return (claude()?"Claude":"OpenAI")+(m.isEmpty()?"":" · "+m);}
+    /** Con OpenRouter el valor de la fila es el modelo; debajo se dice por dónde va y, con un alias, que no hay que actualizarlo. */
+    private String noteAiHint(){return !noteRouter()?null:noteAlias()<0?"Por OpenRouter · el modelo que escribiste":"Por OpenRouter · siempre la versión más nueva";}
     /** La nota quedó activada pero su IA no tiene clave: se ofrece la salida justa. */
     private void noteMissingKey(){if(claude())anthropicKeyInput();else if(noteRouter())routerNoteKeyInput();else noteAiSheet();}
     private void noteAiSheet(){
@@ -395,7 +408,7 @@ public class SettingsActivity extends Screen {
         s.choice("OpenRouter",routerDetail,viaRouter,()->{setNoteProvider("openrouter");if(!settings.hasOpenRouterKey())routerNoteKeyInput();});
         s.choice("OpenAI",openaiDetail,!claude&&!viaRouter,()->setNoteProvider("openai"));
         s.choice("Claude (Anthropic)","Mejor redacción en español · "+(hasClaudeKey?"clave configurada":"requiere tu clave de Anthropic"),claude,()->{setNoteProvider("anthropic");if(!settings.hasAnthropicKey())anthropicKeyInput();});
-        s.action(R.drawable.ic_edit,"Modelo: "+(viaRouter?Models.NOTE_NAMES[noteAlias()]:settings.noteModel().isEmpty()?"el recomendado":settings.noteModel()),false,this::noteModelSheet);
+        s.action(R.drawable.ic_edit,"Modelo: "+(viaRouter?noteRouterModel(true):settings.noteModel().isEmpty()?"el recomendado":settings.noteModel()),false,this::noteModelSheet);
         if(claude||hasClaudeKey)s.action(R.drawable.ic_key,hasClaudeKey?"Clave de Anthropic":"Agregar clave de Anthropic",false,this::anthropicKeySheet);
         // Quien transcribe con OpenRouter administra esa clave en «Servicio de transcripción»; aquí solo si la usa nada más que para la nota.
         if(!router&&(viaRouter||hasRouterKey))s.action(R.drawable.ic_key,hasRouterKey?"Clave de OpenRouter":"Agregar clave de OpenRouter",false,this::routerNoteKeySheet);
@@ -408,16 +421,28 @@ public class SettingsActivity extends Screen {
             // OpenRouter: se elige una familia, no una versión. Sus alias «-latest» apuntan siempre a la más nueva, y la nota
             // muestra cuál respondió. El recomendado se guarda como vacío, igual que con las otras IA.
             String[] details={"Recomendado · la mejor redacción en español","Rápido y económico","La alternativa de Google, rápida y económica"};int current=noteAlias();
-            Sheet s=sheet("Modelo de la nota","OpenRouter usa siempre la versión más nueva de la familia que elijas. Cada nota muestra cuál la escribió.");
+            Sheet s=sheet("Modelo de la nota","OpenRouter usa siempre la versión más nueva de la familia que elijas. Cada nota muestra cuál la escribió."+(current<0?" Ahora usa el modelo que escribiste: "+settings.noteModel().trim()+".":""));
             for(int i=0;i<Models.NOTE_MODELS.length;i++){int k=i;s.choice(Models.NOTE_NAMES[i],i<details.length?details[i]:null,i==current,()->{
                 SharedPreferences.Editor e=settings.prefs.edit();if(k==0)e.remove("noteModel");else e.putString("noteModel",Models.NOTE_MODELS[k]);e.apply();
                 Diagnostics.event("setting_changed",null,"action","note_model","result",k==0?"default":"alias");render();});}
+            // Otro modelo de OpenRouter, escrito a mano: un id «autor/modelo» o un alias con «~». Notes los acepta, así que la hoja también.
+            s.action(R.drawable.ic_edit,"Otro modelo de OpenRouter…",false,this::noteModelInput);
             s.show();return;
         }
-        EditText model=ui.field("Vacío = el recomendado","Modelo de la nota");model.setText(settings.noteModel());model.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        Sheet s=sheet("Modelo de la nota","Déjalo vacío para usar el recomendado de "+(claude()?"Claude":"OpenAI")+". Escribe otro solo si conoces su nombre exacto.").add(model);
+        noteModelInput();
+    }
+    /**
+     * Modelo de la nota escrito a mano. Con OpenRouter vale un id «autor/modelo» o un alias «~autor/familia-latest» (la
+     * regla es Notes.routerModel, la misma con que Notes decide si lo envía); con OpenAI y Claude, el nombre de siempre.
+     */
+    private void noteModelInput(){
+        boolean router=noteRouter();
+        EditText model=ui.field(router?"autor/modelo":"Vacío = el recomendado","Modelo de la nota");model.setText(router&&noteAlias()>=0?"":settings.noteModel());model.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        Sheet s=sheet("Modelo de la nota",router?"Escribe el identificador tal como aparece en openrouter.ai, por ejemplo anthropic/claude-sonnet-5.5. Con «~» delante y «-latest» al final, OpenRouter usa siempre la versión más nueva. Déjalo vacío para volver al recomendado."
+            :"Déjalo vacío para usar el recomendado de "+(claude()?"Claude":"OpenAI")+". Escribe otro solo si conoces su nombre exacto.").add(model);
         s.primary("Guardar",Ui.Style.PRIMARY,()->{String m=model.getText().toString().trim();
-            if(!m.isEmpty()&&!m.matches("[A-Za-z0-9_.:/-]{1,120}")){model.setError("Usa solo letras, números, puntos y guiones");return false;}
+            if(router&&!m.isEmpty()&&!Notes.routerModel(m)){model.setError("Escríbelo como autor/modelo, sin espacios");return false;}
+            if(!router&&!m.isEmpty()&&!m.matches("[A-Za-z0-9_.:/-]{1,120}")){model.setError("Usa solo letras, números, puntos y guiones");return false;}
             settings.prefs.edit().putString("noteModel",m).apply();Diagnostics.event("setting_changed",null,"action","note_model","result",m.isEmpty()?"default":"custom");render();return true;});
         if(!settings.noteModel().isEmpty())s.secondary("Usar el recomendado",()->{settings.prefs.edit().remove("noteModel").apply();Diagnostics.event("setting_changed",null,"action","note_model","result","default");render();});
         s.secondary("Cancelar",null).show();
@@ -438,7 +463,7 @@ public class SettingsActivity extends Screen {
     private void anthropicKeySheet(){
         if(settings.hasAnthropicKey()){sheet("Clave de Anthropic","Configurada y cifrada en este teléfono. Se usa solo para armar la nota y nunca aparece en informes.")
             .action(R.drawable.ic_edit,"Reemplazar clave",false,this::anthropicKeyInput)
-            .action(R.drawable.ic_trash,"Eliminar clave",true,()->confirm("¿Eliminar la clave de Anthropic?","Sin clave, Claude no podrá armar tus notas. Puedes volver a OpenAI en «IA de la nota».","Eliminar",true,()->{try{settings.saveAnthropicKey("");Diagnostics.event("setting_changed",null,"action","anthropic_key","result","deleted");render();}catch(Exception e){message("Clave","No se pudo eliminar.");}})).show();return;}
+            .action(R.drawable.ic_trash,"Eliminar clave",true,()->confirm("¿Eliminar la clave de Anthropic?","Sin clave, Claude no podrá armar tus notas. Puedes elegir otra IA en «IA de la nota».","Eliminar",true,()->{try{settings.saveAnthropicKey("");Diagnostics.event("setting_changed",null,"action","anthropic_key","result","deleted");render();}catch(Exception e){message("Clave","No se pudo eliminar.");}})).show();return;}
         anthropicKeyInput();
     }
     private void anthropicKeyInput(){
@@ -497,13 +522,26 @@ public class SettingsActivity extends Screen {
     }
 
     // ---------- Comprobar conexión (resultado en la misma fila, guardado en prefs) ----------
-    /** A qué configuración corresponde la última comprobación: si cambias proveedor, modelo o clave, deja de valer. */
-    private String verifyTarget(){
+    /**
+     * A qué configuración corresponde la última comprobación: si cambias proveedor, modelo o clave, deja de valer.
+     * Es estático porque la bienvenida deja su comprobación en estas mismas preferencias (ver saveVerify).
+     */
+    private String verifyTarget(){return verifyTarget(settings);}
+    static String verifyTarget(Settings settings){
         String provider=settings.provider();
         // OpenRouter: lo que se comprueba es la clave (GET /key), no el modelo. Cambiar de modelo no deja la comprobación vieja.
         if(settings.openRouter())return provider+"|"+settings.prefs.getString(settings.prefix()+"keyEncrypted","").hashCode();
         String what=provider.equals("openai")?settings.textModel()+"|"+settings.defaultSpeakers():settings.prefs.getString("customBase","")+"|"+settings.prefs.getString("customModel","")+"|"+settings.prefs.getBoolean("customSpeakers",false);
         return provider+"|"+what+"|"+settings.prefs.getString(settings.prefix()+"keyEncrypted","").hashCode();
+    }
+    /**
+     * Guarda el resultado de comprobar la clave (preferencias verify*). Lo escriben «Comprobar conexión» y la bienvenida:
+     * una clave comprobada al instalar ya aparece comprobada aquí. target: verifyTarget() al EMPEZAR la comprobación.
+     * El saldo (balance; NaN si no se informó) queda solo en las preferencias: nunca va al diagnóstico.
+     */
+    static void saveVerify(Settings settings,String target,boolean ok,long ms,String why,double balance,boolean free){
+        settings.prefs.edit().putLong("verifyAt",System.currentTimeMillis()).putBoolean("verifyOk",ok).putLong("verifyMs",ms).putString("verifyFor",target).putString("verifyMsg",ok||why==null?"":why)
+            .putString("verifyBalance",ok&&!Double.isNaN(balance)?String.valueOf(balance):"").putBoolean("verifyFree",ok&&free).apply();
     }
     private boolean verifyValid(){return settings.prefs.getLong("verifyAt",0)>0&&verifyTarget().equals(settings.prefs.getString("verifyFor",""));}
     private boolean verifyFailed(){return verifyValid()&&!settings.prefs.getBoolean("verifyOk",true);}
@@ -522,7 +560,7 @@ public class SettingsActivity extends Screen {
         return "No se pudo conectar · "+ago(at);
     }
     /** Bajo medio centavo ya no alcanza para nada: se muestra como «sin saldo». */
-    private static final double NO_BALANCE=0.005;
+    static final double NO_BALANCE=0.005;
     /** Saldo (US$) que informó OpenRouter en la última comprobación; NaN si no lo informó. Queda solo en las preferencias: no va al diagnóstico. */
     private double verifyBalance(){try{return Double.parseDouble(settings.prefs.getString("verifyBalance",""));}catch(NumberFormatException e){return Double.NaN;}}
     private boolean noBalance(){return settings.openRouter()&&verifyValid()&&settings.prefs.getBoolean("verifyOk",false)&&verifyBalance()<=NO_BALANCE;}
@@ -544,11 +582,14 @@ public class SettingsActivity extends Screen {
                     free=info.freeTier;balance=info.remaining;double account=Models.credits(call,key);
                     if(!Double.isNaN(account))balance=Double.isNaN(balance)?account:Math.min(balance,account);
                 }else{new OpenAiClient(call).verify(settings.config());ms=SystemClock.elapsedRealtime()-started;}
-            }catch(Exception e){ms=SystemClock.elapsedRealtime()-started;reason=e instanceof HttpApi.UserAction?e.getMessage():openai||router?"No se pudo conectar. Revisa tu conexión a internet.":"No se pudo conectar. Revisa tu conexión y la URL del servidor.";}
+            }catch(Exception e){ms=SystemClock.elapsedRealtime()-started;
+                // OpenRouter respondió, pero no con un sí o un no sobre la clave (caído, límite de pedidos, algo inesperado):
+                // Models.checkKey lo dice con su nombre y el código. No es la conexión del teléfono, así que se muestra eso.
+                boolean answered=router&&e instanceof java.io.IOException&&e.getMessage()!=null&&e.getMessage().startsWith(HttpApi.OPENROUTER);
+                reason=e instanceof HttpApi.UserAction||answered?e.getMessage():openai||router?"No se pudo conectar. Revisa tu conexión a internet.":"No se pudo conectar. Revisa tu conexión y la URL del servidor.";}
             if(call.cancelled)return; // se salió de Ajustes: no se guarda un fallo que no fue
             boolean ok=reason==null;String why=reason;long took=ms;
-            settings.prefs.edit().putLong("verifyAt",System.currentTimeMillis()).putBoolean("verifyOk",ok).putLong("verifyMs",took).putString("verifyFor",target).putString("verifyMsg",ok?"":why)
-                .putString("verifyBalance",ok&&!Double.isNaN(balance)?String.valueOf(balance):"").putBoolean("verifyFree",ok&&free).apply();
+            saveVerify(settings,target,ok,took,why,balance,free);
             // El saldo es un dato de la cuenta: se muestra en la fila y no se registra.
             Diagnostics.event("setting_changed",null,"action","verify","result",ok,"elapsed_ms",took);
             runOnUiThread(()->{verifying=false;if(isDestroyed()||isFinishing())return;render();
@@ -1098,7 +1139,9 @@ public class SettingsActivity extends Screen {
             else name=Voices.add(this,t.name,voiceTmp,t.me).name;
             refreshVoices();
             String done=t.me?"Tu voz quedó guardada":"Voz de "+name+" guardada";
-            if(voiceFlow){toast(done+" · toca Transcribir");finish();}else{toast(done);page.post(this::voiceSheet);}
+            // voiceFlow: se vino solo a grabar la voz y se vuelve. Desde una grabación (hoja «¿Separar voces?») lo que sigue
+            // es transcribir; desde la bienvenida (que además trae «back») todavía no hay nada que transcribir.
+            if(voiceFlow){toast(done+(returnOnBack?"":" · toca Transcribir"));finish();}else{toast(done);page.post(this::voiceSheet);}
         }catch(Exception e){if(voiceTmp!=null)voiceTmp.delete();message("Voces conocidas","No se pudo guardar la muestra. Vuelve a intentarlo.");}
     }
     /** Reproduce una muestra; ended corre al terminar o al detenerla. */

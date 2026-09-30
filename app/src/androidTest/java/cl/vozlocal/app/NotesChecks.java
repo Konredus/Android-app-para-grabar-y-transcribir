@@ -148,7 +148,8 @@ final class NotesChecks {
         JSONObject simpleBody=Notes.openrouterBody(Models.NOTE_DEFAULT,p,true);
         expect(simpleBody.length()==2&&simpleBody.getString("model").equals(Models.NOTE_DEFAULT)&&simpleBody.getJSONArray("messages").length()==2,"Simple OpenRouter body carries optional fields: "+simpleBody.names());
         Map<String,String> routerHeaders=Notes.openrouterHeaders();
-        expect(routerHeaders.size()==2&&"Verbapp".equals(routerHeaders.get("X-OpenRouter-Title"))&&routerHeaders.get("HTTP-Referer").startsWith("https://")&&!routerHeaders.containsKey("Authorization"),"OpenRouter headers wrong: "+routerHeaders);
+        // Una sola fuente: los mismos encabezados con que se transcribe (OpenRouterClient.headers()).
+        expect(routerHeaders.equals(OpenRouterClient.headers())&&"Verbapp".equals(routerHeaders.get("X-OpenRouter-Title"))&&routerHeaders.get("HTTP-Referer").startsWith("https://")&&!routerHeaders.containsKey("Authorization"),"OpenRouter headers wrong: "+routerHeaders);
         expect(Notes.service("openrouter").equals("OpenRouter")&&Notes.service("openai").equals("OpenAI")&&Notes.service("anthropic").equals("Claude")&&Notes.service("").equals("OpenAI"),"Service names wrong");
         expect(Notes.defaultModel("openrouter").equals(Models.NOTE_DEFAULT)&&Notes.defaultModel("openai").equals("gpt-6-luna")&&Notes.defaultModel("anthropic").equals("claude-sonnet-5-5"),"Default note models wrong");
         // La nota muestra el modelo que respondió (con un alias, la versión concreta) y el costo: real con OpenRouter, estimado si no.
