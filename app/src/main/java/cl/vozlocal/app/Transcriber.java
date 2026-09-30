@@ -109,7 +109,7 @@ final class Transcriber {
                     // «Volver a transcribir» que se rinde: vuelve la versión anterior en vez de pedir Reintentar.
                     boolean restoring=!again&&Retranscribe.hasPrevious(c,r.id)&&!Transcript.exists(c,r.id);
                     FilesStore.update(c,r.id,s->s.put("attempts",attempts).put("retries",s.optInt("retries")+1).put("localCuts",cuts).put("requested",again).put("failed",!again).put("lastError",reason));
-                    String hint=local&&!Battery.unrestricted(c)?" · para evitarlo, permite a Voz local usar batería en segundo plano":"";
+                    String hint=local&&!Battery.unrestricted(c)?" · para evitarlo, permite a Verbapp usar batería en segundo plano":"";
                     Pipeline.log(c,r.id,local?"El teléfono cortó la conexión ("+reason+") · se reintenta sin gastar un intento"+hint
                         :"Intento "+attempts+" de 5 falló: "+reason+(again?" · se reintentará (las partes ya listas no se vuelven a enviar)":restoring?"":" · pulsa Reintentar"));
                     if(restoring)keepPrevious(r);
@@ -418,7 +418,7 @@ final class Transcriber {
         String id=currentId;
         PendingIntent open=id!=null?PendingIntent.getActivity(c,NOTIFICATION,openIntent(c,id),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE)
             :PendingIntent.getActivity(c,NOTIFICATION,new Intent(c,MainActivity.class).putExtra("library",true),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        Notification.Builder b=new Notification.Builder(c,"processing").setSmallIcon(R.drawable.ic_notification).setContentTitle(ongoing?"Transcribiendo":"Voz local").setContentText(text).setContentIntent(open).setOngoing(ongoing).setAutoCancel(!ongoing).setOnlyAlertOnce(true);
+        Notification.Builder b=new Notification.Builder(c,"processing").setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle(ongoing?"Transcribiendo":"Verbapp").setContentText(text).setContentIntent(open).setOngoing(ongoing).setAutoCancel(!ongoing).setOnlyAlertOnce(true);
         if(ongoing){if(percent>=0)b.setProgress(100,percent,false);else b.setProgress(0,0,true);}
         return b.build();
     }
@@ -437,7 +437,7 @@ final class Transcriber {
         try{Transcript t=Transcript.load(c,r.id);voices=t.speakers().size();review=t.diarized()&&voices>1&&!t.reviewed();}catch(Exception ignored){}
         Intent open=openIntent(c,r.id);if(again)open.putExtra("retranscribed",true);
         String text="«"+r.title+"»"+(review?" · "+voices+" voces por revisar":again?" · elige si te quedas con ella":"");
-        Notification.Builder b=new Notification.Builder(c,DONE_CHANNEL).setSmallIcon(R.drawable.ic_notification).setContentTitle(again?"Nueva versión lista":"Transcripción lista").setContentText(text)
+        Notification.Builder b=new Notification.Builder(c,DONE_CHANNEL).setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle(again?"Nueva versión lista":"Transcripción lista").setContentText(text)
             .setContentIntent(activity(c,r.id,0,open)).setAutoCancel(true).setCategory(Notification.CATEGORY_STATUS).setShowWhen(true);
         if(review)b.addAction(action(c,R.drawable.ic_people,"Revisar voces",activity(c,r.id,1,openIntent(c,r.id).putExtra("names",true))));
         else if(Inbox.configured(c))b.addAction(action(c,R.drawable.ic_save,"Guardar en "+Inbox.folderName(c),activity(c,r.id,2,openIntent(c,r.id).putExtra("save",true))));
@@ -451,7 +451,7 @@ final class Transcriber {
     /** Algo falló y necesita al usuario: abre esa grabación. */
     private void attention(Recording r,String title,String text){
         NotificationManager manager=c.getSystemService(NotificationManager.class);manager.createNotificationChannel(new NotificationChannel("processing","Transcripciones",NotificationManager.IMPORTANCE_LOW));
-        Notification n=new Notification.Builder(c,"processing").setSmallIcon(R.drawable.ic_notification).setContentTitle(title).setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text))
+        Notification n=new Notification.Builder(c,"processing").setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle(title).setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text))
             .setContentIntent(activity(c,r.id,3,openIntent(c,r.id))).setAutoCancel(true).build();
         try{manager.notify(doneId(r.id),n);}catch(RuntimeException ignored){}
         manager.cancel(NOTIFICATION);

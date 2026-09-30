@@ -16,98 +16,129 @@ import android.view.animation.PathInterpolator;
 import android.widget.TextView;
 
 /**
- * Design tokens de Voz local según Material 3 (m3.material.io), implementados sin librerías.
- * Los nombres de color son los "roles" de Material: primary, primaryContainer, surfaceContainer…
- * Documentación y razonamiento: docs/diseno/CRITERIOS.md (sección "Tokens").
+ * Design tokens de Verbapp (0.7.0, «Bosque de vidrio»), implementados sin librerías.
+ * Los nombres de color siguen los "roles" de Material 3 (primary, primaryContainer, surfaceContainer…) para que todo el
+ * código existente siga funcionando; encima se agregan los roles propios de la estética: tinta (botón principal negro),
+ * verde de marca, vidrio (tarjetas translúcidas) y el degradado blanco → verde del fondo.
+ * Documentación y razonamiento: docs/diseno/CRITERIOS.md (sección "Tokens") y docs/diseno/PROPUESTA-0.7.md.
  */
 final class AppTheme {
     /**
-     * Esquema de color Material 3. Un solo color semilla (azul) genera todos los roles;
-     * los neutros están levemente tintados de ese azul para que todo se sienta de la misma familia.
-     * El rojo solo aparece como "error" y como "record" (grabar).
+     * Esquema de color. Un solo verde de marca (#2F6B58) genera todo; los neutros están levemente tintados de verde para
+     * que todo se sienta de la misma familia. El rojo anaranjado solo marca «grabando» y los errores.
      */
     static final class Palette {
         final boolean dark,dynamic;
-        // Roles de Material 3
+        // Roles de Material 3 (se conservan: los usa toda la app)
         final int primary,onPrimary,primaryContainer,onPrimaryContainer;
         final int secondaryContainer,onSecondaryContainer;
         final int surface,surfaceContainerLowest,surfaceContainerLow,surfaceContainer,surfaceContainerHigh,surfaceContainerHighest;
         final int onSurface,onSurfaceVariant,outline,outlineVariant;
         final int error,onError,errorContainer,onErrorContainer;
-        /** Roles invertidos (snackbar con "Deshacer"): superficie oscura en tema claro y viceversa. */
+        /** Roles invertidos (snackbar con "Deshacer"): cápsula de tinta en tema claro y clara en oscuro. */
         final int inverseSurface,inverseOnSurface,inversePrimary;
         // Roles de la app, derivados de los anteriores
         final int background,card,record,ripple;
         final int[] speakers;
+        // ---- Roles propios de Verbapp (0.7.0) ----
+        /** Tinta: el botón principal (negro verdoso en claro, blanco menta en oscuro) y su contenido. */
+        final int ink,onInk;
+        /** Verde de marca (botón de micrófono, ícono de la app) y su versión profunda para degradados. */
+        final int brand,brandDeep,onBrand;
+        /** Vidrio: relleno translúcido de tarjetas y su borde claro de 1 dp. */
+        final int glass,glassStroke;
+        /** Vidrio sobre el verde intenso (píldoras Detener/Pausa): relleno, borde y contenido. */
+        final int glassOnVivid,glassOnVividStroke,onVivid,onVividVariant;
+        /** Fondo del subrayado de una palabra destacada (la última palabra de un título grande). */
+        final int highlight;
+        /** Degradado del fondo: arriba, medio y abajo (intenso = Grabar; suave = listas y documentos). */
+        final int gradTop,gradMid,gradBottom,softMid,softBottom;
+        /** Puntitos de la textura de la parte alta del fondo. */
+        final int dotGrid;
+        /** Barras decorativas de onda sobre fondo claro (en reposo). */
+        final int waveIdle;
+        /** Color de sombra (Android 9+): verde muy oscuro en vez de gris. */
+        final int shadow;
 
         Palette(Context c,boolean dark,boolean dynamic){
-            this.dark=dark;this.dynamic=dynamic&&Build.VERSION.SDK_INT>=31;
-            if(this.dynamic){
-                // Material You: los roles salen de la paleta que Android genera desde el fondo de pantalla.
-                primary=sys(c,dark?"system_accent1_200":"system_accent1_600");onPrimary=sys(c,dark?"system_accent1_800":"system_accent1_0");
-                primaryContainer=sys(c,dark?"system_accent1_700":"system_accent1_100");onPrimaryContainer=sys(c,dark?"system_accent1_100":"system_accent1_900");
-                secondaryContainer=sys(c,dark?"system_accent2_700":"system_accent2_100");onSecondaryContainer=sys(c,dark?"system_accent2_100":"system_accent2_900");
-                surface=sys(c,dark?"system_neutral1_900":"system_neutral1_10");
-                surfaceContainerLowest=sys(c,dark?"system_neutral1_1000":"system_neutral1_0");
-                surfaceContainerLow=sys(c,dark?"system_neutral1_900":"system_neutral1_10");
-                surfaceContainer=sys(c,dark?"system_neutral1_800":"system_neutral1_50");
-                surfaceContainerHigh=sys(c,dark?"system_neutral1_800":"system_neutral1_100");
-                surfaceContainerHighest=sys(c,dark?"system_neutral1_700":"system_neutral1_100");
-                onSurface=sys(c,dark?"system_neutral1_100":"system_neutral1_900");onSurfaceVariant=sys(c,dark?"system_neutral2_200":"system_neutral2_700");
-                outline=sys(c,dark?"system_neutral2_400":"system_neutral2_500");outlineVariant=sys(c,dark?"system_neutral2_700":"system_neutral2_200");
-            }else if(dark){
-                primary=0xFFB5C4FF;onPrimary=0xFF0E2A78;primaryContainer=0xFF2A4190;onPrimaryContainer=0xFFDCE1FF;
-                secondaryContainer=0xFF3F4759;onSecondaryContainer=0xFFDDE1F9;
-                surface=0xFF121318;surfaceContainerLowest=0xFF0D0E13;surfaceContainerLow=0xFF1B1B21;surfaceContainer=0xFF1F1F25;surfaceContainerHigh=0xFF292A2F;surfaceContainerHighest=0xFF34343A;
-                onSurface=0xFFE4E1E9;onSurfaceVariant=0xFFC6C5D0;outline=0xFF90909A;outlineVariant=0xFF45464F;
+            this.dark=dark;this.dynamic=false;
+            if(dark){
+                primary=0xFF93D4BA;onPrimary=0xFF00382B;primaryContainer=0xFF1F4E40;onPrimaryContainer=0xFFC4EBDA;
+                secondaryContainer=0xFF25352F;onSecondaryContainer=0xFFD6E7DF;
+                surface=0xFF0E1412;surfaceContainerLowest=0xFF0A0F0D;surfaceContainerLow=0xFF151C19;surfaceContainer=0xFF19211E;surfaceContainerHigh=0xFF212B27;surfaceContainerHighest=0xFF2A3530;
+                onSurface=0xFFE1EAE6;onSurfaceVariant=0xFFB4C3BC;outline=0xFF82918A;outlineVariant=0xFF36433E;
+                ink=0xFFE3F0EA;onInk=0xFF0F1714;brand=0xFF4C9A7F;brandDeep=0xFF1F4E40;onBrand=0xFFFFFFFF;
+                glass=0x17FFFFFF;glassStroke=0x26FFFFFF;glassOnVivid=0x1FFFFFFF;glassOnVividStroke=0x40FFFFFF;onVivid=0xFFF2F7F4;onVividVariant=0xCCF2F7F4;
+                highlight=0xFF28503F;gradTop=0xFF0D1311;gradMid=0xFF101B17;gradBottom=0xFF1F4A3D;softMid=0xFF0F1714;softBottom=0xFF14241E;
+                dotGrid=0x14FFFFFF;waveIdle=0xFF55635D;shadow=0xFF000000;
+                inverseSurface=0xFFE1EAE6;inverseOnSurface=0xFF17201C;inversePrimary=0xFF2F6B58;
             }else{
-                primary=0xFF3A5BC7;onPrimary=0xFFFFFFFF;primaryContainer=0xFFDCE1FF;onPrimaryContainer=0xFF00164E;
-                secondaryContainer=0xFFDDE1F9;onSecondaryContainer=0xFF151B2C;
-                surface=0xFFFBF8FF;surfaceContainerLowest=0xFFFFFFFF;surfaceContainerLow=0xFFF5F2FA;surfaceContainer=0xFFEFEDF4;surfaceContainerHigh=0xFFE9E7EF;surfaceContainerHighest=0xFFE3E1E9;
-                onSurface=0xFF1B1B21;onSurfaceVariant=0xFF45464F;outline=0xFF767680;outlineVariant=0xFFC6C5D0;
+                primary=0xFF2F6B58;onPrimary=0xFFFFFFFF;primaryContainer=0xFFD4E9DF;onPrimaryContainer=0xFF0C3427;
+                secondaryContainer=0xFFE2EEE8;onSecondaryContainer=0xFF15261F;
+                surface=0xFFF7FAF8;surfaceContainerLowest=0xFFFFFFFF;surfaceContainerLow=0xFFF2F6F4;surfaceContainer=0xFFECF1EF;surfaceContainerHigh=0xFFE5ECE9;surfaceContainerHighest=0xFFDEE6E2;
+                onSurface=0xFF111714;onSurfaceVariant=0xFF4F5D57;outline=0xFF7C8A84;outlineVariant=0xFFCBD6D1;
+                ink=0xFF121815;onInk=0xFFFFFFFF;brand=0xFF2F6B58;brandDeep=0xFF1E4D3F;onBrand=0xFFFFFFFF;
+                // Borde del vidrio: un trazo muy tenue de verde oscuro. Uno blanco no se ve sobre la parte blanca del fondo.
+                glass=0xC7FFFFFF;glassStroke=0x1C0B2A20;glassOnVivid=0x33FFFFFF;glassOnVividStroke=0x73FFFFFF;onVivid=0xFFFFFFFF;onVividVariant=0xD9FFFFFF;
+                highlight=0xFFD8EDE3;gradTop=0xFFFFFFFF;gradMid=0xFFF1F6F4;gradBottom=0xFF3E7262;softMid=0xFFF5F9F7;softBottom=0xFFD3E4DC;
+                dotGrid=0x1A1E3A30;waveIdle=0xFFA3AEA9;shadow=0xFF0B2A20;
+                inverseSurface=0xFF121815;inverseOnSurface=0xFFEEF3F1;inversePrimary=0xFF9ED5BF;
             }
-            inverseSurface=onSurface;inverseOnSurface=surfaceContainerLow;inversePrimary=this.dynamic?sys(c,dark?"system_accent1_600":"system_accent1_200"):(dark?0xFF3A5BC7:0xFFB5C4FF);
             error=dark?0xFFFFB4AB:0xFFBA1A1A;onError=dark?0xFF690005:0xFFFFFFFF;errorContainer=dark?0xFF93000A:0xFFFFDAD6;onErrorContainer=dark?0xFFFFDAD6:0xFF410002;
-            // Fondo de pantalla un tono más oscuro que las tarjetas, como en los Ajustes de Android.
-            background=dark?surface:surfaceContainer;card=dark?surfaceContainer:surfaceContainerLowest;
-            record=dark?0xFFFF5449:0xFFDE3730;
+            // El fondo real es un degradado (Glass.Backdrop); este color sólido es su tono de arriba (barra de estado, ventanas).
+            background=gradTop;card=glass;
+            record=dark?0xFFFF7A55:0xFFE4572E;
             ripple=(onSurface&0x00FFFFFF)|0x1F000000;
-            // Hablantes: tonos 40/80 de Material para 6 matices, armonizados (misma luminosidad); el primero es primary.
-            speakers=dark?new int[]{primary,0xFFFFB870,0xFF53DBC9,0xFFE5B6FF,0xFFFFB3B3,0xFFB6D26A}
-                         :new int[]{primary,0xFF8B5000,0xFF006A60,0xFF7B4E9E,0xFF9C4146,0xFF4F6300};
+            // Hablantes: 6 matices armonizados con el verde (misma luminosidad); el primero es el verde de marca.
+            speakers=dark?new int[]{primary,0xFFF2B37A,0xFFA9C3FF,0xFFD9B3F5,0xFFFFB1BE,0xFFBFD77E}
+                         :new int[]{primary,0xFFA5561C,0xFF3559A8,0xFF7E4C9F,0xFFA83F55,0xFF5D7A12};
         }
         int speaker(int index){return speakers[Math.abs(index)%speakers.length];}
-        private static int sys(Context c,String name){int id=c.getResources().getIdentifier(name,"color","android");return id==0?0xFF808080:c.getColor(id);}
     }
 
-    /** Escala tipográfica de Material 3 (sp). Roboto del sistema. El tracking del cuerpo se redujo un poco respecto de la spec para textos en español, que son más largos. */
+    /**
+     * Escala tipográfica. Outfit (geométrica, en assets/fonts, licencia OFL) para todo lo que se «mira»: cronómetro,
+     * títulos, etiquetas, botones y números. Roboto del sistema para el texto largo que se «lee» (transcripciones,
+     * explicaciones), porque a tamaño chico y en párrafos se lee mejor.
+     */
     enum Type {
-        HEADLINE_LARGE(32,Weight.REGULAR,0f),
-        HEADLINE_MEDIUM(28,Weight.REGULAR,0f),
-        HEADLINE_SMALL(24,Weight.REGULAR,0f),
-        TITLE_LARGE(22,Weight.REGULAR,0f),
-        TITLE_MEDIUM(16,Weight.MEDIUM,0.009f),
-        TITLE_SMALL(14,Weight.MEDIUM,0.007f),
-        BODY_LARGE(16,Weight.REGULAR,0.01f),
-        BODY_MEDIUM(14,Weight.REGULAR,0.01f),
-        BODY_SMALL(12,Weight.REGULAR,0.02f),
-        LABEL_LARGE(14,Weight.MEDIUM,0.007f),
-        LABEL_MEDIUM(12,Weight.MEDIUM,0.02f),
-        LABEL_SMALL(11,Weight.MEDIUM,0.045f);
-        final int size;final Weight weight;final float tracking;
-        Type(int size,Weight weight,float tracking){this.size=size;this.weight=weight;this.tracking=tracking;}
+        DISPLAY_LARGE(68,Weight.MEDIUM,-0.02f,true),
+        DISPLAY_MEDIUM(44,Weight.MEDIUM,-0.015f,true),
+        DISPLAY_SMALL(36,Weight.MEDIUM,-0.01f,true),
+        HEADLINE_LARGE(32,Weight.MEDIUM,-0.01f,true),
+        HEADLINE_MEDIUM(28,Weight.MEDIUM,-0.005f,true),
+        HEADLINE_SMALL(24,Weight.MEDIUM,0f,true),
+        TITLE_LARGE(22,Weight.MEDIUM,0f,true),
+        TITLE_MEDIUM(16,Weight.MEDIUM,0.005f,true),
+        TITLE_SMALL(14,Weight.SEMIBOLD,0.01f,true),
+        /** Título de fila de lista o de opción de menú: Outfit normal, 16 sp. */
+        ITEM(16,Weight.REGULAR,0.005f,true),
+        BODY_LARGE(16,Weight.REGULAR,0.01f,false),
+        BODY_MEDIUM(14,Weight.REGULAR,0.01f,false),
+        BODY_SMALL(12,Weight.REGULAR,0.02f,false),
+        LABEL_LARGE(14,Weight.MEDIUM,0.01f,true),
+        LABEL_MEDIUM(12,Weight.MEDIUM,0.02f,true),
+        LABEL_SMALL(11,Weight.MEDIUM,0.04f,true);
+        final int size;final Weight weight;final float tracking;final boolean display;
+        Type(int size,Weight weight,float tracking,boolean display){this.size=size;this.weight=weight;this.tracking=tracking;this.display=display;}
     }
-    enum Weight{REGULAR,MEDIUM,BOLD,LIGHT}
+    enum Weight{
+        REGULAR(400),MEDIUM(500),BOLD(700),LIGHT(300),SEMIBOLD(600);
+        final int value;Weight(int value){this.value=value;}
+    }
 
-    /** Espaciado en múltiplos de 4 dp (Material usa una grilla de 4/8 dp). */
+    /** Espaciado en múltiplos de 4 dp (grilla de 4/8 dp). */
     static final int S1=4,S2=8,S3=12,S4=16,S5=20,S6=24,S8=32,S10=40;
-    /** Formas de Material 3: extra-small 4 · small 8 · medium 12 · large 16 · extra-large 28 · full (99). */
-    static final int R_SMALL=8,R_CONTROL=12,R_CARD=16,R_SHEET=28,R_FULL=99;
+    /**
+     * Formas (0.7.0, más redondas): chica 8 · control 16 · tarjeta 24 · hoja 32 · píldora (99).
+     * Las tarjetas de vidrio usan R_CARD; las esquinas grandes son parte de la estética de la referencia.
+     */
+    static final int R_SMALL=8,R_CONTROL=16,R_CARD=24,R_SHEET=32,R_FULL=99;
     /** Movimiento (ms): corto para respuestas, medio para aparecer, largo para transformaciones. */
     static final int MOTION_FAST=100,MOTION_BASE=250,MOTION_SLOW=400;
 
     /*
-     * Curvas de movimiento de Material 3 Expressive (ver PROPUESTA #12):
+     * Curvas de movimiento de Material 3 Expressive (ver PROPUESTA-0.6 #12):
      * - Color, transparencia y forma usan las curvas "emphasized", sin rebote.
      * - Lo que cambia de lugar o de tamaño usa un resorte con un rebote leve (SPATIAL).
      * Todo respeta «Quitar animaciones» de Android: con la escala de animación en 0, motion() es false
@@ -149,26 +180,39 @@ final class AppTheme {
     }
 
     static String appearance(Context c){return new Settings(c).prefs.getString("appearance","system");}
-    static boolean dynamicColor(Context c){return Build.VERSION.SDK_INT>=31&&new Settings(c).prefs.getBoolean("dynamicColor",false);}
+    /**
+     * Colores del fondo de pantalla (Material You): desde 0.7.0 ya no se usan. Verbapp tiene una identidad propia (el
+     * verde de marca y el degradado), que los colores del fondo de pantalla romperían. Se conserva el método para no
+     * cambiar a quien lo consulta.
+     */
+    static boolean dynamicColor(Context c){return false;}
     static boolean isDark(Context c){String mode=appearance(c);return mode.equals("dark") || (mode.equals("system") && (c.getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES);}
-    static Palette apply(Activity activity){Palette p=new Palette(activity,isDark(activity),dynamicColor(activity));activity.setTheme(p.dark?R.style.AppThemeDark:R.style.AppTheme);return p;}
+    static Palette apply(Activity activity){Palette p=new Palette(activity,isDark(activity),false);activity.setTheme(p.dark?R.style.AppThemeDark:R.style.AppTheme);return p;}
     static int dp(Context c,float n){return Math.round(n*c.getResources().getDisplayMetrics().density);}
     /**
-     * Barras del sistema del mismo color que la pantalla: la de estado como el fondo y la de navegación como la
-     * zona que queda encima (barra de pestañas o fondo). Sin divisor ni velo de contraste, así en modo oscuro no se ve una franja.
-     * En Android 15+ (de borde a borde) el color lo pinta Screen detrás de la barra.
+     * Pantalla de borde a borde: el degradado del fondo pasa por detrás de la barra de estado y de la de navegación
+     * (ambas transparentes). Los íconos del sistema se eligen según lo que queda detrás: arriba siempre claro (íconos
+     * oscuros en tema claro); abajo, verde intenso en Grabar (íconos blancos) o suave en las demás (íconos oscuros).
+     * navigationColor: el color que queda detrás de la barra de navegación (decide el color de sus íconos).
      */
     static void window(Activity activity,Palette p,int navigationColor){
         Window w=activity.getWindow();
-        w.setStatusBarColor(p.background);w.setNavigationBarColor(navigationColor);w.getDecorView().setBackgroundColor(p.background);
-        if(Build.VERSION.SDK_INT>=28)w.setNavigationBarDividerColor(navigationColor);
+        w.setStatusBarColor(0x00000000);w.setNavigationBarColor(0x00000000);w.getDecorView().setBackgroundColor(p.background);
+        if(Build.VERSION.SDK_INT>=28)w.setNavigationBarDividerColor(0x00000000);
         if(Build.VERSION.SDK_INT>=29){w.setNavigationBarContrastEnforced(false);w.setStatusBarContrastEnforced(false);}
         boolean lightNav=!p.dark&&luminance(navigationColor)>0.5f;
-        w.getDecorView().setSystemUiVisibility((p.dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR)|(lightNav&&Build.VERSION.SDK_INT>=27?View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:0));
         if(Build.VERSION.SDK_INT>=30){
+            w.setDecorFitsSystemWindows(false);
             WindowInsetsController controller=w.getInsetsController();
             if(controller!=null){int mask=WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
                 controller.setSystemBarsAppearance((p.dark?0:WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS)|(lightNav?WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS:0),mask);}
+        }else{
+            int flags=View.SYSTEM_UI_FLAG_LAYOUT_STABLE|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+            if(!p.dark)flags|=View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            if(lightNav&&Build.VERSION.SDK_INT>=27)flags|=View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            // Android 8.0 no tiene íconos oscuros en la barra de navegación: sobre fondo claro, un velo la mantiene legible.
+            if(lightNav&&Build.VERSION.SDK_INT<27)w.setNavigationBarColor(0x66000000);
+            w.getDecorView().setSystemUiVisibility(flags);
         }
     }
     /** Mezcla lineal de dos colores ARGB (t = 0 → a, t = 1 → b). */
@@ -180,20 +224,43 @@ final class AppTheme {
     static int withAlpha(int color,int alpha){return (color&0x00FFFFFF)|((alpha&0xFF)<<24);}
     /** Luminancia relativa aproximada (0 = negro, 1 = blanco). */
     static float luminance(int color){return (0.2126f*((color>>16)&0xFF)+0.7152f*((color>>8)&0xFF)+0.0722f*(color&0xFF))/255f;}
+    /** Roboto del sistema (texto de lectura). */
     static Typeface typeface(Weight weight){
         switch(weight){
             case BOLD:return Typeface.create("sans-serif",Typeface.BOLD);
-            case MEDIUM:return Typeface.create("sans-serif-medium",Typeface.NORMAL);
+            case MEDIUM:case SEMIBOLD:return Typeface.create("sans-serif-medium",Typeface.NORMAL);
             case LIGHT:return Typeface.create("sans-serif-light",Typeface.NORMAL);
             default:return Typeface.create("sans-serif",Typeface.NORMAL);
         }
     }
+    private static final Typeface[] OUTFIT=new Typeface[10];
+    /**
+     * Outfit (fuente variable de 100 a 900) con el peso pedido. Se carga una vez por peso. Si el archivo faltara o
+     * Android no pudiera leerlo, se usa Roboto: la app nunca queda sin letra.
+     */
+    static Typeface outfit(Context c,Weight weight){return outfit(c,weight.value);}
+    static Typeface outfit(Context c,int weight){
+        int slot=Math.max(1,Math.min(9,Math.round(weight/100f)));
+        synchronized(OUTFIT){
+            if(OUTFIT[slot]!=null)return OUTFIT[slot];
+            Typeface t=null;
+            try{t=new Typeface.Builder(c.getApplicationContext().getAssets(),"fonts/Outfit.ttf").setFontVariationSettings("'wght' "+(slot*100)).setWeight(slot*100).build();}catch(RuntimeException ignored){}
+            if(t==null)t=typeface(slot>=6?Weight.BOLD:slot==5?Weight.MEDIUM:slot<=3?Weight.LIGHT:Weight.REGULAR);
+            OUTFIT[slot]=t;return t;
+        }
+    }
+    /** Letra de un estilo de la escala (Outfit o Roboto según corresponda). */
+    static Typeface font(Context c,Type type){return type.display?outfit(c,type.weight):typeface(type.weight);}
     static void type(TextView t,Type type){
-        t.setTextSize(type.size);t.setTypeface(typeface(type.weight));t.setLetterSpacing(type.tracking);
-        float extra=type.size>=22?type.size*0.15f:type.size*0.4f;t.setLineSpacing(dp(t.getContext(),extra/2f),1f);
+        t.setTextSize(type.size);t.setTypeface(font(t.getContext(),type));t.setLetterSpacing(type.tracking);
+        float extra=type.size>=22?type.size*0.12f:type.size*0.4f;t.setLineSpacing(dp(t.getContext(),extra/2f),1f);
     }
     static GradientDrawable shape(Context c,int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(c,radius));return d;}
     static GradientDrawable outline(Context c,int fill,int stroke,int radius,boolean dashed){GradientDrawable d=shape(c,fill,radius);if(dashed)d.setStroke(dp(c,1.5f),stroke,dp(c,6),dp(c,5));else d.setStroke(dp(c,1),stroke);return d;}
     static GradientDrawable oval(int color){GradientDrawable d=new GradientDrawable();d.setShape(GradientDrawable.OVAL);d.setColor(color);return d;}
+    /** Vidrio: relleno translúcido con borde claro de 1 dp (tarjetas, grupos de lista, campos). */
+    static GradientDrawable glass(Context c,Palette p,int radius){GradientDrawable d=shape(c,p.glass,radius);d.setStroke(Math.max(1,dp(c,1)),p.glassStroke);return d;}
+    /** Vidrio circular (botones de ícono flotantes: volver, más opciones). */
+    static GradientDrawable glassOval(Context c,Palette p){GradientDrawable d=oval(p.dark?p.glass:0xF2FFFFFF);d.setStroke(Math.max(1,dp(c,1)),p.glassStroke);return d;}
     private AppTheme(){}
 }

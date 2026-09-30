@@ -4,8 +4,12 @@ import android.animation.ValueAnimator;
 import android.content.*;
 import android.content.res.ColorStateList;
 import android.graphics.Canvas;
+import android.graphics.ColorFilter;
 import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.InsetDrawable;
@@ -19,6 +23,7 @@ import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
+import android.text.style.ReplacementSpan;
 import android.view.*;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.*;
@@ -34,6 +39,10 @@ import static cl.vozlocal.app.AppTheme.*;
  *
  * Estabilidad: la pantalla solo se vuelve a armar cuando cambian los archivos de ESTA grabación, y conserva la
  * posición. El avance de una transcripción en curso se actualiza en su lugar, sin reconstruir nada.
+ *
+ * Estética 0.7.0 (Verbapp, PROPUESTA-0.7 §3.5): documento sobre el fondo suave; título grande en Outfit con la última
+ * palabra en menta; cada bloque (personas, nota, momentos, transcripción, avance) en una tarjeta de vidrio con su
+ * ícono verde y su título; menta para lo que destaca; el reproductor en una cápsula flotante casi opaca.
  */
 public class RecordingActivity extends Screen {
     private static final int SAVE_AS=71;
@@ -68,7 +77,7 @@ public class RecordingActivity extends Screen {
     private final Runnable progress=new Runnable(){public void run(){
         if(recording!=null){
             if(player!=null&&prepared){int pos=player.getCurrentPosition();
-                if(scrubber!=null&&!scrubber.dragging){scrubber.setPosition(pos);timeText.setText(Recording.time(pos)+" / "+Recording.time(total()));}
+                if(scrubber!=null&&!scrubber.dragging){scrubber.setPosition(pos);showTime(pos);}
                 tickPlayback(pos);}
             if(!demo)checkChanges();
             tickProcess();updateFollowChip();
@@ -83,14 +92,19 @@ public class RecordingActivity extends Screen {
             if(demo){recording=new Recording("00000000-0000-0000-0000-000000000000","Conversación de ejemplo",System.currentTimeMillis(),27000);java.io.File f=demoFile();transcript=f.exists()?new Transcript(FilesStore.read(f)):example();demoStamp=f.exists()?f.lastModified():0;}
             else{recording=FilesStore.recording(this,id);if(recording==null)throw new java.io.FileNotFoundException();}
         }catch(Exception e){recording=null;largeTitle(page,"No disponible","Esta grabación ya no existe o no se pudo abrir.");return;}
-        if(!demo){ImageButton more=ui.iconButton(R.drawable.ic_more,"Más opciones",p.onSurfaceVariant,0,48);more.setOnClickListener(v->RecordingActions.menu(this,recording,this::reload,this::releasePlayer));barActions.addView(more);}
-        // El título grande se va con el contenido; al desplazarte aparece en la barra superior.
-        barTitle=ui.oneLine(ui.text(recording.title,Type.TITLE_LARGE,p.onSurface));barTitle.setAlpha(0f);barTitle.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        // ← y ⋯ son los dos botones redondos de vidrio de la barra (el menú es el mismo de siempre).
+        if(!demo)barButton(R.drawable.ic_more,"Más opciones",v->RecordingActions.menu(this,recording,this::reload,this::releasePlayer));
+        else if(barActions!=null)barActions.addView(ui.space(48)); // el ejemplo no tiene ⋯: el hueco mantiene centrado el título de la barra
+        // El título grande se va con el contenido; al desplazarte aparece centrado en la barra (Outfit), entre los dos botones.
+        barTitle=ui.oneLine(ui.text(recording.title,Type.TITLE_MEDIUM,p.onSurface));barTitle.setTextSize(17);barTitle.setGravity(Gravity.CENTER);barTitle.setPadding(ui.dp(S3),0,ui.dp(S3),0);
+        barTitle.setAlpha(0f);barTitle.setTranslationY(ui.dp(S2));barTitle.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         if(bar!=null&&bar.getChildCount()>2){bar.removeViewAt(1);bar.addView(barTitle,1,new LinearLayout.LayoutParams(0,-2,1));}
         // La zona desplazable lleva encima el chip flotante «Volver a lo que suena».
         int at=root.indexOfChild(scroll);root.removeView(scroll);FrameLayout stage=new FrameLayout(this);stage.addView(scroll,new FrameLayout.LayoutParams(-1,-1));
-        followChip=ui.text("↓ Volver a lo que suena",Type.LABEL_LARGE,p.onPrimaryContainer);followChip.setGravity(Gravity.CENTER);followChip.setMinHeight(ui.dp(48));followChip.setPadding(ui.dp(S5),0,ui.dp(S5),0);
-        followChip.setBackground(ui.ripple(shape(this,p.primaryContainer,R_FULL),R_FULL));followChip.setElevation(ui.dp(3));followChip.setAccessibilityDelegate(Ui.buttonRole());followChip.setVisibility(View.GONE);
+        followChip=ui.text("↓ Volver a lo que suena",Type.LABEL_LARGE,p.onInk);followChip.setGravity(Gravity.CENTER);followChip.setMinHeight(ui.dp(48));followChip.setPadding(ui.dp(S5),0,ui.dp(S5),0);
+        // Píldora de tinta que flota (como la barra de pestañas): se distingue de cualquier texto que pase por detrás.
+        followChip.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.stateLayer(p.onInk)),shape(this,p.ink,R_FULL),null));followChip.setElevation(ui.dp(6));lift(followChip);
+        followChip.setAccessibilityDelegate(Ui.buttonRole());followChip.setVisibility(View.GONE);Ui.pressable(followChip);
         followChip.setOnClickListener(v->{lastUserScroll=0;if(playingTurn!=null)followTo(playingTurn,true);followChip.setVisibility(View.GONE);Diagnostics.event("follow_resume",demo?null:id);});
         FrameLayout.LayoutParams fp=new FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);fp.bottomMargin=ui.dp(S3);stage.addView(followChip,fp);
         root.addView(stage,Math.max(0,at),new LinearLayout.LayoutParams(-1,0,1));
@@ -166,7 +180,11 @@ public class RecordingActivity extends Screen {
         if(barTitle!=null)barTitle.setText(recording.title);
         refreshPrimary();afterBuild(st);
     }
-    private void addMarks(){View m=marksRow();if(m!=null)content.addView(m,Ui.fill());}
+    private void addMarks(){View m=marksRow();if(m!=null)content.addView(m,gap());}
+    /** Separación entre tarjetas: 12 dp, el mismo ritmo en toda la pantalla. */
+    private LinearLayout.LayoutParams gap(){LinearLayout.LayoutParams lp=Ui.fill();lp.topMargin=ui.dp(S3);return lp;}
+    /** Sombra verde muy oscura en vez de gris (Android 9+), como la barra de pestañas y los botones de vidrio. */
+    private void lift(View v){if(Build.VERSION.SDK_INT>=28&&!p.dark){v.setOutlineSpotShadowColor(p.shadow);v.setOutlineAmbientShadowColor(p.shadow);}}
     /** Pedidos que llegan con la apertura (notificación «lista», «Nueva versión lista») y el punto «nuevo» de la Biblioteca. */
     private void afterBuild(JSONObject st){
         if(demo)return;
@@ -216,19 +234,23 @@ public class RecordingActivity extends Screen {
     // ---------- Cabecera: título, fecha, título sugerido ----------
     private void header(JSONObject st){
         LinearLayout row=ui.row();row.setGravity(Gravity.TOP);row.setPadding(ui.dp(S1),0,0,0);
-        titleView=ui.heading(recording.title,Type.HEADLINE_SMALL);titleView.setPadding(0,ui.dp(S2),ui.dp(S1),ui.dp(S1));row.addView(titleView,new LinearLayout.LayoutParams(0,-2,1));
+        // Título grande en Outfit con la última palabra en un recuadro menta: el sello de la referencia (igual que al grabar).
+        titleView=ui.heading("",Type.HEADLINE_MEDIUM);ui.highlightLast(titleView,recording.title);titleView.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_BALANCED);titleView.setPadding(0,ui.dp(S2),ui.dp(S1),ui.dp(S1));row.addView(titleView,new LinearLayout.LayoutParams(0,-2,1));
         if(!demo){titleView.setOnClickListener(v->rename());
-            ImageButton edit=ui.iconButton(R.drawable.ic_edit,"Cambiar título",p.onSurfaceVariant,0,48);edit.setOnClickListener(v->rename());row.addView(edit);}
+            // El lápiz queda a la altura de la primera línea del título, aunque este ocupe varias.
+            ImageButton edit=ui.iconButton(R.drawable.ic_edit,"Cambiar título",p.onSurfaceVariant,0,48);edit.setOnClickListener(v->rename());LinearLayout.LayoutParams el=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));el.topMargin=ui.dp(2);row.addView(edit,el);}
         content.addView(row,Ui.fill());
-        LinearLayout metaRow=ui.row();metaRow.setPadding(ui.dp(S1),0,0,ui.dp(S3));
-        metaRow.addView(ui.text(metaText(),Type.BODY_MEDIUM,p.onSurfaceVariant),new LinearLayout.LayoutParams(0,-2,1));
+        // Fecha · hora · duración en Outfit con cifras fijas (se leen como datos, no como frase).
+        LinearLayout metaRow=ui.row();metaRow.setPadding(ui.dp(S1),0,0,ui.dp(S1));metaRow.setMinimumHeight(ui.dp(32));
+        metaRow.addView(Ui.tabular(ui.text(metaText(),Type.LABEL_LARGE,p.onSurfaceVariant)),new LinearLayout.LayoutParams(0,-2,1));
         // Lo terminado va en silencio: el estado solo se muestra cuando pide atención o está en curso.
-        if(demo||mode!=Mode.DONE){RecState state=RecState.of(st,false);TextView chip=ui.chip(demo?"Ejemplo":state.label,demo?p.onSecondaryContainer:state.onBg(p),demo?p.secondaryContainer:state.bg(p));metaRow.addView(chip);}
+        if(demo||mode!=Mode.DONE){RecState state=RecState.of(st,false);TextView chip=ui.chip(demo?"Ejemplo":state.label,demo?p.onPrimaryContainer:state.onBg(p),demo?p.primaryContainer:state.bg(p));
+            LinearLayout.LayoutParams cl=Ui.wrap();cl.setMarginStart(ui.dp(S2));metaRow.addView(chip,cl);}
         content.addView(metaRow,Ui.fill());
         if(!demo){String suggested=st.optString("suggestedTitle","").trim();
             if(!suggested.isEmpty()&&!sameTitle(suggested,recording.title)){
-                TextView chip=chip("Usar «"+quote(suggested,48)+"»",R.drawable.ic_sparkle,p.onSurfaceVariant,0,true);chip.setContentDescription("Título sugerido: "+suggested+". Toca para usarlo");
-                chip.setOnClickListener(v->useSuggested(suggested));LinearLayout.LayoutParams lp=Ui.wrap();lp.bottomMargin=ui.dp(S1);content.addView(chip,lp);}}
+                TextView chip=chip("Usar «"+quote(suggested,48)+"»",R.drawable.ic_sparkle,p.primary,p.onSurface,0,true);chip.setContentDescription("Título sugerido: "+suggested+". Toca para usarlo");
+                chip.setOnClickListener(v->useSuggested(suggested));content.addView(chip,Ui.wrap());}}
     }
     private void rename(){RecordingActions.rename(this,recording,this::reload);}
     private String metaText(){return dayLabel(recording.created)+" · "+new SimpleDateFormat("HH:mm",Locale.ROOT).format(new Date(recording.created))+" · "+Ui.humanDuration(recording.duration);}
@@ -246,30 +268,48 @@ public class RecordingActivity extends Screen {
     }
 
     // ---------- Zona fija de abajo: onda, controles y botón que avanza ----------
+    /**
+     * Reproductor en una cápsula flotante (como la barra de pestañas): casi opaca, para que el texto que se desplaza
+     * detrás no se mezcle con los controles. Arriba ▶ junto a la onda (como el mini reproductor de la referencia);
+     * al medio el tiempo, ±15 y la velocidad; abajo el botón que avanza.
+     */
     private void buildDock(){
-        bottom.removeAllViews();bottom.setVisibility(View.VISIBLE);bottom.setBackgroundColor(0);bottom.setClipToPadding(false);bottom.setPadding(ui.dp(S3),0,ui.dp(S3),ui.dp(S3));
-        LinearLayout dock=ui.column();dock.setBackground(shape(this,p.card,R_SHEET));dock.setElevation(ui.dp(3));dock.setPadding(ui.dp(S3),ui.dp(S2),ui.dp(S3),ui.dp(S3));
+        bottom.removeAllViews();bottom.setVisibility(View.VISIBLE);bottom.setBackgroundColor(0);bottom.setClipToPadding(false);bottom.setClipChildren(false);bottom.setPadding(ui.dp(S3),0,ui.dp(S3),ui.dp(S3));
+        LinearLayout dock=ui.column();GradientDrawable capsule=shape(this,dockColor(),28);capsule.setStroke(Math.max(1,ui.dp(1)),p.glassStroke);dock.setBackground(capsule);
+        dock.setElevation(ui.dp(p.dark?0:6));lift(dock);dock.setPadding(ui.dp(S3),ui.dp(S3),ui.dp(S3),ui.dp(S3));
         if(!demo){
-            scrubber=new Scrubber(this,p);scrubber.setDuration(recording.duration);scrubber.listener=this::onScrub;dock.addView(scrubber,new LinearLayout.LayoutParams(-1,ui.dp(48)));
+            LinearLayout wave=ui.row();
+            play=ui.iconButton(R.drawable.ic_play,"Reproducir",p.onBrand,p.brand,48);play.setOnClickListener(v->toggle());wave.addView(play);
+            scrubber=new Scrubber(this,p,dockColor());scrubber.setDuration(recording.duration);scrubber.listener=this::onScrub;
+            LinearLayout.LayoutParams sl=new LinearLayout.LayoutParams(0,ui.dp(48),1);sl.setMarginStart(ui.dp(S2));wave.addView(scrubber,sl);
+            dock.addView(wave,Ui.fill());
             LinearLayout controls=ui.row();
-            play=ui.iconButton(R.drawable.ic_play,"Reproducir",p.onPrimary,p.primary,48);play.setOnClickListener(v->toggle());controls.addView(play);
-            timeText=ui.oneLine(ui.text(Recording.time(0)+" / "+Recording.time(recording.duration),Type.BODY_MEDIUM,p.onSurfaceVariant));timeText.setFontFeatureSettings("tnum");timeText.setPadding(ui.dp(S3),0,ui.dp(S1),0);
+            timeText=Ui.tabular(ui.oneLine(ui.text("",Type.LABEL_LARGE,p.onSurfaceVariant)));timeText.setPadding(ui.dp(S1),0,ui.dp(S2),0);showTime(0);
             controls.addView(timeText,new LinearLayout.LayoutParams(0,-2,1));
             controls.addView(skipButton(false));controls.addView(skipButton(true));controls.addView(speedBox());
-            dock.addView(controls,Ui.fill());
+            dock.addView(controls,Ui.fill()); // las dos filas de 48 dp ya traen su aire: la cápsula no crece más que el reproductor de antes
         }
         primary=ui.split(demo?"Nombrar voces":"Transcribir",demo?R.drawable.ic_people:R.drawable.ic_sparkle,v->onPrimary(),v->moreSheet());
-        LinearLayout.LayoutParams lp=Ui.fill();lp.topMargin=ui.dp(demo?S1:S2);dock.addView(primary,lp);
+        LinearLayout.LayoutParams lp=Ui.fill();lp.topMargin=ui.dp(demo?0:S2);dock.addView(primary,lp);
         LinearLayout.LayoutParams dl=Ui.fill();dl.topMargin=ui.dp(S2);bottom.addView(dock,dl);
     }
+    /** Fondo de la cápsula: blanco casi opaco en claro (blanco con alfa, como el vidrio de la barra); gris verdoso en oscuro. */
+    private int dockColor(){return p.dark?p.surfaceContainerHigh:0xF2FFFFFF;}
+    /** Tiempo actual (en tinta) / duración (en gris), con cifras fijas para que no bailen mientras suena. */
+    private void showTime(long ms){
+        if(timeText==null)return;String now=Recording.time(ms);SpannableStringBuilder b=new SpannableStringBuilder(now).append(" / ").append(Recording.time(total()));
+        b.setSpan(new ForegroundColorSpan(p.onSurface),0,now.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);timeText.setText(b);
+    }
     private View skipButton(boolean forward){
-        TextView b=ui.text(forward?"+15":"−15",Type.LABEL_LARGE,p.onSurface);b.setGravity(Gravity.CENTER);b.setFontFeatureSettings("tnum");
-        b.setBackground(ui.ripple(null,R_FULL));b.setContentDescription(forward?"Adelantar 15 segundos":"Retroceder 15 segundos");b.setAccessibilityDelegate(Ui.buttonRole());
+        // Íconos redondos con el «15» adentro: se entienden de un vistazo y ocupan lo mismo que el texto de antes.
+        ImageButton b=new ImageButton(this);b.setImageResource(forward?R.drawable.ic_forward_15:R.drawable.ic_replay_15);b.setImageTintList(ColorStateList.valueOf(p.onSurface));b.setScaleType(ImageView.ScaleType.CENTER);
+        b.setBackground(new RippleDrawable(ColorStateList.valueOf(p.ripple),null,oval(0xFF000000)));b.setContentDescription(forward?"Adelantar 15 segundos":"Retroceder 15 segundos");
         b.setOnClickListener(v->skip(forward?15000:-15000));Ui.pressable(b);b.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));return b;
     }
     private View speedBox(){
         FrameLayout box=new FrameLayout(this);box.setMinimumWidth(ui.dp(56));
-        speedChip=ui.chip(speedLabel(),p.onSurface,p.surfaceContainerHighest);speedChip.setMinWidth(ui.dp(44));speedChip.setFontFeatureSettings("tnum");speedChip.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        // Velocidad como píldora de vidrio: borde fino sobre la cápsula, cifras fijas en Outfit.
+        speedChip=Ui.tabular(ui.chip(speedLabel(),p.onSurface,0));speedChip.setBackground(outline(this,p.dark?p.glass:p.surfaceContainerLow,p.outlineVariant,R_FULL,false));speedChip.setMinWidth(ui.dp(48));speedChip.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         box.addView(speedChip,new FrameLayout.LayoutParams(-2,ui.dp(32),Gravity.CENTER));
         box.setClickable(true);box.setFocusable(true);box.setContentDescription("Velocidad "+speedLabel());box.setAccessibilityDelegate(Ui.buttonRole());box.setOnClickListener(v->cycleSpeed());Ui.pressable(box);
         box.setLayoutParams(new LinearLayout.LayoutParams(-2,ui.dp(48)));speedBox=box;return box;
@@ -348,16 +388,29 @@ public class RecordingActivity extends Screen {
     private void toggle(){ensurePlayer();if(!prepared)return;
         if(player.isPlaying()){player.pause();setPlaying(false);}
         else if(getSystemService(AudioManager.class).requestAudioFocus(focus)==AudioManager.AUDIOFOCUS_REQUEST_GRANTED){applySpeed();player.start();setPlaying(true);}}
-    /** ▶ lleno y redondo en pausa; al sonar, ‖ en un contenedor tonal más cuadrado (cambia de forma, como en Material 3 Expressive). */
+    /** Forma que se muestra ahora en ▶ (true = sonando) y su animación, para no rehacerla si el estado no cambió. */
+    private boolean playShown;private ValueAnimator playMorph;
+    /**
+     * ▶ blanco en un círculo verde de marca; al sonar, ❚❚ en un cuadrado redondeado del mismo verde. La forma cuenta el
+     * estado (Material 3 Expressive) y el verde se queda: es el botón de la marca. El cambio de forma usa la curva
+     * emphasized, sin rebote; con «Quitar animaciones» es inmediato.
+     */
     private void setPlaying(boolean on){
         if(play==null)return;
-        play.setImageResource(on?R.drawable.ic_pause:R.drawable.ic_play);play.setContentDescription(on?"Pausar":"Reproducir");play.setImageTintList(ColorStateList.valueOf(on?p.onPrimaryContainer:p.onPrimary));
-        int radius=on?R_CARD:R_FULL;play.setBackground(new RippleDrawable(ColorStateList.valueOf(p.ripple),shape(this,on?p.primaryContainer:p.primary,radius),shape(this,0xFF000000,radius)));
+        play.setImageResource(on?R.drawable.ic_pause:R.drawable.ic_play);play.setContentDescription(on?"Pausar":"Reproducir");play.setImageTintList(ColorStateList.valueOf(p.onBrand));
+        float round=ui.dp(24),square=ui.dp(R_CONTROL),to=on?square:round,from=playShown?square:round;boolean changed=on!=playShown;playShown=on;
+        GradientDrawable fill=new GradientDrawable(),mask=new GradientDrawable();fill.setColor(p.brand);mask.setColor(0xFF000000);fill.setCornerRadius(to);mask.setCornerRadius(to);
+        play.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.stateLayer(p.onBrand)),fill,mask));
+        if(playMorph!=null){playMorph.cancel();playMorph=null;}
+        if(changed&&AppTheme.motion()&&play.isAttachedToWindow()){
+            fill.setCornerRadius(from);mask.setCornerRadius(from);playMorph=ValueAnimator.ofFloat(from,to);playMorph.setDuration(MOTION_BASE);playMorph.setInterpolator(EMPHASIZED);
+            playMorph.addUpdateListener(a->{float r=(float)a.getAnimatedValue();fill.setCornerRadius(r);mask.setCornerRadius(r);});playMorph.start();
+        }
         labelPlaying(on);
     }
-    private void skip(int ms){ensurePlayer();if(!prepared)return;int to=Math.max(0,Math.min(player.getDuration(),player.getCurrentPosition()+ms));player.seekTo(to);if(scrubber!=null)scrubber.setPosition(to);timeText.setText(Recording.time(to)+" / "+Recording.time(total()));}
+    private void skip(int ms){ensurePlayer();if(!prepared)return;int to=Math.max(0,Math.min(player.getDuration(),player.getCurrentPosition()+ms));player.seekTo(to);if(scrubber!=null)scrubber.setPosition(to);showTime(to);}
     private void onScrub(long ms,boolean done){
-        if(timeText!=null)timeText.setText(Recording.time(ms)+" / "+Recording.time(total()));
+        showTime(ms);
         if(!done)return;ensurePlayer();if(!prepared)return;playUntil=0;player.seekTo((int)ms);lastUserScroll=0;followPending=true;
     }
     /** Salta a un momento (★, frase clave) y reproduce desde ahí; la transcripción lo sigue. */
@@ -388,12 +441,17 @@ public class RecordingActivity extends Screen {
     }
     private void markPlaying(View turn){
         if(turn==playingTurn)return;
-        if(playingTurn!=null){playingTurn.setBackground(null);Object[] old=turnOf(playingTurn);if(old!=null)((TextView)old[3]).setText((String)old[4]);}
+        if(playingTurn!=null){playingTurn.setBackground(null);Object[] old=turnOf(playingTurn);if(old!=null){((TextView)old[3]).setText((String)old[4]);((TextView)old[3]).setTextColor(p.onSurfaceVariant);}}
         playingTurn=turn;
-        if(turn!=null){turn.setBackground(shape(this,p.primaryContainer,R_CARD));if(restoringPlaying)restoringPlaying=false;else followPending=true;labelPlaying(player!=null&&prepared&&player.isPlaying());}
+        if(turn!=null){
+            // Recuadro menta con esquinas concéntricas a las de la tarjeta (24 − 4 dp de margen); aparece con un fundido corto.
+            GradientDrawable glow=shape(this,p.highlight,R_CARD-S1);turn.setBackground(glow);
+            if(AppTheme.motion()){ValueAnimator in=ValueAnimator.ofInt(0,255);in.setDuration(MOTION_BASE);in.setInterpolator(EMPHASIZED_DECELERATE);in.addUpdateListener(a->glow.setAlpha((int)a.getAnimatedValue()));in.start();}
+            if(restoringPlaying)restoringPlaying=false;else followPending=true;labelPlaying(player!=null&&prepared&&player.isPlaying());}
     }
     private boolean restoringPlaying;
-    private void labelPlaying(boolean on){Object[] t=playingTurn==null?null:turnOf(playingTurn);if(t!=null)((TextView)t[3]).setText(on?t[4]+" · sonando":(String)t[4]);}
+    /** La hora de la intervención que suena dice «· sonando» y se pone verde. */
+    private void labelPlaying(boolean on){Object[] t=playingTurn==null?null:turnOf(playingTurn);if(t!=null){((TextView)t[3]).setText(on?t[4]+" · sonando":(String)t[4]);((TextView)t[3]).setTextColor(on?p.primary:p.onSurfaceVariant);}}
     private Object[] turnOf(View v){for(Object[] t:turns)if(t[0]==v)return t;return null;}
     /** Trae la intervención a la vista con un desplazamiento suave (solo si no está ya en la zona cómoda de lectura). */
     private void followTo(View turn,boolean force){
@@ -418,7 +476,8 @@ public class RecordingActivity extends Screen {
         if(barTitle==null||titleView==null||!titleView.isAttachedToWindow())return;
         Rect r=new Rect();titleView.getDrawingRect(r);try{scroll.offsetDescendantRectToMyCoords(titleView,r);}catch(IllegalArgumentException e){return;}
         boolean show=scroll.getScrollY()>r.bottom-ui.dp(S2);
-        if(show!=barTitleShown){barTitleShown=show;barTitle.animate().alpha(show?1f:0f).setDuration(MOTION_FAST).start();}
+        // Entra subiendo 8 dp y se va bajando, más rápido (curvas emphasized de entrada y salida).
+        if(show!=barTitleShown){barTitleShown=show;barTitle.animate().alpha(show?1f:0f).translationY(show?0f:ui.dp(S2)).setDuration(show?MOTION_BASE:MOTION_FAST+50).setInterpolator(show?EMPHASIZED_DECELERATE:EMPHASIZED_ACCELERATE).start();}
     }
     private String speedLabel(){String v=rate==(int)rate?String.valueOf((int)rate):String.valueOf(rate).replace('.',',');return v+"×";}
     private void cycleSpeed(){float[] rates={1f,1.25f,1.5f,2f,0.75f};int i=0;for(int k=0;k<rates.length;k++)if(Math.abs(rates[k]-rate)<0.01f)i=k;rate=rates[(i+1)%rates.length];
@@ -438,12 +497,16 @@ public class RecordingActivity extends Screen {
     // ---------- Sin transcribir ----------
     private void showNew(){
         Settings s=new Settings(this);LinearLayout card=ui.card();card.setPadding(ui.dp(S5),ui.dp(S5),ui.dp(S5),ui.dp(S5));
-        card.addView(ui.tile(R.drawable.ic_sparkle,p.primary,p.primaryContainer,44,24));
-        TextView h=ui.text("Transcribe este audio",Type.TITLE_LARGE,p.onSurface);h.setPadding(0,ui.dp(S3),0,ui.dp(S1));card.addView(h);
+        card.addView(sparkTile(44));
+        TextView h=ui.heading("Transcribe este audio",Type.TITLE_LARGE);h.setPadding(0,ui.dp(S4),0,ui.dp(S1));card.addView(h);
         card.addView(ui.text(s.hasKey()?"Toca «Transcribir» abajo. Al transcribir eliges si separar voces. Proveedor: "+SettingsActivity.modelSummary(s)+".":"Agrega tu clave de API para transcribir: toca «Transcribir» abajo. Solo pagas lo que usas en tu cuenta del proveedor.",Type.BODY_MEDIUM,p.onSurfaceVariant));
         if(s.hasKey()&&s.provider().equals("openai")){double voices=Pricing.estimate("openai","gpt-4o-transcribe-diarize",recording.duration),text=Pricing.estimate("openai",s.textModel(),recording.duration);
-            if(voices>=0&&text>=0){TextView c=ui.text("≈ "+Pricing.usd(voices)+" separando voces · ≈ "+Pricing.usd(text)+" solo el texto",Type.BODY_SMALL,p.onSurfaceVariant);c.setPadding(0,ui.dp(S2),0,0);card.addView(c);}}
-        content.addView(card,ui.top(S2));
+            // Los dos costos como píldoras, una bajo la otra (juntas no caben en un teléfono angosto): se comparan de un vistazo.
+            if(voices>=0&&text>=0){
+                TextView both=Ui.tabular(ui.chip("≈ "+Pricing.usd(voices)+" separando voces",p.onPrimaryContainer,p.primaryContainer)),plain=Ui.tabular(ui.chip("≈ "+Pricing.usd(text)+" solo el texto",p.onSurfaceVariant,0));
+                plain.setBackground(outline(this,chipFill(),p.outlineVariant,R_FULL,false));
+                LinearLayout.LayoutParams bl=Ui.wrap();bl.topMargin=ui.dp(S3);card.addView(both,bl);LinearLayout.LayoutParams pl=Ui.wrap();pl.topMargin=ui.dp(S2);card.addView(plain,pl);}}
+        content.addView(card,gap());
     }
 
     // ---------- En curso: titular, partes, etapas, estimación y bitácora (se actualiza en su lugar) ----------
@@ -451,18 +514,22 @@ public class RecordingActivity extends Screen {
     private long phaseSince,conditionsAt,lastEstimateAt;private String shownBlocker;
     private void resetLiveViews(){progHeadline=progParts=progEstimate=progNote=phaseElapsed=upText=null;progBar=upBar=null;progStages=conditions=null;startNow=null;liveTotal=liveRemaining=null;liveState=null;logList=statsHolder=null;conditionsAt=0;shownBlocker=null;}
     private void showQueued(JSONObject st){
-        LinearLayout card=ui.card();card.setPadding(ui.dp(S5),ui.dp(S5),ui.dp(S5),ui.dp(S4));
+        LinearLayout card=ui.card();card.setPadding(ui.dp(S5),ui.dp(S4),ui.dp(S5),ui.dp(S4));
         LinearLayout head=ui.row();head.setGravity(Gravity.TOP);
-        ProgressBar spin=new ProgressBar(this,null,android.R.attr.progressBarStyleSmall);spin.setIndeterminateTintList(ColorStateList.valueOf(p.primary));LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(ui.dp(22),ui.dp(22));sp.topMargin=ui.dp(1);head.addView(spin,sp);head.addView(ui.space(S3));
-        progHeadline=ui.text("",Type.TITLE_MEDIUM,p.onSurface);progHeadline.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);head.addView(progHeadline,new LinearLayout.LayoutParams(0,-2,1));
-        progEstimate=ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant);progEstimate.setFontFeatureSettings("tnum");progEstimate.setPadding(ui.dp(S2),ui.dp(1),0,0);head.addView(progEstimate);
+        // La fila se alinea arriba (el titular puede ocupar dos líneas); el indicador y el titular bajan 5 dp para quedar
+        // centrados con la píldora de la estimación, que mide 32 dp.
+        ProgressBar spin=new ProgressBar(this,null,android.R.attr.progressBarStyleSmall);spin.setIndeterminateTintList(ColorStateList.valueOf(p.primary));LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(ui.dp(22),ui.dp(22));sp.topMargin=ui.dp(6);head.addView(spin,sp);head.addView(ui.space(S3));
+        progHeadline=ui.text("",Type.TITLE_MEDIUM,p.onSurface);progHeadline.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);progHeadline.setPadding(0,ui.dp(5),0,0);head.addView(progHeadline,new LinearLayout.LayoutParams(0,-2,1));
+        // La estimación («≈ 2–4 min», «casi lista») en una píldora menta: es lo que más se mira mientras espera.
+        progEstimate=Ui.tabular(ui.chip("",p.onPrimaryContainer,p.primaryContainer));LinearLayout.LayoutParams el=Ui.wrap();el.setMarginStart(ui.dp(S2));head.addView(progEstimate,el);
         card.addView(head,Ui.fill());
         phaseElapsed=ui.text("",Type.BODY_SMALL,p.onSurfaceVariant);phaseElapsed.setFontFeatureSettings("tnum");phaseElapsed.setPadding(ui.dp(22+S3),ui.dp(2),0,0);card.addView(phaseElapsed);
         if(st.has("retranscribe")){TextView r=ui.text("Volviendo a transcribir · tu versión anterior se conserva",Type.BODY_MEDIUM,p.onSurfaceVariant);r.setPadding(0,ui.dp(S3),0,0);card.addView(r);}
-        progParts=ui.text("",Type.BODY_LARGE,p.onSurface);progParts.setPadding(0,ui.dp(S4),0,ui.dp(S2));card.addView(progParts);
-        progBar=new Meter(this,p.primary,p.secondaryContainer);card.addView(progBar,new LinearLayout.LayoutParams(-1,ui.dp(8)));
+        progParts=Ui.tabular(ui.text("",Type.TITLE_MEDIUM,p.onSurface));progParts.setPadding(0,ui.dp(S4),0,ui.dp(S2));card.addView(progParts);
+        // Barras en verde sobre menta: avanzan solo con lo terminado de verdad.
+        progBar=new Meter(this,p.primary,p.primaryContainer);card.addView(progBar,new LinearLayout.LayoutParams(-1,ui.dp(8)));
         upText=ui.text("",Type.LABEL_LARGE,p.onSurfaceVariant);upText.setFontFeatureSettings("tnum");upText.setPadding(0,ui.dp(S4),0,ui.dp(S2));card.addView(upText);
-        upBar=new Meter(this,p.primary,p.secondaryContainer);card.addView(upBar,new LinearLayout.LayoutParams(-1,ui.dp(8)));
+        upBar=new Meter(this,p.primary,p.primaryContainer);card.addView(upBar,new LinearLayout.LayoutParams(-1,ui.dp(8)));
         HorizontalScrollView hs=new HorizontalScrollView(this);hs.setHorizontalScrollBarEnabled(false);progStages=ui.row();hs.addView(progStages);card.addView(hs,ui.top(S4));
         conditions=ui.column();conditions.setPadding(0,ui.dp(S3),0,0);card.addView(conditions,Ui.fill());
         startNow=ui.button("Empezar ahora",R.drawable.ic_play,Ui.Style.TONAL,v->{if(Pipeline.startForeground(this))toast("Transcribiendo en primer plano");else message("Empezar ahora","Android no permitió empezar todavía. Se hará automáticamente.");});
@@ -470,7 +537,7 @@ public class RecordingActivity extends Screen {
         View div=new View(this);div.setBackgroundColor(p.outlineVariant);LinearLayout.LayoutParams dl=new LinearLayout.LayoutParams(-1,Math.max(1,ui.dp(1)));dl.topMargin=ui.dp(S4);card.addView(div,dl);
         progNote=ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant);progNote.setPadding(0,ui.dp(S3),0,0);card.addView(progNote);
         card.addView(details(st,true),Ui.fill());
-        content.addView(card,ui.top(S2));
+        content.addView(card,gap());
         liveState=st;renderConditions();updateProgress(st);
     }
     /** Actualiza la tarjeta en su lugar con el estado nuevo (sin reconstruir la pantalla). */
@@ -500,11 +567,14 @@ public class RecordingActivity extends Screen {
         if(new Settings(this).noteAuto()&&Notes.canGenerate(this))stage("Nota",0);
         stage("Lista",0);
     }
-    /** state: 0 pendiente, 1 en curso, 2 listo. */
+    /**
+     * state: 0 pendiente, 1 en curso, 2 listo. Píldoras: lo listo en menta con ✓, lo que está en curso con borde verde
+     * (lo que se mira ahora) y lo pendiente solo con un borde tenue.
+     */
     private void stage(String label,int state){
-        TextView t=ui.text(state==2?"✓ "+label:label,Type.LABEL_MEDIUM,state==2?p.primary:state==1?p.onSecondaryContainer:p.onSurfaceVariant);
-        t.setGravity(Gravity.CENTER);t.setMinHeight(ui.dp(28));t.setPadding(ui.dp(10),0,ui.dp(10),0);
-        t.setBackground(state==2?shape(this,p.surfaceContainerLow,R_SMALL):state==1?shape(this,p.secondaryContainer,R_SMALL):outline(this,0x00000000,p.outlineVariant,R_SMALL,false));
+        TextView t=Ui.tabular(ui.text(state==2?"✓ "+label:label,Type.LABEL_MEDIUM,state==2?p.onPrimaryContainer:state==1?p.primary:p.onSurfaceVariant));
+        t.setGravity(Gravity.CENTER);t.setMinHeight(ui.dp(28));t.setPadding(ui.dp(S3),0,ui.dp(S3),0);
+        t.setBackground(state==2?shape(this,p.primaryContainer,R_FULL):state==1?outline(this,chipFill(),p.primary,R_FULL,false):outline(this,0x00000000,p.outlineVariant,R_FULL,false));
         t.setContentDescription(label+(state==2?": listo":state==1?": en curso":": pendiente"));
         LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginEnd(ui.dp(6));progStages.addView(t,lp);
     }
@@ -560,7 +630,7 @@ public class RecordingActivity extends Screen {
             condition(chargeOk,s.charging()?(charging?"Cargando":"Se requiere conectar el cargador"):"Cargador no requerido");
             condition(batteryOk,"Batería "+level+" %"+(batteryOk?"":" · Android espera a que cargues"));
             // Con la optimización activa, algunos teléfonos congelan la app con la pantalla bloqueada y cortan la conexión.
-            condition(free,free?"Puede trabajar con la pantalla bloqueada":"Android optimiza la batería de Voz local · puede cortar la transcripción al bloquear");
+            condition(free,free?"Puede trabajar con la pantalla bloqueada":"Android optimiza la batería de Verbapp · puede cortar la transcripción al bloquear");
             if(!free){Ui.Btn allow=ui.button("Permitir en segundo plano",R.drawable.ic_battery,Ui.Style.TONAL,v->RecordingActions.allowBackground(this));conditions.addView(allow,ui.top(S2));}
         }
         refreshWaiting(blocker);
@@ -580,7 +650,8 @@ public class RecordingActivity extends Screen {
     private TextView liveTotal,liveRemaining;private JSONObject liveState;private LinearLayout logList,statsHolder;private int logCount=-1;private long logLast;
     /** Grilla de métricas. live=true: tiempo total y restante se actualizan cada 250 ms. El nombre del modelo vive solo aquí. */
     private View stats(JSONObject st,boolean live){
-        LinearLayout grid=ui.column();grid.setBackground(shape(this,p.surfaceContainerLow,R_CONTROL));grid.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),ui.dp(S3));
+        // Panel interior más claro que el vidrio que lo rodea (como los datos de «Tu semana»).
+        LinearLayout grid=ui.column();grid.setBackground(shape(this,chipFill(),R_CONTROL+S1));grid.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),ui.dp(S3));
         long now=System.currentTimeMillis(),queued=st.optLong("queuedAt",now),audio=st.optLong("audioMs",recording.duration),doneAudio=st.optLong("doneAudioMs");
         long elapsed=live?now-queued:st.optLong("doneIn",now-queued);String model=st.optString("model","");
         List<String[]> cells=new ArrayList<>();
@@ -598,7 +669,7 @@ public class RecordingActivity extends Screen {
         int retries=st.optInt("retries",st.optInt("attempts"));if(retries>0)cells.add(new String[]{"Reintentos",retries+(st.optInt("localCuts")>0?" · "+st.optInt("localCuts")+" por el teléfono":"")});
         for(int i=0;i<cells.size();i+=2){
             LinearLayout line=ui.row();line.setGravity(Gravity.TOP);line.setPadding(0,ui.dp(S1),0,ui.dp(S1));
-            for(int k=i;k<Math.min(i+2,cells.size());k++){LinearLayout cell=ui.column();cell.addView(ui.text(cells.get(k)[0],Type.BODY_SMALL,p.onSurfaceVariant));TextView v=ui.text(cells.get(k)[1],Type.TITLE_SMALL,p.onSurface);v.setFontFeatureSettings("tnum");cell.addView(v);line.addView(cell,new LinearLayout.LayoutParams(0,-2,1));
+            for(int k=i;k<Math.min(i+2,cells.size());k++){LinearLayout cell=ui.column();cell.addView(ui.text(cells.get(k)[0],Type.LABEL_MEDIUM,p.onSurfaceVariant));TextView v=ui.text(cells.get(k)[1],Type.TITLE_SMALL,p.onSurface);v.setFontFeatureSettings("tnum");cell.addView(v);line.addView(cell,new LinearLayout.LayoutParams(0,-2,1));
                 if(live&&k==0)liveTotal=v;if(live&&k==1)liveRemaining=v;}
             if(cells.size()-i==1)line.addView(ui.flex());grid.addView(line,Ui.fill());
         }
@@ -620,7 +691,7 @@ public class RecordingActivity extends Screen {
         LinearLayout box=ui.column();JSONArray log=st.optJSONArray("log");
         if(!live&&(log==null||log.length()==0))return box;
         LinearLayout body=ui.column();
-        if(live)body.setPadding(0,ui.dp(S2),0,0);else{body.setBackground(shape(this,p.card,R_CARD));body.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),ui.dp(S3));}
+        if(live)body.setPadding(0,ui.dp(S2),0,0);else{body.setBackground(glass(this,p,R_CARD));body.setPadding(ui.dp(S4),ui.dp(S4),ui.dp(S4),ui.dp(S3));}
         LinearLayout statsBox=ui.column();body.addView(statsBox,Ui.fill());if(live||st.has("model"))statsBox.addView(stats(st,live),Ui.fill());
         TextView h=ui.text("Bitácora",Type.TITLE_SMALL,p.primary);h.setPadding(0,ui.dp(S4),0,ui.dp(S1));body.addView(h);
         LinearLayout list=ui.column();body.addView(list,Ui.fill());renderLog(list,log);
@@ -636,14 +707,16 @@ public class RecordingActivity extends Screen {
             LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(0,ui.dp(S1),0,ui.dp(S1));TextView time=ui.text(f.format(new Date(t)),Type.BODY_SMALL,p.onSurfaceVariant);time.setFontFeatureSettings("tnum");r.addView(time,new LinearLayout.LayoutParams(ui.dp(64),-2));
             TextView m=ui.text(e.optString("m")+(next>0&&next-t>=1000?"  ("+Recording.time(next-t)+")":""),Type.BODY_SMALL,p.onSurface);r.addView(m,new LinearLayout.LayoutParams(0,-2,1));list.addView(r);}
     }
+    /** Vidrio como las demás tarjetas; el error se distingue por el círculo rojo con la alerta, sin teñir toda la tarjeta. */
     private void showFailed(JSONObject st){
-        LinearLayout card=ui.card();card.setBackground(shape(this,p.errorContainer,R_CARD));LinearLayout row=ui.row();row.setGravity(Gravity.TOP);row.addView(ui.icon(R.drawable.ic_alert,p.onErrorContainer,24));row.addView(ui.space(S3));
-        LinearLayout texts=ui.column();texts.addView(ui.text("No se pudo transcribir",Type.TITLE_MEDIUM,p.onErrorContainer));texts.addView(ui.text(st.optString("status","No se pudo transcribir"),Type.BODY_MEDIUM,p.onErrorContainer));
-        TextView hint=ui.text("Cuando lo revises, toca «Reintentar» abajo.",Type.BODY_SMALL,p.onErrorContainer);hint.setPadding(0,ui.dp(S2),0,0);texts.addView(hint);
-        row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));card.addView(row,Ui.fill());
+        LinearLayout card=ui.card();card.setPadding(ui.dp(S5),ui.dp(S5),ui.dp(S5),ui.dp(S4));
+        card.addView(ui.tile(R.drawable.ic_alert,p.onErrorContainer,p.errorContainer,44,24));
+        TextView h=ui.heading("No se pudo transcribir",Type.TITLE_LARGE);h.setPadding(0,ui.dp(S4),0,ui.dp(S1));card.addView(h);
+        card.addView(ui.text(st.optString("status","No se pudo transcribir"),Type.BODY_MEDIUM,p.onSurface));
+        TextView hint=ui.text("Cuando lo revises, toca «Reintentar» abajo.",Type.BODY_SMALL,p.onSurfaceVariant);hint.setPadding(0,ui.dp(S2),0,0);card.addView(hint);
         if(Retranscribe.hasPrevious(this,id))card.addView(ui.button("Volver a la versión anterior",R.drawable.ic_refresh,Ui.Style.TONAL,v->restorePrevious()),ui.top(S4));
         card.addView(ui.button("Revisar ajustes",0,Ui.Style.PLAIN,v->startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true))),ui.top(S1));
-        content.addView(card,ui.top(S2));content.addView(details(st,false));
+        content.addView(card,gap());content.addView(details(st,false));
     }
     private void restorePrevious(){
         try{Retranscribe.restorePrevious(this,id);Diagnostics.event("retranscribe_restored",id);reload();snackbar("Volviste a la versión anterior",null,null);}
@@ -665,18 +738,26 @@ public class RecordingActivity extends Screen {
             boolean diarized=transcript.diarized();Map<String,String> names=transcript.speakers();JSONArray segments=transcript.segments();
             if(onlySpeaker!=null&&!names.containsKey(onlySpeaker))onlySpeaker=null;
             List<String> order=transcript.order();colors.clear();for(String key:names.keySet())colors.put(key,p.speaker(order.indexOf(key)));
-            if(diarized&&!names.isEmpty())content.addView(ficha(names),Ui.fill());
+            if(diarized&&!names.isEmpty())content.addView(ficha(names),gap());
             if(demo)content.addView(note(R.drawable.ic_info,"Texto de demostración: no proviene de la API. Prueba a nombrar las voces."));
             // Aviso honesto: la separación automática puede equivocarse; se oculta cuando el usuario ya revisó las voces.
             if(diarized&&!transcript.reviewed()&&segments.length()>0)content.addView(note(R.drawable.ic_info,"Voces separadas automáticamente: pueden tener errores. Toca el nombre de una intervención para escuchar y corregir quién habla."));
             else if(!diarized&&transcript.data.optInt("parts",1)>1)content.addView(note(R.drawable.ic_info,"Audio procesado en partes: los tiempos indican el inicio de cada parte."));
             if(!demo&&segments.length()>0)content.addView(noteCard(st,names));
             addMarks();
-            TextView heading=ui.text("Transcripción",Type.TITLE_SMALL,p.primary);heading.setPadding(ui.dp(S2),ui.dp(S6),ui.dp(S2),ui.dp(S1));if(Build.VERSION.SDK_INT>=28)heading.setAccessibilityHeading(true);content.addView(heading);
-            if(onlySpeaker!=null){LinearLayout f=ui.row();f.setPadding(ui.dp(S2),0,0,ui.dp(S1));f.addView(ui.text("Mostrando solo a "+names.get(onlySpeaker),Type.BODY_MEDIUM,p.onSurfaceVariant),new LinearLayout.LayoutParams(0,-2,1));
-                f.addView(ui.button("Ver todo",0,Ui.Style.PLAIN,v->{onlySpeaker=null;reload(true);}));content.addView(f,Ui.fill());}
-            LinearLayout doc=ui.column();
-            if(segments.length()==0)doc.addView(ui.text("No se detectó habla en este audio.",Type.BODY_LARGE,p.onSurfaceVariant));
+            // La transcripción es una tarjeta de vidrio con poco margen: las intervenciones van casi a todo el ancho (se leen
+            // mejor) y el resaltado de la que suena queda con esquinas concéntricas a las de la tarjeta.
+            LinearLayout doc=ui.card();doc.setPadding(ui.dp(S1),ui.dp(S2),ui.dp(S1),ui.dp(S2));
+            LinearLayout head=cardHeader(doc,R.drawable.ic_transcribe,"Transcripción",null);head.setPadding(ui.dp(S3),0,ui.dp(S3),ui.dp(S1));
+            if(onlySpeaker!=null){
+                // Filtro activo en una franja menta, con la salida a mano.
+                LinearLayout f=ui.row();f.setBackground(shape(this,p.primaryContainer,R_FULL));f.setPadding(ui.dp(S4),0,ui.dp(S1),0);f.setMinimumHeight(ui.dp(48));
+                View dot=new View(this);Integer only=colors.get(onlySpeaker);dot.setBackground(oval(only==null?p.primary:only));f.addView(dot,new LinearLayout.LayoutParams(ui.dp(8),ui.dp(8)));f.addView(ui.space(S2));
+                // Sin cortar: un nombre largo baja a una segunda línea (la franja crece) en vez de perderse con «…».
+                f.addView(ui.text("Mostrando solo a "+names.get(onlySpeaker),Type.LABEL_LARGE,p.onPrimaryContainer),new LinearLayout.LayoutParams(0,-2,1));
+                f.addView(ui.button("Ver todo",0,Ui.Style.PLAIN,v->{onlySpeaker=null;reload(true);}));
+                LinearLayout.LayoutParams fl=Ui.fill();fl.setMargins(ui.dp(S2),ui.dp(S1),ui.dp(S2),ui.dp(S2));doc.addView(f,fl);}
+            if(segments.length()==0){TextView none=ui.text("No se detectó habla en este audio.",Type.BODY_LARGE,p.onSurfaceVariant);none.setPadding(ui.dp(S3),ui.dp(S2),ui.dp(S3),ui.dp(S3));doc.addView(none);}
             // Los separadores de parte solo se ven al corregir voces: ahí es donde una voz puede cruzarse entre partes.
             boolean dividers=correctionOpened||transcript.edited();
             List<Double> blocks=diarized?transcript.blockStarts(demo?null:st):new ArrayList<>();
@@ -691,8 +772,9 @@ public class RecordingActivity extends Screen {
                 if(onlySpeaker==null||onlySpeaker.equals(speaker)){doc.addView(turn(i,j,speaker,start,end,names,diarized,first),Ui.fill());first=false;}
                 i=j;
             }
-            content.addView(doc,Ui.fill());
-            if(!demo){String foot=footer(st);if(!foot.isEmpty()){TextView t=ui.text(foot,Type.BODY_MEDIUM,p.onSurfaceVariant);t.setPadding(ui.dp(S2),ui.dp(S5),ui.dp(S2),0);content.addView(t);}
+            content.addView(doc,gap());
+            // Pie centrado y discreto, en Outfit: cierra el documento.
+            if(!demo){String foot=footer(st);if(!foot.isEmpty()){TextView t=Ui.tabular(ui.text(foot,Type.LABEL_MEDIUM,p.onSurfaceVariant));t.setGravity(Gravity.CENTER);t.setPadding(ui.dp(S4),ui.dp(S5),ui.dp(S4),0);content.addView(t,Ui.fill());}
                 if(st.has("log"))content.addView(details(st,false));}
             updateStrip(segments,diarized);
         }catch(Exception e){content.addView(ui.text("No se pudo leer la transcripción.",Type.BODY_LARGE,p.error));}
@@ -709,20 +791,39 @@ public class RecordingActivity extends Screen {
         long q=st.optLong("queuedAt"),d=st.optLong("doneIn");if(q>0&&d>0)return q+d;
         java.io.File f=FilesStore.file(this,id,".transcript.json");return f.isFile()?f.lastModified():0;
     }
-    /** Ficha: cada persona con su color y su parte del tiempo, y si las voces ya están revisadas. */
+    /**
+     * Ficha en una tarjeta de vidrio: arriba «Personas» y si las voces ya están revisadas; al medio, una barra con el
+     * reparto del tiempo de habla (un tramo por persona, en su color); abajo, cada persona como píldora con su punto y su %.
+     * La persona que filtra la transcripción («Ver solo sus intervenciones») va en tinta, como un filtro elegido.
+     */
     private View ficha(Map<String,String> names)throws JSONException{
-        HorizontalScrollView hs=new HorizontalScrollView(this);hs.setHorizontalScrollBarEnabled(false);LinearLayout chips=ui.row();hs.addView(chips);
+        LinearLayout card=ui.card();card.setPadding(ui.dp(S4),ui.dp(S2),ui.dp(S4),ui.dp(S3));
+        LinearLayout head=cardHeader(card,R.drawable.ic_people,"Personas",null);
+        boolean reviewed=transcript.reviewed();
+        TextView status=chip(reviewed?"Voces revisadas":"Voces sin revisar",reviewed?R.drawable.ic_check:R.drawable.ic_voice,p.primary,reviewed?p.onSurfaceVariant:p.onPrimaryContainer,reviewed?0:p.primaryContainer,reviewed);
+        status.setContentDescription((reviewed?"Voces revisadas":"Voces sin revisar")+". Nombrar voces");status.setOnClickListener(v->openNameVoices());
+        // El estado va junto al título solo si los dos caben enteros. Con letra grande le quitaba el ancho al título y partía
+        // «Personas»: en ese caso va al final de la fila de personas, como en 0.6.
+        android.text.TextPaint probe=new android.text.TextPaint();probe.setTypeface(AppTheme.font(this,Type.TITLE_MEDIUM));probe.setTextSize(android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP,Type.TITLE_MEDIUM.size,getResources().getDisplayMetrics()));
+        status.measure(View.MeasureSpec.UNSPECIFIED,View.MeasureSpec.UNSPECIFIED);
+        boolean beside=probe.measureText("Personas")+status.getMeasuredWidth()+ui.dp(S2)<=getResources().getDisplayMetrics().widthPixels-ui.dp(2*S4+2*S4+20+S3);
+        if(beside)head.addView(status,Ui.wrap());
         Map<String,Double> share=transcript.talkShare();
+        float[] parts=new float[names.size()];int[] tones=new int[names.size()];int n=0;
+        for(String key:names.keySet()){Double v=share.get(key);parts[n]=v==null?0f:v.floatValue();tones[n]=colors.get(key);n++;}
+        LinearLayout.LayoutParams bl=new LinearLayout.LayoutParams(-1,ui.dp(8));bl.topMargin=ui.dp(S2);card.addView(new ShareBar(this,parts,tones),bl);
+        // Las píldoras se desplazan de borde a borde de la tarjeta (sin cortarse en su margen).
+        HorizontalScrollView hs=new HorizontalScrollView(this);hs.setHorizontalScrollBarEnabled(false);LinearLayout chips=ui.row();chips.setPadding(ui.dp(S4),0,ui.dp(S2),0);hs.addView(chips);
         for(String key:names.keySet()){int color=colors.get(key);boolean only=key.equals(onlySpeaker);String pct=percent(share.get(key));
-            LinearLayout c=ui.row();c.setBackground(chipBackground(only?shape(this,p.secondaryContainer,R_SMALL):outline(this,0x00000000,p.outline,R_SMALL,false)));c.setPadding(ui.dp(S3),0,ui.dp(S3),0);c.setMinimumHeight(ui.dp(48));
-            View dot=new View(this);dot.setBackground(oval(color));c.addView(dot,new LinearLayout.LayoutParams(ui.dp(8),ui.dp(8)));c.addView(ui.space(S2));
-            c.addView(ui.text(names.get(key)+(pct.isEmpty()?"":"  "+pct),Type.LABEL_LARGE,only?p.onSecondaryContainer:p.onSurface));
+            LinearLayout c=ui.row();c.setBackground(pillBackground(only?shape(this,p.ink,R_FULL):outline(this,chipFill(),p.outlineVariant,R_FULL,false)));c.setPadding(ui.dp(S3),0,ui.dp(S4),0);c.setMinimumHeight(ui.dp(48));
+            GradientDrawable mark=oval(color);if(only)mark.setStroke(Math.max(1,ui.dp(1.5f)),p.onInk);View dot=new View(this);dot.setBackground(mark);c.addView(dot,new LinearLayout.LayoutParams(ui.dp(10),ui.dp(10)));c.addView(ui.space(S2));
+            c.addView(ui.text(names.get(key),Type.LABEL_LARGE,only?p.onInk:p.onSurface));
+            if(!pct.isEmpty()){TextView pc=Ui.tabular(ui.text(pct,Type.LABEL_LARGE,only?withAlpha(p.onInk,0xB3):p.onSurfaceVariant));pc.setPadding(ui.dp(6),0,0,0);c.addView(pc);}
             c.setClickable(true);c.setFocusable(true);c.setContentDescription(names.get(key)+(pct.isEmpty()?"":", "+pct+" del tiempo")+". Opciones");c.setAccessibilityDelegate(Ui.buttonRole());c.setOnClickListener(v->personSheet(key));Ui.pressable(c);
             LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginEnd(ui.dp(S2));chips.addView(c,lp);}
-        boolean reviewed=transcript.reviewed();
-        TextView status=chip(reviewed?"Voces revisadas":"Voces sin revisar",reviewed?R.drawable.ic_check:R.drawable.ic_people,reviewed?p.onSurfaceVariant:p.onSecondaryContainer,reviewed?0:p.secondaryContainer,reviewed);
-        status.setContentDescription((reviewed?"Voces revisadas":"Voces sin revisar")+". Nombrar voces");status.setOnClickListener(v->openNameVoices());chips.addView(status,Ui.wrap());
-        return hs;
+        if(!beside)chips.addView(status,Ui.wrap());
+        LinearLayout.LayoutParams hl=Ui.fill();hl.topMargin=ui.dp(S2);hl.setMarginStart(-ui.dp(S4));hl.setMarginEnd(-ui.dp(S4));card.addView(hs,hl);
+        return card;
     }
     private static String percent(Double share){if(share==null)return "";long r=Math.round(share*100);return r<1?"<1 %":r+" %";}
     /** Franja de la onda con el color de quién habla en cada tramo (al corregir una voz, cambia al instante). */
@@ -736,29 +837,61 @@ public class RecordingActivity extends Screen {
         for(int i=0;i<runs.size();i++){from[i]=runs.get(i)[0];to[i]=runs.get(i)[1];c[i]=cols.get(i);}
         scrubber.setStrip(from,to,c);
     }
-    private View note(int icon,String value){LinearLayout n=ui.row();n.setGravity(Gravity.TOP);n.setBackground(shape(this,p.primaryContainer,R_CONTROL));n.setPadding(ui.dp(S3),ui.dp(S3),ui.dp(S3),ui.dp(S3));n.addView(ui.icon(icon,p.primary,18));n.addView(ui.space(S2));n.addView(ui.text(value,Type.BODY_MEDIUM,p.onSurface),new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams lp=Ui.fill();lp.topMargin=ui.dp(S2);lp.bottomMargin=ui.dp(S1);n.setLayoutParams(lp);return n;}
-    /** Chip de 36 dp visibles dentro de un área táctil de 48 dp. */
-    private Drawable chipBackground(GradientDrawable fill){int v=ui.dp(6);return new RippleDrawable(ColorStateList.valueOf(p.ripple),new InsetDrawable(fill,0,v,0,v),new InsetDrawable(shape(this,0xFF000000,R_SMALL),0,v,0,v));}
-    private TextView chip(String text,int icon,int fg,int bg,boolean outlined){
+    /** Aviso en menta (lo que destaca): ícono verde y texto en el verde profundo del contenedor. */
+    private View note(int icon,String value){
+        LinearLayout n=ui.row();n.setGravity(Gravity.TOP);n.setBackground(shape(this,p.primaryContainer,R_CONTROL+S1));n.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),ui.dp(S3));
+        ImageView i=ui.icon(icon,p.primary,18);((LinearLayout.LayoutParams)i.getLayoutParams()).topMargin=ui.dp(1);n.addView(i);n.addView(ui.space(S3));
+        n.addView(ui.text(value,Type.BODY_MEDIUM,p.onPrimaryContainer),new LinearLayout.LayoutParams(0,-2,1));n.setLayoutParams(gap());return n;
+    }
+    /**
+     * Encabezado de tarjeta: ícono verde de 20 dp + título en Outfit (como «Your Weekly Activity» en la referencia).
+     * Devuelve la fila, para agregar acciones a la derecha.
+     */
+    private LinearLayout cardHeader(LinearLayout card,int icon,String title,String subtitle){return cardHeader(card,ui.icon(icon,p.primary,20),title,subtitle);}
+    private LinearLayout cardHeader(LinearLayout card,View mark,String title,String subtitle){
+        LinearLayout head=ui.row();head.setMinimumHeight(ui.dp(48));
+        mark.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(20),ui.dp(20)));head.addView(mark);head.addView(ui.space(S3));
+        // Cortes de línea equilibrados: «Nota para tu / segundo cerebro» en vez de dejar una palabra sola abajo.
+        LinearLayout titles=ui.column();TextView t=ui.heading(title,Type.TITLE_MEDIUM);t.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_BALANCED);titles.addView(t);
+        if(subtitle!=null){TextView s=ui.text(subtitle,Type.BODY_SMALL,p.onSurfaceVariant);s.setPadding(0,ui.dp(2),0,0);titles.addView(s);}
+        head.addView(titles,new LinearLayout.LayoutParams(0,-2,1));card.addView(head,Ui.fill());return head;
+    }
+    /** Círculo menta con el destello ✦ verde de la marca (lo que la IA hará o hizo). */
+    private FrameLayout sparkTile(int sizeDp){
+        FrameLayout f=new FrameLayout(this);f.setBackground(oval(p.primaryContainer));f.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        int icon=Math.round(sizeDp*0.5f);f.addView(new Spark(this,p.primary),new FrameLayout.LayoutParams(ui.dp(icon),ui.dp(icon),Gravity.CENTER));
+        f.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(sizeDp),ui.dp(sizeDp)));return f;
+    }
+    /** Relleno de una píldora sobre vidrio: blanco con alfa en claro (como los datos de «Tu semana»), vidrio en oscuro. */
+    private int chipFill(){return p.dark?p.glass:0xB3FFFFFF;}
+    /** Píldora de 36 dp visibles dentro de un área táctil de 48 dp. */
+    private Drawable pillBackground(GradientDrawable fill){int v=ui.dp(6);return new RippleDrawable(ColorStateList.valueOf(p.ripple),new InsetDrawable(fill,0,v,0,v),new InsetDrawable(shape(this,0xFF000000,R_FULL),0,v,0,v));}
+    /** Píldora tocable (como ui.chip / ui.outlinedChip, pero con 48 dp de área táctil): de vidrio con borde, o rellena con bg. */
+    private TextView chip(String text,int icon,int iconColor,int fg,int bg,boolean outlined){
         TextView t=ui.oneLine(ui.text(text,Type.LABEL_LARGE,fg));t.setGravity(Gravity.CENTER_VERTICAL);t.setMinHeight(ui.dp(48));
-        t.setBackground(chipBackground(outlined?outline(this,0x00000000,p.outline,R_SMALL,false):shape(this,bg,R_SMALL)));t.setPadding(ui.dp(icon!=0?S2:S3),0,ui.dp(S3),0); // después del fondo: un fondo con márgenes reemplaza el padding
-        if(icon!=0){Drawable d=getDrawable(icon).mutate();d.setTint(outlined?p.primary:fg);d.setBounds(0,0,ui.dp(18),ui.dp(18));t.setCompoundDrawablesRelative(d,null,null,null);t.setCompoundDrawablePadding(ui.dp(S2));}
+        t.setBackground(pillBackground(outlined?outline(this,chipFill(),p.outlineVariant,R_FULL,false):shape(this,bg,R_FULL)));t.setPadding(ui.dp(icon!=0?S3:S4),0,ui.dp(S4),0); // después del fondo: un fondo con márgenes reemplaza el padding
+        if(icon!=0){Drawable d=getDrawable(icon).mutate();d.setTint(iconColor);d.setBounds(0,0,ui.dp(18),ui.dp(18));t.setCompoundDrawablesRelative(d,null,null,null);t.setCompoundDrawablePadding(ui.dp(6));}
         t.setAccessibilityDelegate(Ui.buttonRole());Ui.pressable(t);return t;
     }
 
     // ---------- Momentos ★ ----------
     private long[] markTimes(){JSONArray m=Marks.list(this,id);long[] out=new long[m.length()];for(int i=0;i<m.length();i++){JSONObject o=m.optJSONObject(i);out[i]=o==null?0:o.optLong("t");}Arrays.sort(out);return out;}
     private boolean hasMark(double start,double end){long a=(long)(start*1000)-500,b=(long)(end*1000)+500;for(long m:marksMs)if(m>=a&&m<=b)return true;return false;}
+    /**
+     * «Momentos ★» en una tarjeta de vidrio: cada ★ es una píldora menta con su estrella verde y la hora (toca para
+     * escuchar, mantén para nombrarlo). La línea de ayuda hace visible el toque largo, que antes solo anunciaba TalkBack.
+     */
     private View marksRow(){
         if(demo||marksMs.length==0)return null;JSONArray marks=Marks.list(this,id);
-        LinearLayout box=ui.column();TextView h=ui.text("Momentos ★",Type.TITLE_SMALL,p.primary);h.setPadding(ui.dp(S2),ui.dp(S4),0,0);if(Build.VERSION.SDK_INT>=28)h.setAccessibilityHeading(true);box.addView(h);
-        HorizontalScrollView hs=new HorizontalScrollView(this);hs.setHorizontalScrollBarEnabled(false);LinearLayout row=ui.row();hs.addView(row);
+        LinearLayout card=ui.card();card.setPadding(ui.dp(S4),ui.dp(S2),ui.dp(S4),ui.dp(S3));
+        cardHeader(card,R.drawable.ic_star_fill,"Momentos","Toca para escuchar · mantén para nombrar"); // la ★ del nombre es el ícono
+        HorizontalScrollView hs=new HorizontalScrollView(this);hs.setHorizontalScrollBarEnabled(false);LinearLayout row=ui.row();row.setPadding(ui.dp(S4),0,ui.dp(S2),0);hs.addView(row);
         for(int i=0;i<marks.length();i++){JSONObject m=marks.optJSONObject(i);if(m==null)continue;long t=m.optLong("t");String label=m.optString("label","").trim();int index=i;
-            TextView c=chip("★ "+Recording.time(t)+(label.isEmpty()?"":" · "+label),0,p.onSecondaryContainer,p.secondaryContainer,false);c.setFontFeatureSettings("tnum");
+            TextView c=Ui.tabular(chip(Recording.time(t)+(label.isEmpty()?"":" · "+label),R.drawable.ic_star_fill,p.primary,p.onPrimaryContainer,p.primaryContainer,false));
             c.setContentDescription("Momento "+Recording.time(t)+(label.isEmpty()?"":", "+label)+". Toca para escuchar; mantén pulsado para editar");
             c.setOnClickListener(v->{Diagnostics.event("mark_played",id);playAt(t);});c.setOnLongClickListener(v->{markSheet(index,t,label);return true;});
             LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginEnd(ui.dp(S2));row.addView(c,lp);}
-        box.addView(hs,Ui.fill());return box;
+        LinearLayout.LayoutParams hl=Ui.fill();hl.topMargin=ui.dp(S1);hl.setMarginStart(-ui.dp(S4));hl.setMarginEnd(-ui.dp(S4));card.addView(hs,hl);return card;
     }
     private void markSheet(int index,long t,String label){
         Sheet s=sheet("Momento "+Recording.time(t),"Ponle un nombre para encontrarlo después («precio», «idea»…).");
@@ -791,22 +924,19 @@ public class RecordingActivity extends Screen {
         if(error!=null)return noteMessage("No se pudo armar la nota",error.isEmpty()?"Vuelve a intentarlo en un momento.":error,"Reintentar",R.drawable.ic_refresh);
         if(Notes.canGenerate(this))return noteMessage("Nota para tu segundo cerebro","Resumen, decisiones, tareas y frases clave de esta grabación, listos para guardar.","Armar nota",R.drawable.ic_sparkle);
         // Sin IA para la nota: una pista corta que lleva directo a configurarla.
-        LinearLayout box=ui.row();box.setPadding(0,ui.dp(S1),0,0);TextView hint=chip("Configura la IA de la nota en Ajustes",R.drawable.ic_sparkle,p.onSurfaceVariant,0,true);
-        hint.setOnClickListener(v->openNoteAi());box.addView(hint);return box;
+        LinearLayout box=ui.row();TextView hint=chip("Configura la IA de la nota en Ajustes",R.drawable.ic_sparkle,p.primary,p.onSurface,0,true);
+        hint.setOnClickListener(v->openNoteAi());box.addView(hint);box.setLayoutParams(gap());return box;
     }
     /** Ajustes con la hoja «IA de la nota» abierta; Atrás vuelve aquí. */
     private void openNoteAi(){startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true).putExtra("noteAi",true));}
-    private LinearLayout noteHeader(LinearLayout card,String subtitle){
-        LinearLayout head=ui.row();head.setMinimumHeight(ui.dp(48));head.addView(ui.icon(R.drawable.ic_sparkle,p.primary,20));head.addView(ui.space(S3));
-        LinearLayout titles=ui.column();TextView t=ui.text("Nota para tu segundo cerebro",Type.TITLE_MEDIUM,p.primary);if(Build.VERSION.SDK_INT>=28)t.setAccessibilityHeading(true);titles.addView(t);
-        if(subtitle!=null)titles.addView(ui.text(subtitle,Type.BODY_SMALL,p.onSurfaceVariant));
-        head.addView(titles,new LinearLayout.LayoutParams(0,-2,1));card.addView(head,Ui.fill());return head;
-    }
-    private LinearLayout noteSurface(){LinearLayout card=ui.card();card.setPadding(ui.dp(S4),ui.dp(S2),ui.dp(S2),ui.dp(S4));LinearLayout.LayoutParams lp=Ui.fill();lp.topMargin=ui.dp(S2);card.setLayoutParams(lp);return card;}
+    /** Título de la nota con el destello ✦ verde del logo: lo que armó la IA lleva la misma chispa que la marca. */
+    private LinearLayout noteHeader(LinearLayout card,String subtitle){return cardHeader(card,new Spark(this,p.primary),"Nota para tu segundo cerebro",subtitle);}
+    private LinearLayout noteSurface(){LinearLayout card=ui.card();card.setPadding(ui.dp(S4),ui.dp(S2),ui.dp(S2),ui.dp(S4));card.setLayoutParams(gap());return card;}
     private View noteSkeleton(){
         LinearLayout card=noteSurface();noteHeader(card,null);
         TextView w=ui.text("Armando la nota…",Type.BODY_MEDIUM,p.onSurfaceVariant);w.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);w.setPadding(0,0,0,ui.dp(S3));card.addView(w);
-        for(float width:new float[]{1f,0.92f,0.7f}){LinearLayout line=ui.row();View bar=new View(this);bar.setBackground(shape(this,p.surfaceContainerHighest,R_SMALL));line.addView(bar,new LinearLayout.LayoutParams(0,ui.dp(12),width));if(width<1f)line.addView(new View(this),new LinearLayout.LayoutParams(0,1,1f-width));
+        // Líneas menta que laten mientras la IA escribe.
+        for(float width:new float[]{1f,0.92f,0.7f}){LinearLayout line=ui.row();View bar=new View(this);bar.setBackground(shape(this,p.primaryContainer,R_FULL));line.addView(bar,new LinearLayout.LayoutParams(0,ui.dp(12),width));if(width<1f)line.addView(new View(this),new LinearLayout.LayoutParams(0,1,1f-width));
             LinearLayout.LayoutParams lp=Ui.fill();lp.bottomMargin=ui.dp(S2);lp.setMarginEnd(ui.dp(S2));card.addView(line,lp);pulse(bar);}
         return card;
     }
@@ -817,7 +947,7 @@ public class RecordingActivity extends Screen {
     }
     private View noteMessage(String title,String text,String action,int icon){
         LinearLayout card=noteSurface();
-        if(title.startsWith("Nota"))noteHeader(card,null);else{TextView t=ui.text(title,Type.TITLE_MEDIUM,p.onSurface);t.setPadding(0,ui.dp(S2),0,ui.dp(S1));card.addView(t);}
+        if(title.startsWith("Nota"))noteHeader(card,null);else cardHeader(card,ui.icon(R.drawable.ic_alert,p.error,20),title,null);
         TextView d=ui.text(text,Type.BODY_MEDIUM,p.onSurfaceVariant);d.setPadding(0,0,ui.dp(S2),0);card.addView(d);
         LinearLayout.LayoutParams lp=Ui.wrap();lp.topMargin=ui.dp(S3);card.addView(ui.button(action,icon,Ui.Style.TONAL,v->generateNote()),lp);
         return card;
@@ -826,19 +956,24 @@ public class RecordingActivity extends Screen {
         Map<String,String> who=noteNames(note,names);
         LinearLayout card=noteSurface();LinearLayout head=noteHeader(card,"Generada por IA · revísala");
         ImageButton more=ui.iconButton(R.drawable.ic_more,"Opciones de la nota",p.onSurfaceVariant,0,48);more.setOnClickListener(v->noteMenu());head.addView(more);
-        ImageButton fold=ui.iconButton(R.drawable.ic_arrow_back,"Contraer la nota",p.onSurfaceVariant,0,48);head.addView(fold);
+        ImageButton fold=ui.iconButton(R.drawable.ic_chevron_down,"Contraer la nota",p.onSurfaceVariant,0,48);head.addView(fold);
         LinearLayout body=ui.column();body.setPadding(0,0,ui.dp(S2),0);
         String summary=Notes.resolve(note.optString("summary",""),who).trim();
         if(!summary.isEmpty()){TextView s=ui.text(summary,Type.BODY_LARGE,p.onSurface);s.setLineSpacing(ui.dp(3),1f);s.setTextIsSelectable(true);s.setPadding(0,ui.dp(S1),0,0);body.addView(s,Ui.fill());}
         bullets(body,"Decisiones",note.optJSONArray("decisions"),who);
         tasks(body,note.optJSONArray("tasks"),who);
         quotes(body,note.optJSONArray("quotes"),who);
-        JSONArray tags=note.optJSONArray("tags");if(tags!=null&&tags.length()>0){StringBuilder b=new StringBuilder();for(int i=0;i<tags.length();i++){String tag=tags.optString(i).trim().replaceFirst("^#","");if(!tag.isEmpty())b.append(b.length()==0?"":"   ").append('#').append(tag);}
-            if(b.length()>0){TextView t=ui.text(b.toString(),Type.BODY_SMALL,p.onSurfaceVariant);t.setPadding(0,ui.dp(S4),0,0);body.addView(t);}}
+        // Etiquetas como píldoras menta que se reparten en líneas como palabras (nunca se cortan por la mitad).
+        JSONArray tags=note.optJSONArray("tags");if(tags!=null&&tags.length()>0){SpannableStringBuilder b=new SpannableStringBuilder();
+            for(int i=0;i<tags.length();i++){String tag=tags.optString(i).trim().replaceFirst("^#","");if(tag.isEmpty())continue;if(b.length()>0)b.append("  ");int from=b.length();b.append('#').append(tag);b.setSpan(new TagSpan(p.primaryContainer,p.onPrimaryContainer,ui.dp(10),ui.dp(5),getResources().getDisplayMetrics().widthPixels-ui.dp(72)),from,b.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);}
+            if(b.length()>0){TextView t=ui.text("",Type.LABEL_MEDIUM,p.onPrimaryContainer);t.setText(b);t.setLineSpacing(ui.dp(S2),1f);t.setPadding(0,ui.dp(S4),0,0);body.addView(t,Ui.fill());}}
         if(error!=null&&!error.isEmpty()){TextView e=ui.text("No se pudo volver a armar: "+error,Type.BODY_SMALL,p.error);e.setPadding(0,ui.dp(S3),0,0);body.addView(e);}
         card.addView(body,Ui.fill());
         TextView collapsed=ui.text(summary.isEmpty()?"Toca para ver la nota":summary,Type.BODY_MEDIUM,p.onSurfaceVariant);collapsed.setMaxLines(2);collapsed.setEllipsize(TextUtils.TruncateAt.END);collapsed.setPadding(0,0,ui.dp(S2),0);card.addView(collapsed);
-        Runnable apply=()->{boolean open=prefs.getBoolean("noteOpen",true);body.setVisibility(open?View.VISIBLE:View.GONE);collapsed.setVisibility(open?View.GONE:View.VISIBLE);fold.setRotation(open?90:-90);fold.setContentDescription(open?"Contraer la nota":"Expandir la nota");};
+        // ⌄ para abrir y ⌃ para cerrar; al tocarla, la flecha gira (sin animación si están quitadas).
+        Runnable apply=()->{boolean open=prefs.getBoolean("noteOpen",true);body.setVisibility(open?View.VISIBLE:View.GONE);collapsed.setVisibility(open?View.GONE:View.VISIBLE);
+            float angle=open?180f:0f;if(AppTheme.motion()&&fold.isAttachedToWindow())fold.animate().rotation(angle).setDuration(MOTION_BASE).setInterpolator(EMPHASIZED).start();else fold.setRotation(angle);
+            fold.setContentDescription(open?"Contraer la nota":"Expandir la nota");};
         apply.run();
         View.OnClickListener toggle=v->{prefs.edit().putBoolean("noteOpen",!prefs.getBoolean("noteOpen",true)).apply();apply.run();};
         fold.setOnClickListener(toggle);collapsed.setOnClickListener(toggle);
@@ -854,7 +989,8 @@ public class RecordingActivity extends Screen {
         if(key==null||key.trim().isEmpty())return "";String k=key.trim().replaceAll("[{}]","");String n=who.get(k);if(n!=null)return n;
         return k.matches("S\\d+")?"":k;
     }
-    private TextView noteLabel(LinearLayout body,String title){TextView t=ui.text(title,Type.LABEL_LARGE,p.onSurfaceVariant);t.setPadding(0,ui.dp(S4),0,ui.dp(S1));body.addView(t);return t;}
+    /** Subtítulo de sección de la nota: verde, en Outfit (como los subtítulos de Ajustes). */
+    private TextView noteLabel(LinearLayout body,String title){TextView t=ui.text(title,Type.TITLE_SMALL,p.primary);t.setPadding(0,ui.dp(S5),0,ui.dp(S1));if(Build.VERSION.SDK_INT>=28)t.setAccessibilityHeading(true);body.addView(t);return t;}
     private void bullets(LinearLayout body,String title,JSONArray items,Map<String,String> who){
         if(items==null||items.length()==0)return;noteLabel(body,title);
         for(int i=0;i<items.length();i++){String text=Notes.resolve(items.optString(i),who).trim();if(text.isEmpty())continue;
@@ -865,8 +1001,9 @@ public class RecordingActivity extends Screen {
         if(tasks==null||tasks.length()==0)return;noteLabel(body,"Tareas");
         for(int i=0;i<tasks.length();i++){JSONObject t=tasks.optJSONObject(i);if(t==null)continue;int index=i;
             String text=Notes.resolve(t.optString("text"),who).trim(),person=whoName(t.optString("who",""),who),when=t.optString("when","").trim();if(text.isEmpty())continue;
-            CheckBox cb=new CheckBox(this);cb.setChecked(t.optBoolean("done"));cb.setButtonTintList(new ColorStateList(new int[][]{{android.R.attr.state_checked},{}},new int[]{p.primary,p.onSurfaceVariant}));
-            AppTheme.type(cb,Type.BODY_MEDIUM);cb.setMinHeight(ui.dp(48));cb.setPadding(ui.dp(S2),ui.dp(S1),0,ui.dp(S1));
+            // Casilla redonda: anillo gris vacío; al marcarla se llena de verde con ✓ blanco. Sigue siendo un CheckBox (TalkBack igual).
+            CheckBox cb=new CheckBox(this);cb.setButtonDrawable(new RoundCheck(this,p.primary,p.onPrimary,p.outline));cb.setChecked(t.optBoolean("done"));
+            AppTheme.type(cb,Type.BODY_MEDIUM);cb.setMinHeight(ui.dp(48));cb.setPadding(0,ui.dp(S1),0,ui.dp(S1));
             SpannableStringBuilder label=new SpannableStringBuilder(text);String meta=(person.isEmpty()?"":" · "+person)+(when.isEmpty()?"":" · "+when);
             if(!meta.isEmpty()){int from=label.length();label.append(meta);label.setSpan(new ForegroundColorSpan(p.onSurfaceVariant),from,label.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);}
             cb.setText(label);styleTask(cb,cb.isChecked());
@@ -884,11 +1021,20 @@ public class RecordingActivity extends Screen {
         if(quotes==null||quotes.length()==0)return;noteLabel(body,"Frases clave");
         for(int i=0;i<quotes.length();i++){JSONObject q=quotes.optJSONObject(i);if(q==null)continue;String text=Notes.resolve(q.optString("text"),who).trim();if(text.isEmpty())continue;
             long ms=(long)(q.optDouble("t",0)*1000);String person=whoName(q.optString("who",""),who);
+            // Cita con una barra verde a la izquierda; debajo, ▶ hora (toca para escuchar ahí) y quién la dijo.
             LinearLayout r=ui.row();r.setGravity(Gravity.TOP);
-            TextView time=ui.text(Recording.time(ms),Type.LABEL_LARGE,p.primary);time.setFontFeatureSettings("tnum");time.setGravity(Gravity.CENTER_VERTICAL);time.setMinHeight(ui.dp(48));time.setPadding(ui.dp(S1),0,ui.dp(S2),0);
-            time.setBackground(ui.ripple(null,R_SMALL));time.setContentDescription("Escuchar desde "+Recording.time(ms));time.setAccessibilityDelegate(Ui.buttonRole());time.setOnClickListener(v->playAt(ms));r.addView(time);
-            TextView t=ui.text("«"+text+"»"+(person.isEmpty()?"":" — "+person),Type.BODY_MEDIUM,p.onSurface);t.setPadding(0,ui.dp(S3),0,ui.dp(S2));t.setTextIsSelectable(true);r.addView(t,new LinearLayout.LayoutParams(0,-2,1));
-            body.addView(r,Ui.fill());}
+            View rule=new View(this);rule.setBackground(shape(this,p.primary,R_FULL));LinearLayout.LayoutParams rl=new LinearLayout.LayoutParams(ui.dp(3),-1);rl.topMargin=ui.dp(S1);rl.bottomMargin=ui.dp(S1);r.addView(rule,rl);
+            // Sin recorte: la onda del toque de la hora ocupa los 4 dp que el margen negativo le quita (así ▶ se alinea con la cita).
+            LinearLayout col=ui.column();col.setPadding(ui.dp(S3),0,0,0);col.setClipToPadding(false);
+            TextView t=ui.text("«"+text+"»",Type.BODY_MEDIUM,p.onSurface);t.setLineSpacing(ui.dp(2),1f);t.setPadding(0,ui.dp(S1),0,0);t.setTextIsSelectable(true);col.addView(t,Ui.fill());
+            LinearLayout by=ui.row();by.setClipChildren(false);
+            TextView time=Ui.tabular(ui.text(Recording.time(ms),Type.LABEL_LARGE,p.primary));time.setGravity(Gravity.CENTER_VERTICAL);time.setMinHeight(ui.dp(48));time.setPadding(ui.dp(S1),0,ui.dp(S2),0);
+            Drawable go=getDrawable(R.drawable.ic_play).mutate();go.setTint(p.primary);go.setBounds(0,0,ui.dp(16),ui.dp(16));time.setCompoundDrawablesRelative(go,null,null,null);time.setCompoundDrawablePadding(ui.dp(2));
+            time.setBackground(ui.ripple(null,R_SMALL));time.setContentDescription("Escuchar desde "+Recording.time(ms));time.setAccessibilityDelegate(Ui.buttonRole());time.setOnClickListener(v->playAt(ms));
+            LinearLayout.LayoutParams tl=Ui.wrap();tl.setMarginStart(-ui.dp(S1));by.addView(time,tl);
+            if(!person.isEmpty())by.addView(ui.oneLine(ui.text("· "+person,Type.LABEL_MEDIUM,p.onSurfaceVariant)),new LinearLayout.LayoutParams(0,-2,1));
+            col.addView(by,Ui.fill());r.addView(col,new LinearLayout.LayoutParams(0,-2,1));
+            LinearLayout.LayoutParams ql=Ui.fill();ql.topMargin=ui.dp(S2);body.addView(r,ql);}
     }
     private void noteMenu(){
         sheet("Nota para tu segundo cerebro",null)
@@ -966,26 +1112,35 @@ public class RecordingActivity extends Screen {
     // ---------- Intervenciones y corrección de voces ----------
     /** Una intervención: nombre (toca para corregir quién habla), ★ si hay un momento marcado y la hora (toca para escuchar ahí mismo). */
     private View turn(int a,int b,String speaker,double start,double end,Map<String,String> names,boolean diarized,boolean first)throws JSONException{
-        LinearLayout t=ui.column();t.setPadding(ui.dp(S2),first?0:ui.dp(S1),ui.dp(S2),ui.dp(S3));
-        LinearLayout h=ui.row();String when=Recording.time((long)(start*1000));
+        // Dentro de la tarjeta (4 dp de margen), 12 dp más: nombre, hora y texto quedan alineados con el título «Transcripción».
+        // Sin recorte en la fila del nombre: las ondas del nombre y de la hora usan los 4 dp de sus márgenes negativos.
+        LinearLayout t=ui.column();t.setPadding(ui.dp(S3),first?0:ui.dp(S1),ui.dp(S3),ui.dp(S3));t.setClipToPadding(false);
+        LinearLayout h=ui.row();h.setClipChildren(false);String when=Recording.time((long)(start*1000));
         if(diarized){int color=colors.containsKey(speaker)?colors.get(speaker):p.speaker(transcript.colorIndex(speaker));
-            DottedName name=new DottedName(this,color);name.setText(names.get(speaker));AppTheme.type(name,Type.TITLE_SMALL);name.setTextColor(color);name.setGravity(Gravity.CENTER_VERTICAL);name.setMinHeight(ui.dp(48));name.setPadding(ui.dp(S1),0,ui.dp(S1),0);
-            name.setBackground(ui.ripple(null,R_SMALL));name.setContentDescription(names.get(speaker)+", "+when+". Cambiar quién habla");name.setAccessibilityDelegate(Ui.buttonRole());name.setOnClickListener(v->whoSheet(a,b));h.addView(name);}
+            // Nombre en Outfit con su punto de color (el mismo de la ficha); el subrayado de puntos avisa que se puede tocar.
+            DottedName name=new DottedName(this,color);name.setText(names.get(speaker));AppTheme.type(name,Type.LABEL_LARGE);name.setTextColor(color);name.setGravity(Gravity.CENTER_VERTICAL);name.setMinHeight(ui.dp(48));
+            GradientDrawable dot=oval(color);dot.setSize(ui.dp(8),ui.dp(8));name.setCompoundDrawablesRelativeWithIntrinsicBounds(dot,null,null,null);name.setCompoundDrawablePadding(ui.dp(S2));
+            // 4 dp de aire para la onda del toque, compensados con un margen negativo: el punto queda alineado con el texto.
+            name.setBackground(ui.ripple(null,R_SMALL));name.setPadding(ui.dp(S1),0,ui.dp(S2),0);name.setContentDescription(names.get(speaker)+", "+when+". Cambiar quién habla");name.setAccessibilityDelegate(Ui.buttonRole());name.setOnClickListener(v->whoSheet(a,b));
+            LinearLayout.LayoutParams nl=Ui.wrap();nl.setMarginStart(-ui.dp(S1));h.addView(name,nl);}
         if(hasMark(start,end)){TextView star=ui.text("★",Type.LABEL_LARGE,p.primary);star.setPadding(ui.dp(S1),0,0,0);star.setContentDescription("Momento marcado");h.addView(star);}
         View flex=new View(this);h.addView(flex,new LinearLayout.LayoutParams(0,ui.dp(1),1));
-        TextView time=ui.text(when,Type.BODY_SMALL,p.onSurfaceVariant);time.setFontFeatureSettings("tnum");time.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);time.setMinHeight(ui.dp(48));time.setPadding(ui.dp(S2),0,ui.dp(S1),0);
+        TextView time=Ui.tabular(ui.text(when,Type.LABEL_MEDIUM,p.onSurfaceVariant));time.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);time.setMinHeight(ui.dp(48));time.setPadding(ui.dp(S2),0,ui.dp(S1),0);
         if(!demo){time.setBackground(ui.ripple(null,R_SMALL));time.setContentDescription("Escuchar desde "+when);time.setAccessibilityDelegate(Ui.buttonRole());time.setOnClickListener(v->playTurn(t,start));}
-        h.addView(time);t.addView(h,Ui.fill());
+        LinearLayout.LayoutParams wl=Ui.wrap();wl.setMarginEnd(-ui.dp(S1));h.addView(time,wl);t.addView(h,Ui.fill());
+        // El texto sigue en Roboto BODY_LARGE: en párrafos largos se lee mejor que una letra geométrica.
         JSONArray segments=transcript.segments();
-        for(int k=a;k<b;k++){if(k>a)t.addView(ui.space(S2));TextView text=ui.text(segments.getJSONObject(k).getString("text").trim(),Type.BODY_LARGE,p.onSurface);text.setTextIsSelectable(true);text.setLineSpacing(ui.dp(4),1f);text.setPadding(ui.dp(S1),0,ui.dp(S1),0);t.addView(text,Ui.fill());}
+        for(int k=a;k<b;k++){if(k>a)t.addView(ui.space(S2));TextView text=ui.text(segments.getJSONObject(k).getString("text").trim(),Type.BODY_LARGE,p.onSurface);text.setTextIsSelectable(true);text.setLineSpacing(ui.dp(4),1f);t.addView(text,Ui.fill());}
         turns.add(new Object[]{t,(long)(start*1000),(long)(end*1000),time,when});
         return t;
     }
     /** Separador discreto donde empieza cada parte (solo al corregir voces). */
     private View blockDivider(int index,double startS){
-        LinearLayout r=ui.row();r.setGravity(Gravity.CENTER_VERTICAL);r.setPadding(ui.dp(S2),ui.dp(S4),ui.dp(S2),ui.dp(S1));
-        View a=new View(this);a.setBackgroundColor(p.outlineVariant);r.addView(a,new LinearLayout.LayoutParams(0,ui.dp(1),1));
-        TextView label=ui.text("Parte "+(index+1)+" · desde "+Recording.time((long)(startS*1000)),Type.BODY_SMALL,p.onSurfaceVariant);label.setPadding(ui.dp(S2),0,ui.dp(S2),0);r.addView(label);
+        LinearLayout r=ui.row();r.setGravity(Gravity.CENTER_VERTICAL);r.setPadding(ui.dp(S3),ui.dp(S3),ui.dp(S3),ui.dp(S2));
+        View a=new View(this);a.setBackgroundColor(p.outlineVariant);r.addView(a,new LinearLayout.LayoutParams(0,Math.max(1,ui.dp(1)),1));
+        // La etiqueta va en una píldora de vidrio entre las dos líneas.
+        TextView label=Ui.tabular(ui.text("Parte "+(index+1)+" · desde "+Recording.time((long)(startS*1000)),Type.LABEL_MEDIUM,p.onSurfaceVariant));label.setBackground(outline(this,chipFill(),p.outlineVariant,R_FULL,false));label.setPadding(ui.dp(S3),ui.dp(S1),ui.dp(S3),ui.dp(S1));
+        LinearLayout.LayoutParams ll=Ui.wrap();ll.setMargins(ui.dp(S2),0,ui.dp(S2),0);r.addView(label,ll);
         View b=new View(this);b.setBackgroundColor(p.outlineVariant);r.addView(b,new LinearLayout.LayoutParams(0,ui.dp(1),1));
         return r;
     }
@@ -1161,16 +1316,94 @@ public class RecordingActivity extends Screen {
         @Override protected void onDraw(Canvas c){float h=getHeight(),w=getWidth(),r=h/2f;paint.setColor(track);c.drawRoundRect(0,0,w,h,r,r,paint);if(value>0){paint.setColor(fill);c.drawRoundRect(0,0,Math.max(h,w*value),h,r,r,paint);}}
     }
     /**
-     * La onda del audio como barra para moverse: lo escuchado en primary y lo que falta en outlineVariant, debajo una
-     * franja con el color de quién habla y arriba los ★. Tocar o arrastrar salta; al pasar por un ★ se siente un tic.
-     * Mientras la onda no está lista, es una barra simple.
+     * Destello de la marca (el ✦ del logo, Glass.sparkle) con uno chico al lado, como el ícono de «Your Weekly Activity»
+     * de la referencia. Marca lo que armó la IA.
+     */
+    private static final class Spark extends View {
+        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);private final Path path=new Path();
+        Spark(Context c,int color){super(c);paint.setColor(color);setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
+        @Override protected void onDraw(Canvas canvas){
+            float w=getWidth(),h=getHeight(),s=Math.min(w,h);
+            canvas.drawPath(Glass.sparkle(path,w*0.42f,h*0.58f,s*0.42f),paint);
+            canvas.drawPath(Glass.sparkle(path,w*0.8f,h*0.2f,s*0.18f),paint);
+        }
+    }
+    /**
+     * Reparto del tiempo de habla: una barra redondeada con un tramo por persona, en su color, separados por 2 dp.
+     * Solo es un dibujo (el % de cada persona lo lee TalkBack en su píldora).
+     */
+    private static final class ShareBar extends View {
+        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);private final Path path=new Path();private final RectF rect=new RectF();private final float[] parts;private final int[] tones;private final float density;
+        ShareBar(Context c,float[] parts,int[] tones){super(c);this.parts=parts;this.tones=tones;density=c.getResources().getDisplayMetrics().density;setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
+        @Override protected void onDraw(Canvas canvas){
+            float sum=0;int shown=0,firstShown=-1,lastShown=-1;for(int i=0;i<parts.length;i++)if(parts[i]>0){sum+=parts[i];shown++;if(firstShown<0)firstShown=i;lastShown=i;}
+            if(sum<=0)return;float gap=2*density,w=getWidth()-gap*(shown-1),h=getHeight(),full=h/2f,inner=1.5f*density,x=0;
+            for(int i=0;i<parts.length;i++){if(parts[i]<=0)continue;
+                float seg=Math.max(inner*2,w*parts[i]/sum),l=i==firstShown?full:inner,r=i==lastShown?full:inner;
+                rect.set(x,0,Math.min(getWidth(),x+seg),h);path.reset();path.addRoundRect(rect,new float[]{l,l,r,r,r,r,l,l},Path.Direction.CW);
+                paint.setColor(tones[i]);canvas.drawPath(path,paint);x+=seg+gap;}
+        }
+    }
+    /**
+     * Casilla redonda de las tareas: anillo vacío (off) o círculo lleno (on) con un ✓ del color onMark. Al marcarla, el
+     * relleno crece desde el centro (curva emphasized); con «Quitar animaciones», cambia al instante.
+     */
+    private static final class RoundCheck extends Drawable {
+        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);private final Path tick=new Path();private final int on,onMark,off;private final float density;
+        private boolean checked,drawn;private float t;private ValueAnimator anim;
+        RoundCheck(Context c,int on,int onMark,int off){density=c.getResources().getDisplayMetrics().density;this.on=on;this.onMark=onMark;this.off=off;paint.setStrokeCap(Paint.Cap.ROUND);paint.setStrokeJoin(Paint.Join.ROUND);}
+        @Override public boolean isStateful(){return true;}
+        @Override protected boolean onStateChange(int[] state){
+            boolean c=false;for(int s:state)if(s==android.R.attr.state_checked)c=true;if(c==checked)return false;checked=c;
+            if(anim!=null)anim.cancel();float target=c?1f:0f;
+            if(!drawn||!AppTheme.motion()){t=target;invalidateSelf();return true;}
+            anim=ValueAnimator.ofFloat(t,target);anim.setDuration(MOTION_BASE);anim.setInterpolator(EMPHASIZED);anim.addUpdateListener(a->{t=(float)a.getAnimatedValue();invalidateSelf();});anim.start();return true;
+        }
+        /** 32 dp de ancho: el círculo de 20 dp y el espacio hasta el texto. */
+        @Override public int getIntrinsicWidth(){return Math.round(32*density);}
+        @Override public int getIntrinsicHeight(){return Math.round(24*density);}
+        @Override public void draw(Canvas canvas){
+            drawn=true;Rect b=getBounds();float cx=b.left+11*density,cy=b.exactCenterY(),r=10*density,sw=2*density;
+            if(t<1f){paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(sw);paint.setColor(off);paint.setAlpha(Math.round(255*(1f-t)));canvas.drawCircle(cx,cy,r-sw/2f,paint);}
+            if(t>0f){paint.setStyle(Paint.Style.FILL);paint.setColor(on);paint.setAlpha(255);canvas.drawCircle(cx,cy,r*(0.4f+0.6f*t),paint);
+                tick.reset();tick.moveTo(cx-4.2f*density,cy+0.2f*density);tick.lineTo(cx-1.2f*density,cy+3.2f*density);tick.lineTo(cx+4.6f*density,cy-3.2f*density);
+                paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(2*density);paint.setColor(onMark);paint.setAlpha(Math.round(255*Math.max(0f,t*2f-1f)));canvas.drawPath(tick,paint);}
+        }
+        @Override public void setAlpha(int alpha){}
+        @Override public void setColorFilter(ColorFilter filter){}
+        @Override public int getOpacity(){return PixelFormat.TRANSLUCENT;}
+    }
+    /**
+     * Etiqueta (#tema) como píldora dentro del texto. A diferencia de Glass.Highlight (que abraza las letras de un título
+     * grande), aquí la píldora tiene aire arriba y abajo, y la línea crece para que dos filas de etiquetas no se toquen.
+     */
+    private static final class TagSpan extends ReplacementSpan {
+        private final int bg,fg;private final float padH,padV,maxW;private final RectF rect=new RectF();
+        /** maxW: ancho de la línea. Una etiqueta más larga (p. ej. con letra muy grande) se acorta con «…» en vez de salirse. */
+        TagSpan(int bg,int fg,float padH,float padV,float maxW){this.bg=bg;this.fg=fg;this.padH=padH;this.padV=padV;this.maxW=maxW;}
+        @Override public int getSize(Paint paint,CharSequence text,int start,int end,Paint.FontMetricsInt fm){
+            if(fm!=null){Paint.FontMetricsInt m=paint.getFontMetricsInt();int v=Math.round(padV);fm.ascent=m.ascent-v;fm.top=m.top-v;fm.descent=m.descent+v;fm.bottom=m.bottom+v;}
+            return Math.round(Math.min(maxW,paint.measureText(text,start,end)+2*padH));
+        }
+        @Override public void draw(Canvas canvas,CharSequence text,int start,int end,float x,int top,int y,int bottom,Paint paint){
+            Paint.FontMetrics m=paint.getFontMetrics();CharSequence shown=text.subSequence(start,end);float w=paint.measureText(shown,0,shown.length());int old=paint.getColor();
+            if(w+2*padH>maxW&&paint instanceof android.text.TextPaint){shown=TextUtils.ellipsize(shown,(android.text.TextPaint)paint,Math.max(0,maxW-2*padH),TextUtils.TruncateAt.END);w=paint.measureText(shown,0,shown.length());}
+            rect.set(x,y+m.ascent-padV*0.5f,x+w+2*padH,y+m.descent+padV*0.5f);float r=rect.height()/2f;
+            paint.setColor(bg);canvas.drawRoundRect(rect,r,r,paint);paint.setColor(fg);canvas.drawText(shown,0,shown.length(),x+padH,y,paint);paint.setColor(old);
+        }
+    }
+    /**
+     * La onda del audio como barra para moverse: lo escuchado en verde (primary) y lo que falta en el gris de las ondas
+     * de la referencia (waveIdle), debajo una franja con el color de quién habla y arriba los ★ verdes. La posición es una
+     * perilla redonda de tinta con un anillo del color de la cápsula (crece mientras la arrastras). Tocar o arrastrar
+     * salta; al pasar por un ★ se siente un tic. Mientras la onda no está lista, es una barra simple.
      */
     private static final class Scrubber extends View {
         interface Listener{void seek(long ms,boolean done);}
-        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG),star=new Paint(Paint.ANTI_ALIAS_FLAG);private final int played,rest,track;private final float density;
+        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG),star=new Paint(Paint.ANTI_ALIAS_FLAG);private final int played,rest,track,knob,ring;private final float density;
         private float[] env;private long duration=1,position,last;private long[] marks=new long[0],runFrom=new long[0],runTo=new long[0];private int[] runColor=new int[0];
         boolean dragging;Listener listener;
-        Scrubber(Context c,Palette p){super(c);density=c.getResources().getDisplayMetrics().density;played=p.primary;rest=p.outlineVariant;track=p.surfaceContainerHighest;
+        Scrubber(Context c,Palette p,int ring){super(c);density=c.getResources().getDisplayMetrics().density;played=p.primary;rest=p.waveIdle;track=p.surfaceContainerHighest;knob=p.ink;this.ring=ring;
             star.setColor(p.primary);star.setTextAlign(Paint.Align.CENTER);star.setTextSize(11*density);setClickable(true);setFocusable(true);describe();}
         void setDuration(long d){duration=Math.max(1,d);position=clamp(position);describe();invalidate();}
         void setPosition(long ms){long v=clamp(ms);if(v!=position){position=v;invalidate();}}
@@ -1179,21 +1412,25 @@ public class RecordingActivity extends Screen {
         void setStrip(long[] from,long[] to,int[] colors){runFrom=from==null?new long[0]:from;runTo=to==null?new long[0]:to;runColor=colors==null?new int[0]:colors;invalidate();}
         private long clamp(long ms){return Math.max(0,Math.min(duration,ms));}
         private float dp(float n){return n*density;}
-        private float left(){return dp(4);}
-        private float right(){return getWidth()-dp(4);}
+        /** 10 dp a cada lado: la perilla (con su anillo) cabe entera también al principio y al final. */
+        private float left(){return dp(10);}
+        private float right(){return getWidth()-dp(10);}
         private float x(long ms){return left()+(right()-left())*(ms/(float)duration);}
         private long ms(float x){return clamp((long)((x-left())/Math.max(1f,right()-left())*duration));}
         @Override protected void onDraw(Canvas canvas){
             float top=dp(13),waveH=getHeight()-top-dp(10),mid=top+waveH/2f,stripY=top+waveH+dp(4),stripH=dp(4),px=x(position);
             if(env==null||env.length==0){float h=dp(4);paint.setColor(rest);canvas.drawRoundRect(left(),mid-h/2,right(),mid+h/2,h/2,h/2,paint);
-                paint.setColor(played);canvas.drawRoundRect(left(),mid-h/2,Math.max(left()+h,px),mid+h/2,h/2,h/2,paint);canvas.drawCircle(px,mid,dp(6),paint);}
+                paint.setColor(played);canvas.drawRoundRect(left(),mid-h/2,Math.max(left()+h,px),mid+h/2,h/2,h/2,paint);}
             else{float step=dp(4),bar=dp(2.5f);int bars=Math.max(1,(int)((right()-left())/step));
                 for(int i=0;i<bars;i++){int a=(int)((long)i*env.length/bars),b=Math.max(a+1,(int)((long)(i+1)*env.length/bars));float v=0;for(int k=a;k<b&&k<env.length;k++)v=Math.max(v,env[k]);
                     float h=Math.max(dp(2),Math.min(1f,v)*waveH),bx=left()+i*step;paint.setColor(bx+bar/2<=px?played:rest);canvas.drawRoundRect(bx,mid-h/2,bx+bar,mid+h/2,bar/2,bar/2,paint);}
-                paint.setColor(played);canvas.drawRoundRect(px-dp(1),top-dp(1),px+dp(1),top+waveH+dp(1),dp(1),dp(1),paint);}
+                // Cabezal: una línea fina de tinta que atraviesa la onda.
+                paint.setColor(knob);canvas.drawRoundRect(px-dp(0.75f),top-dp(1),px+dp(0.75f),top+waveH+dp(1),dp(0.75f),dp(0.75f),paint);}
             if(runColor.length>0){paint.setColor(track);canvas.drawRoundRect(left(),stripY,right(),stripY+stripH,stripH/2,stripH/2,paint);
                 for(int i=0;i<runColor.length;i++){float a=x(runFrom[i]),b=Math.max(a+dp(1),x(runTo[i]));paint.setColor(runColor[i]);canvas.drawRect(a,stripY,b,stripY+stripH,paint);}}
             for(long m:marks)canvas.drawText("★",x(m),top-dp(2),star);
+            // Perilla redonda de tinta con un anillo del color de la cápsula (la separa de las barras); crece al arrastrarla.
+            float r=dragging?dp(8):dp(6);paint.setColor(ring);canvas.drawCircle(px,mid,r+dp(2),paint);paint.setColor(knob);canvas.drawCircle(px,mid,r,paint);
         }
         @Override public boolean onTouchEvent(MotionEvent e){
             if(!isEnabled())return false;
@@ -1201,8 +1438,8 @@ public class RecordingActivity extends Screen {
                 case MotionEvent.ACTION_DOWN:if(getParent()!=null)getParent().requestDisallowInterceptTouchEvent(true);dragging=true;last=ms(e.getX());position=last;invalidate();if(listener!=null)listener.seek(position,false);return true;
                 case MotionEvent.ACTION_MOVE:{long v=ms(e.getX()),lo=Math.min(last,v),hi=Math.max(last,v);for(long m:marks)if(m>lo&&m<=hi){Ui.haptic(this,Ui.Haptic.TICK);break;}
                     last=v;position=v;invalidate();if(listener!=null)listener.seek(v,false);return true;}
-                case MotionEvent.ACTION_UP:dragging=false;describe();if(listener!=null)listener.seek(position,true);performClick();return true;
-                case MotionEvent.ACTION_CANCEL:dragging=false;return true;
+                case MotionEvent.ACTION_UP:dragging=false;describe();invalidate();if(listener!=null)listener.seek(position,true);performClick();return true;
+                case MotionEvent.ACTION_CANCEL:dragging=false;invalidate();return true;
             }
             return super.onTouchEvent(e);
         }

@@ -1,9 +1,9 @@
-# Criterios de diseño y usabilidad — Voz local
+# Criterios de diseño y usabilidad — Verbapp (antes Voz local)
 
 > Documento vivo. Explica **qué** se decidió, **por qué** y **cómo** seguir iterando sin perder coherencia.
 > Si cambias algo de la UI, actualiza este archivo en el mismo commit.
 
-**Sistema de diseño: [Material 3](https://m3.material.io)**, el lenguaje oficial de Android, implementado de forma nativa (sin la librería de Material). Un solo color de marca (azul), neutros de la misma familia y el rojo reservado para grabar y para errores.
+**Sistema de diseño (0.7.0): «Bosque de vidrio»**, sobre la estructura de [Material 3](https://m3.material.io) (roles de color, escala tipográfica, patrones de Android), implementado de forma nativa (sin la librería de Material). Un verde de marca (`#2F6B58`), tinta negra verdosa para lo principal, vidrio translúcido para las superficies, un degradado blanco → verde de fondo y la letra Outfit en títulos y botones. El naranja rojizo queda solo para «grabando» y los errores. Propuesta completa: [PROPUESTA-0.7.md](PROPUESTA-0.7.md).
 
 | 0.3 (antes) | 1.ª iteración 0.4: estilo iOS | 0.4: Material 3 |
 | --- | --- | --- |
@@ -39,9 +39,9 @@ La primera versión de la 0.4 imitaba iOS (cuadrados de colores en Ajustes, "‹
 
 Son 9 reglas para decidir cualquier cambio.
 
-1. **Una acción principal por pantalla.** Grabar → el botón rojo. Detalle → Transcribir (o leer). Importar → Guardar.
+1. **Una acción principal por pantalla.** Grabar → el botón verde del micrófono. Detalle → Transcribir (o leer). Importar → Guardar.
 2. **Mostrar el estado real, nunca inventarlo.** La onda solo se mueve con sonido real; "En proceso" muestra la etapa exacta.
-3. **Color con significado, no decoración.** Un color de marca para acciones y selección, neutros para todo lo demás, y rojo solo para grabar o error. Si un color no comunica nada, sobra.
+3. **Color con significado, no decoración.** Verde de marca para grabar, selección y lo que avanza; tinta (negro verdoso) para el botón principal; neutros y vidrio para todo lo demás; naranja rojizo solo para «grabando» y errores. Si un color no comunica nada, sobra.
 4. **Pedir lo mínimo, en el momento justo.** El título después de grabar; la clave recién al transcribir por primera vez.
 5. **Todo error tiene una salida.** Cada mensaje viene con el botón que lo resuelve.
 6. **Consistencia por sistema, no por memoria.** Colores, tipografía, formas y componentes salen de `AppTheme` y `Ui`. Nunca se escribe un color o un tamaño "a mano" en una pantalla.
@@ -64,45 +64,50 @@ Son 9 reglas para decidir cualquier cambio.
 
 ## 4. Tokens (fuente única: `AppTheme.java`)
 
-### Color: roles de Material 3
-Un **color semilla** (azul `#3A5BC7`) genera todo el esquema. Los grises están levemente tintados de azul, así que todo pertenece a la misma familia.
+### Color: roles de Material 3 + roles de Verbapp (0.7.0)
+Un **verde de marca** (`#2F6B58`) genera todo el esquema; los grises están levemente tintados de verde. Los nombres de rol de Material se conservan (así todo el código sigue funcionando) y se agregan roles propios de la estética.
 
 | Rol | Claro | Oscuro | Para qué |
 | --- | --- | --- | --- |
-| `primary` / `onPrimary` | `#3A5BC7` / blanco | `#B5C4FF` / `#0E2A78` | Botón principal, enlaces, selección, subtítulos de sección |
-| `primaryContainer` / `on…` | `#DCE1FF` / `#00164E` | `#2A4190` / `#DCE1FF` | Ícono de estado "Transcrito", avatares de acción |
-| `secondaryContainer` / `on…` | `#DDE1F9` / `#151B2C` | `#3F4759` / `#DDE1F9` | Indicador de la barra de navegación, chip de filtro elegido, botón tonal, estado "En proceso", aviso "Falta un paso" |
-| `surfaceContainer` | `#EFEDF4` | `#1F1F25` | **Fondo de pantalla** (claro) y barra de navegación |
-| `surfaceContainerLowest` | `#FFFFFF` | — | **Tarjetas** en claro (en oscuro, las tarjetas usan `surfaceContainer` sobre `surface` `#121318`) |
-| `surfaceContainerHighest` | `#E3E1E9` | `#34343A` | Campos, búsqueda, estado "Sin transcribir" |
-| `onSurface` / `onSurfaceVariant` | `#1B1B21` / `#45464F` | `#E4E1E9` / `#C6C5D0` | Texto principal / secundario e **íconos** |
-| `outline` / `outlineVariant` | `#767680` / `#C6C5D0` | `#90909A` / `#45464F` | Bordes de chips / divisores |
+| `primary` / `brand` | `#2F6B58` | `#93D4BA` / `#4C9A7F` | Botón de micrófono (brand), selección, enlaces, subtítulos de sección, barras de progreso |
+| `ink` / `onInk` (propio) | `#121815` / blanco | `#E3F0EA` / `#0F1714` | **Botón principal** (Guardar, Ver grabación, el botón que avanza), destino activo de la barra, snackbar |
+| `primaryContainer` / `on…` | `#D4E9DF` / `#0C3427` | `#1F4E40` / `#C4EBDA` | Menta: botón tonal, estado logrado («✓ En 0-Inbox»), círculos de opciones |
+| `glass` / `glassStroke` (propio) | blanco 78 % / blanco 95 % | blanco 9 % / blanco 15 % | **Tarjetas y grupos de vidrio** (`p.card` = `glass`) |
+| `glassOnVivid` / `onVivid` (propio) | blanco 20 % / blanco | igual | Píldoras y texto sobre el verde intenso (Detener, Pausa, onda) |
+| `highlight` (propio) | `#D8EDE3` | `#28503F` | Recuadro detrás de la palabra destacada de un título |
+| degradado (propio) | `#FFFFFF` → `#F1F6F4` → `#3E7262` (intenso) o `#D3E4DC` (suave) | `#0D1311` → `#1F4A3D` | Fondo de cada pantalla (`Glass.Backdrop`) |
+| `onSurface` / `onSurfaceVariant` | `#111714` / `#4F5D57` | `#E1EAE6` / `#B4C3BC` | Texto principal / secundario e **íconos** |
+| `outline` / `outlineVariant` | `#7C8A84` / `#CBD6D1` | `#82918A` / `#36433E` | Bordes / divisores |
 | `error` / `errorContainer` | `#BA1A1A` / `#FFDAD6` | `#FFB4AB` / `#93000A` | Errores y acciones destructivas |
-| `record` (propio) | `#DE3730` | `#FF5449` | **Solo** el botón de grabar y el punto REC |
-| `speakers[6]` (propio) | tonos 40 | tonos 80 | Un color estable por hablante, armonizados; el primero es `primary` |
+| `record` (propio) | `#E4572E` | `#FF7A55` | **Solo** el punto «● Grabando» y avisos de trabajo en curso |
+| `speakers[6]` (propio) | verde, ámbar, azul, violeta, rosa, oliva | tonos claros | Un color estable por hablante; el primero es el verde |
 
 **Reglas de uso**
-- Todo texto o ícono sobre un contenedor usa su pareja "on" (`onPrimaryContainer` sobre `primaryContainer`, etc.). Así se garantiza el contraste.
+- Todo texto o ícono sobre un contenedor usa su pareja "on" (`onInk` sobre `ink`, `onPrimaryContainer` sobre `primaryContainer`, `onVivid` sobre el verde intenso). Así se garantiza el contraste.
 - Los íconos de lista y de menú son **monocromos** (`onSurfaceVariant`). El color va solo en lo que es interactivo o comunica un estado.
+- **Una sola tinta por pantalla** (lo principal). El verde de marca es para grabar y para lo que avanza; la menta, para lo logrado.
 - ¿Un color nuevo? Primero busca un rol que sirva. Si de verdad falta, se crea como rol con nombre de función y valores para ambos temas.
 
-**Material You (opcional):** en Android 12+, Ajustes → Apariencia → "Colores de tu fondo de pantalla" reemplaza los roles por la paleta que Android genera del fondo de pantalla (`system_accent1_*`, `system_neutral1_*`…). Está apagado por defecto para mantener la identidad de marca.
+**Material You:** desde 0.7.0 se retiró («Colores de tu fondo de pantalla»). Verbapp tiene identidad propia (verde + degradado) y los colores del fondo de pantalla la romperían.
 
-### Tipografía: escala de Material 3 (sp, Roboto del sistema)
-| Estilo | Tamaño/peso | Dónde |
+### Tipografía: Outfit + Roboto (sp)
+**Outfit** (geométrica, fuente variable en `assets/fonts/Outfit.ttf`, licencia SIL OFL) para todo lo que se «mira»: cronómetro, títulos, botones, etiquetas y números. **Roboto** (del sistema) para lo que se «lee» en párrafos: transcripciones y explicaciones.
+
+| Estilo | Tamaño / letra | Dónde |
 | --- | --- | --- |
-| `HEADLINE_MEDIUM` | 28 | Título grande de pantalla (Biblioteca, Ajustes, Importar) |
-| `HEADLINE_SMALL` | 24 | Marca en inicio, título en detalle |
-| `TITLE_LARGE` | 22 | Títulos de hojas y estados vacíos |
-| `TITLE_MEDIUM` | 16 medium | Títulos de filas y tarjetas |
-| `TITLE_SMALL` | 14 medium | Subtítulos de sección (en `primary`) |
-| `BODY_LARGE` / `BODY_MEDIUM` / `BODY_SMALL` | 16 / 14 / 12 | Texto, apoyo, notas |
-| `LABEL_LARGE` / `LABEL_MEDIUM` | 14 / 12 medium | Botones y chips / barra de navegación |
+| `DISPLAY_LARGE` | 68 Outfit 500 | Cronómetro al grabar |
+| `DISPLAY_SMALL` | 36 Outfit 500 | Saludo (nombre), título mientras grabas |
+| `HEADLINE_LARGE` | 32 Outfit 500 | Título grande de pantalla (Biblioteca, Ajustes) |
+| `HEADLINE_MEDIUM` / `SMALL` | 28 / 24 Outfit 500 | Título en el detalle / hojas |
+| `TITLE_LARGE` / `MEDIUM` / `SMALL` | 22 / 16 / 14 Outfit | Títulos de tarjetas y filas / subtítulos de sección (verde) |
+| `ITEM` | 16 Outfit 400 | Título de filas de lista y opciones de menú |
+| `BODY_LARGE` / `MEDIUM` / `SMALL` | 16 / 14 / 12 Roboto | Texto de lectura, apoyo, notas |
+| `LABEL_LARGE` / `MEDIUM` / `SMALL` | 14 / 12 / 11 Outfit 500 | Botones (15 sp), chips, metadatos |
 
-El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bailen" al cambiar. El tracking del cuerpo se redujo un poco respecto de la especificación porque los textos en español son más largos.
+Los números que cambian usan **cifras de ancho fijo** (`Ui.tabular`, «tnum» de Outfit) para que no «bailen». La **palabra destacada** (`ui.highlightLast`) pone un recuadro menta detrás de la última palabra de un título grande, solo si es corta.
 
 ### Formas, espacio y movimiento
-- **Formas de Material:** small 8 (chips) · medium 12 (campos) · large 16 (tarjetas) · extra-large 28 (hojas) · full (botones en píldora, indicador de navegación, avatares).
+- **Formas (0.7.0, más redondas):** 8 (detalles) · 16 (campos) · 24 (tarjetas de vidrio) · 32 (hojas) · píldora (botones, chips, filtros, barra flotante, búsqueda).
 - **Espacio:** múltiplos de 4 dp (`S1=4 … S10=40`), con 16 de margen de pantalla y 24 dentro de las hojas.
 - **Movimiento:** 100 ms al presionar, 250 ms al aparecer y 400 ms para transformar el botón de grabar.
 - **Curvas (0.6.0, Material 3 Expressive):**
@@ -122,12 +127,14 @@ El cronómetro usa **dígitos tabulares** (`tnum`) para que los números no "bai
 
 | Componente M3 | Código | Reglas |
 | --- | --- | --- |
-| **Botones** | `ui.button(texto, ícono, Style, click)` | Píldora de 52 dp. `PRIMARY` = Filled (1 por pantalla), `TONAL` = Filled tonal, `SECONDARY` = Outlined, `PLAIN` = Text, `DESTRUCTIVE` = error. Al presionar se hunden a 0,96 y cierran un poco las esquinas |
+| **Botones** | `ui.button(texto, ícono, Style, click)` | Píldora de 52 dp con texto en Outfit 15. `PRIMARY` = **tinta** (1 por pantalla), `TONAL` = menta, `SECONDARY` = gris suave (Cancelar, Listo), `PLAIN` = texto verde, `DESTRUCTIVE` = error, `RECORD` = verde de marca y `VIVID` = vidrio blanco sobre el verde intenso (Detener, Pausa). Al presionar se hunden a 0,96 y cierran un poco las esquinas |
 | **Botón de dos partes** | `ui.split(texto, ícono, principal, más)` | 52 dp, con 2 dp entre la acción principal y ▾. `setTonal` para el estado «hecho» (`secondaryContainer`). `setBusy` muestra un indicador de carga y `showDone()` lo convierte en ✓. Es el **botón que avanza** del detalle: Transcribir → Revisar voces → Guardar en 0-Inbox → ✓ En 0-Inbox · hh:mm / Actualizar |
-| **Botón de ícono** | `ui.iconButton(...)` | 48 dp mínimo. Barra superior: ← a la izquierda y ⋮ a la derecha, en `onSurface` / `onSurfaceVariant` |
-| **Barra de navegación** | `BottomNav` | 3 destinos con ícono y texto. El activo lleva una píldora `secondaryContainer`. Un punto rojo indica grabación o trabajo en curso |
-| **Hoja inferior** | `Sheet` | Fondo `surfaceContainerLow`, asa de 32×4 y esquinas de 28. Menús sin tarjeta interna, íconos neutros y la destructiva en rojo al final. Para elegir entre opciones usa **botones de radio** |
-| **Lista** | `ui.group()` + `ui.listRow()` / `ui.switchRow()` | Ícono de 24 dp monocromo, título `BODY_LARGE`, apoyo `BODY_MEDIUM` y valor a la derecha. Sin chevrons (no son de Android) |
+| **Botón de ícono** | `ui.iconButton(...)` / `ui.glassButton(...)` / `Screen.barButton(...)` | 48 dp mínimo. En la barra superior, círculos de vidrio: ← a la izquierda y ⋯ a la derecha |
+| **Barra de navegación** | `BottomNav` | Cápsula flotante de vidrio con 3 destinos. El activo se abre en una **píldora de tinta con su nombre**; los demás muestran solo el ícono (el nombre lo lee el lector de pantalla). Un punto naranja indica grabación o trabajo en curso. Al grabar se esconde (`Screen.setNavHidden`) |
+| **Hoja inferior** | `Sheet` | Blanca (en oscuro, `surfaceContainerLow`), con esquinas de 32, título en Outfit y el fondo desenfocado en Android 12+. Llega hasta el borde de abajo. Con dos botones cortos van lado a lado ([gris] · [tinta]); si no, apilados. `closable()` agrega el ✕. Para elegir entre opciones usa **botones de radio** |
+| **Vidrio y fondo (0.7.0)** | `ui.card()`, `ui.group()`, `AppTheme.glass()`, `Glass.Backdrop` | Tarjetas translúcidas con borde tenue y esquinas de 24. El fondo es un degradado (intenso en Grabar y suave en el resto) que pasa por detrás de las barras del sistema. Las listas se desvanecen en los bordes |
+| **Marca y detalles (0.7.0)** | `ui.brand()`, `ui.highlightLast()`, `ui.stat()`, `Ui.tabular()` | Logo + «Verbapp» en Outfit inclinado; la última palabra de un título grande en un recuadro menta; datos de resumen («Tu semana»); cifras de ancho fijo para números que cambian |
+| **Lista** | `ui.group()` + `ui.listRow()` / `ui.switchRow()` | Ícono de 24 dp monocromo (o en círculo menta, en Ajustes), título `ITEM` (Outfit), apoyo `BODY_MEDIUM` y valor a la derecha. Sin chevrons (no son de Android) |
 | **Subtítulo de sección** | `ui.section()` | `TITLE_SMALL` en `primary`, sin forzar mayúsculas |
 | **Chips** | `ui.filter()` / `ui.chip()` / `ui.outlinedChip()` | Esquinas de 8 dp. El filtro sin elegir lleva borde; el elegido va en `secondaryContainer` con ✓ |
 | **Avatar / ícono de estado** | `ui.tile()` | Círculo tonal. Estado: Transcrito = `primaryContainer`, En proceso = `secondaryContainer`, Error = `errorContainer`, Sin transcribir = `surfaceContainerHighest` |
@@ -288,3 +295,8 @@ adb exec-out screencap -p > captura.png    # captura para comparar
 | 2026-09-29 | La nota para el segundo cerebro, con IA (OpenAI o Claude), usa marcas {S1} en vez de nombres | La nota sigue siendo válida después de nombrar o corregir voces: los nombres se ponen al mostrarla |
 | 2026-09-29 | Volver a transcribir con alternativas que cambian algo, y la versión anterior se guarda | Repetir exactamente lo mismo no mejora el resultado. «Segunda pasada con tus correcciones» usa las voces corregidas como muestras en todo el audio |
 | 2026-09-29 | Marcar momentos ★ al grabar, también desde la notificación | Lo pidió el usuario: poder saltar a lo importante y destacarlo en la nota |
+| 2026-09-29 | **Verbapp, estética «Bosque de vidrio»** (0.7.0): verde de marca, degradado, vidrio, tinta para lo principal y Outfit | El usuario pidió un rediseño SOLO de interfaz basado en una referencia («Convora»): «este mismo verde, la mismísima estética». Nombre elegido: Verbapp (con «app»). La lógica no cambió |
+| 2026-09-29 | El micrófono pasa a verde de marca; el rojo anaranjado queda solo para «● Grabando» | En la referencia el botón de grabar es verde. Grabar es la acción de la marca, no una alarma |
+| 2026-09-29 | Grabar a pantalla completa (sin barra de pestañas) con cronómetro gigante | Mientras grabas, lo único importante es que está grabando y cuánto va; la barra vuelve al detener |
+| 2026-09-29 | Se retira Material You | Los colores del fondo de pantalla rompían la identidad verde y el degradado |
+| 2026-09-29 | «Tu semana» reemplaza a «Recientes» en Grabar | La Biblioteca está a un toque en la barra flotante; el resumen motiva y ocupa menos |

@@ -2,6 +2,9 @@ package cl.vozlocal.app;
 
 import android.content.*;
 import android.content.res.ColorStateList;
+import android.graphics.drawable.ClipDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
 import android.os.*;
 import android.text.*;
@@ -19,6 +22,8 @@ import static cl.vozlocal.app.AppTheme.*;
  * - Salir de la pantalla NO cancela: ImportService sigue trabajando, avisa al terminar y al volver se ve el avance.
  * - Guardar muestra una barra de avance determinada; el título llega sin la extensión del archivo.
  * - La ayuda «Desde WhatsApp» vive aquí (antes era una tarjeta del inicio).
+ * 0.7.0 (Verbapp): la misma estética que Grabar sobre el fondo suave: tarjetas de vidrio, círculos menta, el porcentaje
+ * en grande con cifras fijas, barra de avance redondeada y el recorte con una regla verde (RangeView).
  */
 public class ImportActivity extends Screen {
     private EditText title,start,end;private TextView stage,detail,percent,fileName,fileMeta,problem,summary;private Ui.Btn save,cancel;private ProgressBar progress;
@@ -31,17 +36,22 @@ public class ImportActivity extends Screen {
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);shell("Grabar",-1);largeTitle(page,"Importar audio","Audios de WhatsApp, grabadoras y notas de voz.");
 
-        // Paso 1: elegir un archivo (+ cómo traerlo desde WhatsApp).
+        // Paso 1: elegir un archivo (+ cómo traerlo desde WhatsApp). Zona de vidrio con borde punteado verde.
         pickerSection=ui.column();
-        LinearLayout picker=ui.column();picker.setGravity(Gravity.CENTER_HORIZONTAL);picker.setPadding(ui.dp(S5),ui.dp(S8),ui.dp(S5),ui.dp(S8));picker.setBackground(ui.ripple(outline(this,p.card,p.outline,R_CARD,true),R_CARD));
-        picker.addView(ui.tile(R.drawable.ic_upload,p.onPrimaryContainer,p.primaryContainer,56,28));TextView pt=ui.text("Elegir un archivo de audio",Type.TITLE_MEDIUM,p.onSurface);pt.setGravity(Gravity.CENTER);pt.setPadding(0,ui.dp(S3),0,ui.dp(S1));picker.addView(pt,Ui.wrap());
-        picker.addView(ui.text("Hasta 1 GB · tu archivo original no se modifica",Type.BODY_MEDIUM,p.onSurfaceVariant),Ui.wrap());
-        LinearLayout formats=ui.row();formats.setPadding(0,ui.dp(S4),0,0);for(String f:new String[]{"M4A","MP3","WAV","OGG","OPUS"}){TextView c=ui.chip(f,p.onSurfaceVariant,p.surfaceContainerHighest);LinearLayout.LayoutParams lp=Ui.wrap();lp.setMargins(ui.dp(3),0,ui.dp(3),0);formats.addView(c,lp);}picker.addView(formats,Ui.wrap());
+        LinearLayout picker=ui.column();picker.setGravity(Gravity.CENTER_HORIZONTAL);picker.setPadding(ui.dp(S5),ui.dp(S8),ui.dp(S5),ui.dp(S6));picker.setBackground(ui.ripple(outline(this,p.glass,withAlpha(p.primary,0x80),R_CARD,true),R_CARD));
+        // Círculo menta dentro de un halo suave (el mismo gesto del micrófono en Grabar).
+        FrameLayout art=new FrameLayout(this);art.setBackground(oval(withAlpha(p.primary,0x14)));art.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        art.addView(ui.tile(R.drawable.ic_upload,p.onPrimaryContainer,p.primaryContainer,64,30),new FrameLayout.LayoutParams(ui.dp(64),ui.dp(64),Gravity.CENTER));picker.addView(art,new LinearLayout.LayoutParams(ui.dp(92),ui.dp(92)));
+        TextView pt=ui.text("Elegir un archivo de audio",Type.TITLE_LARGE,p.onSurface);pt.setGravity(Gravity.CENTER);pt.setPadding(0,ui.dp(S4),0,ui.dp(S1));picker.addView(pt,Ui.wrap());
+        TextView ps=ui.text("Hasta 1 GB · tu archivo original no se modifica",Type.BODY_MEDIUM,p.onSurfaceVariant);ps.setGravity(Gravity.CENTER);picker.addView(ps,Ui.wrap());
+        LinearLayout formats=ui.row();formats.setPadding(0,ui.dp(S4),0,0);
+        for(String f:new String[]{"M4A","MP3","WAV","OGG","OPUS"}){TextView c=ui.chip(f,p.onSurfaceVariant,p.dark?p.surfaceContainerHighest:p.surfaceContainerHigh);AppTheme.type(c,Type.LABEL_MEDIUM);c.setPadding(ui.dp(10),ui.dp(S1),ui.dp(10),ui.dp(S1));LinearLayout.LayoutParams lp=Ui.wrap();lp.setMargins(ui.dp(2),0,ui.dp(2),0);formats.addView(c,lp);}
+        picker.addView(formats,Ui.wrap());
         picker.setClickable(true);picker.setFocusable(true);picker.setContentDescription("Elegir un archivo de audio");picker.setAccessibilityDelegate(Ui.buttonRole());picker.setOnClickListener(v->pick());Ui.pressable(picker);
         pickerSection.addView(picker,Ui.fill());
         TextView wa=ui.section("Desde WhatsApp");wa.setPadding(ui.dp(S1),ui.dp(S6),0,ui.dp(S2));pickerSection.addView(wa);
-        LinearLayout steps=ui.card();String[] texts={"Abre el chat y mantén presionado el audio.","Toca Compartir (o ⋮ → Compartir).","Elige Voz local en la lista de apps.","Revisa el título y toca Guardar audio."};
-        for(int i=0;i<texts.length;i++){LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(0,ui.dp(S1),0,ui.dp(S1));TextView n=ui.text(String.valueOf(i+1),Type.LABEL_MEDIUM,p.onSecondaryContainer);n.setGravity(Gravity.CENTER);n.setBackground(oval(p.secondaryContainer));n.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);r.addView(n,new LinearLayout.LayoutParams(ui.dp(24),ui.dp(24)));r.addView(ui.space(S3));TextView t=ui.text(texts[i],Type.BODY_LARGE,p.onSurface);t.setContentDescription("Paso "+(i+1)+": "+texts[i]);r.addView(t,new LinearLayout.LayoutParams(0,-2,1));steps.addView(r,Ui.fill());}
+        LinearLayout steps=ui.card();steps.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),ui.dp(S4));String[] texts={"Abre el chat y mantén presionado el audio.","Toca Compartir (o ⋮ → Compartir).","Elige Verbapp en la lista de apps.","Revisa el título y toca Guardar audio."};
+        for(int i=0;i<texts.length;i++){LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(0,ui.dp(S1),0,ui.dp(S1));TextView n=ui.text(String.valueOf(i+1),Type.LABEL_MEDIUM,p.onPrimaryContainer);n.setGravity(Gravity.CENTER);n.setBackground(oval(p.primaryContainer));n.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);r.addView(n,new LinearLayout.LayoutParams(ui.dp(24),ui.dp(24)));r.addView(ui.space(S3));TextView t=ui.text(texts[i],Type.BODY_LARGE,p.onSurface);t.setContentDescription("Paso "+(i+1)+": "+texts[i]);r.addView(t,new LinearLayout.LayoutParams(0,-2,1));steps.addView(r,Ui.fill());}
         TextView note=ui.text("También funciona con grabadoras, Telegram y cualquier app que comparta audio.",Type.BODY_MEDIUM,p.onSurfaceVariant);note.setPadding(0,ui.dp(S3),0,0);steps.addView(note);
         pickerSection.addView(steps,Ui.fill());
         page.addView(pickerSection,Ui.fill());
@@ -49,24 +59,24 @@ public class ImportActivity extends Screen {
         // Paso 2: avance (copiar o guardar). Sigue aunque se salga de la pantalla.
         progressPanel=ui.card();progressPanel.setPadding(ui.dp(S5),ui.dp(S5),ui.dp(S5),ui.dp(S4));
         stage=ui.text("Leyendo archivo",Type.TITLE_MEDIUM,p.onSurface);stage.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);progressPanel.addView(stage);
-        percent=ui.text("",Type.HEADLINE_MEDIUM,p.primary);percent.setFontFeatureSettings("tnum");percent.setPadding(0,ui.dp(S2),0,ui.dp(S2));progressPanel.addView(percent);
-        progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setMax(100);progress.setProgressTintList(ColorStateList.valueOf(p.primary));progress.setIndeterminateTintList(ColorStateList.valueOf(p.primary));progress.setProgressBackgroundTintList(ColorStateList.valueOf(p.secondaryContainer));progressPanel.addView(progress,new LinearLayout.LayoutParams(-1,ui.dp(8)));
-        detail=ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant);detail.setFontFeatureSettings("tnum");detail.setPadding(0,ui.dp(S2),0,ui.dp(S3));progressPanel.addView(detail);
+        percent=Ui.tabular(ui.text("",Type.DISPLAY_MEDIUM,p.primary));percent.setIncludeFontPadding(false);percent.setPadding(0,ui.dp(S3),0,ui.dp(S3));progressPanel.addView(percent);
+        progress=progressBar();progressPanel.addView(progress,new LinearLayout.LayoutParams(-1,ui.dp(8)));
+        detail=Ui.tabular(ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant));detail.setPadding(0,ui.dp(S3),0,ui.dp(S3));progressPanel.addView(detail);
         progressPanel.addView(ui.text("Puedes salir de esta pantalla o bloquear el teléfono: la importación sigue y te aviso al terminar.",Type.BODY_MEDIUM,p.onSurfaceVariant));
         cancel=ui.button("Cancelar importación",0,Ui.Style.PLAIN,v->confirmCancel());progressPanel.addView(cancel,ui.top(S2));
         page.addView(progressPanel,ui.top(S2));
 
         // Paso 3: nombrar y recortar.
         form=ui.column();page.addView(form,Ui.fill());
-        problem=ui.text("",Type.BODY_MEDIUM,p.onErrorContainer);problem.setBackground(shape(this,p.errorContainer,R_CONTROL));problem.setPadding(ui.dp(S3),ui.dp(S3),ui.dp(S3),ui.dp(S3));problem.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);form.addView(problem,ui.top(0));
-        LinearLayout file=ui.card();file.setOrientation(LinearLayout.HORIZONTAL);file.setGravity(Gravity.CENTER_VERTICAL);file.addView(ui.tile(R.drawable.ic_wave,p.onSurfaceVariant,p.surfaceContainerHighest,44,22));file.addView(ui.space(S3));
-        LinearLayout ft=ui.column();fileName=ui.oneLine(ui.text("",Type.TITLE_MEDIUM,p.onSurface));fileMeta=ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant);ft.addView(fileName);ft.addView(fileMeta);file.addView(ft,new LinearLayout.LayoutParams(0,-2,1));
+        problem=ui.text("",Type.BODY_MEDIUM,p.onErrorContainer);problem.setBackground(shape(this,p.errorContainer,R_CONTROL));problem.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),ui.dp(S3));problem.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);form.addView(problem,ui.top(0));
+        LinearLayout file=ui.card();file.setOrientation(LinearLayout.HORIZONTAL);file.setGravity(Gravity.CENTER_VERTICAL);file.addView(ui.tile(R.drawable.ic_wave,p.onPrimaryContainer,p.primaryContainer,44,22));file.addView(ui.space(S3));
+        LinearLayout ft=ui.column();fileName=ui.oneLine(ui.text("",Type.TITLE_MEDIUM,p.onSurface));fileMeta=Ui.tabular(ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant));ft.addView(fileName);ft.addView(fileMeta);file.addView(ft,new LinearLayout.LayoutParams(0,-2,1));
         Ui.Btn other=ui.button("Cambiar",0,Ui.Style.PLAIN,v->{release();ImportService.dismiss(this);boundId="";pick();});other.setPadding(ui.dp(S3),0,ui.dp(S1),0);file.addView(other);
         form.addView(file,ui.top(S3));
         form.addView(ui.section("Título"));title=ui.field("Nombre de la grabación","Título");title.setFilters(new InputFilter[]{new InputFilter.LengthFilter(120)});form.addView(title,Ui.fill());
         form.addView(ui.section("Tramo (opcional)"));
-        LinearLayout trim=ui.card();range=new RangeView(this,p);trim.addView(range,new LinearLayout.LayoutParams(-1,ui.dp(48)));
-        summary=ui.text("",Type.LABEL_LARGE,p.onSurface);summary.setFontFeatureSettings("tnum");summary.setGravity(Gravity.CENTER);summary.setPadding(0,ui.dp(S1),0,ui.dp(S2));summary.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);trim.addView(summary,Ui.fill());
+        LinearLayout trim=ui.card();range=new RangeView(this,p);trim.addView(range,new LinearLayout.LayoutParams(-1,ui.dp(56)));
+        summary=Ui.tabular(ui.text("",Type.TITLE_MEDIUM,p.onSurface));summary.setGravity(Gravity.CENTER);summary.setPadding(0,ui.dp(S1),0,ui.dp(S2));summary.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);trim.addView(summary,Ui.fill());
         LinearLayout fields=ui.row();LinearLayout a=ui.column(),b=ui.column();start=ui.labeled(a,"Desde (seg.)","0");end=ui.labeled(b,"Hasta (seg.)","Final");start.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);end.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);start.setText("0");
         fields.addView(a,new LinearLayout.LayoutParams(0,-2,1));fields.addView(ui.space(S3));fields.addView(b,new LinearLayout.LayoutParams(0,-2,1));trim.addView(fields,Ui.fill());
         trim.addView(ui.button("Escuchar el tramo",R.drawable.ic_play,Ui.Style.TONAL,v->listen()),ui.top(S4));
@@ -91,6 +101,12 @@ public class ImportActivity extends Screen {
             else if(existing==null)pick();
         }
         render();
+    }
+    /** Barra de avance redondeada (verde sobre menta), de 0 a 100; indeterminada si el archivo no dice su tamaño. */
+    private ProgressBar progressBar(){
+        ProgressBar b=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);b.setMax(100);
+        LayerDrawable d=new LayerDrawable(new Drawable[]{shape(this,p.primaryContainer,R_FULL),new ClipDrawable(shape(this,p.primary,R_FULL),Gravity.START,ClipDrawable.HORIZONTAL)});
+        d.setId(0,android.R.id.background);d.setId(1,android.R.id.progress);b.setProgressDrawable(d);b.setIndeterminateTintList(ColorStateList.valueOf(p.primary));return b;
     }
     private void save(){
         try{ImportSession s=ImportService.session(this);if(s==null||s.busy||!s.ready||s.done)return;long from=seconds(start),to=seconds(end);if(from<0||to-from<RangeView.MIN_GAP||to>s.duration+100)throw new IllegalArgumentException();
