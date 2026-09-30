@@ -74,7 +74,7 @@ final class Glass {
         private final int color;private final float padH,radius;private final RectF rect=new RectF();
         Highlight(int color,float padH,float radius){this.color=color;this.padH=padH;this.radius=radius;}
         /** ¿El tramo quedó dentro de los puntos suspensivos del TextView? (Android 8–9: «…» y relleno U+FEFF, sin ancho.) */
-        private static boolean cut(CharSequence text,int start,int end){if(end<=start)return true;char first=text.charAt(start);return first=='…'||first=='﻿';}
+        private static boolean cut(CharSequence text,int start,int end){if(end<=start)return true;char first=text.charAt(start);return first=='…'||first=='\uFEFF';}
         @Override public int getSize(Paint paint,CharSequence text,int start,int end,Paint.FontMetricsInt fm){
             if(fm!=null){Paint.FontMetricsInt m=paint.getFontMetricsInt();fm.ascent=m.ascent;fm.descent=m.descent;fm.top=m.top;fm.bottom=m.bottom;}
             if(cut(text,start,end))return Math.round(paint.measureText(text,start,end));

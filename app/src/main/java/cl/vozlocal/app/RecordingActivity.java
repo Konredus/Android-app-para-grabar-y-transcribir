@@ -235,7 +235,7 @@ public class RecordingActivity extends Screen {
     private void header(JSONObject st){
         LinearLayout row=ui.row();row.setGravity(Gravity.TOP);row.setPadding(ui.dp(S1),0,0,0);
         // Título grande en Outfit con la última palabra en un recuadro menta: el sello de la referencia (igual que al grabar).
-        titleView=ui.heading("",Type.HEADLINE_MEDIUM);ui.highlightLast(titleView,recording.title);titleView.setBreakStrategy(Layout.BREAK_STRATEGY_BALANCED);titleView.setPadding(0,ui.dp(S2),ui.dp(S1),ui.dp(S1));row.addView(titleView,new LinearLayout.LayoutParams(0,-2,1));
+        titleView=ui.heading("",Type.HEADLINE_MEDIUM);ui.highlightLast(titleView,recording.title);titleView.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_BALANCED);titleView.setPadding(0,ui.dp(S2),ui.dp(S1),ui.dp(S1));row.addView(titleView,new LinearLayout.LayoutParams(0,-2,1));
         if(!demo){titleView.setOnClickListener(v->rename());
             // El lápiz queda a la altura de la primera línea del título, aunque este ocupe varias.
             ImageButton edit=ui.iconButton(R.drawable.ic_edit,"Cambiar título",p.onSurfaceVariant,0,48);edit.setOnClickListener(v->rename());LinearLayout.LayoutParams el=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));el.topMargin=ui.dp(2);row.addView(edit,el);}
@@ -801,8 +801,13 @@ public class RecordingActivity extends Screen {
         LinearLayout head=cardHeader(card,R.drawable.ic_people,"Personas",null);
         boolean reviewed=transcript.reviewed();
         TextView status=chip(reviewed?"Voces revisadas":"Voces sin revisar",reviewed?R.drawable.ic_check:R.drawable.ic_voice,p.primary,reviewed?p.onSurfaceVariant:p.onPrimaryContainer,reviewed?0:p.primaryContainer,reviewed);
-        // El estado va al final de la fila de personas (como en 0.6), no junto al título: con letra grande le quitaba el ancho y partía «Personas».
         status.setContentDescription((reviewed?"Voces revisadas":"Voces sin revisar")+". Nombrar voces");status.setOnClickListener(v->openNameVoices());
+        // El estado va junto al título solo si los dos caben enteros. Con letra grande le quitaba el ancho al título y partía
+        // «Personas»: en ese caso va al final de la fila de personas, como en 0.6.
+        android.text.TextPaint probe=new android.text.TextPaint();probe.setTypeface(AppTheme.font(this,Type.TITLE_MEDIUM));probe.setTextSize(android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP,Type.TITLE_MEDIUM.size,getResources().getDisplayMetrics()));
+        status.measure(View.MeasureSpec.UNSPECIFIED,View.MeasureSpec.UNSPECIFIED);
+        boolean beside=probe.measureText("Personas")+status.getMeasuredWidth()+ui.dp(S2)<=getResources().getDisplayMetrics().widthPixels-ui.dp(2*S4+2*S4+20+S3);
+        if(beside)head.addView(status,Ui.wrap());
         Map<String,Double> share=transcript.talkShare();
         float[] parts=new float[names.size()];int[] tones=new int[names.size()];int n=0;
         for(String key:names.keySet()){Double v=share.get(key);parts[n]=v==null?0f:v.floatValue();tones[n]=colors.get(key);n++;}
@@ -816,7 +821,7 @@ public class RecordingActivity extends Screen {
             if(!pct.isEmpty()){TextView pc=Ui.tabular(ui.text(pct,Type.LABEL_LARGE,only?withAlpha(p.onInk,0xB3):p.onSurfaceVariant));pc.setPadding(ui.dp(6),0,0,0);c.addView(pc);}
             c.setClickable(true);c.setFocusable(true);c.setContentDescription(names.get(key)+(pct.isEmpty()?"":", "+pct+" del tiempo")+". Opciones");c.setAccessibilityDelegate(Ui.buttonRole());c.setOnClickListener(v->personSheet(key));Ui.pressable(c);
             LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginEnd(ui.dp(S2));chips.addView(c,lp);}
-        chips.addView(status,Ui.wrap());
+        if(!beside)chips.addView(status,Ui.wrap());
         LinearLayout.LayoutParams hl=Ui.fill();hl.topMargin=ui.dp(S2);hl.setMarginStart(-ui.dp(S4));hl.setMarginEnd(-ui.dp(S4));card.addView(hs,hl);
         return card;
     }
@@ -847,7 +852,7 @@ public class RecordingActivity extends Screen {
         LinearLayout head=ui.row();head.setMinimumHeight(ui.dp(48));
         mark.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(20),ui.dp(20)));head.addView(mark);head.addView(ui.space(S3));
         // Cortes de línea equilibrados: «Nota para tu / segundo cerebro» en vez de dejar una palabra sola abajo.
-        LinearLayout titles=ui.column();TextView t=ui.heading(title,Type.TITLE_MEDIUM);t.setBreakStrategy(Layout.BREAK_STRATEGY_BALANCED);titles.addView(t);
+        LinearLayout titles=ui.column();TextView t=ui.heading(title,Type.TITLE_MEDIUM);t.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_BALANCED);titles.addView(t);
         if(subtitle!=null){TextView s=ui.text(subtitle,Type.BODY_SMALL,p.onSurfaceVariant);s.setPadding(0,ui.dp(2),0,0);titles.addView(s);}
         head.addView(titles,new LinearLayout.LayoutParams(0,-2,1));card.addView(head,Ui.fill());return head;
     }

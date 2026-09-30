@@ -39,7 +39,7 @@ Lo que **no** copiamos: el selector «Default mic» (no hay elección de micróf
 ### 3.1 Grabar, en reposo (fondo intenso, barra flotante visible)
 1. **Cabecera**: logo + «Verbapp» a la izquierda; a la derecha, un botón redondo de vidrio con el **estado** (llave si falta la clave, anillo girando si transcribe, alerta con punto si algo falló, documento si hay algo listo para revisar, ✓ si todo va bien). Tocarlo hace lo mismo que el chip de estado de 0.6.
 2. **Saludo**: «Buenas noches,» (Outfit 16, gris) y debajo el **nombre** en grande (DISPLAY_SMALL), tomado de «Mi voz» (`Voices.name`). Sin nombre: «¿Qué grabamos hoy?» con «hoy?» destacado. Si algo pide atención, debajo va una píldora de vidrio con el texto del estado («Transcribiendo «Reunión» · 2 de 4»).
-3. **Centro**: el botón de micrófono **verde** (76 dp, halo de dos anillos suaves que respiran) entre dos ondas decorativas grises que se desvanecen hacia los bordes. Debajo, «Toca para grabar» y una píldora de vidrio chica «Importar audio».
+3. **Centro**: el botón de micrófono **verde** (76 dp, halo de dos anillos suaves que respiran) entre dos ondas decorativas grises que se desvanecen hacia los bordes. Debajo, «Toca para grabar · funciona sin internet» y una píldora de vidrio chica «Importar audio».
 4. **Última grabación** (tarjeta de vidrio): el siguiente paso de 0.6 con su botón (Transcribir → Revisar voces → Guardar en 0-Inbox → ✓).
 5. **Tu semana** (tarjeta de vidrio con tres datos, `ui.stat`): grabaciones, tiempo grabado y notas de los últimos 7 días. Reemplaza a «Recientes» (la Biblioteca queda a un toque). En pantallas bajas se oculta primero.
 
@@ -51,7 +51,7 @@ Lo que **no** copiamos: el selector «Default mic» (no hay elección de micróf
 - **Cronómetro enorme** (DISPLAY_LARGE, cifras fijas).
 - **Onda en vivo** sobre el verde: barras blancas que nacen en un cabezal vertical (a ~62 % del ancho) y avanzan hacia la izquierda, con una sombra en degradado detrás del cabezal; a la derecha, marcas tenues de lo que falta. Las ★ se ven como estrellitas blancas sobre su barra. En pausa, todo se atenúa.
 - **Controles** abajo: [■ Detener] [❚❚ Pausa] (píldoras de vidrio) y ★ redondo con contador. Detener ignora el primer segundo (0.6). Mantener ★ = anotar una palabra.
-- Línea tenue: «Puedes bloquear el teléfono: la grabación sigue».
+- Línea tenue: «Puedes bloquear el teléfono: la grabación sigue. Toca ★ para marcar un momento.» (o el conteo de ★).
 
 ### 3.3 Nombra esta grabación (hoja al detener)
 - Título «Nombra esta grabación» con ✕ redondo (cierra y guarda lo escrito, igual que antes).

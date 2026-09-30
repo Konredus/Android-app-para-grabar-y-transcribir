@@ -37,6 +37,16 @@ La app pasa a llamarse **Verbapp** («las palabras vuelan, lo escrito permanece�
   - hojas con el fondo desenfocado (Android 12+).
 - Pantallas de borde a borde: el degradado pasa por detrás de las barras del sistema.
 
+**Revisión antes de entregar**
+Una revisión independiente del código (cuatro revisores y un verificador por área) confirmó 22 hallazgos, todos corregidos. Los principales:
+- Sobre Grabar, los botones del sistema quedaban blancos encima de la hoja blanca. Ahora cada hoja pide sus propios íconos oscuros.
+- «Cambiar título» había cambiado de comportamiento (fecha fija y la tecla del teclado guardaba). Volvió a funcionar como en 0.6.
+- Con letra grande se cortaban textos: el título «Personas», el nombre filtrado, las etiquetas de la nota, los botones lado a lado de las hojas, los nombres de los temas y los nombres de voces en «Nueva versión lista».
+- El lector de pantalla no anunciaba «Grabando» al empezar, y el ✕ de las hojas medía menos de 48 dp.
+- La pantalla Grabar podía medirse antes de tener el botón de «Última grabación» y aplastar «Importar audio».
+- La onda del mini reproductor se dibuja plana si no se alcanzó a registrar toda la grabación (teléfono bloqueado), en vez de estirar un tramo.
+- Volvieron dos textos útiles de 0.6: «funciona sin internet» y la pista de ★.
+
 **Para la próxima versión**
 - Investigación verificada para transcribir y armar notas con **una sola key de OpenRouter**, con una lista de modelos que se actualiza sola: `docs/PLAN-openrouter.md`.
 
