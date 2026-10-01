@@ -242,8 +242,10 @@ public class SettingsActivity extends Screen {
         if(ready){panel=p.dark?p.glass:0xB3FFFFFF;fg=p.onSurface;fg2=p.onSurfaceVariant;dotFg=p.onBrand;dotBg=p.brand;}
         else if(failed){panel=p.errorContainer;fg=fg2=p.onErrorContainer;dotFg=p.error;dotBg=p.surfaceContainerLowest;}
         else{panel=p.primaryContainer;fg=fg2=p.onPrimaryContainer;dotFg=p.onPrimaryContainer;dotBg=p.surfaceContainerLowest;}
-        String title=ready?"Listo para transcribir":failed?"No se pudo conectar":broke?"Sin saldo en OpenRouter":old!=null?"Verbapp ahora usa OpenRouter":"Falta un paso para transcribir";
-        String detail=ready?modelSummary(settings):failed?"Toca para ver qué pasó y reintentar"
+        // Una clave rechazada se dice como en la bienvenida y en Grabar (keyRejected), no como un problema de conexión.
+        boolean rejected=failed&&keyRejected(settings);
+        String title=ready?"Listo para transcribir":rejected?"Revisa tu clave de OpenRouter":failed?"No se pudo conectar":broke?"Sin saldo en OpenRouter":old!=null?"Verbapp ahora usa OpenRouter":"Falta un paso para transcribir";
+        String detail=ready?modelSummary(settings):rejected?"OpenRouter no la aceptó. Toca para ver qué pasó y cambiarla":failed?"Toca para ver qué pasó y reintentar"
             :broke?(noCredits()?"Tu cuenta aún no tiene créditos. Cárgalos en openrouter.ai y vuelve a comprobar.":"Carga créditos en openrouter.ai y vuelve a comprobar.")
             :old!=null?"Pega tu clave de OpenRouter para seguir transcribiendo. La de "+old+" ya no se usa."
             :"Agrega tu clave de OpenRouter. Grabar funciona igual sin ella.";
@@ -633,12 +635,23 @@ public class SettingsActivity extends Screen {
     }
     private boolean verifyValid(){return settings.prefs.getLong("verifyAt",0)>0&&verifyTarget().equals(settings.prefs.getString("verifyFor",""));}
     private boolean verifyFailed(){return verifyValid()&&!settings.prefs.getBoolean("verifyOk",true);}
+    /**
+     * La última comprobación (vigente) rechazó la clave: la regla de la bienvenida (OnboardingActivity.saved, un fallo que
+     * habla de la clave), dicha igual aquí, en «Listo» y en Grabar. Antes la bienvenida decía «Revisa tu clave», Ajustes
+     * «No se pudo conectar» (que suena a la red) y Grabar ✓ «Listo para transcribir».
+     */
+    static boolean keyRejected(SharedPreferences prefs,String target){
+        OnboardingActivity.Verdict v=OnboardingActivity.saved(prefs,target);return v!=null&&v.state==OnboardingActivity.Check.REJECTED;
+    }
+    static boolean keyRejected(Settings settings){return settings.hasOpenRouterKey()&&keyRejected(settings.prefs,verifyTarget(settings));}
+    /** La fila «Comprobar conexión» tras una comprobación que falló: la clave rechazada se nombra; lo demás es la conexión. */
+    static String failedText(boolean rejected,long at){return (rejected?"Clave rechazada · revísala · ":"No se pudo conectar · ")+ago(at);}
     private String verifyText(){
         if(verifying)return "Comprobando…";
         if(!settings.hasOpenRouterKey())return "Primero agrega tu clave";
         if(!verifyValid())return "Confirma que tu clave funciona";
         long at=settings.prefs.getLong("verifyAt",0);
-        if(!settings.prefs.getBoolean("verifyOk",false))return "No se pudo conectar · "+ago(at);
+        if(!settings.prefs.getBoolean("verifyOk",false))return failedText(keyRejected(settings),at);
         // OpenRouter dice cuánto queda: es el dato que sirve (con saldo en cero la clave vale, pero no transcribe).
         String what=balanceText(verifyBalance(),settings.prefs.getBoolean("verifyFree",false));
         return "✓ Clave válida · "+(what!=null?what:seconds(settings.prefs.getLong("verifyMs",0)))+" · "+ago(at);
@@ -690,7 +703,7 @@ public class SettingsActivity extends Screen {
             // El saldo es un dato de la cuenta: se muestra en la fila y no se registra.
             Diagnostics.event("setting_changed",null,"action","verify","result",ok,"elapsed_ms",took);
             runOnUiThread(()->{verifying=false;if(isDestroyed()||isFinishing())return;render();
-                if(verifyRow!=null){Ui.haptic(verifyRow,ok?Ui.Haptic.CONFIRM:Ui.Haptic.REJECT);verifyRow.announceForAccessibility(ok?"Clave válida":"No se pudo conectar");}
+                if(verifyRow!=null){Ui.haptic(verifyRow,ok?Ui.Haptic.CONFIRM:Ui.Haptic.REJECT);verifyRow.announceForAccessibility(ok?"Clave válida":keyRejected(settings)?"Clave rechazada":"No se pudo conectar");}
                 if(!ok)verifyError(why);
                 // Con la clave recién comprobada se aprovecha de poner al día la lista de modelos (y lo que usa «Automático»).
                 else if(Models.stale(this))loadCatalog();});
@@ -699,8 +712,10 @@ public class SettingsActivity extends Screen {
     /** Los errores siguen explicándose, con su salida: revisar la clave o reintentar. */
     private void verifyError(String reason){
         String why=reason==null||reason.isEmpty()?"Revisa tu conexión y vuelve a intentarlo.":reason;
-        Sheet s=sheet("No se pudo conectar",why);
-        if(why.toLowerCase(CL).contains("clave"))s.primary("Revisar la clave",this::keySheet);else s.primary("Reintentar",this::verify);
+        // Un motivo que habla de la clave es un rechazo (la regla de OnboardingActivity.saved): se titula como tal.
+        boolean key=why.toLowerCase(CL).contains("clave");
+        Sheet s=sheet(key?"Revisa tu clave de OpenRouter":"No se pudo conectar",why);
+        if(key)s.primary("Revisar la clave",this::keySheet);else s.primary("Reintentar",this::verify);
         s.secondary("Cerrar",null).show();
     }
     /** «0,9 s». */
