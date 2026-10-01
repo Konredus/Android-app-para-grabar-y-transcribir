@@ -2,6 +2,29 @@
 
 > Lista de mejoras acordadas con el usuario. Al implementar una, muévela al CHANGELOG y, si es una decisión de diseño, regístrala en `diseno/CRITERIOS.md`.
 
+## Diagnóstico 2026-10-01: audio de 4 min que tardó 1:15 (informe del usuario, 0.8.0 adelanto, vivo V2318, Android 16)
+Grabación df1c8d5d, solo texto, MAI-Transcribe 2. El trabajo real fue de 1 minuto. El resto se fue en esperas:
+1. **27 min esperando Wi-Fi** (10:12 → 10:40). El usuario estaba con datos móviles y «Solo con Wi-Fi» viene activado por defecto. La bitácora lo decía, pero no se vio.
+2. **45 min con la tarea pausada por Android** (10:42 → 11:27). La app estaba cerrada, así que no se pudo pasar a primer plano (`ForegroundServiceStartNotAllowedException`, Android 12+) y corrió como tarea de fondo.
+   - La conversión a FLAC tardó **150 s** en segundo plano (31–43 s en primer plano).
+   - Al subir, el teléfono cortó la red: «Software caused connection abort».
+   - JobScheduler la detuvo con STOP_REASON 4 (DEVICE_STATE) y no volvió hasta que el usuario abrió la app.
+   - El informe dice «Optimización de batería: activada». La excepción de batería que el usuario había dado se perdió: la bienvenida aparece en el informe, así que probablemente hubo una instalación nueva.
+3. **La conversión a FLAC es lenta.**
+   - Una parte de 9 min tardó 292 s en primer plano.
+   - La parte 2 tardó 912 s, pero con 10 min de app congelada.
+   - Hay que bajarla al menos 5 veces: float en vez de double, menos coeficientes (para voz bastan ~12–16 por lado), decimación entera 48k→16k y una comprobación del FLAC más barata (o ninguna). El porcentaje de «Preparando audio» debe verse.
+
+Buenas noticias del mismo informe:
+- Las **anclas funcionan con audio real**: «reconoció 1 de 1 voz conocida» en la parte 1 y «2 de 2» en la parte 2 de una reunión de 18 min.
+- Costo real: transcribir 18 min costó US$0,031, y la nota con Claude Sonnet, US$0,042. **La nota cuesta más que la transcripción.**
+
+Qué hacer (ronda 3 de la 0.8):
+- **Esperando Wi-Fi:** en el detalle, un botón grande «Usar datos móviles ahora (≈X MB)» y una notificación con esa acción. Evaluar un tope por defecto: permitir datos móviles para envíos de menos de ~10 MB.
+- **Transferencia iniciada por el usuario** (Android 14+): `JobInfo.Builder.setUserInitiated(true)` con el permiso `RUN_USER_INITIATED_JOBS`. Google la recomienda para transferencias que el usuario pidió, y no sufre las cuotas de las tareas de fondo. Debe programarse con la app visible, al tocar «Transcribir».
+- **La bienvenida pide «Transcribir con el teléfono bloqueado»** (permiso de batería, con la guía de vivo). Hoy una instalación nueva queda optimizada.
+- **Conversión más rápida** (ver el punto 3) y avance visible.
+
 ## Para la 0.9: métricas de uso en Ajustes (pedido 2026-09-30)
 > «En Ajustes, alguna sección con métricas de uso, de conversión, de tokens usados y cuánto equivale en USD… un poco más de métricas en general, eso se ve bonito. El público objetivo es alguien que habla mucho y quiere cargar información transcrita en su segundo cerebro.»
 
