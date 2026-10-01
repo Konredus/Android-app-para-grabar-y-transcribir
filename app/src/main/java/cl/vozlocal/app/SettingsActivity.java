@@ -329,8 +329,15 @@ public class SettingsActivity extends Screen {
     }
     private String versionName(){String v=Novedades.versionName(this);if(!v.isEmpty())return v;try{return getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception e){return "";}}
     private void set(String key,String value){settings.prefs.edit().putString(key,value).apply();changed(key);}
-    private void toggle(String key,boolean on){settings.prefs.edit().putBoolean(key,on).apply();Diagnostics.event("setting_changed",null,"action",key,"result",on);Pipeline.schedule(this,true);}
-    private void changed(String key){Diagnostics.event("setting_changed",null,"action",key);Pipeline.schedule(this,true);render();}
+    private void toggle(String key,boolean on){settings.prefs.edit().putBoolean(key,on).apply();Diagnostics.event("setting_changed",null,"action",key,"result",on);reschedule(key);}
+    private void changed(String key){Diagnostics.event("setting_changed",null,"action",key);reschedule(key);render();}
+    /**
+     * Vuelve a programar lo pendiente con los ajustes nuevos. «Red para enviar audio» y «Solo mientras carga» son
+     * condiciones de la transferencia ya pedida: Pipeline.settingsChanged la reprograma con las nuevas (si no, seguía
+     * esperando el Wi-Fi o el cargador de antes y, por 2 minutos, ningún otro camino la empezaba) y quita el aviso
+     * «Esperando Wi-Fi» si ya no corresponde. Ajustes está a la vista: Android acepta reprogramarla.
+     */
+    private void reschedule(String key){if("wifi".equals(key)||"charging".equals(key))Pipeline.settingsChanged(this);else Pipeline.schedule(this,true);}
     private static void subtitle(View row,String text){if(row instanceof Ui.Row)((Ui.Row)row).setSubtitle(text==null?"":text);}
     /** Muestra u oculta una fila de grupo junto con su divisor. */
     private static void showRow(View row,boolean visible){
@@ -561,8 +568,16 @@ public class SettingsActivity extends Screen {
                 +"Créala en openrouter.ai → Keys y pégala aquí. Sirve para transcribir y para armar tus notas. Se guarda cifrada y deja de mostrarse.",
             "sk-or-…","Clave de OpenRouter",this::saveRouterKey,()->{Diagnostics.event("setting_changed",null,"action","api_key");Pipeline.schedule(this,true);render();page.post(this::verify);});
     }
-    /** Guarda la clave de OpenRouter y deja OpenRouter como servicio (por si quedó otro de antes: la app ya no usa otros). */
-    private void saveRouterKey(String value)throws Exception{settings.saveOpenRouterKey(value);if(!settings.openRouter())VozApp.openRouterOnly(settings,settings.prefs.edit()).apply();}
+    /**
+     * Guarda la clave de OpenRouter y deja OpenRouter como servicio (por si quedó otro de antes: la app ya no usa otros).
+     * Antes, la misma revisión que la bienvenida (OnboardingActivity.keyProblem): una clave cortada, con espacios o de otro
+     * servicio (la de OpenAI que tenía quien actualiza, una sk-ant-) no se guarda, porque comprobarla y transcribir la
+     * mandarían a openrouter.ai. El motivo va al campo (HttpApi.UserAction; nunca repite la clave).
+     */
+    private void saveRouterKey(String value)throws Exception{
+        String problem=OnboardingActivity.keyProblem(value);if(problem!=null)throw new HttpApi.UserAction(problem);
+        settings.saveOpenRouterKey(value);if(!settings.openRouter())VozApp.openRouterOnly(settings,settings.prefs.edit()).apply();
+    }
     interface Secret{void save(String value)throws Exception;}
     /**
      * Hoja segura para pegar una clave: campo oculto, sin autocompletar ni capturas de pantalla. Debajo, «Pegar» (trae lo
@@ -572,12 +587,16 @@ public class SettingsActivity extends Screen {
     private void secretInput(String title,String message,String hint,String description,Secret secret,Runnable saved){
         EditText input=ui.field(hint,description);input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);input.setSaveEnabled(false);input.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         Sheet s=sheet(title,message).add(input);
-        Ui.Btn paste=ui.button("Pegar",0,Ui.Style.PLAIN,v->{String copied=clipboard();if(copied.isEmpty()){input.setError("No hay nada copiado");return;}input.setError(null);input.setText(copied);input.setSelection(input.length());});
+        // El campo va oculto: si lo pegado no sirve como clave de OpenRouter (otro servicio, cortado), se dice al tiro.
+        Ui.Btn paste=ui.button("Pegar",0,Ui.Style.PLAIN,v->{String copied=clipboard();if(copied.isEmpty()){input.setError("No hay nada copiado");return;}input.setError(null);input.setText(copied);input.setSelection(input.length());
+            String problem=OnboardingActivity.keyProblem(copied);if(problem!=null){input.setError(problem);Ui.haptic(input,Ui.Haptic.REJECT);}});
         Ui.Btn how=ui.button("¿Cómo consigo una clave?",0,Ui.Style.PLAIN,v->howToKey());
         // Enlaces de texto: su letra queda alineada con la del campo (se corren lo que mide el relleno del botón).
         Flow links=new Flow(this,0,0);for(Ui.Btn b:new Ui.Btn[]{paste,how}){b.setMinimumHeight(ui.dp(48));links.addView(b);}
         LinearLayout.LayoutParams lp=Ui.fill();lp.setMarginStart(-ui.dp(S3));lp.topMargin=ui.dp(S1);s.body.addView(links,lp);
-        s.primary("Guardar clave",Ui.Style.PRIMARY,()->{try{if(input.length()==0){input.setError("Pega tu clave");return false;}secret.save(input.getText().toString());input.setText("");saved.run();toast("Clave guardada");return true;}catch(Exception e){input.setError("No se pudo guardar. Revisa que no tenga espacios.");return false;}})
+        // Si la clave no sirve (secret lanza HttpApi.UserAction), su motivo; si falló el guardado en el teléfono, eso.
+        s.primary("Guardar clave",Ui.Style.PRIMARY,()->{try{if(input.length()==0){input.setError("Pega tu clave");return false;}secret.save(input.getText().toString());input.setText("");saved.run();toast("Clave guardada");return true;}
+            catch(Exception e){input.setError(e instanceof HttpApi.UserAction&&e.getMessage()!=null?e.getMessage():"No se pudo guardar la clave en este teléfono. Inténtalo de nuevo.");Ui.haptic(input,Ui.Haptic.REJECT);return false;}})
             .secondary("Cancelar",null).secure().show();
         input.requestFocus();if(s.dialog.getWindow()!=null)s.dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }

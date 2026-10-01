@@ -38,6 +38,7 @@ final class MetricsChecks {
             empty(c,dir);
             synthetic(c,dir);
             File again=new File(dir,"otra-pasada");check(again.mkdirs(),"No se pudo crear la subcarpeta de prueba");retranscribing(c,again);
+            File unknown=new File(dir,"sin-tarifa");check(unknown.mkdirs(),"No se pudo crear la subcarpeta de prueba");unknownByService(c,unknown);
         }finally{deleteTree(dir);}
         // El contrato de la tarjeta de Ajustes, con los datos reales (solo lectura): nunca lanza, y queda vacío solo si no
         // hay grabaciones (antes exigía que nunca quedara vacío: la tarjeta pasó a mostrar su propia invitación en ese caso).
@@ -149,6 +150,7 @@ final class MetricsChecks {
         Metrics.Totals all=m.of(Metrics.Period.ALL);
         check(all.recordings==9&&all.audioMs==8_940_000&&all.transcribed==4&&all.words==4050,"Todo: 9 grabaciones, 149 min, 4 transcritas, 4.050 palabras: "+all.audioMs+" · "+all.words);
         check(all.unknown==1&&near(all.realUsd,0.15)&&near(all.estUsd,0.30),"Todo: tu servidor no tiene tarifa (no se inventa costo)");
+        check(MetricsActivity.unknownNote(all).equals("1 transcripción con tu servidor: sin tarifa conocida.\n"),"Todo: el pie nombra a tu servidor: «"+MetricsActivity.unknownNote(all)+"»");
         check(all.queued.size()==1&&all.queued.get(0).equals(e)&&all.failed.size()==1&&all.failed.get(0).equals(f),"Todo: E en proceso y F con error");
         check(all.pending.size()==3&&all.pending.get(0).equals(cc)&&all.pending.get(1).equals(h)&&all.pending.get(2).equals(g),"Todo: sin transcribir de la más nueva a la más vieja (C, H, G)");
         check(all.heatMs[3][10]==600_000&&all.heatCount[3][10]==1&&all.heatMs[2][18]==1_800_000&&all.heatMs[3][8]==900_000,"Mapa: A el jueves a las 10, B el miércoles a las 18, E el jueves a las 8");
@@ -190,23 +192,55 @@ final class MetricsChecks {
      * "costUsd" y lo que cobre la nueva se suma aparte.
      */
     private static void retranscribing(Context c,File dir)throws Exception{
-        String or="openrouter",model="mistralai/voxtral-mini-transcribe-x";long done=at(9,5,10,0);
+        String or="openrouter",model="mistralai/voxtral-mini-transcribe-x";long done=at(9,5,10,0),asked=at(9,23,10,0);
         String k=rec(dir,at(9,5,9,0),600_000);
         FilesStore.write(new File(dir,k+".transcript.prev.json"),new JSONObject().put("segments",new JSONArray()));
         JSONObject before=new JSONObject().put("provider",or).put("model",model).put("audioMs",600_000).put("costUsd",0.07).put("doneAt",done);
-        state(dir,k,new JSONObject(before.toString()).put("requested",true).put("retranscribe",new JSONObject().put("mode","SPEAKERS").put("at",done+60_000).put("before",before)));
+        // Pedida el 23-09 (Pipeline.request pone "queuedAt"); el estado sigue con el "doneAt" de la pasada del 05-09.
+        state(dir,k,new JSONObject(before.toString()).put("requested",true).put("queuedAt",asked).put("retranscribe",new JSONObject().put("mode","SPEAKERS").put("at",asked).put("before",before)));
         Metrics.Totals all=Metrics.compute(c,dir,at(9,24,15,0),"Konrad",true,true).all;
         check(near(all.realUsd,0.07)&&all.passes==1,"En la cola, la pasada anterior se cuenta una sola vez: "+all.realUsd+" · "+all.passes);
         check(all.queued.size()==1&&all.transcribed==0,"Mientras se rehace, la grabación está «en proceso»");
         // La nueva empezó: el motor quitó "costUsd" (el resto del estado sigue igual).
-        JSONObject started=new JSONObject(before.toString()).put("requested",true).put("retranscribe",new JSONObject().put("before",before));started.remove("costUsd");
+        JSONObject started=new JSONObject(before.toString()).put("requested",true).put("queuedAt",asked).put("retranscribe",new JSONObject().put("before",before));started.remove("costUsd");
         state(dir,k,started);
         all=Metrics.compute(c,dir,at(9,24,15,0),"Konrad",true,true).all;
         check(near(all.realUsd,0.07)&&all.passes==1,"Recién empezada la nueva pasada, solo cuenta la anterior: "+all.realUsd+" · "+all.passes);
         // Y ya cobró una parte.
         state(dir,k,started.put("costUsd",0.02));
-        all=Metrics.compute(c,dir,at(9,24,15,0),"Konrad",true,true).all;
+        Metrics.Data m=Metrics.compute(c,dir,at(9,24,15,0),"Konrad",true,true);all=m.all;
         check(near(all.realUsd,0.09)&&all.passes==2,"La parte ya cobrada de la nueva pasada se suma a la anterior: "+all.realUsd+" · "+all.passes);
+        // Lo cobrado de la pasada sin terminar va en el día en que se pidió (23-09), no en el «doneAt» de la anterior (05-09).
+        Metrics.Totals week=m.of(Metrics.Period.WEEK);
+        check(near(week.realUsd,0.02)&&week.passes==1,"La parte cobrada de la nueva pasada cae en los últimos 7 días: "+week.realUsd+" · "+week.passes);
+        check(near(m.weekReal[7],0.02)&&near(m.weekReal[4],0.07),"Por semana: la nueva en la del 21-09 y la anterior en la del 31-08: "+m.weekReal[7]+" · "+m.weekReal[4]);
+    }
+
+    /**
+     * Transcripciones sin costo conocido: el pie de «Costos» dice de qué servicio son. Un modelo de OpenRouter sin tarifa
+     * por minuto (no está en el catálogo ni en la tabla) cuyo costo no vino (0 = dato que no vino) no es «tu servidor».
+     */
+    private static void unknownByService(Context c,File dir)throws Exception{
+        long now=at(9,24,15,0);String or="openrouter",model="prueba/modelo-sin-tarifa-x";
+        check(MetricsActivity.unknownNote(new Metrics.Totals()).isEmpty(),"Sin transcripciones sin tarifa, el pie no dice nada");
+        String n=rec(dir,at(9,20,9,0),600_000);
+        transcript(dir,n,or,model,false,new Object[][]{{"text",0,600,50}},null);
+        state(dir,n,new JSONObject().put("provider",or).put("model",model).put("audioMs",600_000).put("costUsd",0).put("doneAt",at(9,20,9,10)));
+        Metrics.Totals all=Metrics.compute(c,dir,now,"Konrad",true,true).all;
+        check(all.unknown==1&&near(all.realUsd,0)&&near(all.estUsd,0),"OpenRouter sin costo ni tarifa: se cuenta aparte, sin inventar un costo: "+all.unknown);
+        String note=MetricsActivity.unknownNote(all);
+        check(note.equals("1 transcripción de OpenRouter sin precio conocido: no informó el costo y el modelo no tiene tarifa por minuto.\n"),"El pie no habla de un servidor para OpenRouter: «"+note+"»");
+        // Con una de tu servidor y una de OpenAI con un modelo sin tarifa: una línea por servicio.
+        String s=rec(dir,at(9,21,9,0),300_000);
+        transcript(dir,s,"custom","mi-modelo",false,new Object[][]{{"text",0,300,20}},null);
+        state(dir,s,new JSONObject().put("provider","custom").put("model","mi-modelo").put("audioMs",300_000).put("doneAt",at(9,21,9,10)));
+        String o=rec(dir,at(9,22,9,0),300_000);
+        transcript(dir,o,"openai","modelo-viejo",false,new Object[][]{{"text",0,300,20}},null);
+        state(dir,o,new JSONObject().put("provider","openai").put("model","modelo-viejo").put("audioMs",300_000).put("doneAt",at(9,22,9,10)));
+        all=Metrics.compute(c,dir,now,"Konrad",true,true).all;note=MetricsActivity.unknownNote(all);
+        check(all.unknown==3,"Tres sin tarifa: "+all.unknown);
+        check(note.equals("1 transcripción de OpenRouter sin precio conocido: no informó el costo y el modelo no tiene tarifa por minuto.\n"
+            +"1 transcripción de OpenAI sin tarifa conocida para su modelo.\n1 transcripción con tu servidor: sin tarifa conocida.\n"),"Una línea por servicio: «"+note+"»");
     }
 
     // ---------- Grabaciones sintéticas ----------
