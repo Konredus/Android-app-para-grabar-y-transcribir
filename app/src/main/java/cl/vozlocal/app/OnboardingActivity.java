@@ -51,7 +51,8 @@ import static cl.vozlocal.app.AppTheme.*;
  * Bienvenida de la primera instalación (0.8.0, ver docs/diseno/SPEC-0.8.md → «onboarding»): cuatro pasos cortos a pantalla
  * completa sobre el fondo intenso de Grabar, con la estética Verbapp (docs/diseno/PROPUESTA-0.7.md):
  * 1. Bienvenida: el logo en grande, el lema y tres beneficios en tarjetas de vidrio.
- * 2. Tú: tu nombre (opcional, para el saludo y para tu voz) y el permiso del micrófono.
+ * 2. Tú: tu nombre (opcional, para el saludo y para tu voz), el permiso del micrófono y, debajo, una fila más liviana
+ *    «Con la pantalla bloqueada» (permiso de batería y la guía del fabricante; SPEC-0.8c, decisión 4).
  * 3. Conecta tu IA: solo OpenRouter (0.8.0, segunda ronda: docs/diseno/SPEC-0.8b.md). Antes de pedir la clave se dice en
  *    claro qué sale del teléfono, a quién y quién paga; después, el campo para pegarla.
  * 4. Listo: cómo quedó la clave y dos accesos opcionales (grabar tu voz, elegir tu carpeta 0-Inbox).
@@ -125,48 +126,46 @@ public class OnboardingActivity extends Screen {
     /**
      * Guarda la clave de OpenRouter y deja OpenRouter como servicio de transcripción. Devuelve false, sin tocar nada, si no
      * se escribió nada: así un repaso de la bienvenida no pisa la clave que ya existe.
-     * La nota va siempre por OpenRouter (SPEC-0.8b, decisión 3): como en la migración de VozApp, se quita una IA de la nota
-     * elegida antes; las claves viejas de otros servicios y el modelo de la nota quedan como estaban (Notes descarta solo
-     * un modelo que no es de OpenRouter), así nada se borra sin aviso.
+     * La nota ya no mira la preferencia "noteProvider": Notes.provider() es siempre OpenRouter (SPEC-0.8b, decisión 3) y la
+     * migración de VozApp la borra. Por eso aquí no se escribe ni se borra (pedido de la parte settings en la segunda
+     * ronda). Las claves viejas de otros servicios y el modelo de la nota quedan como estaban (Notes descarta solo un
+     * modelo que no es de OpenRouter), así nada se borra sin aviso.
      */
     static boolean applyKey(Settings s,String raw)throws Exception{
         String key=raw==null?"":raw.trim();if(key.isEmpty())return false;
         String problem=keyProblem(key);if(problem!=null)throw new IllegalArgumentException(problem);
         s.saveKeyFor(OPENROUTER,key);
-        s.prefs.edit().putString("provider",OPENROUTER).remove("noteProvider").apply();return true;
-    }
-    /** Saldo con que se puede transcribir: lo que le queda a la clave (si tiene tope) y a la cuenta, el menor; NaN si no se supo ninguno. */
-    static double balance(Models.KeyInfo info,double account){
-        double key=info==null||Double.isInfinite(info.remaining)?Double.NaN:info.remaining;if(Double.isInfinite(account))account=Double.NaN;
-        return Double.isNaN(account)?key:Double.isNaN(key)?account:Math.min(key,account);
+        s.prefs.edit().putString("provider",OPENROUTER).apply();return true;
     }
     /**
-     * La cuenta nunca cargó créditos: OpenRouter la marca «gratuita» (is_free_tier) y no informa saldo de cuenta. El tope
-     * de la clave no sirve de saldo en ese caso (una clave con tope de US$5 en una cuenta vacía no transcribe nada).
-     */
-    static boolean noCredits(Models.KeyInfo info,double account){return info!=null&&info.freeTier&&Double.isNaN(account);}
-    /**
-     * «Clave válida · quedan US$4,20» (el saldo solo si se supo). La etiqueta de la clave no se muestra. El monto y el piso
-     * de «sin saldo» son los de Ajustes → «Comprobar conexión» (SettingsActivity.money y NO_BALANCE): la misma clave dice
-     * lo mismo en los dos lugares.
+     * «Clave válida · quedan US$4,20» (el saldo solo si se supo). La etiqueta de la clave no se muestra. Lo que va después
+     * de «Clave válida» es SettingsActivity.balanceText, el mismo texto de Ajustes → «Comprobar conexión»: la misma clave
+     * dice lo mismo en los dos lugares (también «aún sin créditos», que manda sobre el tope de la clave).
      */
     static String validText(double balance,boolean noCredits){
-        if(noCredits)return "Clave válida, pero aún sin créditos: carga créditos en openrouter.ai.";
-        if(Double.isNaN(balance)||Double.isInfinite(balance))return "Clave válida";
-        if(balance<=SettingsActivity.NO_BALANCE)return "Clave válida, pero sin saldo: carga créditos en openrouter.ai.";
-        return "Clave válida · quedan "+SettingsActivity.money(balance);
+        String what=SettingsActivity.balanceText(balance,noCredits);return what==null?"Clave válida":"Clave válida · "+what;
     }
-    /** Lo que se supo de una clave válida: el texto para la persona y lo que queda en Ajustes (saldo, cuenta gratuita, sin saldo). */
+    /**
+     * Lo que se supo de una clave válida: el texto para la persona y lo que queda en Ajustes. balance: el saldo que se
+     * guarda (NaN si no se supo, o si la cuenta aún no carga créditos: el tope de la clave no es plata disponible y
+     * «Tus métricas» lo mostraría como saldo). free: la cuenta aún no carga créditos (Models.Balance.noCredits), lo que
+     * SettingsActivity.saveVerify guarda como verifyFree. empty: válida pero así no transcribe (sin saldo o sin créditos).
+     */
     static final class Valid{
         final String text;final double balance;final boolean free,empty;
         Valid(String text,double balance,boolean free,boolean empty){this.text=text;this.balance=balance;this.free=free;this.empty=empty;}
     }
-    /** De lo que respondió OpenRouter (GET /key y, si lo entrega, GET /credits) a lo que se muestra y se guarda. */
-    static Valid valid(Models.KeyInfo info,double account){
-        boolean none=noCredits(info,account);double left=none?Double.NaN:balance(info,account);
-        // Sin créditos, el saldo queda «no sabido» y Ajustes dice «aún sin créditos cargados» (verifyFree), no el tope de la clave.
-        return new Valid(validText(left,none),left,info!=null&&info.freeTier,none||(!Double.isNaN(left)&&left<=SettingsActivity.NO_BALANCE));
+    /**
+     * De lo que respondió OpenRouter a lo que se muestra y se guarda. La regla del saldo es UNA, Models.balance (la misma
+     * de Ajustes): el menor entre lo que le queda a la clave y a la cuenta, y «sin créditos» si la cuenta es gratuita y
+     * no informa saldo.
+     */
+    static Valid valid(Models.Balance b){
+        boolean none=b!=null&&b.noCredits;double left=b==null||none||Double.isInfinite(b.left)?Double.NaN:b.left;
+        return new Valid(validText(left,none),left,none,none||(!Double.isNaN(left)&&left<=SettingsActivity.NO_BALANCE));
     }
+    /** Lo mismo desde GET /key y el saldo de la cuenta (GET /credits; NaN si no se supo). */
+    static Valid valid(Models.KeyInfo info,double account){return valid(Models.balance(info,account));}
     /** El motivo del rechazo tal como lo dice el cliente, sin mandar a Ajustes: aquí la clave se corrige en el paso anterior. */
     static String rejected(String message){String m=message==null?"":message.replace(" Revísala en Ajustes.","").trim();return m.isEmpty()?"La clave no funcionó.":m;}
     /** Primer nombre para saludar («Konrad Peschka» → «Konrad»); vacío si no hay nombre o es el «Yo» por defecto. */
@@ -184,10 +183,10 @@ public class OnboardingActivity extends Screen {
     interface Checker{Valid check(HttpApi http,String key)throws Exception;}
     /**
      * La comprobación de OpenRouter, la misma de Ajustes → «Comprobar conexión»: GET /key dice si vale y cuánto le queda a
-     * la clave; el saldo de la cuenta (GET /credits) se pide sin exigirlo. Antes solo se miraba la clave, y la bienvenida
-     * podía decir «quedan US$5,00» (el tope de la clave) en una cuenta sin saldo, y dejarlo así en Ajustes.
+     * la clave; Models.balance pide el saldo de la cuenta (GET /credits) sin exigirlo y junta los dos. Antes solo se
+     * miraba la clave, y la bienvenida podía decir «quedan US$5,00» (el tope de la clave) en una cuenta sin saldo.
      */
-    static Checker checker(){return (http,key)->{Models.KeyInfo info=Models.checkKey(http,key);return valid(info,Models.credits(http,key));};}
+    static Checker checker(){return (http,key)->{Models.KeyInfo info=Models.checkKey(http,key);return valid(Models.balance(http,key,info));};}
     /**
      * Comprueba sin bloquear nunca: válida, rechazada con el mensaje del proveedor (HttpApi.UserAction) o, ante cualquier
      * otra cosa (sin red, servicio caído), «no se pudo comprobar ahora». No lanza.
@@ -223,17 +222,22 @@ public class OnboardingActivity extends Screen {
     /** Para entregar el resultado de la comprobación: no es de ninguna pantalla, así un giro justo en ese momento no lo pierde. */
     private static final Handler RESULTS=new Handler(Looper.getMainLooper());
     private Settings settings;private Kept kept;private boolean replay,switching,askedMic,imeShown,secured;
+    /**
+     * Permiso de batería: askedBattery = se abrió el diálogo de Android y falta ver qué respondió (se mira al volver, en
+     * onResume); guideShown = la guía del fabricante ya se mostró sola una vez (después, solo si se toca la fila).
+     */
+    private boolean askedBattery,guideShown;
     private int step,keyTone;private long switchedAt;private String name="";
     // Marco fijo: barra de arriba y zona de abajo
     private ImageButton back;private Steps dots;private Ui.Btn skip,next;private TextView later;private LinearLayout stage;
     // Vistas del paso que está a la vista (null en los demás)
     private TextView heading,micDetail,keyStatus;private EditText nameInput,keyInput;private Emblem micArt,keyArt;private Ui.Btn allow;
-    private LinearLayout nameCard,keyCard,readyList;
+    private LinearLayout nameCard,keyCard,readyList,batteryCard;
 
     @Override public void onCreate(Bundle state){
         super.onCreate(state);settings=new Settings(this);replay=getIntent().getBooleanExtra("replay",false);
         Object last=getLastNonConfigurationInstance();kept=last instanceof Kept?(Kept)last:new Kept();if(kept.check!=null)kept.check.screen=this;
-        if(state!=null){step=Math.max(0,Math.min(STEPS-1,state.getInt("ob_step")));name=state.getString("ob_name","");askedMic=state.getBoolean("ob_asked");}
+        if(state!=null){step=Math.max(0,Math.min(STEPS-1,state.getInt("ob_step")));name=state.getString("ob_name","");askedMic=state.getBoolean("ob_asked");askedBattery=state.getBoolean("ob_battery");guideShown=state.getBoolean("ob_guide");}
         else{
             String saved=settings.prefs.getString("myVoiceName","").trim();name=saved.equals("Yo")?"":saved;
             Diagnostics.event("ui_action",null,"screen","Onboarding","action",replay?"replay":"start");
@@ -244,8 +248,8 @@ public class OnboardingActivity extends Screen {
         buildFrame();show(step,0,false);
         if(state==null)enter(stage);
     }
-    @Override protected void onResume(){super.onResume();renderMic(false);renderReady();}
-    @Override protected void onSaveInstanceState(Bundle out){out.putInt("ob_step",step);out.putString("ob_name",name);out.putBoolean("ob_asked",askedMic);super.onSaveInstanceState(out);}
+    @Override protected void onResume(){super.onResume();renderMic(false);batteryReturned();renderReady();}
+    @Override protected void onSaveInstanceState(Bundle out){out.putInt("ob_step",step);out.putString("ob_name",name);out.putBoolean("ob_asked",askedMic);out.putBoolean("ob_battery",askedBattery);out.putBoolean("ob_guide",guideShown);super.onSaveInstanceState(out);}
     @Override public Object onRetainNonConfigurationInstance(){return kept;}
     @Override protected void onDestroy(){
         main.removeCallbacksAndMessages(null);Check c=kept.check;
@@ -354,7 +358,7 @@ public class OnboardingActivity extends Screen {
      */
     private void show(int target,int dir,boolean animate){
         step=target;LinearLayout out=stage;
-        heading=null;micDetail=null;keyStatus=null;nameInput=null;keyInput=null;micArt=null;keyArt=null;allow=null;nameCard=null;keyCard=null;readyList=null;
+        heading=null;micDetail=null;keyStatus=null;nameInput=null;keyInput=null;micArt=null;keyArt=null;allow=null;nameCard=null;keyCard=null;readyList=null;batteryCard=null;
         LinearLayout in=target==WELCOME?buildWelcome():target==YOU?buildYou():target==AI?buildAi():buildReady();stage=in;
         boolean[] done={false};
         Runnable swap=()->{
@@ -478,7 +482,11 @@ public class OnboardingActivity extends Screen {
         LinearLayout head=lead(R.drawable.ic_mic,"Micrófono",micDetail);head.setPadding(dp(S1),dp(S1),dp(S2),dp(S3));mic.addView(head,Ui.fill());
         allow=ui.button("Permitir micrófono",R.drawable.ic_mic_fill,Ui.Style.RECORD,v->askMic());mic.addView(allow,Ui.fill());
         c.addView(mic,Ui.fill());
-        renderMic(false);
+        // Debajo, «Con la pantalla bloqueada» (SPEC-0.8c, decisión 4): una instalación nueva queda con la batería optimizada
+        // y Android pausa la transcripción con la app cerrada (diagnóstico del 2026-10-01). Va como una fila de vidrio que
+        // se toca, sin otro botón grande: el micrófono sigue siendo lo principal del paso y esto se puede saltar sin más.
+        batteryCard=ui.group();c.addView(batteryCard,ui.top(S2));
+        renderMic(false);batteryShown="";renderBattery(false);
         return c;
     }
     private boolean micGranted(){return checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED;}
@@ -521,6 +529,78 @@ public class OnboardingActivity extends Screen {
         if(request!=REQ_MIC)return;
         boolean ok=micGranted();Diagnostics.event("ui_action",null,"screen","Onboarding","action","mic","result",ok);renderMic(true);
     }
+    /** Lo que muestra la fila de batería ahora («permitido|guía»): no se rearma si no cambió (sin parpadeo al volver). */
+    private String batteryShown="";
+    /**
+     * Fila «Con la pantalla bloqueada» con su estado real, como las filas del último paso: por hacer (flecha; abre el
+     * diálogo de Android) o hecho (✓). El ✓ es por lo único que la app puede comprobar, la optimización de Android. En
+     * marcas con un ahorro propio (vivo, Xiaomi, OPPO…), que ninguna app puede leer, el ✓ va con «hay un ajuste más» y la
+     * fila abre la guía del fabricante. celebrate: recién permitido (el ✓ entra con un resorte y vibra).
+     */
+    private void renderBattery(boolean celebrate){
+        if(batteryCard==null)return;
+        boolean ok=Battery.unrestricted(this),extra=ok&&Battery.makerSteps().length>0;String key=ok+"|"+extra;
+        if(key.equals(batteryShown)&&!celebrate)return;batteryShown=key;batteryCard.removeAllViews();
+        String detail;View.OnClickListener click;
+        if(!ok){detail="Para que tus audios se transcriban aunque bloquees el teléfono.";click=v->askBattery();}
+        else if(extra){detail="Permitido. En "+Battery.makerName()+" hay un ajuste más: toca para verlo.";click=v->makerGuide();}
+        else{detail="Listo: Verbapp transcribe aunque bloquees el teléfono.";click=null;}
+        LinearLayout row=stateRow(R.drawable.ic_battery,"Con la pantalla bloqueada",detail,ok?ROW_DONE:ROW_GO,click);
+        // Alineada con la tarjeta del micrófono de arriba: el círculo del ícono queda a 12 dp del borde, igual que allá.
+        row.setPaddingRelative(dp(S3),dp(S3),dp(S3),dp(S3));batteryCard.addView(row,Ui.fill());
+        // Para el lector de pantalla, lo pendiente dice primero qué hace el toque (la flecha no se anuncia).
+        if(!ok)row.setContentDescription("Permitir transcribir con la pantalla bloqueada. "+detail);
+        if(celebrate&&ok){
+            // La marca ✓ es lo último de la fila: aparece con un resorte corto (tamaño: puede rebotar), como la insignia de arriba.
+            View mark=row.getChildAt(row.getChildCount()-1);
+            if(AppTheme.motion()){mark.setScaleX(0.4f);mark.setScaleY(0.4f);mark.animate().scaleX(1f).scaleY(1f).setDuration(SPATIAL_FAST.duration).setInterpolator(SPATIAL_FAST).start();}
+            Ui.haptic(row,Ui.Haptic.CONFIRM);
+        }
+    }
+    /** Abre el diálogo de Android «¿Permitir que Verbapp se ejecute en segundo plano?» (o la ficha de la app, si no hay diálogo). */
+    private void askBattery(){
+        if(Battery.unrestricted(this)){renderBattery(false);return;}
+        askedBattery=true;Diagnostics.event("ui_action",null,"screen","Onboarding","action","battery_request");
+        Battery.request(this);
+    }
+    /**
+     * Al volver (onResume): si se había abierto el diálogo de batería, se registra qué pasó y, si se permitió, se celebra
+     * y, en marcas con un ahorro propio, la guía del fabricante aparece sola UNA vez: sin ese ajuste, vivo igual pausa
+     * Verbapp (el caso del diagnóstico). Si no se permitió no se insiste: la fila sigue ahí con su flecha.
+     */
+    private void batteryReturned(){
+        if(!askedBattery){renderBattery(false);return;}
+        askedBattery=false;boolean ok=Battery.unrestricted(this);
+        Diagnostics.event("ui_action",null,"screen","Onboarding","action","battery","result",ok);
+        renderBattery(ok);
+        if(!ok||batteryCard==null)return;
+        batteryCard.announceForAccessibility("Permitido: Verbapp transcribe aunque bloquees el teléfono.");
+        // Primero se ve el ✓ y después sube la guía (con «Quitar animaciones», de inmediato).
+        if(!guideShown&&Battery.makerSteps().length>0)main.postDelayed(()->{if(!isFinishing()&&!isDestroyed()&&step==YOU)makerGuide();},AppTheme.motion()?MOTION_SLOW:0);
+    }
+    /**
+     * Guía del ahorro propio del fabricante: por qué hace falta, los pasos en palabras simples y el botón que abre la ficha
+     * de Verbapp en Ajustes de Android. La hoja queda abierta al tocar ese botón: al volver, los pasos siguen a la vista.
+     * La app no puede saber si se hizo, así que no marca nada: solo explica.
+     */
+    private void makerGuide(){
+        String[] steps=Battery.makerSteps();if(steps.length==0)return;guideShown=true;String maker=Battery.makerName();
+        Diagnostics.event("ui_action",null,"screen","Onboarding","action","battery_guide");
+        Sheet s=sheet("Un ajuste más en "+maker,maker+" tiene su propio ahorro de batería, aparte del de Android. Sin este ajuste puede pausar tus transcripciones al bloquear el teléfono.");
+        SheetParts.hero(s,R.drawable.ic_battery,false);numbered(s,steps);
+        TextView tip=ui.text("¿No lo encuentras? En Ajustes, toca la lupa y busca «segundo plano».",Type.BODY_MEDIUM,p.onSurfaceVariant);tip.setPadding(dp(S1),dp(S3),0,0);s.add(tip);
+        // El botón ya queda en el diagnóstico por su rótulo (Ui.Btn); devolver false deja la hoja abierta.
+        s.primary(Battery.OPEN_SETTINGS,Ui.Style.PRIMARY,()->{Battery.appSettings(this);return false;}).secondary("Listo",null).show();
+    }
+    /** Pasos numerados en una hoja: círculo menta con el número y el texto al lado (como «Cómo conseguir tu clave»). */
+    private void numbered(Sheet s,String[] steps){
+        for(int i=0;i<steps.length;i++){
+            LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(dp(S1),dp(S2),0,dp(S2));
+            TextView n=ui.text(String.valueOf(i+1),Type.LABEL_MEDIUM,p.onPrimaryContainer);n.setGravity(Gravity.CENTER);n.setBackground(oval(p.primaryContainer));n.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            r.addView(n,new LinearLayout.LayoutParams(dp(24),dp(24)));r.addView(ui.space(S3));r.addView(ui.text(steps[i],Type.BODY_LARGE,p.onSurface),new LinearLayout.LayoutParams(0,-2,1));s.add(r);
+        }
+    }
+
     /** Solo si escribió algo distinto: un campo vacío no borra el nombre que ya hubiera. */
     private void saveName(){
         String n=Voices.clean(name);name=n;
@@ -643,6 +723,8 @@ public class OnboardingActivity extends Screen {
             Verdict v=verify(checker,c.http,key);
             // cancelled: otra clave reemplazó a esta. Si la clave cambió por otro lado (Ajustes), target ya no calza.
             if(v.state!=Check.UNKNOWN&&!c.http.cancelled&&target.equals(SettingsActivity.verifyTarget(prefs))){
+                // Lo mismo que guarda «Comprobar conexión»: el saldo de Models.balance y si la cuenta aún no carga créditos
+                // (Balance.noCredits, que Ajustes muestra antes que cualquier monto). Sin créditos el saldo va «no sabido».
                 Valid ok=v.valid;
                 SettingsActivity.saveVerify(prefs,target,v.state==Check.VALID,SystemClock.elapsedRealtime()-began,v.message,ok==null?Double.NaN:ok.balance,ok!=null&&ok.free);
             }
@@ -661,12 +743,7 @@ public class OnboardingActivity extends Screen {
     private void howTo(){
         String site="openrouter.ai";
         Sheet s=sheet("Cómo conseguir tu clave","OpenRouter te da acceso a muchas IA con una sola clave. Pagas solo lo que usas.");
-        String[] steps={"Crea tu cuenta en openrouter.ai.","Carga un poco de crédito: se descuenta solo lo que usas.","En «Keys», crea una clave y cópiala.","Vuelve a Verbapp y toca Pegar."};
-        for(int i=0;i<steps.length;i++){
-            LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(dp(S1),dp(S2),0,dp(S2));
-            TextView n=ui.text(String.valueOf(i+1),Type.LABEL_MEDIUM,p.onPrimaryContainer);n.setGravity(Gravity.CENTER);n.setBackground(oval(p.primaryContainer));n.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            r.addView(n,new LinearLayout.LayoutParams(dp(24),dp(24)));r.addView(ui.space(S3));r.addView(ui.text(steps[i],Type.BODY_LARGE,p.onSurface),new LinearLayout.LayoutParams(0,-2,1));s.add(r);
-        }
+        numbered(s,new String[]{"Crea tu cuenta en openrouter.ai.","Carga un poco de crédito: se descuenta solo lo que usas.","En «Keys», crea una clave y cópiala.","Vuelve a Verbapp y toca Pegar."});
         s.primary("Abrir "+site,()->{
             try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(KEYS_OPENROUTER)));}
             catch(ActivityNotFoundException|SecurityException e){message("No se pudo abrir el navegador","Entra a "+site+" desde un navegador, crea tu clave y vuelve para pegarla.");}
@@ -703,6 +780,16 @@ public class OnboardingActivity extends Screen {
         else readyRow(R.drawable.ic_inbox,"Elegir mi carpeta 0-Inbox","Opcional: donde quedan tus notas con un toque.",ROW_GO,()->openSettings("inbox"));
     }
     private void readyRow(int icon,String title,String detail,int tone,Runnable click){
+        // Se registra el tipo de fila (su lugar en la lista), no su texto: el de la carpeta trae un nombre puesto por la persona.
+        LinearLayout row=stateRow(icon,title,detail,tone,click==null?null:v->{Diagnostics.event("ui_action",null,"screen","Onboarding","action","ready_row","result",readyList==null?-1:readyList.indexOfChild(v));click.run();});
+        if(readyList.getChildCount()>0)readyList.addView(ui.separator(S4+44+S3));
+        readyList.addView(row,Ui.fill());
+    }
+    /**
+     * Fila con estado (la del último paso y la de batería del paso «Tú»): ícono en círculo menta (rojo si hay un problema),
+     * título, apoyo y, a la derecha, el estado de un vistazo. Con click es un botón para el lector de pantalla.
+     */
+    private LinearLayout stateRow(int icon,String title,String detail,int tone,View.OnClickListener click){
         boolean bad=tone==ROW_BAD;
         LinearLayout row=ui.row();row.setMinimumHeight(dp(72));row.setPadding(dp(S4),dp(S3),dp(S3),dp(S3));
         row.addView(ui.tile(icon,bad?p.onErrorContainer:p.onPrimaryContainer,bad?p.errorContainer:p.primaryContainer,44,22));row.addView(ui.space(S3));
@@ -715,13 +802,9 @@ public class OnboardingActivity extends Screen {
         else if(tone==ROW_GO||bad){FrameLayout go=ui.tile(R.drawable.ic_arrow_back,p.onSurfaceVariant,0,32,18);go.setBackground(glassOval(this,p));go.getChildAt(0).setRotation(180);mark=go;}
         if(mark!=null){int size=dp(tone==ROW_DONE?28:tone==ROW_BUSY?24:32);LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(size,size);mp.setMarginStart(dp(S3));mark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);row.addView(mark,mp);}
         row.setContentDescription(title+". "+detail);
-        if(click!=null){
-            row.setBackground(ui.ripple(null,0));row.setClickable(true);row.setFocusable(true);row.setAccessibilityDelegate(Ui.buttonRole());
-            // Se registra el tipo de fila, no su texto (el de la carpeta trae un nombre puesto por la persona).
-            row.setOnClickListener(v->{Diagnostics.event("ui_action",null,"screen","Onboarding","action","ready_row","result",readyList==null?-1:readyList.indexOfChild(row));click.run();});
-        }else row.setFocusable(true);
-        if(readyList.getChildCount()>0)readyList.addView(ui.separator(S4+44+S3));
-        readyList.addView(row,Ui.fill());
+        if(click!=null){row.setBackground(ui.ripple(null,0));row.setClickable(true);row.setFocusable(true);row.setAccessibilityDelegate(Ui.buttonRole());row.setOnClickListener(click);}
+        else row.setFocusable(true);
+        return row;
     }
     /** Accesos opcionales: Ajustes abre directo ese paso («voice» = grabar tu voz, «inbox» = carpeta rápida) y vuelve aquí al terminar. */
     private void openSettings(String extra){startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true).putExtra(extra,true));}

@@ -150,6 +150,7 @@ public class MainActivity extends Screen {
         super.onCreate(saved);
         if(saved!=null){query=saved.getString("query","");filter=saved.getInt("filter");homeScroll=saved.getInt("homeScroll");libraryScroll=saved.getInt("libraryScroll");}
         showLibrary=saved!=null?saved.getBoolean("library"):getIntent().getBooleanExtra("library",false);
+        if(saved==null&&showLibrary)filter=requestedFilter(getIntent(),filter);
         // Grabar lleva el fondo intenso (verde abajo); la Biblioteca, el suave (se funden al cambiar de pestaña).
         shell(null,showLibrary?1:0,!showLibrary);
         // El teclado nunca se abre solo al volver: solo cuando tocas la búsqueda.
@@ -183,7 +184,23 @@ public class MainActivity extends Screen {
         super.onNewIntent(intent);setIntent(intent);
         // Si algo trae esta pantalla al frente por encima de la bienvenida (una pestaña de Ajustes, una notificación), Grabar se muestra.
         if(welcoming)endWelcome();
-        section(intent.getBooleanExtra("library",false));
+        boolean library=intent.getBooleanExtra("library",false);
+        if(library&&intent.hasExtra("filter")){
+            // Se llega a ver justamente esas grabaciones: una búsqueda que quedó escrita no las esconde, y la lista parte
+            // desde arriba. La búsqueda se borra antes de fijar el filtro (borrarla redibuja con lo que había).
+            if(search!=null&&search.length()>0)search.setText("");
+            filter=requestedFilter(intent,filter);libraryScroll=0;
+        }
+        section(library);
+    }
+    /**
+     * Filtro de la Biblioteca que pide quien abre esta pantalla con library=true (extra "filter"; lo manda «Tus métricas»
+     * desde «A medio camino»: 1 por guardar o transcritas, 2 en proceso, 3 sin transcribir, 4 con error; ver matches).
+     * Sin el extra, o con un valor que no existe, queda el que había. Si ese filtro no tiene grabaciones al leer la lista,
+     * render vuelve solo a «Todas».
+     */
+    static int requestedFilter(Intent intent,int current){
+        if(intent==null||!intent.hasExtra("filter"))return current;int f=intent.getIntExtra("filter",0);return f>=0&&f<=4?f:current;
     }
     @Override public void onBackPressed(){if(showLibrary)section(false);else super.onBackPressed();}
 
