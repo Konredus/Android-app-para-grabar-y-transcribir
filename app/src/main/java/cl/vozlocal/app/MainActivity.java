@@ -347,7 +347,8 @@ public class MainActivity extends Screen {
         box.addView(ui.icon(icon,p.primary,iconDp),new FrameLayout.LayoutParams(ui.dp(iconDp),ui.dp(iconDp),Gravity.CENTER));box.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);return box;
     }
     /**
-     * «Tu semana»: tres datos de los últimos 7 días. Tocarla abre la Biblioteca. En pantallas bajas se achica primero a una
+     * «Tu semana»: tres datos de los últimos 7 días. Tocarla abre «Tus métricas» (0.8.0, SPEC-0.8b: el resumen invita a ver
+     * el resto de los números; la Biblioteca ya está a un toque en la barra). En pantallas bajas se achica primero a una
      * franja de una línea (los mismos tres datos con su ícono) y, si aún no cabe, se oculta.
      */
     private LinearLayout buildWeekCard(){
@@ -365,7 +366,7 @@ public class MainActivity extends Screen {
         weekStripStats=ui.row();weekStrip.addView(weekStripStats);card.addView(weekStrip,Ui.fill());
         for(View v:new View[]{weekHead,weekStats,weekStrip})v.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         card.setBackground(ui.ripple(glass(this,p,R_CARD),R_CARD));card.setClickable(true);card.setFocusable(true);card.setAccessibilityDelegate(Ui.buttonRole());
-        card.setOnClickListener(v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Tu semana");section(true);});Ui.pressable(card);
+        card.setOnClickListener(v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Tu semana");MetricsActivity.open(this);});Ui.pressable(card);
         return card;
     }
     private void renderWeek(){
@@ -379,7 +380,7 @@ public class MainActivity extends Screen {
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);if(i>0)lp.setMarginStart(ui.dp(S2));weekStats.addView(s,lp);
             if(i>0)weekStripStats.addView(ui.space(S3));weekStripStats.addView(ui.icon(icons[i],p.onSurfaceVariant,16));weekStripStats.addView(ui.space(S1));weekStripStats.addView(Ui.tabular(ui.text(values[i],Type.LABEL_LARGE,p.onSurface)));
         }
-        weekCard.setContentDescription("Tu semana, últimos 7 días: "+w.count+(w.count==1?" grabación, ":" grabaciones, ")+dur+" grabado, "+w.notes+(w.notes==1?" nota":" notas")+". Toca para ver la Biblioteca");
+        weekCard.setContentDescription("Tu semana, últimos 7 días: "+w.count+(w.count==1?" grabación, ":" grabaciones, ")+dur+" grabado, "+w.notes+(w.notes==1?" nota":" notas")+". Toca para ver tus métricas");
     }
     /**
      * Achica un texto de una línea hasta que quepa entero (sin «…» ni saltos), sin bajar de minSp: sirve con la letra
@@ -413,22 +414,24 @@ public class MainActivity extends Screen {
      * Estado, con esta prioridad: falta la clave > transcribiendo > error > una transcripción lista sin abrir > todo bien.
      * Arriba a la derecha va siempre como un botón redondo (llave, anillo que gira, alerta, documento o ✓); si algo pide
      * atención, además se dice con palabras en la píldora bajo el saludo. Ambos hacen lo mismo que el chip de 0.6.
+     * La clave es la de OpenRouter (0.8.0, SPEC-0.8b: solo OpenRouter): sin ella, «Configurar transcripción» abre Ajustes
+     * directo en la hoja de esa clave (extra focusKey), aunque quede guardada una clave vieja de OpenAI.
      */
     private void renderChip(){
-        boolean ready=new Settings(this).hasKey();String text,description;int icon;boolean spin=false,quiet=false,alert=false,fresh=false;View.OnClickListener click;
-        if(!ready){text="Configurar transcripción";icon=R.drawable.ic_key;click=v->startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true));}
+        boolean ready=new Settings(this).hasOpenRouterKey();String text,description;int icon;boolean spin=false,quiet=false,alert=false,fresh=false;View.OnClickListener click;
+        if(!ready){text="Configurar transcripción";icon=R.drawable.ic_key;click=v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Configurar transcripción");startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true));};}
         else if(workingCount>0){text=workingCount>1?"Transcribiendo "+workingCount+" audios":"Transcribiendo «"+workingTitle+"»"+(workingBlocks>1?" · "+workingDone+" de "+workingBlocks:"");icon=R.drawable.ic_wave;spin=true;click=v->{if(workingCount>1){filter=2;section(true);render();}else open(workingId);};}
         else if(failedCount>0){text=failedCount>1?failedCount+" necesitan atención":"Revisar transcripción";icon=R.drawable.ic_alert;alert=true;click=v->{if(failedCount>1){filter=4;section(true);render();}else open(failedId);};}
         else if(reviewId!=null){String id=reviewId;text="Revisar · «"+reviewTitle+"»";icon=R.drawable.ic_doc;fresh=true;click=v->open(id);}
         else{text="Listo para transcribir";icon=R.drawable.ic_check;quiet=true;click=v->startActivity(new Intent(this,SettingsActivity.class));}
-        description=quiet?"Listo para transcribir. Abrir ajustes":text;
+        description=quiet?"Listo para transcribir. Abrir ajustes":!ready?"Configurar transcripción: agrega tu clave de OpenRouter":text;
         // Botón redondo de la cabecera: el ícono cambia con el estado; el punto marca un error o algo nuevo por revisar.
         statusIcon.setImageResource(icon);statusIcon.setImageTintList(ColorStateList.valueOf(alert?p.error:ready?p.primary:p.onSurface));
         statusIcon.setScaleX(spin?0.7f:1f);statusIcon.setScaleY(spin?0.7f:1f);statusRing.setVisibility(spin?View.VISIBLE:View.GONE);
         statusBadge.setVisibility(alert||fresh?View.VISIBLE:View.GONE);if(alert||fresh){GradientDrawable dot=oval(alert?p.record:p.primary);dot.setStroke(Math.max(1,ui.dp(1.5f)),p.surfaceContainerLowest);statusBadge.setBackground(dot);}
         statusButton.setOnClickListener(click);statusButton.setContentDescription(description);
         // Píldora bajo el saludo: solo si algo pide atención (su lugar queda reservado).
-        attention.setVisibility(quiet?View.INVISIBLE:View.VISIBLE);setText(attentionText,text);attention.setOnClickListener(click);attention.setContentDescription(text);
+        attention.setVisibility(quiet?View.INVISIBLE:View.VISIBLE);setText(attentionText,text);attention.setOnClickListener(click);attention.setContentDescription(description);
         attentionRing.setVisibility(spin?View.VISIBLE:View.GONE);attentionIcon.setVisibility(spin?View.GONE:View.VISIBLE);
         attentionIcon.setImageResource(icon);attentionIcon.setImageTintList(ColorStateList.valueOf(alert?p.error:p.primary));
     }
@@ -623,7 +626,7 @@ public class MainActivity extends Screen {
         boolean whole=r.duration-levelsMs<=Math.max(1000,r.duration/10);
         float[] bars=whole?levels.bars(40):new float[0];levels.clear();levelsMs=0;levelsLast=-1;levelsId=null;
         if(!settings.askTitle()){toast("Guardado en Biblioteca · "+Recording.time(r.duration));return;}
-        boolean auto=settings.automatic()&&settings.hasKey();int marks=0;try{marks=Marks.list(this,r.id).length();}catch(RuntimeException ignored){}
+        boolean auto=settings.automatic()&&settings.hasOpenRouterKey();int marks=0;try{marks=Marks.list(this,r.id).length();}catch(RuntimeException ignored){}
         String prefix="",rest=r.title==null?"":r.title;
         if(settings.datePrefix()){Matcher m=DATE.matcher(rest);if(m.find()){prefix=m.group(1);rest=rest.substring(m.end()).trim();}}
         if(namePlayer!=null)namePlayer.release();
@@ -677,7 +680,8 @@ public class MainActivity extends Screen {
     private void begin(){
         if(starting)return;
         if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
-            sheet("Permitir el micrófono","Verbapp usa el micrófono solo mientras grabas. El audio se guarda en este teléfono.").primary("Continuar",()->requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},10)).secondary("Ahora no",null).show();return;
+            // Verdadero: lo grabado queda en el teléfono, pero para transcribirse se envía a OpenRouter (no «se guarda aquí» a secas).
+            sheet("Permitir el micrófono","Verbapp usa el micrófono solo mientras grabas. El audio queda en tu teléfono hasta que lo transcribes.").primary("Continuar",()->requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},10)).secondary("Ahora no",null).show();return;
         }
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED&&!getPreferences(0).getBoolean("notificationAsked",false)){
             getPreferences(0).edit().putBoolean("notificationAsked",true).apply();requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},11);return;
