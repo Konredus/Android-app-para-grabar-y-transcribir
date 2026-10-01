@@ -605,11 +605,12 @@ public class SettingsActivity extends Screen {
      * Guarda el resultado de comprobar la clave (preferencias verify*). Lo escriben «Comprobar conexión» y la bienvenida:
      * una clave comprobada al instalar ya aparece comprobada aquí. target: verifyTarget() al EMPEZAR la comprobación.
      * balance y free salen de Models.balance (Balance.left y Balance.noCredits: la cuenta aún no tiene créditos). El saldo
-     * queda solo en las preferencias: nunca va al diagnóstico.
+     * queda solo en las preferencias: nunca va al diagnóstico. Sin créditos (free) no se guarda ningún saldo: lo que
+     * informa OpenRouter entonces es el tope de la clave, no plata disponible.
      */
     static void saveVerify(Settings settings,String target,boolean ok,long ms,String why,double balance,boolean free){
         settings.prefs.edit().putLong("verifyAt",System.currentTimeMillis()).putBoolean("verifyOk",ok).putLong("verifyMs",ms).putString("verifyFor",target).putString("verifyMsg",ok||why==null?"":why)
-            .putString("verifyBalance",ok&&!Double.isNaN(balance)&&!Double.isInfinite(balance)?String.valueOf(balance):"").putBoolean("verifyFree",ok&&free).apply();
+            .putString("verifyBalance",ok&&!free&&!Double.isNaN(balance)&&!Double.isInfinite(balance)?String.valueOf(balance):"").putBoolean("verifyFree",ok&&free).apply();
     }
     private boolean verifyValid(){return settings.prefs.getLong("verifyAt",0)>0&&verifyTarget().equals(settings.prefs.getString("verifyFor",""));}
     private boolean verifyFailed(){return verifyValid()&&!settings.prefs.getBoolean("verifyOk",true);}

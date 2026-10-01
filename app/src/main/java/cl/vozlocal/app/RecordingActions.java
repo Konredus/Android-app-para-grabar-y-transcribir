@@ -254,22 +254,10 @@ final class RecordingActions {
     }
     // Costos: el estimado sale de Pricing.estimate(Context, proveedor, modelo, ms) (OpenAI por su tabla; OpenRouter por el
     // catálogo guardado, que Models ya recuerda en memoria) y el real, de Pricing.real(estado). El audio que se cobra (con
-    // las muestras de voz que OpenRouter recibe delante de cada bloque) también es una regla única del motor:
-    // Pricing.orBilledMs. Aquí no se repite: «¿Separar voces?» usa la versión con Context (lo elegido en Ajustes) y
-    // billedMs solo adapta la misma cuenta a las alternativas de «Volver a transcribir» que cambian cuántas muestras van
-    // o en cuántos envíos.
-    /**
-     * Audio que cobra OpenRouter al transcribir (ms), para los estimados con «≈». anchors: muestras de voz por envío;
-     * single: un solo envío («sin cortar»); si no, los bloques del motor. La cuenta es la de Pricing.orBilledMs (bloques,
-     * largo de cada muestra y su silencio): un envío «sin cortar» paga las muestras una vez, lo mismo que suman en un
-     * bloque cualquiera. Otro proveedor, o sin muestras: la duración.
-     */
+    // las muestras de voz que OpenRouter recibe delante de cada bloque) es una regla única del motor: Pricing.billedMs.
+    /** Audio que cobra OpenRouter al transcribir (ms), para los estimados con «≈»: la regla única, Pricing.billedMs. */
     static long billedMs(String provider,String model,long durationMs,int anchors,boolean single){
-        if(!"openrouter".equals(provider)||anchors<=0||durationMs<=0)return Math.max(0,durationMs);
-        Models.Recipe recipe=Models.recipe(model);
-        if(!single)return Pricing.orBilledMs(durationMs,anchors,recipe);
-        // Lo que suenan las muestras en UN envío: la cuenta de Pricing para un audio que cabe en un solo bloque, menos ese audio.
-        return durationMs+Math.max(0,Pricing.orBilledMs(1,anchors,recipe)-1);
+        return Pricing.billedMs(provider,model,durationMs,anchors,single);
     }
 
     /** Encola la transcripción. Si falta la clave, lleva directo a configurarla; si ya está transcrita, ofrece volver a transcribir. */

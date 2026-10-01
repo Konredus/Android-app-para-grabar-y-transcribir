@@ -1,15 +1,18 @@
 [
   {
     "version": "0.8.0",
-    "date": "2026-09-30",
+    "date": "2026-10-01",
     "title": "Una sola clave para todo",
     "items": [
-      "OpenRouter: con una sola clave transcribes y armas tus notas. Elígelo en Ajustes → Proveedor. OpenAI sigue disponible como antes.",
-      "Modelos siempre al día: la lista de modelos se actualiza sola desde OpenRouter y te muestra cuáles separan voces y cuánto cuestan por hora. «Automático» elige el recomendado por ti.",
-      "Tus voces conocidas también con OpenRouter: la app pone tus muestras de voz delante del audio para reconocer quién habla. Es una función nueva: si algún nombre sale cambiado, corrígelo como siempre.",
-      "Costo real: cuando el proveedor lo informa, cada transcripción muestra lo que costó de verdad, no un estimado.",
-      "Notas con la última IA: con OpenRouter, la nota usa siempre la versión más nueva del modelo que elijas (Claude, GPT o Gemini) y te dice cuál respondió.",
-      "Bienvenida para quien instala por primera vez (puedes volver a verla en Ajustes → Ayuda y soporte), y un ícono nuevo para la Biblioteca."
+      "Todo con OpenRouter: una sola clave para transcribir y armar tus notas. Nada más que configurar.",
+      "Modelos siempre al día: la lista se actualiza sola y te muestra cuáles separan voces y cuánto cuestan por hora. «Automático» elige el recomendado por ti.",
+      "Tus voces conocidas con OpenRouter: la app pone tus muestras de voz delante del audio para reconocer quién habla. Si algún nombre sale cambiado, corrígelo como siempre.",
+      "Tus métricas: en Ajustes (o tocando «Tu semana») ves cuánto hablas, tus rachas, a qué hora grabas, con quién conversas y cuánto has gastado, con el costo real de cada transcripción.",
+      "Notas con la última IA: la nota usa siempre la versión más nueva del modelo que elijas (Claude, GPT o Gemini) y te dice cuál respondió.",
+      "Más rápido y sin quedarse pegado: preparar el audio es varias veces más rápido y muestra su avance en %. En Android 14 o más, lo que pides transcribir sigue aunque cierres la app.",
+      "Usar datos móviles ahora: si una transcripción espera Wi-Fi, un botón (también en la notificación) la envía con datos solo esa vez.",
+      "Bienvenida para quien instala por primera vez, con el permiso para transcribir con el teléfono bloqueado y los pasos para vivo y otras marcas. Puedes volver a verla en Ajustes → Ayuda y soporte.",
+      "Informe de soporte con fecha y hora en el nombre, para saber cuál es cuál. Y un ícono nuevo para la Biblioteca."
     ]
   },
   {

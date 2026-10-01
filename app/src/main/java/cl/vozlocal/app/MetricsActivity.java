@@ -79,7 +79,10 @@ public class MetricsActivity extends Screen {
     @Override public void onCreate(Bundle state){
         super.onCreate(state);prefs=getSharedPreferences("metrics",MODE_PRIVATE);
         try{period=Metrics.Period.valueOf(prefs.getString("period",period.name()));}catch(RuntimeException ignored){}
-        if(state!=null){week=Math.max(0,Math.min(Metrics.WEEKS-1,state.getInt("week",week)));restoreScroll=state.getInt("screen_scroll",0);}
+        // Desde la tarjeta «Tu semana» de Grabar se abre en «7 días», lo mismo que esa tarjeta resume (sin cambiar lo guardado).
+        if(state==null&&getIntent().getStringExtra("from")!=null&&getIntent().getStringExtra("from").equals("Grabar"))period=Metrics.Period.WEEK;
+        if(state!=null){try{period=Metrics.Period.valueOf(state.getString("period",period.name()));}catch(RuntimeException ignored){}
+            week=Math.max(0,Math.min(Metrics.WEEKS-1,state.getInt("week",week)));restoreScroll=state.getInt("screen_scroll",0);}
         ground=blend(p.softMid,0xFFFFFFFF,(p.glass>>>24)/255f);
         String from=getIntent().getStringExtra("from");shell(from==null||from.isEmpty()?"Ajustes":from,-1);
         TextView title=largeTitle(page,"Tus métricas","Calculadas en tu teléfono con tus grabaciones. Nada se envía.");ui.highlightLast(title,"Tus métricas");
@@ -87,7 +90,7 @@ public class MetricsActivity extends Screen {
         content.addView(loadingView(),Ui.fill());
     }
     @Override protected void onResume(){super.onResume();load();}
-    @Override protected void onSaveInstanceState(Bundle out){out.putInt("week",week);super.onSaveInstanceState(out);}
+    @Override protected void onSaveInstanceState(Bundle out){out.putInt("week",week);out.putString("period",period.name());super.onSaveInstanceState(out);}
     @Override protected void onDestroy(){if(counter!=null)counter.cancel();disk.shutdownNow();super.onDestroy();}
 
     /**

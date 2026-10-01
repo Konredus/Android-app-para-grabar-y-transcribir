@@ -87,7 +87,8 @@ final class EngineChecks {
                 try{job=Pipeline.userJobInfo(c,s,false,6_400_000,true);}
                 catch(IllegalArgumentException e){persisted=false;job=Pipeline.userJobInfo(c,s,false,6_400_000,false);android.util.Log.i("VozLocalTest","User-initiated job not persisted on this Android: "+e.getMessage());}
                 check(job.isUserInitiated()&&job.getId()==Pipeline.USER_JOB_ID&&job.getId()!=Pipeline.JOB_ID&&job.getPriority()==android.app.job.JobInfo.PRIORITY_MAX
-                    &&job.getNetworkType()==android.app.job.JobInfo.NETWORK_TYPE_UNMETERED&&job.getEstimatedNetworkUploadBytes()==6_400_000&&job.isPersisted()==persisted,"User-initiated transfer job wrong");
+                    &&job.getNetworkType()==android.app.job.JobInfo.NETWORK_TYPE_UNMETERED&&job.getEstimatedNetworkUploadBytes()==6_400_000&&job.isPersisted()==persisted,
+                    "User-initiated transfer job wrong: userInitiated="+job.isUserInitiated()+" id="+job.getId()+" priority="+job.getPriority()+" network="+job.getNetworkType()+" upload="+job.getEstimatedNetworkUploadBytes()+" persisted="+job.isPersisted()+"/"+persisted);
                 check(Pipeline.userJobInfo(c,s,true,0,false).getNetworkType()==android.app.job.JobInfo.NETWORK_TYPE_ANY,"User-initiated transfer waits for Wi-Fi although mobile data was allowed");
             }
         }finally{s.prefs.edit().putBoolean("wifi",wifi).putBoolean("charging",charging).commit();}

@@ -208,8 +208,12 @@ final class OrAudioChecks {
      * Topes holgados para el emulador (lo esperado es varias veces menos). Antes de la tercera ronda un bloque de 4 min
      * tardaba 31–43 s en un teléfono con la app abierta (~8 s por minuto): estos topes fallan si la conversión vuelve a
      * ese orden. El tiempo medido queda en el registro («VozLocalTest») y en el mensaje si falla.
+     * El decodificador AAC del aparato pone un piso que no depende de la app: en el emulador, decodificar 60 s tarda de 5
+     * a 14 s según su carga. Por eso ese piso se mide en la misma corrida y el tope es para lo que la app suma encima
+     * (filtro, FLAC y verificación), con un 50 % de margen para el ruido entre una medición y otra (en el emulador, lo que
+     * la app suma encima varió de 3 a 6 s entre dos corridas). Lo de antes de la tercera ronda sumaba decenas de segundos.
      */
-    static final long SPEED_LIMIT_MS=5_000,FILTER_LIMIT_MS=2_000;
+    static final long OVERHEAD_LIMIT_MS=5_000,FILTER_LIMIT_MS=2_000;
     private static void thirdRound(File dir)throws Exception{
         // 1. Caminos directos 48 → 16 kHz (×3) y 32 → 16 kHz (×2): la misma calidad que el polifásico. 12 kHz, sin filtro,
         // reaparecería como un tono falso de 4 kHz en los dos casos.
@@ -230,12 +234,14 @@ final class OrAudioChecks {
         // 3. De punta a punta, como graba la app (AAC a 44,1 kHz), con el avance en % que ve la etapa «Preparando audio».
         File source=wav(new File(dir,"speech60.wav"),44100,1,60_000,(ch,t)->tone(220,6000,t)+tone(1800,2000,t));
         File aac=new File(dir,"speech60.m4a");AudioConvert.convert(source,aac,0,60_000,new HttpApi());source.delete();
+        started=SystemClock.elapsedRealtime();OrAudio.decode(aac,Long.MAX_VALUE,new HttpApi(),(data,count)->{},null);long floor=SystemClock.elapsedRealtime()-started;
         List<Integer> seen=new ArrayList<>();HttpApi watch=new HttpApi();watch.onPrepareProgress=seen::add;watch.startPreparing();
         started=SystemClock.elapsedRealtime();OrAudio.Built b=OrAudio.build(aac,null,new File(dir,"speed"),watch);long took=SystemClock.elapsedRealtime()-started;
         watch.endPreparing(true);
-        android.util.Log.i("VozLocalTest","OrAudio speed: 60 s AAC 44.1 kHz -> "+b.format+" in "+took+" ms");
+        long limit=floor*3/2+OVERHEAD_LIMIT_MS;
+        android.util.Log.i("VozLocalTest","OrAudio speed: 60 s AAC 44.1 kHz -> "+b.format+" in "+took+" ms (decoder alone "+floor+" ms, limit "+limit+" ms)");
         check(Math.abs(b.durationMs-60_000)<300,"60 s conversion duration wrong: "+b.durationMs);
-        check(took<SPEED_LIMIT_MS,"Conversion too slow: 60 s of audio took "+took+" ms (limit "+SPEED_LIMIT_MS+" ms)");
+        check(took<limit,"Conversion too slow: 60 s of audio took "+took+" ms; the decoder alone took "+floor+" ms (limit "+limit+" ms)");
         boolean rising=true;for(int i=1;i<seen.size();i++)rising&=seen.get(i)>seen.get(i-1);
         check(seen.size()>=5&&rising&&seen.get(seen.size()-1)==100,"Preparation progress not reported in rising % ending at 100: "+seen);
         // 4. La comprobación barata cuenta lo mismo que un decodificador de verdad, y nota un final cortado o un byte dañado.

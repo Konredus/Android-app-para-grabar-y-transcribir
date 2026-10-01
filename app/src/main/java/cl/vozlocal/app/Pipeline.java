@@ -132,7 +132,8 @@ final class Pipeline {
             .setRequiresCharging(settings.charging()).setRequiresBatteryNotLow(true);
         // Persistida: si el teléfono se reinicia mientras espera la red, sigue pedida.
         if(persisted)b.setPersisted(true);
-        if(uploadBytes>0)b.setEstimatedNetworkBytes(uploadBytes,64*1024);
+        // Orden de Android: (bajada, subida). Se sube el audio (MB) y se baja solo la respuesta (unos KB).
+        if(uploadBytes>0)b.setEstimatedNetworkBytes(64*1024,uploadBytes);
         return b.build();
     }
     /**

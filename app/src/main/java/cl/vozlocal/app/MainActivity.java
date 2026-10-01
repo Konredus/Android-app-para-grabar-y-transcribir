@@ -133,7 +133,7 @@ public class MainActivity extends Screen {
         float progress(){int b=blocks();if(b>1)return blocksDone()/(float)b;long a=state.optLong("audioMs"),d=state.optLong("doneAudioMs");return a>0&&d>0?Math.min(1f,d/(float)a):-1f;}
         String progressText(String blocker){
             int b=blocks();if(b>1)return "Transcribiendo · "+blocksDone()+" de "+b+" partes";
-            if(blocker!=null&&!TranscribeService.running)return "En cola · "+blocker.replaceFirst(" \\(.*$","");
+            if(blocker!=null&&!Pipeline.working())return "En cola · "+blocker.replaceFirst(" \\(.*$","");
             return "Transcribiendo…";
         }
         String snippet(){Meta m=meta;return m!=null&&!m.snippet.isEmpty()?m.snippet:state.optString("snippet","");}
@@ -905,7 +905,7 @@ public class MainActivity extends Screen {
     private static long newSince(Context c){SharedPreferences sp=c.getSharedPreferences("home",Context.MODE_PRIVATE);long v=sp.getLong("newSince",0);if(v==0){v=System.currentTimeMillis();sp.edit().putLong("newSince",v).apply();}return v;}
     private boolean matches(Item i,int f){switch(f){case 1:return inboxOn?i.toSave():i.done();case 2:return i.status.kind==RecState.Kind.QUEUED;case 3:return i.status.kind==RecState.Kind.NEW;case 4:return i.status.kind==RecState.Kind.FAILED;default:return true;}}
     private String signature(){
-        StringBuilder b=new StringBuilder().append(filter).append('|').append(query).append('|').append(inboxOn).append('|').append(queueBlocker).append('|').append(TranscribeService.running).append('|').append(Calendar.getInstance().get(Calendar.DAY_OF_YEAR));
+        StringBuilder b=new StringBuilder().append(filter).append('|').append(query).append('|').append(inboxOn).append('|').append(queueBlocker).append('|').append(Pipeline.working()).append('|').append(Calendar.getInstance().get(Calendar.DAY_OF_YEAR));
         for(Item i:items){Meta m=i.meta;b.append('\n').append(i.r.id).append(i.r.title).append(i.r.duration).append(i.status.kind).append(i.blocks()).append(i.blocksDone()).append(i.state.optLong("doneAudioMs")).append(i.savedAt).append(i.outdated).append(i.fresh).append(i.state.optString("snippet"));if(m!=null)b.append(m.snippet).append(m.names).append(m.colors).append(m.reviewed);}
         return b.toString();
     }
