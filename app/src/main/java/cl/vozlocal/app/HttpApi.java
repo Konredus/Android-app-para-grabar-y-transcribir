@@ -74,6 +74,13 @@ class HttpApi {
     /** OpenRouter: costo (US$) de un envío cobrado que no quedó en ninguna respuesta (se descartó y el reenvío falló). */
     interface Billed{void cost(double usd);}
     volatile Billed onBilled;
+    /**
+     * Revisión justo antes de abrir cada conexión (0.8.0, tercera ronda): el motor mira ahí «Solo con Wi-Fi», que pudo
+     * cambiar desde que empezó la grabación (p. ej. se fue el Wi-Fi mientras se preparaba el audio). Si lanza, no se envía
+     * nada. Solo la tienen las conexiones de las partes (la nota y las consultas no envían audio).
+     */
+    interface Gate{void pass()throws Exception;}
+    volatile Gate beforeSend;
     /** Conexiones hijas (bloques en paralelo): cancelar la madre cancela todas. */
     private final HttpApi parent;private final java.util.List<HttpApi> children=new java.util.concurrent.CopyOnWriteArrayList<>();
     HttpApi(){parent=null;}
@@ -93,7 +100,7 @@ class HttpApi {
         String why=prepareStalled;if(why!=null)throw new PrepareStalled(why);
     }
     Response request(String method,String url,String token,String contentType,Body body,Map<String,String> extra) throws Exception {
-        check(); URL target=new URL(url);long started=System.currentTimeMillis();Diagnostics.event("http_start",jobId,"bytes",body==null?0:body.length());
+        check();Gate gate=beforeSend;if(gate!=null)gate.pass(); URL target=new URL(url);long started=System.currentTimeMillis();Diagnostics.event("http_start",jobId,"bytes",body==null?0:body.length());
         if(!"https".equals(target.getProtocol()))throw new SecurityException("Solo HTTPS");
         HttpURLConnection c=(HttpURLConnection)target.openConnection();active=c;stalled=null;stalledLocal=true;phase(body!=null?UPLOAD:WAIT);touch();
         try{

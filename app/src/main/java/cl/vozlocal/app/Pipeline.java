@@ -168,11 +168,26 @@ final class Pipeline {
         }
         schedule(c,true);
     }
-    /** Hay una transferencia iniciada por el usuario recién programada que todavía no empieza: el primer plano le cede el turno. */
+    /**
+     * Hay una transferencia iniciada por el usuario recién programada que todavía no empieza Y que podría empezar ya: el
+     * primer plano le cede el turno. Una que espera Wi-Fi o el cargador con las condiciones de cuando se programó (p. ej.
+     * después se eligió «Wi-Fi y datos móviles») no va a empezar: cederle el turno dejaba todo quieto.
+     */
     static boolean userJobFresh(Context c){
         if(Build.VERSION.SDK_INT<34||System.currentTimeMillis()-userJobAt>USER_JOB_GRACE_MS)return false;
-        try{return c.getSystemService(JobScheduler.class).getPendingJob(USER_JOB_ID)!=null;}catch(RuntimeException e){return false;}
+        try{
+            JobInfo job=c.getSystemService(JobScheduler.class).getPendingJob(USER_JOB_ID);
+            return job!=null&&couldStart(job,unmetered(c),c.getSystemService(BatteryManager.class).isCharging());
+        }catch(RuntimeException e){return false;}
     }
+    /** ¿Se cumplen ahora la red y el cargador que exige la tarea? (separado del teléfono para poder probarlo). */
+    static boolean couldStart(JobInfo job,boolean unmetered,boolean charging){
+        NetworkRequest net=Build.VERSION.SDK_INT>=28?job.getRequiredNetwork():null;
+        boolean wifi=Build.VERSION.SDK_INT>=28?net!=null&&net.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED):job.getNetworkType()==JobInfo.NETWORK_TYPE_UNMETERED;
+        return (!wifi||unmetered)&&(!job.isRequireCharging()||charging);
+    }
+    /** Cancela la transferencia iniciada por el usuario que espera (Android 14+). */
+    private static void cancelUserJob(Context c){if(Build.VERSION.SDK_INT>=34){try{c.getSystemService(JobScheduler.class).cancel(USER_JOB_ID);}catch(RuntimeException ignored){}}}
     /**
      * Intenta transcribir en primer plano (sigue con el teléfono bloqueado). Android 12+ solo lo permite
      * mientras la app está visible o desde ciertas acciones del usuario; si no se puede, devuelve false.
@@ -180,16 +195,20 @@ final class Pipeline {
     static boolean startForeground(Context c){return startForeground(c,false);}
     /**
      * now: «Empezar ahora», un toque explícito. No le cede el turno a una transferencia que Android tiene retenida (por
-     * ejemplo, por el cargador): la cancela y empieza en primer plano; si Android no lo permite, vuelve a programar la tarea.
+     * ejemplo, por el cargador): empieza en primer plano y la cancela; si Android no lo permite, vuelve a programar la tarea.
      */
     static boolean startForeground(Context c,boolean now){
         if(working())return true;
         if(!pending(c)||blocker(c)!=null)return false;
         // La transferencia iniciada por el usuario recién programada lo hará: dos trabajadores se pisarían.
         if(!now&&userJobFresh(c))return true;
-        if(now&&Build.VERSION.SDK_INT>=34){try{c.getSystemService(JobScheduler.class).cancel(USER_JOB_ID);}catch(RuntimeException ignored){}}
-        try{c.startForegroundService(new Intent(c,TranscribeService.class));return true;}
+        try{c.startForegroundService(new Intent(c,TranscribeService.class));}
         catch(RuntimeException e){Diagnostics.event("transcribe_fgs_denied",null,"error_class",e.getClass().getSimpleName());if(now)schedule(c,true);return false;}
+        // Se pasó por delante de una transferencia que esperaba (retenida, o con las condiciones de cuando se programó): se
+        // cancela, para que no quede en cola con condiciones viejas. Solo si el primer plano partió: si Android no lo deja
+        // (app cerrada), esa transferencia es el mejor camino que queda.
+        cancelUserJob(c);
+        return true;
     }
     /** Mensaje de espera de Wi-Fi (MainActivity corta lo que va entre paréntesis). */
     static final String WIFI_WAIT="esperando Wi-Fi (ahora usas datos móviles; puedes usarlos igual desde el detalle de la grabación)";
@@ -236,11 +255,15 @@ final class Pipeline {
     static long uploadBytes(Context c,Recording r){
         try{
             String id=r.id;JSONObject st=FilesStore.state(c,id);Settings s=new Settings(c);
-            boolean speakers=st.optBoolean("speakers",s.defaultSpeakers());String provider=st.optString("provider",s.provider());
-            // Antes del primer intento el estado aún no dice el modelo: el que se usaría hoy (solo importa con OpenRouter).
-            String model=st.has("model")?st.optString("model"):"openrouter".equals(provider)?Models.chosen(s,speakers):"";
+            boolean speakers=st.optBoolean("speakers",s.defaultSpeakers());String provider=s.provider();
+            // Lo ya transcrito solo se descuenta si el próximo intento lo reutiliza: el mismo intento en curso ("profile", que
+            // «Volver a transcribir» borra) y el mismo proveedor. Si no, el estado de una pasada terminada decía que no
+            // faltaba nada («Usar datos móviles (≈0,1 MB)» para subir el audio entero).
+            boolean resume=st.has("profile")&&provider.equals(st.optString("provider"));
+            // Sin intento en curso el estado aún no dice el modelo: el que se usaría hoy (solo importa con OpenRouter).
+            String model=resume&&st.has("model")?st.optString("model"):"openrouter".equals(provider)?Models.chosen(s,speakers):"";
             int anchors=speakers&&TranscribeClient.knowsVoices(provider)?Voices.selected(c).size():0;
-            return uploadBytes(provider,model,st.optLong("audioMs",r.duration),st.optLong("doneAudioMs",0),anchors,r.audio(c).length());
+            return uploadBytes(provider,model,st.optLong("audioMs",r.duration),resume?st.optLong("doneAudioMs",0):0,anchors,r.audio(c).length());
         }catch(RuntimeException e){return 0;}
     }
     /** Lo que falta subir de todas las grabaciones pedidas (para avisarle a Android el tamaño de la transferencia). */

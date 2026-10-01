@@ -78,20 +78,44 @@ public class TranscribeService extends Service {
         }
         return retry;
     }
-    /** Espera antes de reintentar; si falta red/cargador, espera hasta 15 min a que vuelva. Devuelve false si hay que ceder. */
+    /**
+     * Espera antes de reintentar; si falta red/cargador, espera hasta 15 min a que vuelva. Devuelve false si hay que ceder.
+     * Con «Solo con Wi-Fi», si se fue el Wi-Fi (antes o durante la espera) cede de inmediato y avisa (ver wifiWait).
+     */
     private static boolean waitBeforeRetry(Context c,HttpApi http,long delay,java.util.concurrent.atomic.AtomicBoolean nudged){
         String id=pendingId(c);String blocker=Pipeline.blocker(c);
+        if(Pipeline.WIFI_WAIT.equals(blocker))return wifiWait(c);
         if(id!=null)Pipeline.log(c,id,blocker==null?"Reintento en "+(delay/1000)+" s · sigue trabajando":"En pausa: "+blocker+" · se retoma sola al cumplirse");
+        boolean wifiOnly=new Settings(c).wifiOnly(),wasMetered=metered(c,wifiOnly);
         // elapsedRealtime sigue contando si Android congela la app: así se detecta (y se anota) una espera que se alargó.
         long start=SystemClock.elapsedRealtime(),until=start+(blocker==null?delay:15*60_000),last=start;nudged.set(false);
         while(SystemClock.elapsedRealtime()<until&&!http.cancelled){
             SystemClock.sleep(1_000);long now=SystemClock.elapsedRealtime();
             if(now-last>30_000&&id!=null){Pipeline.log(c,id,"Android tuvo la app congelada "+Recording.time(now-last)+" (ahorro de batería con la pantalla bloqueada)");Diagnostics.event("app_frozen",id,"elapsed_ms",now-last,"display",Battery.screenOn(c)?"on":"off","battery",Battery.unrestricted(c)?"unrestricted":"optimized");}
             last=now;
+            // Se fue el Wi-Fi durante la espera: el motivo completo (recorre la biblioteca) se mira solo al pasar a datos móviles.
+            boolean onMobile=metered(c,wifiOnly);
+            if(onMobile&&!wasMetered&&Pipeline.WIFI_WAIT.equals(Pipeline.blocker(c)))return wifiWait(c);
+            wasMetered=onMobile;
             if(blocker!=null&&Pipeline.blocker(c)==null)return true;
             if(nudged.get()&&Pipeline.blocker(c)==null){if(id!=null)Pipeline.log(c,id,"Pantalla encendida · se reintenta ahora");return true;}
         }
         return !http.cancelled&&Pipeline.blocker(c)==null;
+    }
+    /** «Solo con Wi-Fi», hay red y no es Wi-Fi (barato: no lee la biblioteca). */
+    private static boolean metered(Context c,boolean wifiOnly){return wifiOnly&&Pipeline.network(c)!=null&&!Pipeline.unmetered(c);}
+    /**
+     * «Solo con Wi-Fi» y se fue el Wi-Fi (p. ej. a mitad de un envío): no se retiene el trabajo hasta 15 min detrás de un
+     * «se reintenta solo». Se avisa «Esperando Wi-Fi» con la salida «Usar datos móviles» y se cede, como onlyWaitingWifi:
+     * la tarea de fondo lo retoma al volver el Wi-Fi. Antes esa espera era silenciosa (diagnóstico del 2026-10-01).
+     * Devuelve false (ceder).
+     */
+    private static boolean wifiWait(Context c){
+        for(Recording r:Recording.list(c))if(Pipeline.waitsForWifi(c,r.id)){
+            Pipeline.log(c,r.id,"En espera de Wi-Fi · ahora hay datos móviles: puedes usarlos para esta grabación desde su detalle");
+            Pipeline.waitingWifi(c,r.id);break;
+        }
+        return false;
     }
     private static String pendingId(Context c){for(Recording r:Recording.list(c))if(FilesStore.state(c,r.id).optBoolean("requested"))return r.id;return null;}
     @Override public void onDestroy(){HttpApi h=http;if(running&&h!=null)h.cancel();running=false;releaseLocks();super.onDestroy();}
