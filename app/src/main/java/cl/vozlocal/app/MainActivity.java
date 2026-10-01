@@ -63,7 +63,13 @@ public class MainActivity extends Screen {
     private static final Map<String,Meta> METAS=new ConcurrentHashMap<>();
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final ExecutorService disk=Executors.newSingleThreadExecutor();
-    private boolean showLibrary,welcomedNow;private int homeScroll,libraryScroll;
+    private boolean showLibrary;private int homeScroll,libraryScroll;
+    /**
+     * Bienvenida de la primera instalación (0.8.0). welcoming: OnboardingActivity está abierta encima y Grabar espera
+     * debajo, armada pero transparente. welcomeLeft: esta pantalla ya cedió el lugar, así que el próximo onResume es la
+     * vuelta de la bienvenida (el primero, antes de que aparezca, no cuenta).
+     */
+    private boolean welcoming,welcomeLeft;
 
     // Grabar: dos composiciones apiladas (reposo y grabando) que se funden al cambiar de estado.
     private FrameLayout homePanel;private LinearLayout idleLayer,recLayer;private Flex center,waveZone;
@@ -76,6 +82,10 @@ public class MainActivity extends Screen {
     private Ui.Btn stop,pause;private ImageButton mark;private Waveform wave;
     // Estado
     private int workingCount,failedCount,workingBlocks,workingDone;private String workingTitle="",workingId,failedId,reviewId,reviewTitle="";
+    /** workingRuns: la grabación de workingTitle se procesa ahora (Pipeline.processing); si no, workingWait dice por qué espera. */
+    private boolean workingRuns;private String workingWait;
+    /** El trabajo de transcripción tal como se dibujó (Pipeline.working y sus ids): si cambia, se redibuja sin esperar al disco. */
+    private boolean shownWorking;private String shownCurrent,shownRetrying;
     private String lastState="",shownTitle,shownImport,levelsId;private boolean starting,shownActive;private int shownMarks;
     /** Niveles de la grabación en curso: de aquí sale la onda chica de la hoja al terminar. */
     private final Levels levels=new Levels();
@@ -99,7 +109,7 @@ public class MainActivity extends Screen {
     private NamePlayer namePlayer;
     // Biblioteca
     private LinearLayout libraryPanel,list,filters,recPill;private View pillDot;private TextView libraryCount,pillTime;private EditText search;
-    private String query="";private int filter;private String rendered="";private boolean imeShown,inboxOn;private String queueBlocker;
+    private String query="";private int filter;private String rendered="";private boolean imeShown,inboxOn;
 
     /** Lo que la Biblioteca sabe de una transcripción sin volver a leerla. */
     static final class Meta{
@@ -110,6 +120,8 @@ public class MainActivity extends Screen {
     static final class Item{
         final Recording r;final JSONObject state;final RecState status;final boolean transcribed;
         volatile Meta meta;long savedAt;boolean outdated,fresh,inbox;Next next;
+        /** Por qué espera ESTA grabación pedida (Pipeline.blocker con su id; se lee en el hilo de disco), o null. */
+        String blocker;
         Item(Recording r,JSONObject state,boolean transcribed){this.r=r;this.state=state;this.transcribed=transcribed;this.status=RecState.of(state,transcribed);}
         boolean done(){return status.kind==RecState.Kind.DONE;}
         /** Voces separadas que el usuario aún no revisó. */
@@ -125,10 +137,20 @@ public class MainActivity extends Screen {
         int blocksDone(){return Math.min(blocks(),state.optInt("blocksDone"));}
         /** Avance real 0..1 (partes listas o audio procesado); -1 si todavía no se sabe. Nunca un porcentaje inventado. */
         float progress(){int b=blocks();if(b>1)return blocksDone()/(float)b;long a=state.optLong("audioMs"),d=state.optLong("doneAudioMs");return a>0&&d>0?Math.min(1f,d/(float)a):-1f;}
-        String progressText(String blocker){
-            int b=blocks();if(b>1)return "Transcribiendo · "+blocksDone()+" de "+b+" partes";
-            if(blocker!=null&&!TranscribeService.running)return "En cola · "+blocker.replaceFirst(" \\(.*$","");
-            return "Transcribiendo…";
+        /** Lo que dibuja su anillo: el avance real; sin saberlo, gira solo si se procesa (Pipeline.processing). En cola, quieto. */
+        float ring(){float f=progress();return f<0&&!Pipeline.processing(r.id)?0f:f;}
+        /**
+         * Con lo que espera ESTA grabación (0.8.0, tercera ronda): el motivo de todas no ve el Wi-Fi si otra pedida puede
+         * usar datos móviles, y «hay un trabajo andando» puede ser con otra. Así una que espera Wi-Fi, o su turno detrás de
+         * la que se está transcribiendo, no dice «Transcribiendo». Sin trabajo andando tampoco (Android negó el servicio y
+         * el trabajo de fondo aún no parte): «En cola», como el botón del detalle (Next.working). «Se procesa» es la regla
+         * única Pipeline.processing: también entre intentos, cuando el trabajo la retiene para reintentarla.
+         */
+        String progressText(){
+            boolean mine=Pipeline.processing(r.id);
+            String wait=mine?null:blocker!=null?"En cola · "+blocker.replaceFirst(" \\(.*$",""):"En cola";
+            int b=blocks();if(b>1)return (wait!=null?wait:"Transcribiendo")+" · "+blocksDone()+" de "+b+" partes";
+            return wait!=null?wait:"Transcribiendo…";
         }
         String snippet(){Meta m=meta;return m!=null&&!m.snippet.isEmpty()?m.snippet:state.optString("snippet","");}
     }
@@ -144,6 +166,7 @@ public class MainActivity extends Screen {
         super.onCreate(saved);
         if(saved!=null){query=saved.getString("query","");filter=saved.getInt("filter");homeScroll=saved.getInt("homeScroll");libraryScroll=saved.getInt("libraryScroll");}
         showLibrary=saved!=null?saved.getBoolean("library"):getIntent().getBooleanExtra("library",false);
+        if(saved==null&&showLibrary)filter=requestedFilter(getIntent(),filter);
         // Grabar lleva el fondo intenso (verde abajo); la Biblioteca, el suave (se funden al cambiar de pestaña).
         shell(null,showLibrary?1:0,!showLibrary);
         // El teclado nunca se abre solo al volver: solo cuando tocas la búsqueda.
@@ -159,20 +182,42 @@ public class MainActivity extends Screen {
         // Tras cada medición: el teclado de la búsqueda y un ajuste de Grabar que esperaba a estar medido (no se sondea).
         root.getViewTreeObserver().addOnGlobalLayoutListener(()->{checkIme();if(fitPending&&homePanel.getVisibility()==View.VISIBLE)homePanel.post(this::fitHome);});
         section(showLibrary);root.requestFocus();
-        if(saved==null)welcomedNow=welcome();
+        // Primera instalación: la bienvenida va en su propia pantalla, encima de esta (nunca sobre una grabación en curso).
+        if(saved==null&&RecorderService.activeId==null&&OnboardingActivity.shouldShow(this))startWelcome();
     }
     @Override void navigate(int tab){if(tab==2)super.navigate(2);else section(tab==1);}
     @Override protected void onResume(){
         super.onResume();lastState="";if(search!=null&&search.hasFocus()){search.clearFocus();root.requestFocus();}
+        boolean fromWelcome=welcoming&&welcomeLeft;if(fromWelcome)endWelcome();
         handler.post(tick);load();if(!Pipeline.startForeground(this))Pipeline.schedule(this,false);renderChip();renderGreeting();
-        // Novedades de la versión: después de la bienvenida (nunca las dos juntas).
-        if(!welcomedNow)try{Novedades.maybeShow(this);}catch(RuntimeException e){Diagnostics.event("novedades_failed",null,"error_class",e.getClass().getSimpleName());}
-        welcomedNow=false;
+        // Novedades de la versión: nunca junto con la bienvenida (ni mientras se abre ni al volver de ella).
+        if(!welcoming&&!fromWelcome)try{Novedades.maybeShow(this);}catch(RuntimeException e){Diagnostics.event("novedades_failed",null,"error_class",e.getClass().getSimpleName());}
     }
-    @Override protected void onPause(){handler.removeCallbacks(tick);if(namePlayer!=null)namePlayer.release();super.onPause();}
+    @Override protected void onPause(){handler.removeCallbacks(tick);if(namePlayer!=null)namePlayer.release();if(welcoming)welcomeLeft=true;super.onPause();}
     @Override protected void onDestroy(){if(namePlayer!=null)namePlayer.release();handler.removeCallbacksAndMessages(null);disk.shutdown();super.onDestroy();}
     @Override protected void onSaveInstanceState(Bundle out){out.putBoolean("library",showLibrary);out.putString("query",query);out.putInt("filter",filter);if(showLibrary)libraryScroll=scroll.getScrollY();else homeScroll=scroll.getScrollY();out.putInt("homeScroll",homeScroll);out.putInt("libraryScroll",libraryScroll);super.onSaveInstanceState(out);}
-    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);section(intent.getBooleanExtra("library",false));}
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);setIntent(intent);
+        // Si algo trae esta pantalla al frente por encima de la bienvenida (una pestaña de Ajustes, una notificación), Grabar se muestra.
+        if(welcoming)endWelcome();
+        boolean library=intent.getBooleanExtra("library",false);
+        if(library&&intent.hasExtra("filter")){
+            // Se llega a ver justamente esas grabaciones: una búsqueda que quedó escrita no las esconde, y la lista parte
+            // desde arriba. La búsqueda se borra antes de fijar el filtro (borrarla redibuja con lo que había).
+            if(search!=null&&search.length()>0)search.setText("");
+            filter=requestedFilter(intent,filter);libraryScroll=0;
+        }
+        section(library);
+    }
+    /**
+     * Filtro de la Biblioteca que pide quien abre esta pantalla con library=true (extra "filter"; lo manda «Tus métricas»
+     * desde «A medio camino»: 1 por guardar o transcritas, 2 en proceso, 3 sin transcribir, 4 con error; ver matches).
+     * Sin el extra, o con un valor que no existe, queda el que había. Si ese filtro no tiene grabaciones al leer la lista,
+     * render vuelve solo a «Todas».
+     */
+    static int requestedFilter(Intent intent,int current){
+        if(intent==null||!intent.hasExtra("filter"))return current;int f=intent.getIntExtra("filter",0);return f>=0&&f<=4?f:current;
+    }
     @Override public void onBackPressed(){if(showLibrary)section(false);else super.onBackPressed();}
 
     private void section(boolean library){
@@ -335,7 +380,8 @@ public class MainActivity extends Screen {
         box.addView(ui.icon(icon,p.primary,iconDp),new FrameLayout.LayoutParams(ui.dp(iconDp),ui.dp(iconDp),Gravity.CENTER));box.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);return box;
     }
     /**
-     * «Tu semana»: tres datos de los últimos 7 días. Tocarla abre la Biblioteca. En pantallas bajas se achica primero a una
+     * «Tu semana»: tres datos de los últimos 7 días. Tocarla abre «Tus métricas» (0.8.0, SPEC-0.8b: el resumen invita a ver
+     * el resto de los números; la Biblioteca ya está a un toque en la barra). En pantallas bajas se achica primero a una
      * franja de una línea (los mismos tres datos con su ícono) y, si aún no cabe, se oculta.
      */
     private LinearLayout buildWeekCard(){
@@ -353,7 +399,7 @@ public class MainActivity extends Screen {
         weekStripStats=ui.row();weekStrip.addView(weekStripStats);card.addView(weekStrip,Ui.fill());
         for(View v:new View[]{weekHead,weekStats,weekStrip})v.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         card.setBackground(ui.ripple(glass(this,p,R_CARD),R_CARD));card.setClickable(true);card.setFocusable(true);card.setAccessibilityDelegate(Ui.buttonRole());
-        card.setOnClickListener(v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Tu semana");section(true);});Ui.pressable(card);
+        card.setOnClickListener(v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Tu semana");MetricsActivity.open(this);});Ui.pressable(card);
         return card;
     }
     private void renderWeek(){
@@ -367,7 +413,7 @@ public class MainActivity extends Screen {
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);if(i>0)lp.setMarginStart(ui.dp(S2));weekStats.addView(s,lp);
             if(i>0)weekStripStats.addView(ui.space(S3));weekStripStats.addView(ui.icon(icons[i],p.onSurfaceVariant,16));weekStripStats.addView(ui.space(S1));weekStripStats.addView(Ui.tabular(ui.text(values[i],Type.LABEL_LARGE,p.onSurface)));
         }
-        weekCard.setContentDescription("Tu semana, últimos 7 días: "+w.count+(w.count==1?" grabación, ":" grabaciones, ")+dur+" grabado, "+w.notes+(w.notes==1?" nota":" notas")+". Toca para ver la Biblioteca");
+        weekCard.setContentDescription("Tu semana, últimos 7 días: "+w.count+(w.count==1?" grabación, ":" grabaciones, ")+dur+" grabado, "+w.notes+(w.notes==1?" nota":" notas")+". Toca para ver tus métricas");
     }
     /**
      * Achica un texto de una línea hasta que quepa entero (sin «…» ni saltos), sin bajar de minSp: sirve con la letra
@@ -398,27 +444,44 @@ public class MainActivity extends Screen {
         requestFit();
     }
     /**
-     * Estado, con esta prioridad: falta la clave > transcribiendo > error > una transcripción lista sin abrir > todo bien.
+     * Estado, con esta prioridad: falta la clave > transcribiendo o en cola > error > clave rechazada > una transcripción
+     * lista sin abrir > todo bien.
      * Arriba a la derecha va siempre como un botón redondo (llave, anillo que gira, alerta, documento o ✓); si algo pide
      * atención, además se dice con palabras en la píldora bajo el saludo. Ambos hacen lo mismo que el chip de 0.6.
+     * La clave es la de OpenRouter (0.8.0, SPEC-0.8b: solo OpenRouter): sin ella, «Configurar transcripción» abre Ajustes
+     * directo en la hoja de esa clave (extra focusKey), aunque quede guardada una clave vieja de OpenAI.
      */
     private void renderChip(){
-        boolean ready=new Settings(this).hasKey();String text,description;int icon;boolean spin=false,quiet=false,alert=false,fresh=false;View.OnClickListener click;
-        if(!ready){text="Configurar transcripción";icon=R.drawable.ic_key;click=v->startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true));}
-        else if(workingCount>0){text=workingCount>1?"Transcribiendo "+workingCount+" audios":"Transcribiendo «"+workingTitle+"»"+(workingBlocks>1?" · "+workingDone+" de "+workingBlocks:"");icon=R.drawable.ic_wave;spin=true;click=v->{if(workingCount>1){filter=2;section(true);render();}else open(workingId);};}
+        Settings settings=new Settings(this);boolean ready=settings.hasOpenRouterKey();String text,description;int icon;boolean spin=false,quiet=false,alert=false,fresh=false;View.OnClickListener click;
+        if(!ready){text="Configurar transcripción";icon=R.drawable.ic_key;click=v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Configurar transcripción");startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true));};}
+        else if(workingCount>0){text=queueText(workingCount,workingRuns?workingTitle:null,workingBlocks,workingDone,workingTitle,workingWait);icon=workingRuns?R.drawable.ic_wave:R.drawable.ic_clock;spin=workingRuns;click=v->{if(workingCount>1){filter=2;section(true);render();}else open(workingId);};}
         else if(failedCount>0){text=failedCount>1?failedCount+" necesitan atención":"Revisar transcripción";icon=R.drawable.ic_alert;alert=true;click=v->{if(failedCount>1){filter=4;section(true);render();}else open(failedId);};}
+        // La última comprobación rechazó la clave (la regla de la bienvenida y de Ajustes): no se dice «Listo» con ✓ de una
+        // clave con la que la próxima transcripción va a fallar. Abre Ajustes directo en la hoja de la clave.
+        else if(SettingsActivity.keyRejected(settings)){text="Revisa tu clave de OpenRouter";icon=R.drawable.ic_alert;alert=true;click=v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Revisa tu clave");startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true));};}
         else if(reviewId!=null){String id=reviewId;text="Revisar · «"+reviewTitle+"»";icon=R.drawable.ic_doc;fresh=true;click=v->open(id);}
         else{text="Listo para transcribir";icon=R.drawable.ic_check;quiet=true;click=v->startActivity(new Intent(this,SettingsActivity.class));}
-        description=quiet?"Listo para transcribir. Abrir ajustes":text;
+        description=quiet?"Listo para transcribir. Abrir ajustes":!ready?"Configurar transcripción: agrega tu clave de OpenRouter":text;
         // Botón redondo de la cabecera: el ícono cambia con el estado; el punto marca un error o algo nuevo por revisar.
         statusIcon.setImageResource(icon);statusIcon.setImageTintList(ColorStateList.valueOf(alert?p.error:ready?p.primary:p.onSurface));
         statusIcon.setScaleX(spin?0.7f:1f);statusIcon.setScaleY(spin?0.7f:1f);statusRing.setVisibility(spin?View.VISIBLE:View.GONE);
         statusBadge.setVisibility(alert||fresh?View.VISIBLE:View.GONE);if(alert||fresh){GradientDrawable dot=oval(alert?p.record:p.primary);dot.setStroke(Math.max(1,ui.dp(1.5f)),p.surfaceContainerLowest);statusBadge.setBackground(dot);}
         statusButton.setOnClickListener(click);statusButton.setContentDescription(description);
         // Píldora bajo el saludo: solo si algo pide atención (su lugar queda reservado).
-        attention.setVisibility(quiet?View.INVISIBLE:View.VISIBLE);setText(attentionText,text);attention.setOnClickListener(click);attention.setContentDescription(text);
+        attention.setVisibility(quiet?View.INVISIBLE:View.VISIBLE);setText(attentionText,text);attention.setOnClickListener(click);attention.setContentDescription(description);
         attentionRing.setVisibility(spin?View.VISIBLE:View.GONE);attentionIcon.setVisibility(spin?View.GONE:View.VISIBLE);
         attentionIcon.setImageResource(icon);attentionIcon.setImageTintList(ColorStateList.valueOf(alert?p.error:p.primary));
+    }
+    /**
+     * La píldora con grabaciones pedidas (0.8.0, revisión r4): «Transcribiendo «X»» (con sus partes y cuántas esperan
+     * detrás) solo si X se procesa ahora (Pipeline.processing, la regla de la tarjeta «Última grabación» y la Biblioteca).
+     * Si ninguna se procesa: «N audios en cola» o, con una sola, «X» y por qué espera (Item.progressText). Antes decía
+     * «Transcribiendo «X»», con el anillo girando, de una que esperaba Wi-Fi, bajo una tarjeta que decía «En cola».
+     * running: título de la que se procesa (null: ninguna); first y wait: la primera pedida y su progressText.
+     */
+    static String queueText(int count,String running,int blocks,int done,String first,String wait){
+        if(running!=null)return "Transcribiendo «"+running+"»"+(blocks>1?" · "+done+" de "+blocks:"")+(count>1?" · "+(count-1)+" en cola":"");
+        return count>1?count+" audios en cola":"«"+first+"» · "+(wait!=null?wait:"En cola");
     }
     /** Cambia el texto solo si cambió: las regiones «en vivo» no se vuelven a anunciar en cada actualización. */
     private static void setText(TextView t,String value){if(!value.contentEquals(t.getText()))t.setText(value);}
@@ -488,6 +551,9 @@ public class MainActivity extends Screen {
         String saved=RecorderService.lastSavedId;if(saved!=null&&!active){RecorderService.lastSavedId=null;afterSave(saved);}
         renderImport();
         int version=FilesStore.version.get();if(dataVersion!=version){dataVersion=version;load();}
+        // El trabajo empezó, terminó, pasó a otra grabación o a esperar su reintento sin escribir nada en disco (p. ej. una
+        // espera de minutos entre intentos): se redibuja con lo ya leído, así la píldora y la tarjeta no quedan atrás.
+        else if(!items.isEmpty()&&(Pipeline.working()!=shownWorking||!Objects.equals(Transcriber.currentId,shownCurrent)||!Objects.equals(Transcriber.retryingId,shownRetrying)))render();
     }
     /** Cambio de estado (reposo, grabando, en pausa): la composición cambia con un fundido; la barra se esconde al grabar. */
     private void applyState(boolean active,boolean paused,boolean animate,boolean was){
@@ -611,7 +677,7 @@ public class MainActivity extends Screen {
         boolean whole=r.duration-levelsMs<=Math.max(1000,r.duration/10);
         float[] bars=whole?levels.bars(40):new float[0];levels.clear();levelsMs=0;levelsLast=-1;levelsId=null;
         if(!settings.askTitle()){toast("Guardado en Biblioteca · "+Recording.time(r.duration));return;}
-        boolean auto=settings.automatic()&&settings.hasKey();int marks=0;try{marks=Marks.list(this,r.id).length();}catch(RuntimeException ignored){}
+        boolean auto=settings.automatic()&&settings.hasOpenRouterKey();int marks=0;try{marks=Marks.list(this,r.id).length();}catch(RuntimeException ignored){}
         String prefix="",rest=r.title==null?"":r.title;
         if(settings.datePrefix()){Matcher m=DATE.matcher(rest);if(m.find()){prefix=m.group(1);rest=rest.substring(m.end()).trim();}}
         if(namePlayer!=null)namePlayer.release();
@@ -665,7 +731,8 @@ public class MainActivity extends Screen {
     private void begin(){
         if(starting)return;
         if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
-            sheet("Permitir el micrófono","Verbapp usa el micrófono solo mientras grabas. El audio se guarda en este teléfono.").primary("Continuar",()->requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},10)).secondary("Ahora no",null).show();return;
+            // Verdadero: lo grabado queda en el teléfono, pero para transcribirse se envía a OpenRouter (no «se guarda aquí» a secas).
+            sheet("Permitir el micrófono","Verbapp usa el micrófono solo mientras grabas. El audio queda en tu teléfono hasta que lo transcribes.").primary("Continuar",()->requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},10)).secondary("Ahora no",null).show();return;
         }
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED&&!getPreferences(0).getBoolean("notificationAsked",false)){
             getPreferences(0).edit().putBoolean("notificationAsked",true).apply();requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},11);return;
@@ -683,24 +750,25 @@ public class MainActivity extends Screen {
         }
     }
     private void send(String action){startService(new Intent(this,RecorderService.class).setAction(action));}
-    /** Bienvenida de la primera instalación: logo, lema y lo esencial en tres filas. Devuelve true si se mostró. */
-    private boolean welcome(){
-        Settings settings=new Settings(this);if(settings.prefs.getBoolean("welcomed",false))return false;settings.prefs.edit().putBoolean("welcomed",true).apply();
-        Sheet s=sheet("Bienvenido a Verbapp",null);
-        // El logo en un círculo menta, sobre el título.
-        FrameLayout logo=new FrameLayout(this);logo.setBackground(oval(p.primaryContainer));logo.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        logo.addView(new Glass.BrandMark(this,p.onPrimaryContainer,p.brand),new FrameLayout.LayoutParams(ui.dp(30),ui.dp(30),Gravity.CENTER));
-        LinearLayout.LayoutParams ll=new LinearLayout.LayoutParams(ui.dp(56),ui.dp(56));ll.bottomMargin=ui.dp(S4);s.body.addView(logo,0,ll);
-        // El lema, levemente inclinado como el nombre.
-        TextView motto=ui.text("Tus palabras, para siempre",Type.TITLE_MEDIUM,p.primary);motto.getPaint().setTextSkewX(-0.12f);motto.setPadding(0,0,0,ui.dp(S3));
-        LinearLayout.LayoutParams ml=Ui.fill();ml.topMargin=-ui.dp(S1);s.body.addView(motto,ml);
-        TextView intro=ui.text("Graba o importa audio y transcríbelo con tu propia clave: pagas centavos por uso, sin suscripción.",Type.BODY_MEDIUM,p.onSurfaceVariant);intro.setPadding(0,0,0,ui.dp(S2));s.add(intro);
-        int[] icons={R.drawable.ic_mic_fill,R.drawable.ic_sparkle,R.drawable.ic_folder};
-        String[][] rows={{"Graba sin internet","El audio queda en tu teléfono, incluso con la pantalla bloqueada."},{"Transcribe cuando quieras","Con separación de voces: Persona 1, Persona 2… y nombres editables."},{"Tus archivos son tuyos","Copias opcionales en una carpeta del teléfono o de Drive."}};
-        for(int i=0;i<3;i++){LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(0,ui.dp(S2),0,ui.dp(S2));r.addView(ui.tile(icons[i],p.onPrimaryContainer,p.primaryContainer,44,22));r.addView(ui.space(S3));LinearLayout t=ui.column();t.addView(ui.text(rows[i][0],Type.TITLE_MEDIUM,p.onSurface));TextView d=ui.text(rows[i][1],Type.BODY_MEDIUM,p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);t.addView(d);r.addView(t,new LinearLayout.LayoutParams(0,-2,1));s.add(r);}
-        if(settings.hasKey())s.primary("Empezar",()->{});
-        else s.primary("Configurar transcripción",()->startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true))).secondary("Solo grabar por ahora",null);
-        s.show();return true;
+    /**
+     * Bienvenida de la primera instalación (0.8.0): OnboardingActivity se abre encima, sin animación de entrada. Reemplaza
+     * a la hoja «Bienvenido a Verbapp». Mientras tanto Grabar queda armada pero transparente: detrás se ve el mismo fondo
+     * verde, así esta pantalla no asoma antes de la bienvenida y, al volver, su contenido aparece sobre el fondo que ya estaba.
+     */
+    private void startWelcome(){
+        welcoming=true;welcomeLeft=false;for(int i=0;i<root.getChildCount();i++)root.getChildAt(i).setAlpha(0f);
+        OnboardingActivity.open(this,false);overridePendingTransition(0,0);
+    }
+    /**
+     * Vuelta de la bienvenida (terminada o saltada; si se salió con Atrás en su primer paso, la app se cerró y esto no
+     * corre): Grabar aparece con un fundido, el saludo toma el nombre recién escrito y la versión instalada se da por
+     * vista, para que «Novedades» no salga encima de quien recién instaló.
+     */
+    private void endWelcome(){
+        welcoming=false;welcomeLeft=false;boolean motion=AppTheme.motion();
+        for(int i=0;i<root.getChildCount();i++){View v=root.getChildAt(i);v.animate().cancel();if(motion)v.animate().alpha(1f).setStartDelay(0).setDuration(MOTION_SLOW).setInterpolator(EMPHASIZED_DECELERATE).start();else v.setAlpha(1f);}
+        Settings settings=new Settings(this);int code=Novedades.versionCode(this);if(code>settings.lastSeenVersion())settings.setLastSeenVersion(code);
+        myName=settings.prefs.getString("myVoiceName","");
     }
 
     // ---------- Última grabación ----------
@@ -717,7 +785,7 @@ public class MainActivity extends Screen {
         String status,label;int actionIcon;Ui.Style style;View.OnClickListener action;float bar=Float.NaN;
         View.OnClickListener transcribe=v->{Ui.haptic(v,Ui.Haptic.CONFIRM);RecordingActions.transcribe(this,r,this::load);};
         switch(i.status.kind){
-            case QUEUED:icon=R.drawable.ic_clock;tone=1;status=i.progressText(queueBlocker);statusColor=p.primary;bar=i.progress();label="Ver avance";actionIcon=R.drawable.ic_clock;style=Ui.Style.TONAL;action=v->open(r.id);break;
+            case QUEUED:icon=R.drawable.ic_clock;tone=1;status=i.progressText();statusColor=p.primary;bar=i.ring();label="Ver avance";actionIcon=R.drawable.ic_clock;style=Ui.Style.TONAL;action=v->open(r.id);break;
             case FAILED:icon=R.drawable.ic_alert;tone=2;status="No se pudo transcribir";statusColor=p.error;label="Reintentar";actionIcon=R.drawable.ic_refresh;style=Ui.Style.PRIMARY;action=transcribe;break;
             case NEW:icon=R.drawable.ic_wave;status=dur+" · Sin transcribir";label="Transcribir";actionIcon=R.drawable.ic_sparkle;style=Ui.Style.PRIMARY;action=transcribe;break;
             default:{
@@ -731,7 +799,7 @@ public class MainActivity extends Screen {
                 }
             }
         }
-        // Transcribiendo: el ícono va dentro de un anillo con el avance real (gira si todavía no se sabe).
+        // Pedida: el ícono va dentro de un anillo con el avance real (Item.ring: gira si aún no se sabe y se procesa ahora).
         lastLead.addView(Float.isNaN(bar)?leadCircle(icon,tone,44,22):progressLead(bar,icon,20,3),new FrameLayout.LayoutParams(-1,-1));if(i.fresh)lastLead.addView(newDot(),new FrameLayout.LayoutParams(ui.dp(12),ui.dp(12),Gravity.TOP|Gravity.END));
         setText(lastTitle,r.title);setText(lastStatus,status);lastStatus.setTextColor(statusColor);
         lastAction(label,actionIcon,style,action);
@@ -833,11 +901,11 @@ public class MainActivity extends Screen {
         disk.execute(()->{
             if(version!=loadVersion)return;
             boolean inbox=false;try{inbox=Inbox.configured(app);}catch(RuntimeException ignored){}
-            String blocker=null;try{blocker=Pipeline.blocker(app);}catch(RuntimeException ignored){}
             String name=null;try{name=Voices.name(app);}catch(RuntimeException ignored){}
             long since=newSince(app),weekFrom=System.currentTimeMillis()-7*DateUtils.DAY_IN_MILLIS;ArrayList<Item> loaded=new ArrayList<>(),missing=new ArrayList<>();Week wk=new Week();
             for(Recording r:Recording.list(app)){
                 Item i=new Item(r,FilesStore.state(app,r.id),Transcript.exists(app,r.id));i.inbox=inbox;
+                if(i.status.kind==RecState.Kind.QUEUED)try{i.blocker=Pipeline.blocker(app,r.id);}catch(RuntimeException ignored){}
                 if(i.transcribed){
                     File f=FilesStore.file(app,r.id,".transcript.json");long modified=f.lastModified();
                     Meta m=METAS.get(r.id);if(m!=null&&m.modified==modified&&m.length==f.length())i.meta=m;else missing.add(i);
@@ -845,19 +913,20 @@ public class MainActivity extends Screen {
                     i.fresh=!i.state.has("opened")&&modified>since;
                     try{i.savedAt=Inbox.savedAt(app,r.id);i.outdated=i.savedAt>0&&Inbox.outdated(app,r.id);}catch(Exception ignored){}
                 }
-                if(r.created>=weekFrom){wk.count++;wk.ms+=Math.max(0,r.duration);if(FilesStore.file(app,r.id,".note.json").isFile())wk.notes++;}
+                // Las demostraciones no cuentan, igual que en «Tus métricas» (Metrics.compute): la tarjeta abre esa pantalla.
+                if(r.created>=weekFrom&&!i.state.optBoolean("demo")){wk.count++;wk.ms+=Math.max(0,r.duration);if(FilesStore.file(app,r.id,".note.json").isFile())wk.notes++;}
                 loaded.add(i);
             }
             if(!loaded.isEmpty())try{loaded.get(0).next=Next.of(app,loaded.get(0).r);}catch(Throwable ignored){}
             // Primero la lista rápida; después, lo que hay que leer de las transcripciones (fragmento, personas y colores).
-            if(!missing.isEmpty())publish(loaded,inbox,blocker,wk,name);
+            if(!missing.isEmpty())publish(loaded,inbox,wk,name);
             // Aunque llegue otra lectura, se termina: lo leído queda en METAS y la siguiente ya no lo relee.
             for(Item i:missing){Meta m=readMeta(app,i.r.id);METAS.put(i.r.id,m);i.meta=m;storeSnippet(app,i,m);}
-            publish(loaded,inbox,blocker,wk,name);
+            publish(loaded,inbox,wk,name);
         });
     }
     /** Un solo hilo de disco (en orden): lo publicado siempre es más nuevo que lo anterior, así que no se descarta. */
-    private void publish(ArrayList<Item> loaded,boolean inbox,String blocker,Week wk,String name){ArrayList<Item> copy=new ArrayList<>(loaded);runOnUiThread(()->{if(!isDestroyed()){items=copy;inboxOn=inbox;queueBlocker=blocker;week=wk;if(name!=null)myName=name;render();}});}
+    private void publish(ArrayList<Item> loaded,boolean inbox,Week wk,String name){ArrayList<Item> copy=new ArrayList<>(loaded);runOnUiThread(()->{if(!isDestroyed()){items=copy;inboxOn=inbox;week=wk;if(name!=null)myName=name;render();}});}
     private static Meta readMeta(Context c,String id){
         File f=FilesStore.file(c,id,".transcript.json");Meta m=new Meta(f.lastModified(),f.length());
         try{Transcript t=Transcript.load(c,id);m.diarized=t.diarized();m.reviewed=t.reviewed();m.snippet=t.snippet(120);
@@ -871,15 +940,20 @@ public class MainActivity extends Screen {
     private static long newSince(Context c){SharedPreferences sp=c.getSharedPreferences("home",Context.MODE_PRIVATE);long v=sp.getLong("newSince",0);if(v==0){v=System.currentTimeMillis();sp.edit().putLong("newSince",v).apply();}return v;}
     private boolean matches(Item i,int f){switch(f){case 1:return inboxOn?i.toSave():i.done();case 2:return i.status.kind==RecState.Kind.QUEUED;case 3:return i.status.kind==RecState.Kind.NEW;case 4:return i.status.kind==RecState.Kind.FAILED;default:return true;}}
     private String signature(){
-        StringBuilder b=new StringBuilder().append(filter).append('|').append(query).append('|').append(inboxOn).append('|').append(queueBlocker).append('|').append(TranscribeService.running).append('|').append(Calendar.getInstance().get(Calendar.DAY_OF_YEAR));
-        for(Item i:items){Meta m=i.meta;b.append('\n').append(i.r.id).append(i.r.title).append(i.r.duration).append(i.status.kind).append(i.blocks()).append(i.blocksDone()).append(i.state.optLong("doneAudioMs")).append(i.savedAt).append(i.outdated).append(i.fresh).append(i.state.optString("snippet"));if(m!=null)b.append(m.snippet).append(m.names).append(m.colors).append(m.reviewed);}
+        StringBuilder b=new StringBuilder().append(filter).append('|').append(query).append('|').append(inboxOn).append('|').append(Pipeline.working()).append('|').append(Transcriber.currentId).append('|').append(Transcriber.retryingId).append('|').append(Calendar.getInstance().get(Calendar.DAY_OF_YEAR));
+        for(Item i:items){Meta m=i.meta;b.append('\n').append(i.r.id).append(i.r.title).append(i.r.duration).append(i.status.kind).append(i.blocker).append(i.blocks()).append(i.blocksDone()).append(i.state.optLong("doneAudioMs")).append(i.savedAt).append(i.outdated).append(i.fresh).append(i.state.optString("snippet"));if(m!=null)b.append(m.snippet).append(m.names).append(m.colors).append(m.reviewed);}
         return b.toString();
     }
     private void render(){
         int[] counts=new int[5];int done=0;for(Item i:items){if(i.done())done++;for(int f=0;f<5;f++)if(matches(i,f))counts[f]++;}
         // Grabar: estado, «Última grabación», «Tu semana» y el saludo.
-        Item working=null,failed=null,review=null;for(Item i:items){if(i.status.kind==RecState.Kind.QUEUED&&working==null)working=i;if(i.status.kind==RecState.Kind.FAILED&&failed==null)failed=i;if(i.fresh&&review==null)review=i;}
-        workingCount=counts[2];failedCount=counts[4];workingTitle=working==null?"":working.r.title;workingId=working==null?null:working.r.id;workingBlocks=working==null?0:working.blocks();workingDone=working==null?0:working.blocksDone();
+        // run: la pedida que se procesa ahora (Pipeline.processing), la única de la que la píldora dice «Transcribiendo».
+        // Lo que se ve del trabajo se anota ANTES de mirarlo: si cambia mientras se dibuja, el bucle de UI redibuja.
+        shownWorking=Pipeline.working();shownCurrent=Transcriber.currentId;shownRetrying=Transcriber.retryingId;
+        Item working=null,run=null,failed=null,review=null;
+        for(Item i:items){if(i.status.kind==RecState.Kind.QUEUED){if(working==null)working=i;if(run==null&&Pipeline.processing(i.r.id))run=i;}if(i.status.kind==RecState.Kind.FAILED&&failed==null)failed=i;if(i.fresh&&review==null)review=i;}
+        Item shown=run!=null?run:working;workingRuns=run!=null;workingWait=run==null&&working!=null?working.progressText():null;
+        workingCount=counts[2];failedCount=counts[4];workingTitle=shown==null?"":shown.r.title;workingId=shown==null?null:shown.r.id;workingBlocks=shown==null?0:shown.blocks();workingDone=shown==null?0:shown.blocksDone();
         failedId=failed==null?null:failed.r.id;reviewId=review==null?null:review.r.id;reviewTitle=review==null?"":review.r.title;renderChip();
         nav.badge(1,counts[2]>0);renderLast();renderWeek();renderGreeting();
         // Biblioteca (solo se rearma si cambió algo: no salta mientras se actualiza el avance de otra grabación).
@@ -930,7 +1004,7 @@ public class MainActivity extends Screen {
         texts.addView(line1,Ui.fill());
         String second;int secondColor=p.onSurfaceVariant;
         switch(i.status.kind){
-            case QUEUED:second=i.progressText(queueBlocker);secondColor=p.primary;break;
+            case QUEUED:second=i.progressText();secondColor=p.primary;break;
             case FAILED:second="No se pudo transcribir";secondColor=p.error;break;
             case NEW:second="Sin transcribir";break;
             default:{String s=i.snippet();second=s.isEmpty()?"Transcripción lista":"«"+s+"»";}
@@ -953,7 +1027,7 @@ public class MainActivity extends Screen {
     private View lead(Item i){
         FrameLayout f=new FrameLayout(this);f.setClipChildren(false);View base;
         switch(i.status.kind){
-            case QUEUED:base=progressLead(i.progress(),R.drawable.ic_wave,18,3);break;
+            case QUEUED:base=progressLead(i.ring(),R.drawable.ic_wave,18,3);break;
             case FAILED:base=leadCircle(R.drawable.ic_alert,2,40,20);break;
             case NEW:base=leadCircle(R.drawable.ic_wave,0,40,20);break;
             default:{boolean review=i.toReview(),save=i.toSave();base=leadCircle(review?R.drawable.ic_people:save?R.drawable.ic_save:R.drawable.ic_doc,review||save?1:0,40,20);}

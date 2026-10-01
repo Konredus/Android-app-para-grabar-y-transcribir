@@ -19,6 +19,11 @@ import java.util.regex.Pattern;
  *
  * Archivo: &lt;id&gt;.note.json (ver docs/diseno/SPEC-0.6.md). Estado: noteState working → ready | failed (+ noteError),
  * suggestedTitle. Nada de esto viaja al informe de soporte: solo eventos sin contenido.
+ *
+ * IA de la nota (0.8.0): OpenRouter, con la misma clave con que se transcribe (ver {@link #provider}). La nota guarda
+ * "model" (el que se pidió), "modelUsed" (el que respondió) y "costUsd", que con OpenRouter es el cobro real
+ * ("costReal") y con los demás un estimado. Diseño: docs/diseno/SPEC-0.8.md y SPEC-0.8b.md (segunda ronda: solo
+ * OpenRouter). Los caminos de OpenAI y de Claude siguen en el código, con sus pruebas, pero la app ya no los elige.
  */
 final class Notes {
     private Notes(){}
@@ -40,6 +45,12 @@ final class Notes {
     static final String REVIEWED="2026-09-29";
     static final String OPENAI_URL="https://api.openai.com/v1/chat/completions";
     static final String ANTHROPIC_URL="https://api.anthropic.com/v1/messages";
+    /**
+     * OpenRouter (0.8.0): Chat Completions con la misma clave con que se transcribe. El modelo por defecto es un alias
+     * ({@link Models#NOTE_DEFAULT}) que OpenRouter resuelve siempre a la última versión de su familia; la nota guarda
+     * qué versión respondió ("modelUsed"). La clave de OpenRouter solo viaja a esta dirección.
+     */
+    static final String OPENROUTER_URL=Models.BASE+"/chat/completions";
     /** Tope del texto enviado (≈ 10 h de conversación): protege de un pedido absurdo si algo sale mal. */
     static final int MAX_TRANSCRIPT_CHARS=400_000;
 
@@ -76,19 +87,47 @@ final class Notes {
     /** La respuesta llegó cuando la transcripción ya había cambiado (otra versión o cancelada): no se guarda. */
     static final class Discarded extends HttpApi.UserAction{Discarded(){super("La transcripción cambió mientras se armaba la nota. Vuelve a armarla cuando la nueva versión esté lista.");}}
     static JSONObject load(Context c,String id){try{return exists(c,id)?FilesStore.read(FilesStore.file(c,id,".note.json")):null;}catch(Exception e){return null;}}
-    /** ¿Hay clave para el proveedor elegido? (OpenAI usa la misma clave de transcribir). */
-    static boolean canGenerate(Context c){Settings s=new Settings(c);return s.noteProvider().equals("anthropic")?s.hasAnthropicKey():s.hasOpenAiKey();}
-    /** "openai" o "anthropic". */
-    static String provider(Settings s){return "anthropic".equals(s.noteProvider())?"anthropic":"openai";}
-    static String defaultModel(String provider){return "anthropic".equals(provider)?ANTHROPIC_MODEL:OPENAI_MODEL;}
+    /** ¿Hay clave para la IA de la nota? Es la de OpenRouter, la misma con que se transcribe. */
+    static boolean canGenerate(Context c){return new Settings(c).hasOpenRouterKey();}
+    /**
+     * IA de la nota: siempre "openrouter" (SPEC-0.8b, decisión 3: «Nota: siempre por OpenRouter»). Una preferencia
+     * "noteProvider" que haya quedado de antes (OpenAI o Claude) ya no se respeta: la migración del esquema 5 la borra y
+     * la interfaz no la ofrece, y así una clave de OpenAI o de Anthropic guardada nunca se vuelve a enviar sin querer.
+     * Los caminos "openai" y "anthropic" quedan en generate(…, provider, model, key) para sus pruebas.
+     */
+    static String provider(Settings s){return "openrouter";}
+    static String defaultModel(String provider){return "anthropic".equals(provider)?ANTHROPIC_MODEL:"openrouter".equals(provider)?Models.NOTE_DEFAULT:OPENAI_MODEL;}
     /** Modelo efectivo: el de Ajustes si corresponde a ese proveedor; si no, el recomendado. */
     static String model(Settings s,String provider){
         String m=s.noteModel()==null?"":s.noteModel().trim();
+        // OpenRouter: ids «autor/modelo» o alias «~autor/familia-latest». Sin «/» no es de OpenRouter (quedó de otra IA).
+        if("openrouter".equals(provider))return routerModel(m)?m:defaultModel(provider);
+        // OpenAI y Claude: nombres sin «/» ni «~», así un id de OpenRouter nunca llega a sus APIs.
         if(m.isEmpty()||!m.matches("[A-Za-z0-9._:-]{2,80}"))return defaultModel(provider);
         boolean claude=m.startsWith("claude");
         return "anthropic".equals(provider)==claude?m:defaultModel(provider);
     }
-    static String service(String provider){return "anthropic".equals(provider)?"Claude":"OpenAI";}
+    /**
+     * ¿Sirve como modelo de OpenRouter para la nota? Un id «autor/modelo» o un alias «~autor/familia-latest», de hasta 80
+     * caracteres. Es la misma regla de {@link #model}: la hoja «Modelo de la nota» de Ajustes acepta justo lo que aquí se envía.
+     */
+    static boolean routerModel(String m){return m!=null&&m.length()<=80&&m.matches("~?[A-Za-z0-9._-]+/[A-Za-z0-9._:/-]+");}
+    /** Nombre del servicio en textos y errores. El de OpenRouter es HttpApi.OPENROUTER: con ese nombre HttpApi.require usa sus mensajes propios. */
+    static String service(String provider){return "anthropic".equals(provider)?"Claude":"openrouter".equals(provider)?HttpApi.OPENROUTER:"OpenAI";}
+    /** Modelo que respondió de verdad (con un alias «…-latest», la versión concreta); si no se supo, el que se pidió. */
+    static String modelShown(JSONObject note){if(note==null)return "";String used=note.optString("modelUsed","");return used.isEmpty()?note.optString("model",""):used;}
+    /**
+     * «Armada con OpenRouter · anthropic/claude-sonnet-5.5 · costó US$0,004»: con qué IA se armó la nota y cuánto costó.
+     * El costo es el real si el proveedor lo informó ("costReal"); si no, el estimado con la tarifa pública («≈»).
+     */
+    static String credit(JSONObject note){
+        String model=modelShown(note);if(model.isEmpty())return "";
+        StringBuilder b=new StringBuilder("Armada con ").append(service(note.optString("provider"))).append(" · ").append(model);
+        double cost=note.optDouble("costUsd",-1);
+        // «< US$0,001» ya dice que es aproximado: no lleva «≈» delante.
+        if(cost>=0){String usd=Pricing.usd(cost);b.append(" · ").append(note.optBoolean("costReal")?"costó ":usd.startsWith("<")?"":"≈ ").append(usd);}
+        return b.toString();
+    }
 
     // ---------- Costos (estimados; el cobro real lo define el proveedor) ----------
     /** USD por millón de tokens {entrada, salida}, o null si no se conoce. Revisado: 2026-09-29. */
@@ -115,9 +154,9 @@ final class Notes {
     /** Arma y guarda la nota (bloquea: se llama desde el trabajo de transcripción o un hilo de fondo). */
     static void generate(Context c,Recording r,HttpApi http)throws Exception{
         Settings s=new Settings(c);String provider=provider(s);String key="";
-        try{key="anthropic".equals(provider)?s.anthropicKey():s.openAiKey();}catch(Exception ignored){}
+        try{key=s.openRouterKey();}catch(Exception ignored){}
         if(key==null||key.isEmpty()){
-            String why="anthropic".equals(provider)?"Falta tu clave de Claude para armar la nota. Agrégala en Ajustes.":"La nota usa tu clave de OpenAI. Configúrala en Ajustes.";
+            String why="La nota usa tu clave de OpenRouter. Agrégala en Ajustes → «Tu IA (OpenRouter)».";
             failed(c,r.id,why);throw new HttpApi.UserAction(why);
         }
         generate(c,r,http,provider,model(s,provider),key);
@@ -142,10 +181,17 @@ final class Notes {
             // La respuesta llega completa al final: la espera crece con el largo del audio (2 min como mínimo, 5 como máximo).
             http.readTimeoutMs=(int)Math.min(300_000,Math.max(120_000,60_000+r.duration/60_000*2_000));
             http.onUploaded=null;http.onEvent=null;http.onProgress=null;if(http.jobId==null)http.jobId=id;
-            Answer answer="anthropic".equals(provider)?anthropic(http,key,model,prompt):openai(http,key,model,prompt);
+            Answer answer="anthropic".equals(provider)?anthropic(http,key,model,prompt)
+                :"openrouter".equals(provider)?openrouter(http,key,model,prompt,()->{log(c,id,"OpenRouter no aceptó una opción del pedido · se reintenta en modo simple");Diagnostics.event("note_retry_simple",id,"provider",provider,"model",model,"http",400);})
+                :openai(http,key,model,prompt);
             JSONObject note=normalize(parseAnswer(answer.text),prompt.tokens,r.duration);
             note.put("version",1).put("provider",provider).put("model",model).put("createdAt",System.currentTimeMillis()).put("speakers",new JSONObject(prompt.tokens));
-            if(answer.usage!=null){note.put("usage",answer.usage);double cost=usd(model,answer.usage.optLong("input_tokens"),answer.usage.optLong("output_tokens"));if(cost>=0)note.put("costUsd",cost);}
+            // "model" es el que se pidió (puede ser un alias); "modelUsed", la versión que respondió de verdad (0.8.0).
+            if(!answer.model.isEmpty())note.put("modelUsed",answer.model);
+            if(answer.usage!=null)note.put("usage",answer.usage);
+            // Costo: el real si el proveedor lo informa (OpenRouter); si no, el estimado con la tarifa pública del modelo.
+            if(answer.cost>=0)note.put("costUsd",answer.cost).put("costReal",true);
+            else if(answer.usage!=null){double cost=usd(model,answer.usage.optLong("input_tokens"),answer.usage.optLong("output_tokens"));if(cost>=0)note.put("costUsd",cost);}
             synchronized(FilesStore.LOCK){
                 if(!FilesStore.file(c,id,".m4a").exists())return;
                 if(http.cancelled)throw new InterruptedIOException("Cancelado");
@@ -157,7 +203,8 @@ final class Notes {
             long took=System.currentTimeMillis()-started;
             FilesStore.update(c,id,st->{st.put("noteState","ready").remove("noteError");if(suggested.isEmpty())st.remove("suggestedTitle");else st.put("suggestedTitle",suggested);});
             log(c,id,"Nota lista · tardó "+Ui.humanDuration(took)+(applied?" · le puso título":""));
-            Diagnostics.event("note_ready",id,"provider",provider,"model",model,"elapsed_ms",took,"count",note.getJSONArray("tasks").length(),"result",applied?"title_applied":"title_suggested");
+            // Solo datos sin contenido: el costo (un número) sirve para revisar tarifas; el título y el texto nunca se registran.
+            Diagnostics.event("note_ready",id,"provider",provider,"model",model,"elapsed_ms",took,"count",note.getJSONArray("tasks").length(),"result",applied?"title_applied":"title_suggested","cost",note.has("costUsd")?(Object)note.optDouble("costUsd"):null);
             LocalStorage.enqueue(c,id);
         }catch(Exception e){
             // El estado de la nota solo se toca si sigue siendo el de ESTE pedido (no el de una versión nueva).
@@ -237,8 +284,17 @@ final class Notes {
         return new Prompt(b.toString(),tokens,diarized);
     }
 
-    /** Texto de la respuesta y uso de tokens normalizado {input_tokens, output_tokens}. */
-    static final class Answer{final String text;final JSONObject usage;Answer(String text,JSONObject usage){this.text=text;this.usage=usage;}}
+    /**
+     * Texto de la respuesta y uso de tokens normalizado {input_tokens, output_tokens}. Desde la 0.8.0 también el modelo
+     * que respondió ("" si el proveedor no lo dijo) y el costo real en US$ (-1 si no vino; solo OpenRouter lo informa).
+     */
+    static final class Answer{
+        final String text;final JSONObject usage;final String model;final double cost;
+        Answer(String text,JSONObject usage){this(text,usage,"",-1);}
+        Answer(String text,JSONObject usage,String model,double cost){this.text=text;this.usage=usage;this.model=model==null?"":model;this.cost=cost;}
+    }
+    /** El nombre de modelo que devuelve el proveedor se guarda y se muestra: solo si parece un id (nada de texto libre). */
+    private static String safeModel(String m){return m!=null&&m.matches("[A-Za-z0-9._:/~-]{1,120}")?m:"";}
 
     /** Cuerpo del pedido a OpenAI (Chat Completions, respuesta JSON). */
     static JSONObject openaiBody(String model,Prompt prompt)throws JSONException{
@@ -252,14 +308,104 @@ final class Notes {
     static Answer openai(HttpApi http,String key,String model,Prompt prompt)throws Exception{
         HttpApi.Response res=http.request("POST",OPENAI_URL,key,"application/json",HttpApi.json(openaiBody(model,prompt)),null);
         require(res,"OpenAI",model);
-        JSONObject json;try{json=res.json();}catch(Exception e){throw new BadAnswer("OpenAI respondió en un formato inesperado. Vuelve a intentarlo.");}
-        JSONArray choices=json.optJSONArray("choices");if(choices==null||choices.length()==0)throw new BadAnswer("OpenAI no devolvió la nota. Vuelve a intentarlo.");
+        return chatAnswer(res,"OpenAI");
+    }
+    /** Lee una respuesta de Chat Completions (el formato de OpenAI, que OpenRouter repite): texto, uso, modelo y costo. */
+    private static Answer chatAnswer(HttpApi.Response res,String service)throws Exception{
+        JSONObject json;try{json=res.json();}catch(Exception e){throw new BadAnswer(service+" respondió en un formato inesperado. Vuelve a intentarlo.");}
+        JSONArray choices=json.optJSONArray("choices");if(choices==null||choices.length()==0)throw new BadAnswer(service+" no devolvió la nota. Vuelve a intentarlo.");
         JSONObject choice=choices.getJSONObject(0),message=choice.optJSONObject("message");
-        if(message!=null&&message.has("refusal")&&!message.isNull("refusal")&&!message.optString("refusal").trim().isEmpty())throw new HttpApi.UserAction("OpenAI no quiso resumir esta grabación.");
-        String text=message==null||message.isNull("content")?"":message.optString("content","");
-        if(text.trim().isEmpty())throw new BadAnswer("length".equals(choice.optString("finish_reason"))?"La respuesta de OpenAI se cortó antes de terminar. Vuelve a intentarlo.":"OpenAI no devolvió la nota. Vuelve a intentarlo.");
+        if(message!=null&&message.has("refusal")&&!message.isNull("refusal")&&!message.optString("refusal").trim().isEmpty())throw new HttpApi.UserAction(service+" no quiso resumir esta grabación.");
+        String text=message==null||message.isNull("content")?"":content(message.opt("content"));
+        if(text.trim().isEmpty())throw new BadAnswer("length".equals(choice.optString("finish_reason"))?"La respuesta de "+service+" se cortó antes de terminar. Vuelve a intentarlo.":service+" no devolvió la nota. Vuelve a intentarlo.");
         JSONObject u=json.optJSONObject("usage"),usage=u==null?null:new JSONObject().put("input_tokens",u.optLong("prompt_tokens")).put("output_tokens",u.optLong("completion_tokens"));
-        return new Answer(text,usage);
+        // usage.cost: lo que cobró OpenRouter por este pedido, en US$. OpenAI no lo envía. Un 0 no cuenta como cobro real
+        // (la misma regla de Pricing.real): con una clave propia del proveedor (BYOK) OpenRouter informa 0 aunque el
+        // proveedor sí cobró, y «costó US$0,000» escondería el estimado.
+        double cost=u==null?-1:u.optDouble("cost",-1);
+        return new Answer(text,usage,safeModel(json.optString("model")),cost>0&&!Double.isInfinite(cost)?cost:-1);
+    }
+    /** El contenido es un texto; algunos modelos lo entregan en partes [{type:"text",text:"…"}]: se unen las de texto. */
+    private static String content(Object value){
+        if(!(value instanceof JSONArray))return value==null?"":String.valueOf(value);
+        StringBuilder b=new StringBuilder();JSONArray parts=(JSONArray)value;
+        for(int i=0;i<parts.length();i++){JSONObject part=parts.optJSONObject(i);if(part!=null&&!part.isNull("text"))b.append(part.optString("text"));}
+        return b.toString();
+    }
+
+    /**
+     * Cuerpo del pedido a OpenRouter (Chat Completions). simple=true: solo el modelo, los mensajes y el tope de salida,
+     * para reintentar si rechazó alguna opción: los alias «…-latest» cambian de versión solos y no todas las versiones
+     * aceptan lo mismo. max_tokens va también en el modo simple: sin él OpenRouter reserva el máximo de salida del modelo
+     * y, con poco saldo, responde 402 aunque la nota (8000 tokens) sí alcanzaba (hallazgo de la revisión).
+     */
+    static JSONObject openrouterBody(String model,Prompt prompt,boolean simple)throws JSONException{
+        JSONObject body=new JSONObject().put("model",model)
+            .put("messages",new JSONArray().put(new JSONObject().put("role","system").put("content",SYSTEM)).put(new JSONObject().put("role","user").put("content",prompt.text)))
+            .put("max_tokens",8000);
+        if(simple)return body;
+        body.put("response_format",new JSONObject().put("type","json_object"));
+        // Claude no razona si no se le pide (y así responde rápido). A los que razonan por defecto (GPT, Gemini) se les
+        // pide el mínimo: ordenar una conversación no necesita más, y razonar de más es más lento y más caro.
+        if(!model.contains("anthropic/"))body.put("reasoning",new JSONObject().put("effort","low"));
+        return body;
+    }
+    /**
+     * Encabezados con que la app se identifica ante OpenRouter: los mismos de la transcripción (una sola fuente,
+     * OpenRouterClient.headers()), así la nota y el audio aparecen como la misma app en la cuenta de OpenRouter.
+     * La clave va aparte, en Authorization (la pone HttpApi).
+     */
+    static Map<String,String> openrouterHeaders(){return OpenRouterClient.headers();}
+    /**
+     * Nota por OpenRouter. simpler (opcional) avisa que el primer pedido fue rechazado por una opción y se reintenta una
+     * vez en modo simple (un 400 no se cobra). No se probó contra la API real: por eso es tolerante con lo que responda.
+     */
+    static Answer openrouter(HttpApi http,String key,String model,Prompt prompt,Runnable simpler)throws Exception{
+        Map<String,String> headers=openrouterHeaders();
+        HttpApi.Response res=inner(http.request("POST",OPENROUTER_URL,key,"application/json",HttpApi.json(openrouterBody(model,prompt,false)),headers));
+        if(res.code==400&&optionRejected(res)){
+            if(simpler!=null)simpler.run();
+            res=inner(http.request("POST",OPENROUTER_URL,key,"application/json",HttpApi.json(openrouterBody(model,prompt,true)),headers));
+        }
+        require(res,HttpApi.OPENROUTER,model);
+        return chatAnswer(res,HttpApi.OPENROUTER);
+    }
+    /**
+     * ¿Un 400 que puede deberse a una opción del pedido? No lo es si habla del largo de la transcripción, del saldo o de
+     * un modelo que no existe: ahí el modo simple no cambia nada (mismos criterios que {@link #require}).
+     */
+    private static boolean optionRejected(HttpApi.Response res){
+        String m=errorText(res);
+        boolean tooLong=m.contains("context")||m.contains("too long")||m.contains("too many tokens")||(m.contains("maximum")&&m.contains("prompt"));
+        return !(tooLong||m.contains("credit")||m.contains("billing")||m.contains("not a valid model"));
+    }
+    /**
+     * Texto del error en minúsculas: error.message más error.metadata.raw, donde OpenRouter deja lo que dijo el proveedor
+     * final cuando su propio mensaje es genérico («Provider returned error»). Así se reconoce «prompt is too long» aunque
+     * venga solo ahí (como ya hace HttpApi.require). Vacío si la respuesta no trae error legible. Nunca se registra.
+     */
+    private static String errorText(HttpApi.Response res){
+        try{
+            JSONObject e=res.json().optJSONObject("error");if(e==null)return "";
+            JSONObject meta=e.optJSONObject("metadata");String raw=meta==null||meta.isNull("raw")?"":meta.optString("raw");
+            return (e.optString("message")+" "+raw).toLowerCase(Locale.ROOT);
+        }catch(Exception ignored){return "";}
+    }
+    /**
+     * OpenRouter puede responder 200 con el error del proveedor adentro ({"error":{…}} o choices[0].error). Se convierte
+     * en la respuesta de error que indica su código, para que {@link #require} la explique igual que cualquier otra.
+     */
+    private static HttpApi.Response inner(HttpApi.Response res){
+        if(res.code<200||res.code>=300)return res;
+        try{
+            JSONObject json=res.json(),error=json.optJSONObject("error");
+            // Con el error dentro de la primera opción, el proveedor falló a mitad de la respuesta: no hay nota que leer.
+            if(error==null){JSONArray choices=json.optJSONArray("choices");JSONObject first=choices==null?null:choices.optJSONObject(0);if(first!=null)error=first.optJSONObject("error");}
+            if(error==null)return res;
+            // Sin un código HTTP de error reconocible se trata como una falla pasajera del proveedor (se puede reintentar).
+            int code=error.optInt("code",502);if(code<400||code>599)code=502;
+            HttpApi.Response out=new HttpApi.Response(code,new JSONObject().put("error",error).toString(),null,res.requestId);out.jobId=res.jobId;return out;
+        }catch(Exception e){return res;}
     }
 
     /** Cuerpo del pedido a Anthropic (Messages API). */
@@ -282,21 +428,31 @@ final class Notes {
         String stop=json.optString("stop_reason");
         if(text==null){if("refusal".equals(stop))throw new HttpApi.UserAction("Claude no quiso resumir esta grabación.");throw new BadAnswer("max_tokens".equals(stop)?"La respuesta de Claude se cortó antes de terminar. Vuelve a intentarlo.":"Claude no devolvió la nota. Vuelve a intentarlo.");}
         JSONObject u=json.optJSONObject("usage"),usage=u==null?null:new JSONObject().put("input_tokens",u.optLong("input_tokens")+u.optLong("cache_read_input_tokens")+u.optLong("cache_creation_input_tokens")).put("output_tokens",u.optLong("output_tokens"));
-        return new Answer(text,usage);
+        return new Answer(text,usage,safeModel(json.optString("model")),-1);
     }
 
     /** Errores con palabras de la nota (no del audio); el resto, con la clasificación común de HttpApi. */
     static void require(HttpApi.Response res,String service,String model)throws Exception{
         if(res.code>=200&&res.code<300)return;
-        String message="",type="";
-        try{JSONObject e=res.json().optJSONObject("error");if(e!=null){message=e.optString("message").toLowerCase(Locale.ROOT);type=e.optString("type");}}catch(Exception ignored){}
-        String why=null;boolean transientError=false;
+        String message=errorText(res),type="";
+        try{JSONObject e=res.json().optJSONObject("error");if(e!=null)type=e.optString("type");}catch(Exception ignored){}
+        String why=null;boolean transientError=false,router=HttpApi.OPENROUTER.equals(service);
+        String broke=router?"No queda saldo en OpenRouter. Carga créditos en openrouter.ai y vuelve a armar la nota.":"Tu cuenta de "+service+" no tiene saldo. Revisa la facturación de tu API.";
         if(res.code==401)why="La clave de "+service+" no es válida o fue revocada. Revísala en Ajustes.";
+        // 402 (0.8.0): así avisa OpenRouter que no quedan créditos. Sin esto, HttpApi.require hablaría del formato del audio.
+        else if(res.code==402)why=broke;
         else if(res.code==529||"overloaded_error".equals(type)){why=service+" está saturado en este momento. Vuelve a intentarlo en unos minutos.";transientError=true;}
         else if(res.code==400||res.code==404||res.code==413||res.code==422){
-            if(message.contains("credit balance")||message.contains("billing"))why="Tu cuenta de "+service+" no tiene saldo. Revisa la facturación de tu API.";
+            if(message.contains("credit balance")||message.contains("billing")||message.contains("insufficient credits"))why=broke;
             else if(res.code==413||message.contains("context")||message.contains("too long")||message.contains("too many tokens")||(message.contains("maximum")&&message.contains("prompt")))why="La transcripción es demasiado larga para el modelo de la nota. Prueba con otro modelo.";
-            else if(message.contains("model"))why="El modelo de la nota («"+model+"») no está disponible en tu cuenta de "+service+".";
+            // 404 por la privacidad de la cuenta («No endpoints found matching your data policy»): el modelo existe, pero la
+            // configuración de privacidad de OpenRouter descarta a todos sus proveedores. Cambiar de modelo puede no servir:
+            // se dice dónde está el ajuste (hallazgo de la revisión; HttpApi.require ya lo distingue para el audio).
+            else if(router&&res.code==404&&(message.contains("data policy")||message.contains("privacy")))why="OpenRouter no tiene un proveedor para el modelo de la nota con la privacidad que elegiste en tu cuenta. Revísala en openrouter.ai (Settings → Privacy) o elige otro modelo en Ajustes.";
+            // OpenRouter responde 404 cuando retiró el modelo o ningún proveedor lo ofrece (y 400 si el id no existe): la
+            // salida es elegir otro. Otro 400 que solo nombre «model» puede ser cualquier cosa: va al texto general.
+            else if(router&&(res.code==404||message.contains("not a valid model")))why="El modelo de la nota («"+model+"») ya no está disponible en OpenRouter. Elige otro en Ajustes.";
+            else if(!router&&message.contains("model"))why="El modelo de la nota («"+model+"») no está disponible en tu cuenta de "+service+".";
             // Sin esto, HttpApi.require hablaría del audio, que aquí no se envía.
             else why=service+" rechazó el pedido de la nota (HTTP "+res.code+"). Vuelve a intentarlo o prueba otro modelo."+(res.requestId.isEmpty()?"":" · Ref: "+res.requestId);
         }
@@ -472,7 +628,8 @@ final class Notes {
         if(tags!=null&&tags.length()>0){md.append("tags:\n");for(int i=0;i<tags.length();i++)md.append("  - ").append(q(tags.optString(i))).append('\n');}
         md.append("fuente: ").append(q("Verbapp")).append('\n');
         md.append("grabacion: ").append(q(r.title)).append('\n');
-        if(note!=null)md.append("nota_ia: ").append(q(service(note.optString("provider"))+" · "+note.optString("model"))).append('\n');
+        // Con un alias de OpenRouter se escribe la versión que respondió («anthropic/claude-sonnet-5.5»), no el alias.
+        if(note!=null)md.append("nota_ia: ").append(q(service(note.optString("provider"))+" · "+modelShown(note))).append('\n');
         md.append("---\n\n# ").append(line(heading(r.title))).append("\n\n");
         if(note!=null){
             md.append("## Resumen\n\n").append(resolve(note.optString("summary").trim(),names)).append("\n\n");

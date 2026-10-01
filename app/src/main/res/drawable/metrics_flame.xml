@@ -1,0 +1,7 @@
+<!-- Métricas (0.8.0): racha de días grabando. Una llama de contorno con su llama interior, trazo redondeado a juego con los íconos de contorno. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M12,21.2 C8.4,21.2 5.8,18.6 5.8,15.3 C5.8,12.4 7.6,10.5 9.1,8.8 C10.4,7.3 11.2,5.4 11,3 C14.6,4.9 18.2,9 18.2,14.6 C18.2,18.5 15.5,21.2 12,21.2 Z"/>
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.6" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M12,21.2 C10.5,21.2 9.4,20.1 9.4,18.7 C9.4,17.2 10.5,16.1 12,14.6 C13.5,16.1 14.6,17.2 14.6,18.7 C14.6,20.1 13.5,21.2 12,21.2 Z"/>
+</vector>

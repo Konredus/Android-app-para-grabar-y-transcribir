@@ -41,7 +41,8 @@ final class Next {
     static Next of(Context c,Recording r){
         JSONObject st=FilesStore.state(c,r.id);
         // Pedida (también al volver a transcribir, cuando la versión actual pasó a "anterior"): el trabajo va solo.
-        if(st.optBoolean("requested"))return new Next(Step.WORKING,st.has("retranscribe")?"Volviendo a transcribir…":"Transcribiendo…",R.drawable.ic_clock);
+        if(st.optBoolean("requested")){boolean mine=Pipeline.processing(r.id);
+            return new Next(Step.WORKING,working(st.has("retranscribe"),mine,mine?null:Pipeline.blocker(c,r.id)),R.drawable.ic_clock);}
         if(!Transcript.exists(c,r.id)){
             if(st.optBoolean("failed"))return new Next(Step.RETRY,"Reintentar",R.drawable.ic_refresh);
             return new Next(Step.TRANSCRIBE,"Transcribir",R.drawable.ic_sparkle);
@@ -52,6 +53,20 @@ final class Next {
         if(at==0)return new Next(Step.SAVE,"Guardar en "+folder,R.drawable.ic_inbox);
         if(Inbox.outdated(c,r.id))return new Next(Step.UPDATE,"Actualizar en "+folder,R.drawable.ic_refresh);
         return new Next(Step.SAVED,"En "+folder+" · "+when(at),R.drawable.ic_check);
+    }
+    /**
+     * El botón de una grabación pedida (0.8.0, tercera ronda): «Transcribiendo…» solo si es ESTA la que se procesa ahora
+     * (mine: Pipeline.processing, que cuenta también la espera entre intentos); si no, por qué espera (blocker:
+     * Pipeline.blocker con su id) o «En cola…». Antes decía «Transcribiendo…» con la grabación en cola, esperando Wi-Fi o
+     * el cargador; y en cada espera para reintentar pasaba a «En cola…» (Transcriber.currentId queda en null entre intentos).
+     */
+    static String working(boolean again,boolean mine,String blocker){
+        if(mine)return again?"Volviendo a transcribir…":"Transcribiendo…";
+        if(blocker==null)return "En cola…";
+        if(blocker.contains("Wi-Fi"))return "Esperando Wi-Fi…";
+        if(blocker.contains("cargador"))return "Esperando el cargador…";
+        if(blocker.contains("internet"))return "Esperando conexión…";
+        return blocker.startsWith("batería baja")?"Batería baja · en espera…":"En cola…";
     }
     /** «16:09» si fue hoy; si no, «28 sept». */
     static String when(long at){
@@ -159,7 +174,7 @@ final class RecordingActions {
         switch(next.step){
             case TRANSCRIBE:case RETRY:transcribe(s,r,changed);break;
             case WORKING:
-                if(s instanceof RecordingActivity){JSONObject st=FilesStore.state(s,r.id);s.toast(st.optString("status","Transcribiendo"));}
+                if(s instanceof RecordingActivity){JSONObject st=FilesStore.state(s,r.id);s.toast(RecordingActivity.inDetail(st.optString("status","Transcribiendo")));}
                 else s.startActivity(new Intent(s,RecordingActivity.class).putExtra("id",r.id));
                 break;
             case REVIEW:
@@ -240,6 +255,26 @@ final class RecordingActions {
         Intent share=new Intent(Intent.ACTION_SEND).setType("audio/mp4").putExtra(Intent.EXTRA_STREAM,uri).putExtra(Intent.EXTRA_SUBJECT,r.title).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         share.setClipData(ClipData.newRawUri(r.title,uri));s.startActivity(Intent.createChooser(share,"Compartir audio"));
     }
+    // ---------- Proveedor (0.8.0): lo que cambia en las pantallas según con quién se transcribe ----------
+    /** Nombre para los textos: «OpenAI», «OpenRouter» o «tu servidor» (cualquier otro valor es un servidor propio). */
+    static String providerName(String provider){return "openrouter".equals(provider)?"OpenRouter":"openai".equals(provider)?"OpenAI":"tu servidor";}
+    static String providerName(Settings s){return providerName(s.provider());}
+    // ¿Las voces conocidas viajan con el audio? Lo decide el motor, en un solo lugar: TranscribeClient.knowsVoices(provider).
+    /** ¿El proveedor cobra cada audio? Con un servidor propio no se sabe: ahí se dice «se envía», no «se cobra». */
+    static boolean paid(Settings s){return s.provider().equals("openai")||s.openRouter();}
+    /** Modelo con que se transcribiría hoy. Igual que Settings.config(), pero sin leer la clave (sirve para armar pantallas). */
+    static String model(Settings s,boolean speakers){
+        if(s.provider().equals("openai"))return speakers?"gpt-4o-transcribe-diarize":s.textModel();
+        return s.openRouter()?Models.chosen(s,speakers):s.prefs.getString("customModel","whisper-1");
+    }
+    // Costos: el estimado sale de Pricing.estimate(Context, proveedor, modelo, ms) (OpenAI por su tabla; OpenRouter por el
+    // catálogo guardado, que Models ya recuerda en memoria) y el real, de Pricing.real(estado). El audio que se cobra (con
+    // las muestras de voz que OpenRouter recibe delante de cada bloque) es una regla única del motor: Pricing.billedMs.
+    /** Audio que cobra OpenRouter al transcribir (ms), para los estimados con «≈»: la regla única, Pricing.billedMs. */
+    static long billedMs(String provider,String model,long durationMs,int anchors,boolean single){
+        return Pricing.billedMs(provider,model,durationMs,anchors,single);
+    }
+
     /** Encola la transcripción. Si falta la clave, lleva directo a configurarla; si ya está transcrita, ofrece volver a transcribir. */
     static void transcribe(Screen s,Recording r,Runnable changed){
         if(Transcript.exists(s,r.id)){RetranscribeSheet.show(s,r,changed);return;}
@@ -248,9 +283,16 @@ final class RecordingActions {
         if(settings.canSeparate()&&settings.speakersMode().equals("ask")){askSpeakers(s,r,changed,settings);return;}
         start(s,r,changed,settings.defaultSpeakers());
     }
-    /** Falta la clave: el error trae su salida («Configurar ahora»). */
+    /**
+     * Falta la clave de OpenRouter: el error trae su salida («Configurar ahora», que abre directo el campo de la clave).
+     * A quien actualizó desde una versión con OpenAI (o su servidor) se le explica por qué se le pide otra clave: la que
+     * tenía queda guardada, pero la app ya no la usa (SPEC-0.8b, decisión 2).
+     */
     static void missingKey(Screen s){
-        Sheet sheet=s.sheet("Falta tu clave de API","Para transcribir, Verbapp usa tu propia cuenta del proveedor (por ejemplo OpenAI). Solo pagas lo que usas.");
+        String old=new Settings(s).oldService();
+        Sheet sheet=s.sheet(old!=null?"Verbapp ahora usa OpenRouter":"Falta tu clave de OpenRouter",old!=null
+            ?"Para transcribir y armar tus notas, Verbapp ahora usa OpenRouter: una sola clave para elegir entre varios modelos. La clave de "+old+" que tenías queda guardada, pero ya no se usa. Pega una de OpenRouter para seguir transcribiendo."
+            :"Para transcribir, Verbapp usa tu propia cuenta de OpenRouter: una sola clave para varios modelos y para tus notas. Solo pagas lo que usas.");
         SheetParts.hero(sheet,R.drawable.ic_key,false);
         sheet.primary("Configurar ahora",()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("focusKey",true))).secondary("Más tarde",null).show();
     }
@@ -260,14 +302,21 @@ final class RecordingActions {
      */
     static void askSpeakers(Screen s,Recording r,Runnable changed,Settings settings){
         try{
-            String voices=settings.config(true).model,text=settings.config(false).model;
-            String provider=settings.provider();String costVoices=Pricing.usd(Pricing.estimate(provider,voices,r.duration)),costText=Pricing.usd(Pricing.estimate(provider,text,r.duration));boolean live=provider.equals("openai")&&text.equals("gpt-transcribe");
+            ProviderConfig withVoices=settings.config(true);String voices=withVoices.model,text=settings.config(false).model,provider=settings.provider();
+            // El texto en vivo solo existe con gpt-transcribe de OpenAI directo (OpenRouter responde todo al final).
+            boolean live=provider.equals("openai")&&text.equals("gpt-transcribe");
             // Voces conocidas que van en este audio (hasta 4, la tuya primero): se dice a quién reconoce desde el inicio.
-            List<Voices.Voice> known=provider.equals("openai")?Voices.selected(s):Collections.emptyList();
+            List<Voices.Voice> known=TranscribeClient.knowsVoices(provider)?Voices.selected(s):Collections.emptyList();
+            // Con voces, OpenRouter cobra también las muestras que van delante de cada bloque: el estimado las suma con la
+            // regla única del motor (Pricing.orBilledMs, con lo elegido en Ajustes), la misma que usa el detalle de la grabación.
+            long billed=Pricing.orBilledMs(s,r.duration,withVoices.speakers);
+            String costVoices=Pricing.usd(Pricing.estimate(s,provider,voices,billed)),costText=Pricing.usd(Pricing.estimate(s,provider,text,r.duration));
             boolean onlyMe=known.size()==1&&known.get(0).me;
+            // Con OpenRouter el reconocimiento usa «anclas», una técnica nueva: se promete el intento, no el resultado.
+            boolean sure=!settings.openRouter();
             String who=known.isEmpty()?"Para reuniones y conversaciones: Persona 1, Persona 2…"
-                :onlyMe?"Te reconoce como "+known.get(0).name+" desde el inicio; las demás, Persona 2…"
-                :(known.get(0).me?"Te reconoce ":"Reconoce ")+Voices.people(known)+"; las demás, Persona "+(known.size()+1)+"…";
+                :onlyMe?(sure?"Te reconoce como "+known.get(0).name+" desde el inicio":"Busca tu voz para ponerte como "+known.get(0).name)+"; las demás, Persona 2…"
+                :(known.get(0).me?(sure?"Te reconoce ":"Busca reconocerte "):(sure?"Reconoce ":"Busca reconocer "))+Voices.people(known)+"; las demás, Persona "+(known.size()+1)+"…";
             Sheet sheet=s.sheet("¿Separar voces?","Audio de "+Ui.humanDuration(r.duration)+". Puedes cambiar esta pregunta en Ajustes.");
             LinearLayout list=SheetParts.list(sheet);
             String yes=known.isEmpty()?"Sí, separar voces":onlyMe?"Sí, separar voces · con Mi voz":"Sí, separar voces · con voces conocidas";
@@ -278,14 +327,40 @@ final class RecordingActions {
             List<SheetParts.Fact> noFacts=new ArrayList<>();noFacts.add(SheetParts.fact(R.drawable.ic_bolt,"Más rápido"));if(live)noFacts.add(SheetParts.fact(R.drawable.ic_transcribe,"Texto en vivo"));if(!costText.equals("—"))noFacts.add(SheetParts.cost("≈ "+costText));
             list.addView(SheetParts.option(s,R.drawable.ic_doc,"No, solo el texto","Para dictados y notas",noFacts,true,"No, solo el texto. "+noDetail,()->{sheet.dismiss();start(s,r,changed,false);}));
             // Sin "Mi voz", la separación se equivoca más al inicio: se sugiere grabarla (una sola vez).
-            if(provider.equals("openai")&&!Voices.has(s))list.addView(SheetParts.item(s,sheet,R.drawable.ic_mic_fill,"Grabar mi voz para que me reconozca",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true))));
+            if(TranscribeClient.knowsVoices(provider)&&!Voices.has(s))list.addView(SheetParts.item(s,sheet,R.drawable.ic_mic_fill,"Grabar mi voz para que me reconozca",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true))));
             sheet.show();
         }catch(Exception e){start(s,r,changed,settings.defaultSpeakers());}
     }
     static void start(Screen s,Recording r,Runnable changed,boolean speakers){
         askNotifications(s);
-        try{Pipeline.request(s,r.id,speakers);Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);if(changed!=null)changed.run();String blocker=Pipeline.blocker(s);s.toast(blocker==null?"Transcribiendo · sigue aunque bloquees el teléfono":"En cola · "+blocker);}
+        try{Pipeline.request(s,r.id,speakers);Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);if(changed!=null)changed.run();s.toast(queuedToast(s,r,"Transcribiendo"));}
         catch(Exception e){s.message("No se pudo poner en cola",e instanceof HttpApi.UserAction?e.getMessage():"Vuelve a intentarlo.");}
+    }
+    /**
+     * Aviso breve al pedir una transcripción («Transcribir», «Volver a transcribir»), con lo que espera ESTA grabación
+     * (Pipeline.blocker con su id). El de todas no sirve: con otra grabación autorizada a usar datos móviles no ve el Wi-Fi,
+     * y decía «Transcribiendo» de una que en verdad esperaba Wi-Fi. En el detalle, el Wi-Fi sin el paréntesis que manda al
+     * detalle (RecordingActivity.inDetail). doing: «Transcribiendo» o «Volviendo a transcribir».
+     */
+    static String queuedToast(Screen s,Recording r,String doing){
+        return queuedToast(doing,Pipeline.blocker(s,r.id),behind(r.id),s instanceof RecordingActivity);
+    }
+    /**
+     * ¿El trabajo andando está con OTRA grabación? La transcribe (Transcriber.currentId) o espera para reintentarla
+     * (Transcriber.retryingId): esta espera su turno. Antes solo miraba currentId, y detrás de una que esperaba su reintento
+     * decía «Transcribiendo · sigue aunque bloquees el teléfono».
+     */
+    static boolean behind(String id){return behind(Pipeline.working(),Pipeline.processing(id),Transcriber.currentId,Transcriber.retryingId);}
+    /** Lo mismo con lo ya leído (separado del teléfono para poder probarlo). mine: Pipeline.processing de esta grabación. */
+    static boolean behind(boolean working,boolean mine,String current,String retrying){return working&&!mine&&(current!=null||retrying!=null);}
+    /**
+     * Lo mismo con lo ya sabido. behind: el trabajo andando está con OTRA grabación (Pipeline.start no arranca otro: esta
+     * espera su turno), y entonces dice «En cola», como el botón, la nota del detalle y la Biblioteca; antes decía
+     * «Transcribiendo». detail: el aviso sale en el detalle.
+     */
+    static String queuedToast(String doing,String blocker,boolean behind,boolean detail){
+        if(blocker!=null)return "En cola · "+(detail?RecordingActivity.inDetail(blocker):blocker);
+        return behind?"En cola · empieza cuando termine la transcripción en curso":doing+" · sigue aunque bloquees el teléfono";
     }
     /** Android 13+: el aviso de «lista» necesita permiso de notificaciones; se pide al encolar. */
     static void askNotifications(Screen s){
@@ -294,7 +369,7 @@ final class RecordingActions {
     /** Explica por qué conviene quitar la optimización de batería y abre el permiso del sistema. */
     static void allowBackground(Screen s){
         String hint=Battery.makerHint();
-        Sheet sheet=s.sheet("Trabajar con la pantalla bloqueada","Con la optimización de batería activa, Android puede congelar Verbapp al bloquear el teléfono y cortar el envío a OpenAI. Solo gasta batería mientras transcribe."+(hint.isEmpty()?"":"\n\n"+hint));
+        Sheet sheet=s.sheet("Trabajar con la pantalla bloqueada","Con la optimización de batería activa, Android puede congelar Verbapp al bloquear el teléfono y cortar el envío a "+providerName(new Settings(s))+". Solo gasta batería mientras transcribe."+(hint.isEmpty()?"":"\n\n"+hint));
         SheetParts.hero(sheet,R.drawable.ic_battery,false);
         sheet.primary("Permitir",()->{Diagnostics.event("ui_action",null,"action","battery_request");Battery.request(s);});
         if(!hint.isEmpty())sheet.secondary("Abrir ajustes de la app",()->Battery.appSettings(s));

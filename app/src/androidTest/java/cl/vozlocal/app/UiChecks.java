@@ -19,6 +19,7 @@ final class UiChecks {
     static void run(Context c,Recording r)throws Exception{
         durations();
         motion();
+        waiting(r);
         onMain(()->drawables(c));
         // Las vistas y sus animaciones necesitan el hilo principal (la instrumentación corre en otro hilo).
         onMain(()->views(c,false));
@@ -29,6 +30,62 @@ final class UiChecks {
     static void durations(){
         String[][] cases={{"0","0 s"},{"5000","5 s"},{"59000","59 s"},{"240000","4 min"},{"3120000","52 min"},{"3840000","1 h 04 min"},{"3600000","1 h"},{"9000000","2 h 30 min"},{"-2000","0 s"},{"400","0 s"}};
         for(String[] k:cases){String got=Ui.humanDuration(Long.parseLong(k[0]));check(k[1].equals(got),"humanDuration("+k[0]+") = «"+got+"», se esperaba «"+k[1]+"»");}
+    }
+
+    /**
+     * Una grabación pedida que todavía no se procesa (0.8.0, tercera ronda, revisión): el botón, la nota del detalle y la
+     * Biblioteca dicen por qué espera en vez de «Transcribiendo», y el detalle muestra el Wi-Fi sin el paréntesis que manda
+     * al detalle. Solo funciones puras y un estado de mentira: no arranca ningún trabajo.
+     */
+    static void waiting(Recording r)throws Exception{
+        String wifi="En cola · "+Pipeline.WIFI_WAIT;
+        check("En cola · esperando Wi-Fi".equals(RecordingActivity.inDetail(wifi))&&"En cola · esperando Wi-Fi".equals(RecordingActivity.human(wifi)),"El detalle no debe repetir «desde el detalle»: «"+RecordingActivity.human(wifi)+"»");
+        check("En pausa: esperando Wi-Fi · se retoma sola al cumplirse".equals(RecordingActivity.inDetail("En pausa: "+Pipeline.WIFI_WAIT+" · se retoma sola al cumplirse")),"El paréntesis del Wi-Fi debe quitarse también a mitad del texto");
+        check("En espera de Wi-Fi · ahora hay datos móviles".equals(RecordingActivity.inDetail("En espera de Wi-Fi · ahora hay datos móviles: puedes usarlos para esta grabación desde su detalle")),"La bitácora del motor tampoco debe mandar al detalle desde el detalle");
+        String other="Intento 1 de 5 falló: el servidor no respondió (HTTP 503) · se reintentará";
+        check(other.equals(RecordingActivity.inDetail(other))&&"".equals(RecordingActivity.inDetail(null)),"Solo se quita lo del Wi-Fi");
+        // El botón de abajo (Next): «Transcribiendo…» solo si es ESTA la que se procesa.
+        check("Transcribiendo…".equals(Next.working(false,true,null))&&"Volviendo a transcribir…".equals(Next.working(true,true,null)),"La que se procesa dice «Transcribiendo…»");
+        check("Esperando Wi-Fi…".equals(Next.working(false,false,Pipeline.WIFI_WAIT))&&"Esperando Wi-Fi…".equals(Next.working(true,false,Pipeline.WIFI_WAIT)),"Esperando Wi-Fi no debe decir «Transcribiendo…»");
+        check("Esperando el cargador…".equals(Next.working(false,false,"esperando que conectes el cargador"))&&"Esperando conexión…".equals(Next.working(false,false,"esperando conexión a internet")),"El botón debe decir qué espera");
+        check("En cola…".equals(Next.working(false,false,null))&&!Next.working(false,false,"batería baja: Android espera a que cargues").contains("Transcribiendo"),"En cola no debe decir «Transcribiendo…»");
+        // La nota del detalle: «tarda más de lo normal» y «Puedes cerrar la app» solo para la que se procesa.
+        check(RecordingActivity.waitingNote(true,true,false,true,null).contains("tarda más")&&RecordingActivity.waitingNote(true,true,false,false,null).startsWith("Puedes cerrar la app"),"La que se procesa: tranquilidad, o que tarda");
+        String queued=RecordingActivity.waitingNote(false,true,true,true,null);
+        check(!queued.contains("tarda más")&&queued.startsWith("En cola"),"Una en cola detrás de otra no está «en un paso»: «"+queued+"»");
+        String waits=RecordingActivity.waitingNote(false,true,true,true,Pipeline.WIFI_WAIT);
+        check(waits.startsWith("Esperando: Wi-Fi.")&&!waits.contains("(")&&!waits.contains("tarda más"),"Esperando Wi-Fi debe decirlo, aunque otra se esté transcribiendo: «"+waits+"»");
+        check(RecordingActivity.waitingNote(false,false,false,false,null).contains("Empezar ahora"),"Sin trabajo andando ni espera, se ofrece «Empezar ahora»");
+        // Biblioteca: el motivo de ESTA grabación, sin el paréntesis.
+        MainActivity.Item item=new MainActivity.Item(r,new org.json.JSONObject().put("requested",true),false);item.blocker=Pipeline.WIFI_WAIT;
+        if(!Pipeline.processing(r.id)){
+            check("En cola · esperando Wi-Fi".equals(item.progressText()),"La Biblioteca debe decir que espera Wi-Fi: «"+item.progressText()+"»");
+            MainActivity.Item parts=new MainActivity.Item(r,new org.json.JSONObject().put("requested",true).put("blocks",4).put("blocksDone",1),false);parts.blocker=Pipeline.WIFI_WAIT;
+            check("En cola · esperando Wi-Fi · 1 de 4 partes".equals(parts.progressText()),"Con partes listas igual debe decir que espera: «"+parts.progressText()+"»");
+            // Sin motivo y sin procesarse (Android negó el servicio y el trabajo de fondo aún no parte): «En cola», como el botón.
+            MainActivity.Item idle=new MainActivity.Item(r,new org.json.JSONObject().put("requested",true),false);
+            check("En cola".equals(idle.progressText()),"La Biblioteca no debe decir «Transcribiendo» de una que no se procesa: «"+idle.progressText()+"»");
+            // Su anillo tampoco gira (avance desconocido y en cola: quieto); el avance real se muestra igual.
+            check(idle.progress()<0&&idle.ring()==0f,"Una en cola no debe tener el anillo girando: "+idle.ring());
+            MainActivity.Item idleParts=new MainActivity.Item(r,new org.json.JSONObject().put("requested",true).put("blocks",4).put("blocksDone",1),false);
+            check("En cola · 1 de 4 partes".equals(idleParts.progressText()),"Con partes listas tampoco: «"+idleParts.progressText()+"»");
+            check(idleParts.ring()==0.25f,"El avance real se muestra aunque espere: "+idleParts.ring());
+        }
+        // El aviso al pedirla: «En cola» si el trabajo andando es con otra grabación; el Wi-Fi sin paréntesis en el detalle.
+        check("Transcribiendo · sigue aunque bloquees el teléfono".equals(RecordingActions.queuedToast("Transcribiendo",null,false,false)),"Sin espera ni otra en curso, empieza");
+        check("En cola · empieza cuando termine la transcripción en curso".equals(RecordingActions.queuedToast("Volviendo a transcribir",null,true,true)),"Detrás de otra no debe decir «Transcribiendo»");
+        check("En cola · esperando Wi-Fi".equals(RecordingActions.queuedToast("Transcribiendo",Pipeline.WIFI_WAIT,true,true))&&("En cola · "+Pipeline.WIFI_WAIT).equals(RecordingActions.queuedToast("Transcribiendo",Pipeline.WIFI_WAIT,false,false)),"El aviso debe decir que espera Wi-Fi");
+        // «Detrás de otra» (revisión r4): también si el trabajo espera para reintentar OTRA (currentId en null entre intentos).
+        check(RecordingActions.behind(true,false,"otra",null)&&RecordingActions.behind(true,false,null,"otra"),"Detrás de una que se transcribe o espera su reintento, esta espera su turno");
+        check(!RecordingActions.behind(true,true,null,"esta")&&!RecordingActions.behind(true,true,"esta",null),"La que se procesa (o se reintenta) no está detrás de nadie");
+        check(!RecordingActions.behind(false,false,"otra","otra")&&!RecordingActions.behind(true,false,null,null),"Sin trabajo andando, o sin ninguna tomada, no hay delante de quién esperar");
+        check(!Pipeline.processing(null),"Sin id no hay grabación que procesar");
+        // La píldora de Grabar (MainActivity.queueText): «Transcribiendo» solo de la que se procesa; si no, por qué espera.
+        check("«Reunión» · En cola · esperando Wi-Fi".equals(MainActivity.queueText(1,null,0,0,"Reunión","En cola · esperando Wi-Fi")),"Una sola en espera de Wi-Fi no debe decir «Transcribiendo»");
+        check("«Reunión» · En cola".equals(MainActivity.queueText(1,null,0,0,"Reunión",null)),"Sin motivo, «En cola»");
+        check("3 audios en cola".equals(MainActivity.queueText(3,null,0,0,"Reunión","En cola")),"Varias sin ninguna en proceso: cuántas esperan");
+        check("Transcribiendo «Reunión»".equals(MainActivity.queueText(1,"Reunión",0,0,"Reunión",null)),"La que se procesa, sola");
+        check("Transcribiendo «Reunión» · 1 de 3 · 2 en cola".equals(MainActivity.queueText(3,"Reunión",3,1,"Otra",null)),"La que se procesa, con sus partes y las que esperan detrás: «"+MainActivity.queueText(3,"Reunión",3,1,"Otra",null)+"»");
     }
 
     /** Curvas: empiezan en 0, terminan en 1 y el resorte espacial rebota poco. */

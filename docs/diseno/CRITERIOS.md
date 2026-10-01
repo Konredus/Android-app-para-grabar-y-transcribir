@@ -217,6 +217,28 @@ Los números que cambian usan **cifras de ancho fijo** (`Ui.tabular`, «tnum» d
 - Una línea de apoyo por fila; lo largo va en «Más información».
 - «Comprobar conexión» muestra el resultado en la misma fila, sin una hoja que haya que cerrar.
 - Los cambios se hacen en hojas con botones de radio.
+- **(0.8.0) Tus métricas:** una tarjeta arriba de todo (antes de «Tu flujo») con el resumen, que abre la pantalla «Tus métricas». Sin grabaciones, la tarjeta invita a grabar en vez de mostrar ceros.
+- **(0.8.0) Tu IA (OpenRouter):** sin elección de proveedor. Orden: Clave de OpenRouter → Comprobar conexión → modelo con voces → modelo solo texto → Separar voces → IA de la nota → Idioma. Primero lo que hace falta para empezar, después lo que se afina. «Comprobar conexión» muestra el saldo («✓ Clave válida · quedan US$4,20»), o «aún sin créditos» si la cuenta no los tiene (entonces no se guarda ningún saldo). Los montos se escriben siempre igual, sin espacio tras «US$» (`Pricing.usd`, `SettingsActivity.money`).
+- **(0.8.0) Energía y red:** con «Solo Wi-Fi», la fila recuerda que cada transcripción en espera ofrece «Usar datos móviles ahora». Ese botón principal va en el detalle (con el tamaño aproximado: «≈X MB») y como acción en la notificación «Esperando Wi-Fi»; vale solo para esa grabación y no cambia el ajuste.
+- **(0.8.0) Hoja de modelos de OpenRouter:** arriba, una franja con el estado de la lista («Lista actualizada hace 2 h · 24 modelos», «Actualizar lista», carga, y el error en tono de error con «Reintentar»); después la tarjeta menta «Automático» con la píldora «Recomendado» y el modelo que usa hoy; luego «Probados por Verbapp» y «Nuevos en OpenRouter». Cada modelo lleva nombre, autor, una píldora («Separa voces» en menta, «Solo texto» en gris, «Sin confirmar» y «Nuevo · sin probar» solo con borde, «Se retira el…») y el precio por hora alineado a la derecha, con «≈» si es de referencia. Las píldoras bajan de línea si no caben (contenedor `Flow`).
+- **(0.8.0) IA de la nota:** una familia de OpenRouter (Claude, GPT o Gemini, con alias «-latest»: siempre la versión más nueva) u «Otro modelo de OpenRouter…» escrito a mano; la nota muestra cuál respondió.
+- **(0.8.0) Ayuda y soporte** suma «Ver la bienvenida».
+
+### Bienvenida (0.8.0)
+<img src="capturas/0.8-01-bienvenida.png" width="200"> <img src="capturas/0.8-02-nombre-microfono.png" width="200"> <img src="capturas/0.8-03-conecta-tu-ia.png" width="200"> <img src="capturas/0.8-04-todo-listo.png" width="200">
+
+- Solo en la primera instalación (`welcomed=false`); quien actualiza ve «Novedades». Se repite desde Ajustes → Ayuda y soporte, sin tocar claves ni ajustes guardados.
+- Pantalla completa sobre el fondo intenso, sin barra de pestañas. Marco fijo: ← (desde el paso 2), puntos de avance y «Saltar» arriba; un solo botón de tinta abajo, que no cambia de lugar.
+- Cuatro pasos cortos: Bienvenida (tres beneficios en vidrio) → Tú (nombre opcional, permiso de micrófono y «Con la pantalla bloqueada») → Conecta tu IA (solo OpenRouter; campo oculto con «Pegar»; «Ahora no, solo grabar») → Listo (estado de la clave, «Grabar mi voz», «Elegir mi carpeta 0-Inbox»).
+- **«Con la pantalla bloqueada»** (tercera ronda): pide quitar la optimización de batería (`Battery.request`) y, en marcas que la vuelven a activar (vivo y otras), muestra los pasos de su menú (`Battery.makerSteps`). Muestra ✓ si ya está permitido y se puede saltar. Nace del diagnóstico del 2026-10-01: sin este permiso, Android pausó una transcripción 45 min.
+- Nada bloquea: la clave se comprueba en segundo plano mientras ya se avanza, y el resultado queda también en Ajustes → «Comprobar conexión». La clave nunca se vuelve a mostrar ni se registra.
+
+### Tus métricas (0.8.0)
+<img src="capturas/0.8-07-metricas.png" width="200"> <img src="capturas/0.8-08-metricas-oscuro.png" width="200"> <img src="capturas/0.8-06-ajustes-openrouter.png" width="200">
+
+- Se abre desde la tarjeta de Ajustes o desde «Tu semana» en Grabar. Desde «Tu semana» abre en «7 días», lo mismo que esa tarjeta resume; desde Ajustes, en el último período elegido.
+- Una sola fila de filtros (7 días · Este mes · Todo) manda sobre todo lo de abajo: tiempo hablado, grabaciones, palabras y notas; 8 semanas en barras (se ajustan con el gesto de TalkBack); racha y mejor racha; mapa de a qué hora grabas; con quién conversas; y gasto por modelo, con lo cobrado y lo estimado («≈») por separado.
+- Todo se calcula en el teléfono (`Metrics.compute`) y se dice: «Nada se envía». Sin grabaciones en el período, una invitación en vez de ceros.
 
 ---
 
@@ -300,3 +322,12 @@ adb exec-out screencap -p > captura.png    # captura para comparar
 | 2026-09-29 | Grabar a pantalla completa (sin barra de pestañas) con cronómetro gigante | Mientras grabas, lo único importante es que está grabando y cuánto va; la barra vuelve al detener |
 | 2026-09-29 | Se retira Material You | Los colores del fondo de pantalla rompían la identidad verde y el degradado |
 | 2026-09-29 | «Tu semana» reemplaza a «Recientes» en Grabar | La Biblioteca está a un toque en la barra flotante; el resumen motiva y ocupa menos |
+| 2026-09-30 | **OpenRouter como tercer proveedor** (0.8.0), con «Automático (recomendado)» y una lista de modelos que se actualiza sola | Pedido del usuario: una sola clave para transcribir y para la nota, sin tener que seguir qué modelo es el mejor. OpenAI directo y el servidor compatible quedan igual |
+| 2026-09-30 | Con OpenRouter las voces conocidas van como «anclas» delante del audio, y los textos prometen el intento («Busca tu voz…»), no el resultado | OpenRouter no tiene voces conocidas. La técnica no se pudo probar con audio real: no se promete lo que no se ha visto funcionar |
+| 2026-09-30 | Se muestra el costo real cuando el proveedor lo informa; si no (o si informa 0), el estimado con «≈» | Un número real vale más que un estimado, pero un «US$0,000» de una respuesta sin probar escondería el estimado |
+| 2026-09-30 | Bienvenida de cuatro pasos solo para quien instala por primera vez | Pedido del usuario. Quien actualiza no la necesita: ve «Novedades» |
+| 2026-10-01 | **Solo OpenRouter** (se retiran OpenAI directo, el servidor compatible y la clave propia de Anthropic para la nota; Claude sigue disponible vía OpenRouter); al actualizar, la app pasa a OpenRouter sola | Pedido del usuario: «nada de configurar otras APIs». Una sola clave y un solo saldo para todo es más fácil, y OpenRouter ya da varios modelos para elegir. Las claves antiguas quedan guardadas, sin uso |
+| 2026-10-01 | **«Tus métricas»**, calculadas en el teléfono, con lo cobrado y lo estimado por separado | Pedido del usuario. El público habla mucho y lleva lo transcrito a su segundo cerebro: ver cuánto habla, con quién y cuánto gasta motiva y da control |
+| 2026-10-01 | «Usar datos móviles ahora» por grabación, en vez de cambiar «Solo Wi-Fi» | Diagnóstico: una transcripción esperó 27 min por Wi-Fi sin que se notara. El ajuste general sigue protegiendo el plan de datos; la excepción es consciente y de una vez |
+| 2026-10-01 | Al tocar «Transcribir» (Android 14+), una transferencia iniciada por el usuario; la bienvenida pide el permiso de batería | Diagnóstico: Android pausó una transcripción 45 min en segundo plano. Lo que el usuario pide a mano no debe quedar sujeto a las cuotas de las tareas de fondo |
+| 2026-10-01 | El informe de soporte lleva fecha y hora en el nombre | Pedido del usuario: todos se llamaban igual y no sabía cuál compartir |

@@ -23,10 +23,134 @@ final class EngineChecks {
         sizing();
         corrections();
         server(c);
+        route();
+        mobileData(c,r);
+        userJob(c);
+        waits(c);
         Recording d=copy(c,r);
         try{versions(c,d);snippet(c,d);notification(c,d);}
         catch(Throwable failure){try{d.delete(c);}catch(Exception ignored){}throw failure;}
         deleteAll(c,d);
+    }
+
+    // ---------- 0.8.0, tercera ronda: por dónde corre el trabajo ----------
+    /** La decisión de usar la transferencia iniciada por el usuario, sin depender del teléfono. */
+    static void route(){
+        check(Pipeline.route(34,true,true,true,false)==Pipeline.Route.USER_JOB&&Pipeline.route(35,true,true,true,false)==Pipeline.Route.USER_JOB,"A tap with the app visible on Android 14+ should be a user-initiated transfer");
+        check(Pipeline.route(33,true,true,true,false)==Pipeline.Route.CLASSIC&&Pipeline.route(26,true,true,true,false)==Pipeline.Route.CLASSIC,"Android 13 or older must keep the foreground-service path");
+        check(Pipeline.route(35,false,true,true,false)==Pipeline.Route.CLASSIC,"Automatic work (no tap) must stay as before");
+        check(Pipeline.route(35,true,false,true,false)==Pipeline.Route.CLASSIC,"With the app not visible Android refuses it: the old path must be used");
+        check(Pipeline.route(35,true,true,false,false)==Pipeline.Route.CLASSIC,"Without RUN_USER_INITIATED_JOBS the old path must be used");
+        // Con un trabajador andando no se programa otro: con el mismo id, Android detendría la subida en curso.
+        check(Pipeline.route(35,true,true,true,true)==Pipeline.Route.RUNNING&&Pipeline.route(30,false,false,false,true)==Pipeline.Route.RUNNING,"A running worker would be replaced");
+    }
+
+    // ---------- 0.8.0, tercera ronda: «Usar datos móviles ahora» ----------
+    static void mobileData(Context c,Recording r)throws Exception{
+        JSONObject waiting=new JSONObject().put("requested",true);
+        check(Pipeline.waitsForWifi(true,true,false,waiting),"A requested recording on mobile data with Wi-Fi only should wait for Wi-Fi");
+        check(!Pipeline.waitsForWifi(true,true,true,waiting)&&!Pipeline.waitsForWifi(false,true,false,waiting)&&!Pipeline.waitsForWifi(true,false,false,waiting),"Wi-Fi wait offered on Wi-Fi, without the preference, or offline (mobile data cannot help there)");
+        check(!Pipeline.waitsForWifi(true,true,false,new JSONObject(waiting.toString()).put("mobileOk",true))&&!Pipeline.waitsForWifi(true,true,false,new JSONObject())&&!Pipeline.waitsForWifi(true,true,false,null),"A recording with mobile data allowed, or not requested, still waits for Wi-Fi");
+        // Tamaño estimado del envío: FLAC (~20 KB por segundo) en base64 con las muestras de voz; lo ya transcrito no se sube.
+        String mai="microsoft/mai-transcribe-2";long four=Pipeline.uploadBytes("openrouter",mai,4*60_000,0,0,3_000_000);
+        check(four==HttpApi.base64Length(4*60_000L*Retranscribe.OR_BYTES_PER_MS)&&Pipeline.megabytes(four).equals("≈6,4 MB"),"Upload estimate for 4 min wrong: "+four+" "+Pipeline.megabytes(four));
+        check(Pipeline.uploadBytes("openrouter",mai,4*60_000,3*60_000,0,3_000_000)*4<four+16&&Pipeline.uploadBytes("openrouter",mai,4*60_000,0,2,3_000_000)>four,"Upload estimate ignores the parts already done or the voice samples");
+        check(Pipeline.uploadBytes("openai","gpt-transcribe",60_000,30_000,0,1_000_000)==500_000&&Pipeline.uploadBytes("openrouter",mai,60_000,90_000,0,1)==0,"Upload estimate for the m4a, or for nothing left, wrong");
+        check(Pipeline.megabytes(26_400_000).equals("≈26 MB")&&Pipeline.megabytes(10).equals("≈0,1 MB"),"Megabytes format wrong");
+        // ¿Lo único pedido espera Wi-Fi? Se mira en vivo: si entretanto se permitieron los datos móviles (o volvió el Wi-Fi),
+        // el trabajo en curso hace otra vuelta en vez de cederle la grabación a la tarea de fondo.
+        Set<String> none=Collections.emptySet(),a=Collections.singleton("A");List<String> onlyA=Collections.singletonList("A");
+        check(Transcriber.onlyWaitingWifi(onlyA,a,none,id->true)&&Transcriber.onlyWaitingWifi(Arrays.asList("A","F"),a,Collections.singleton("F"),id->true),"Only Wi-Fi waits left, but the worker keeps retrying");
+        check(!Transcriber.onlyWaitingWifi(onlyA,a,none,id->false),"Mobile data allowed while another recording was sent, but the worker gave the recording to the background job");
+        check(!Transcriber.onlyWaitingWifi(Arrays.asList("A","B"),a,none,id->true)&&!Transcriber.onlyWaitingWifi(onlyA,none,none,id->true),"Worker stopped with another recording still to send");
+        // En una grabación desechable: el permiso es de ESA grabación, una sola vez, queda en la bitácora sin el título y
+        // cancelar lo quita. La ventana con "requested" es mínima (nada la envía: no hay runner ni red en esta prueba).
+        Recording d=new Recording(UUID.randomUUID().toString(),"Prueba datos móviles",System.currentTimeMillis(),r.duration);
+        java.nio.file.Files.copy(r.audio(c).toPath(),d.audio(c).toPath());d.save(c);
+        try{
+            check(!Pipeline.allowMobile(c,d.id),"Mobile data allowed for a recording that is not requested");
+            FilesStore.update(c,d.id,s->s.put("requested",true));
+            boolean allowed=Pipeline.allowMobile(c,d.id);JSONObject st=FilesStore.state(c,d.id);boolean again=Pipeline.allowMobile(c,d.id);
+            String blocker=Pipeline.blocker(c,d.id);
+            Pipeline.cancel(c,d.id);JSONObject after=FilesStore.state(c,d.id);
+            String log=st.optJSONArray("log")==null?"":st.optJSONArray("log").toString();
+            check(allowed&&st.optBoolean("mobileOk")&&!again,"Use mobile data now not stored once");
+            check(has(log,"Usarás datos móviles")&&!has(log,d.title)&&!has(log,"«"),"Mobile data log line wrong or not private: "+log);
+            check(blocker==null||!blocker.startsWith("esperando Wi-Fi"),"A recording with mobile data allowed still waits for Wi-Fi");
+            check(!after.optBoolean("requested")&&!after.has("mobileOk"),"Cancelling kept the mobile data permission");
+            // Se fue el Wi-Fi a mitad de la grabación: no cuenta como «solo queda esperar Wi-Fi», así que el servicio o la
+            // transferencia iniciada por el usuario esperan ahí (TranscribeService.waitBeforeRetry) en vez de cederla a la tarea
+            // de fondo que Android pausa. Ceder de inmediato queda solo para la que esperaba Wi-Fi al comenzar la ronda.
+            Transcriber t=new Transcriber(c,new HttpApi(),0);t.waitWifi(d,true);Pipeline.clearWaitingWifi(c,d.id);
+            // waitWifi a mitad también pone la notificación de avance en «Esperando Wi-Fi»: la prueba no la deja puesta.
+            if(!Pipeline.working())c.getSystemService(NotificationManager.class).cancel(Transcriber.NOTIFICATION);
+            check(t.lostWifi&&!t.onlyWaitingWifi(),"Wi-Fi lost midway, but the worker hands the recording to the background job");
+            // Queda para reintentar en el mismo trabajo: si vuelve el Wi-Fi durante la espera, las pantallas la ven en proceso.
+            check(t.retrying().contains(d.id),"Wi-Fi lost midway, but the recording is not held for the retry");
+        }finally{d.delete(c);}
+    }
+
+    // ---------- 0.8.0, tercera ronda: transferencia iniciada por el usuario (Android 14+) ----------
+    static void userJob(Context c){
+        Settings s=new Settings(c);boolean wifi=s.wifiOnly(),charging=s.charging();
+        try{
+            s.prefs.edit().putBoolean("wifi",true).putBoolean("charging",false).commit();
+            // La tarea de fondo deja de esperar Wi-Fi si alguna grabación pedida tiene permiso para datos móviles.
+            check(Pipeline.jobInfo(c,s).getNetworkType()==android.app.job.JobInfo.NETWORK_TYPE_UNMETERED&&Pipeline.jobInfo(c,s,true).getNetworkType()==android.app.job.JobInfo.NETWORK_TYPE_ANY,"Background job network with mobile data allowed wrong");
+            if(android.os.Build.VERSION.SDK_INT>=34){
+                // Persistida si este Android lo acepta (Pipeline.scheduleUserJob hace lo mismo: si no, la pide sin persistir).
+                android.app.job.JobInfo job;boolean persisted=true;
+                try{job=Pipeline.userJobInfo(c,s,false,6_400_000,true);}
+                catch(IllegalArgumentException e){persisted=false;job=Pipeline.userJobInfo(c,s,false,6_400_000,false);android.util.Log.i("VozLocalTest","User-initiated job not persisted on this Android: "+e.getMessage());}
+                check(job.isUserInitiated()&&job.getId()==Pipeline.USER_JOB_ID&&job.getId()!=Pipeline.JOB_ID&&job.getPriority()==android.app.job.JobInfo.PRIORITY_MAX
+                    &&job.getNetworkType()==android.app.job.JobInfo.NETWORK_TYPE_UNMETERED&&job.getEstimatedNetworkUploadBytes()==6_400_000&&job.isPersisted()==persisted,
+                    "User-initiated transfer job wrong: userInitiated="+job.isUserInitiated()+" id="+job.getId()+" priority="+job.getPriority()+" network="+job.getNetworkType()+" upload="+job.getEstimatedNetworkUploadBytes()+" persisted="+job.isPersisted()+"/"+persisted);
+                check(Pipeline.userJobInfo(c,s,true,0,false).getNetworkType()==android.app.job.JobInfo.NETWORK_TYPE_ANY,"User-initiated transfer waits for Wi-Fi although mobile data was allowed");
+                // El primer plano le cede el turno solo si podría empezar ya (Pipeline.userJobFresh): con datos móviles, una
+                // que exige Wi-Fi no empieza, y cederle el turno dejaba todo quieto.
+                check(Pipeline.couldStart(job,true,false)&&!Pipeline.couldStart(job,false,true),"User-initiated transfer waiting for Wi-Fi treated as ready on mobile data");
+            }
+            // La misma regla con el cargador, en la tarea de fondo (cualquier Android).
+            check(Pipeline.couldStart(Pipeline.jobInfo(c,s,true),false,false)&&!Pipeline.couldStart(Pipeline.jobInfo(c,s),false,true),"Job network constraint not read");
+            // Android detuvo la transferencia por el Wi-Fi que ya no se pide («Wi-Fi y datos móviles», o datos móviles permitidos
+            // a una grabación): la retoma la tarea de fondo con los ajustes de ahora. Si exigía cualquier red (se perdió toda
+            // conexión), o los ajustes siguen pidiendo Wi-Fi, no.
+            int net=android.app.job.JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY,power=android.app.job.JobParameters.STOP_REASON_CONSTRAINT_CHARGING;
+            android.app.job.JobInfo wifiJob=Pipeline.jobInfo(c,s),anyJob=Pipeline.jobInfo(c,s,true);
+            check(PipelineJob.staleStop(net,wifiJob,false,false)&&!PipelineJob.staleStop(net,wifiJob,true,false),"Transfer stopped for Wi-Fi no longer required not handed over");
+            check(!PipelineJob.staleStop(net,anyJob,false,false)&&!PipelineJob.staleStop(power,anyJob,false,false),"Transfer stopped for a condition it never required treated as stale");
+            check(PipelineJob.staleStop(net,null,false,false)&&!PipelineJob.staleStop(net,null,true,false)&&!PipelineJob.staleStop(android.app.job.JobParameters.STOP_REASON_TIMEOUT,wifiJob,false,false),"Stale stop without the job, or for another reason, wrong");
+            s.prefs.edit().putBoolean("charging",true).commit();android.app.job.JobInfo plugged=Pipeline.jobInfo(c,s,true);
+            check(!Pipeline.couldStart(plugged,true,false)&&Pipeline.couldStart(plugged,false,true),"Job charger constraint not read");
+            // Lo mismo con «Solo mientras carga» quitado mientras trabajaba.
+            check(PipelineJob.staleStop(power,plugged,false,false)&&!PipelineJob.staleStop(power,plugged,false,true),"Transfer stopped for a charger no longer required not handed over");
+        }finally{s.prefs.edit().putBoolean("wifi",wifi).putBoolean("charging",charging).commit();}
+    }
+
+    // ---------- 0.8.0, revisión r4: lo que se dice mientras se espera ----------
+    private static String title(Notification n){return String.valueOf(n.extras.getCharSequence(Notification.EXTRA_TITLE));}
+    static void waits(Context c){
+        // Titular al pedir: lo que espera, o su turno detrás de la que se transcribe (como el aviso y el botón).
+        check(Pipeline.queuedLine(null,false).equals("En cola · empezando")&&Pipeline.queuedLine(null,true).equals("En cola · empieza cuando termine la transcripción en curso")
+            &&Pipeline.queuedLine("esperando que conectes el cargador",true).equals("En cola · esperando que conectes el cargador"),"Queued headline wrong");
+        // «Reintento en…» solo en la que la ronda dejó para reintentar y sigue lista; nunca en una recién pedida.
+        check("A".equals(TranscribeService.retryTarget(Arrays.asList("A","B"),id->true))&&"B".equals(TranscribeService.retryTarget(Arrays.asList("A","B"),"B"::equals))
+            &&TranscribeService.retryTarget(Collections.<String>emptyList(),id->true)==null&&TranscribeService.retryTarget(Collections.singletonList("A"),id->false)==null,"Retry target wrong");
+        // Aviso «Esperando Wi-Fi» al pasar a «Solo con Wi-Fi»: nunca para la que se está enviando (su parte en curso termina
+        // igual y el aviso quedaba en una grabación ya transcrita); sí para la siguiente que espera.
+        List<String> ids=Arrays.asList("A","B","C");
+        check("B".equals(Pipeline.wifiNoticeFor(ids,"A",id->true))&&"A".equals(Pipeline.wifiNoticeFor(ids,null,id->true))&&"C".equals(Pipeline.wifiNoticeFor(ids,"A",id->!id.equals("B")))
+            &&Pipeline.wifiNoticeFor(Collections.singletonList("A"),"A",id->true)==null&&Pipeline.wifiNoticeFor(ids,null,id->false)==null,"Wi-Fi notice target wrong");
+        // La ronda se detiene por el cargador, la batería o internet (sin gastar un intento); no por el Wi-Fi, que es de cada
+        // grabación, ni en la tarea de fondo, a la que Android ya retiene por eso mismo.
+        check(Transcriber.holds("esperando que conectes el cargador",0)&&Transcriber.holds("esperando conexión a internet",0)&&Transcriber.holds("batería baja: Android espera a que cargues",0),"Round not held for the charger, the battery or the network");
+        check(!Transcriber.holds(Pipeline.WIFI_WAIT,0)&&!Transcriber.holds(null,0)&&!Transcriber.holds("esperando que conectes el cargador",Transcriber.JOB_BUDGET_MS),"Round held for Wi-Fi, for nothing, or in the background job");
+        // Una espera no se titula «Transcribiendo» ni lleva la barra ocupada; un envío sí.
+        Notification wait=Transcriber.build(c,Transcriber.WIFI_WAIT_TEXT,true,-1),send=Transcriber.build(c,"Enviando parte 1 de 3",true,40);
+        check("En pausa".equals(title(wait))&&wait.extras.getInt(Notification.EXTRA_PROGRESS_MAX)==0&&!wait.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE),"Waiting notification titled as working or with a busy bar");
+        check("Transcribiendo".equals(title(send))&&send.extras.getInt(Notification.EXTRA_PROGRESS)==40&&send.extras.getInt(Notification.EXTRA_PROGRESS_MAX)==100,"Progress notification lost its title or bar");
+        check(Transcriber.waiting("Intento 2 de 5 no resultó · se reintenta solo")&&Transcriber.waiting("Esperando que conectes el cargador · se retoma sola al cumplirse")
+            &&!Transcriber.waiting("Preparando…")&&!Transcriber.waiting("Transcribiendo · 2 de 3 partes listas")&&!Transcriber.waiting("Enviando parte 1 de 3"),"Waiting notification texts wrong");
     }
 
     // ---------- Disponibilidad y motivos ----------
@@ -160,10 +284,18 @@ final class EngineChecks {
         FilesStore.write(FilesStore.file(c,id,".part0.json"),new JSONObject().put("segments",new JSONArray()));
         File block=new File(AudioParts.blockDir(c,id),"block-0.m4a");check(block.createNewFile()||block.exists(),"Test block not created");
 
+        // La pasada anterior terminó: todo su audio está hecho (en partes).
+        String provider=new Settings(c).provider();long duration=d.duration;
+        FilesStore.update(c,id,s->s.put("profile","prueba").put("provider",provider).put("audioMs",duration).put("doneAudioMs",duration).put("blocks",3).put("blocksDone",3));
+        long finished=Pipeline.uploadBytes(c,d);
+
         Retranscribe.prepare(c,d,SPEAKERS,null);JSONObject st=FilesStore.state(c,id);
         check(!Transcript.exists(c,id)&&prev.isFile()&&notePrev.isFile()&&!note.isFile()&&Retranscribe.hasPrevious(c,id),"Previous version not kept aside");
         check(!FilesStore.file(c,id,".part0.json").exists()&&!block.exists(),"Old part checkpoints or blocks would be reused");
         check(st.optInt("attempt")==1&&Retranscribe.mode(st)==SPEAKERS&&!st.has("noteState")&&!st.has("cuts")&&!st.has("snippet")&&!st.has("fixedRefs"),"Retranscribe state wrong: "+st);
+        // Lo hecho por la pasada anterior no es avance de la nueva: ni para el tamaño del envío («Usar datos móviles (≈X MB)»),
+        // ni para la biblioteca, ni para Models.resume (que retenía el modelo del que se movió «Automático»).
+        check(!st.has("blocks")&&!st.has("blocksDone")&&!st.has("doneAudioMs")&&(duration<=0||finished==0&&Pipeline.uploadBytes(c,d)>0),"Progress of the finished pass read as progress of the new one: "+finished+" "+Pipeline.uploadBytes(c,d)+" "+st);
         check(has(Retranscribe.reason(c,d,SPEAKERS),"anterior"),"Unfinished new version not explained on the device");
 
         // Llega la nueva versión (con su nota) y el usuario vuelve a la anterior.
@@ -173,7 +305,8 @@ final class EngineChecks {
         check(first(c,id).equals("Versión uno"),"Previous transcript not restored");
         check(FilesStore.read(note).optString("title").equals("Nota uno"),"Previous note not restored");
         check(!prev.isFile()&&!notePrev.isFile()&&!Retranscribe.hasPrevious(c,id)&&!st.has("retranscribe"),"Previous files or state left after restoring");
-        check(st.optString("suggestedTitle").equals("Título uno")&&st.optString("model").equals("modelo-uno")&&st.optJSONArray("cuts")!=null,"Process data of the previous version not restored");
+        check(st.optString("suggestedTitle").equals("Título uno")&&st.optString("model").equals("modelo-uno")&&st.optJSONArray("cuts")!=null
+            &&st.optInt("blocks")==3&&st.optInt("blocksDone")==3&&st.optLong("doneAudioMs")==duration,"Process data of the previous version not restored");
         check(has(st.optString("snippet"),"Versión uno"),"Snippet not refreshed after restoring");
 
         // Quedarse con la nueva (sin nota nueva: la nota anterior no reaparece). Una nota «armándose» no se guarda como parte

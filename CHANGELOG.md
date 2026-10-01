@@ -1,5 +1,51 @@
 # Historial de versiones
 
+## 0.8.0 — 2026-10-01 · «Una sola clave para todo»
+
+Todo pasa por **OpenRouter**, con una sola clave, y llegan **«Tus métricas»**, una **bienvenida** para quien instala por primera vez y los arreglos del diagnóstico del 2026-10-01: una grabación corta quedó más de 1 hora sin transcribir. Diseño en `docs/diseno/SPEC-0.8.md`, `SPEC-0.8b.md` y `SPEC-0.8c.md`; plan en `docs/PLAN-openrouter.md`.
+
+**OpenRouter, y solo OpenRouter**
+- Una clave transcribe y arma la nota. Ya no se elige proveedor; al actualizar, la app pasa a OpenRouter sola (esquema 5). Las claves antiguas quedan guardadas, sin uso.
+- **Catálogo vivo:** los modelos de transcripción se piden a `GET /models?output_modalities=transcription` y se guardan. Cada uno dice si separa voces y cuánto cuesta por hora. «Automático» elige el recomendado y no cambia de modelo a mitad de una transcripción (regla única: `Models.resume`).
+- **Audio liviano:** se envía en FLAC mono de 16 kHz (WAV si el teléfono no tiene codificador), en partes si es largo, y se reintenta por mitades ante un 413.
+- **Voces conocidas:** tus muestras de voz van delante del audio, con 1 s de silencio entre ellas. La voz que suena en cada muestra se asocia a su nombre y después esa zona se quita del texto.
+- **Costo real:** cuando OpenRouter lo informa, se guarda el costo de cada transcripción y de cada nota. El audio cobrado con muestras se calcula con una sola regla (`Pricing.billedMs`).
+- **Notas con la última versión** de Claude, GPT o Gemini (alias `~…-latest`); la nota dice qué modelo respondió.
+- **Saldo:** «Comprobar conexión» muestra el saldo de la cuenta, y avisa si aún no tiene créditos.
+
+**Tus métricas** (Ajustes, o tocando «Tu semana» en Grabar, que abre en «7 días»)
+- Por período (7 días, este mes, todo): tiempo hablado, grabaciones, palabras transcritas y notas.
+- 8 semanas en barras, racha de días y mejor racha, y un mapa de a qué hora grabas.
+- Con quién conversas (voces reconocidas).
+- Gasto por modelo: real y estimado por separado, con US$ por hora. También el saldo de OpenRouter de la última comprobación.
+- Todo se calcula en el teléfono. Nada se envía.
+
+**Bienvenida** (la primera vez; se repite desde Ajustes → Ayuda y soporte)
+- Cuatro pasos: qué hace la app; «Tú» (nombre, micrófono y batería); tu clave de OpenRouter, con comprobación y saldo; y listo.
+- En «Tú» pide el permiso para **transcribir con el teléfono bloqueado**, con los pasos según la marca (vivo y otras). Muestra ✓ si ya está dado.
+
+**Que nada quede esperando sin avisar** (diagnóstico del 2026-10-01)
+- **Preparar el audio es varias veces más rápido:** filtro en float con menos coeficientes, caminos directos 48→16 kHz y 32→16 kHz, y una comprobación barata del FLAC (cuadros y CRC) en vez de decodificarlo entero. Muestra el avance en %.
+- **«Usar datos móviles ahora (≈X MB)»:** si una transcripción espera Wi-Fi, un botón en el detalle y en la notificación la envía con datos, solo esa vez.
+- **Transferencia iniciada por el usuario (Android 14+):** al tocar «Transcribir», el trabajo sigue aunque la app pase a segundo plano, sin las cuotas de las tareas de fondo.
+- Si una transcripción se rinde tras varios intentos, avisa con una notificación.
+- **Si el Wi-Fi se corta a mitad** (con «Solo con Wi-Fi»), el trabajo espera con el aviso «Esperando Wi-Fi» y su acción «Usar datos móviles», en vez de seguir por datos o quedarse callado. «Solo con Wi-Fi» se revisa antes de enviar cada parte.
+- **Cancelar** cierra la transferencia y su notificación; lo demás pedido sigue.
+- Cambiar «Red para enviar audio» o «Solo mientras carga» en Ajustes reprograma lo que espera, con las condiciones nuevas.
+- **«Empezar ahora»** empieza de verdad aunque Android tenga retenida la transferencia.
+- Un congelamiento de la app (vivo) ya no se confunde con un códec trabado al preparar el audio.
+
+**Que las pantallas digan la verdad** (revisiones adversariales de la 0.8.0)
+- Una grabación en cola dice «En cola…» o «Esperando Wi-Fi…»; solo la que se procesa dice «Transcribiendo…». La píldora de Grabar, la tarjeta «Última grabación», el detalle y los avisos dicen lo mismo (regla única: `Pipeline.processing`).
+- El tamaño de «Usar datos móviles» es el real también al volver a transcribir.
+- Una clave rechazada se muestra igual en la bienvenida, en Ajustes y en Grabar. Ajustes no guarda claves de otros servicios (OpenAI, Anthropic): no se envían a OpenRouter.
+- «Tus métricas» fecha lo cobrado de una pasada en curso cuando se cobró, y no dice «con tu servidor» para OpenRouter.
+- «Tu semana» no cuenta las grabaciones de ejemplo, igual que «Tus métricas».
+
+**Otros**
+- Informe de soporte con fecha y hora en el nombre (`Verbapp-soporte-AAAA-MM-DD-HHMM.txt`).
+- Ícono nuevo para la Biblioteca (tres libros).
+
 ## 0.7.0 — 2026-09-30 · «Verbapp: nueva cara, el mismo cerebro»
 
 La app pasa a llamarse **Verbapp** («las palabras vuelan, lo escrito permanece»; lema: «Tus palabras, para siempre»). Esta versión **solo cambia la interfaz**: grabar, transcribir, voces, notas, 0-Inbox y todo lo demás funciona igual. Diseño en `docs/diseno/PROPUESTA-0.7.md`, basado en la referencia que eligió el usuario (`docs/diseno/referencias/`).

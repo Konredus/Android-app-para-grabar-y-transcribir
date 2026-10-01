@@ -11,7 +11,7 @@ import org.json.JSONObject;
  * - gpt-transcribe: languages[] (NO acepta "language") y streaming del texto.
  * - resto: json + language.
  */
-final class OpenAiClient {
+final class OpenAiClient implements TranscribeClient {
     final HttpApi http;
     OpenAiClient(HttpApi http){this.http=http;}
     interface Delta{void text(int characters);}
@@ -25,7 +25,7 @@ final class OpenAiClient {
     }
     JSONObject transcribe(File audio,ProviderConfig config,String language)throws Exception{return transcribe(audio,config,language,null,null);}
     /** references: pares {nombre, data URL} de muestras de voz (2–10 s) para reconocer a las mismas personas en otros bloques. */
-    JSONObject transcribe(File audio,ProviderConfig config,String language,List<String[]> references,Delta delta)throws Exception{
+    @Override public JSONObject transcribe(File audio,ProviderConfig config,String language,List<String[]> references,Delta delta)throws Exception{
         if(audio.length()>25_000_000)throw new HttpApi.UserAction("Esta parte del audio supera el tamaño que acepta el proveedor (25 MB). Prueba recortar el audio.");
         String boundary="VozLocal"+java.util.UUID.randomUUID().toString().replace("-","");
         boolean fast=config.provider.equals("openai")&&config.model.equals("gpt-transcribe");

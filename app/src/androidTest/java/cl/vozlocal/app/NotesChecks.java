@@ -6,7 +6,10 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-/** Pruebas de la parte «notes» de la 0.6.0 (ver docs/diseno/SPEC-0.6.md). Sin llamadas reales a APIs: HttpApi falso. */
+/**
+ * Pruebas de la parte «notes» de la 0.6.0 (ver docs/diseno/SPEC-0.6.md) y de la nota por OpenRouter de la 0.8.0
+ * (docs/diseno/SPEC-0.8.md). Sin llamadas reales a APIs: HttpApi falso y claves de mentira.
+ */
 final class NotesChecks {
     static void check(boolean ok,String text){if(!ok)throw new AssertionError(text);}
     /** Mismo check con otro nombre: dentro de un HttpApi falso, «check» sería HttpApi.check(). */
@@ -36,10 +39,16 @@ final class NotesChecks {
     static void run(Context c,Recording source)throws Exception{
         pure();
         Settings settings=new Settings(c);boolean prefix=settings.datePrefix();String noteModel=settings.prefs.getString("noteModel",null);
+        // Las pruebas de OpenRouter (0.8.0) cambian el proveedor, la IA de la nota y la clave de OpenRouter: al terminar,
+        // todo vuelve a como estaba (la clave se repone cifrada, tal cual, sin leerla).
+        String[] kept={"provider","noteProvider","openrouter_keyEncrypted","openrouter_keyIv"},before=new String[kept.length];
+        for(int i=0;i<kept.length;i++)before[i]=settings.prefs.getString(kept[i],null);
         List<Recording> fixtures=new ArrayList<>();
-        try{files(c,source,settings,fixtures);}
+        try{files(c,source,settings,fixtures);router(c,source,settings,fixtures);}
         finally{
-            android.content.SharedPreferences.Editor edit=settings.prefs.edit().putBoolean("datePrefix",prefix);if(noteModel==null)edit.remove("noteModel");else edit.putString("noteModel",noteModel);edit.commit();
+            android.content.SharedPreferences.Editor edit=settings.prefs.edit().putBoolean("datePrefix",prefix);if(noteModel==null)edit.remove("noteModel");else edit.putString("noteModel",noteModel);
+            for(int i=0;i<kept.length;i++){if(before[i]==null)edit.remove(kept[i]);else edit.putString(kept[i],before[i]);}
+            edit.commit();
             for(Recording f:fixtures){File[] files=Recording.directory(c).listFiles((dir,name)->name.startsWith(f.id+"."));if(files!=null)for(File file:files)file.delete();}
             FilesStore.version.incrementAndGet();
         }
@@ -126,6 +135,33 @@ final class NotesChecks {
         Map<String,String> headers=Notes.anthropicHeaders("ak-test");
         expect(headers.get("x-api-key").equals("ak-test")&&headers.get("anthropic-version").equals("2023-06-01")&&!headers.containsKey("Authorization"),"Anthropic headers wrong");
 
+        // OpenRouter (0.8.0): mismo formato de chat, con modelo alias. Claude no recibe «reasoning»; los que razonan por
+        // defecto, el mínimo. El modo simple (reintento tras un 400) lleva solo el modelo y los mensajes.
+        expect(Notes.OPENROUTER_URL.equals("https://openrouter.ai/api/v1/chat/completions")&&Notes.OPENAI_URL.equals("https://api.openai.com/v1/chat/completions"),"Note endpoints changed");
+        JSONObject routerBody=Notes.openrouterBody(Models.NOTE_DEFAULT,p,false);
+        expect(routerBody.getString("model").equals("~anthropic/claude-sonnet-latest")&&routerBody.getJSONObject("response_format").getString("type").equals("json_object")&&routerBody.getInt("max_tokens")>=4000
+            &&!routerBody.has("reasoning")&&!routerBody.has("reasoning_effort")&&!routerBody.has("max_completion_tokens"),"OpenRouter body wrong: "+routerBody.names());
+        JSONArray routerMessages=routerBody.getJSONArray("messages");
+        expect(routerMessages.length()==2&&routerMessages.getJSONObject(0).getString("role").equals("system")&&routerMessages.getJSONObject(0).getString("content").equals(Notes.SYSTEM)
+            &&routerMessages.getJSONObject(1).getString("role").equals("user")&&routerMessages.getJSONObject(1).getString("content").equals(p.text),"OpenRouter messages wrong");
+        expect(Notes.openrouterBody("~openai/gpt-luna-latest",p,false).getJSONObject("reasoning").getString("effort").equals("low")&&Notes.openrouterBody("~google/gemini-flash-latest",p,false).has("reasoning"),"Reasoning effort not lowered for models that reason by default");
+        // El modo simple conserva el tope de salida (0.8.0, segunda ronda): sin max_tokens OpenRouter reserva el máximo del
+        // modelo y, con poco saldo, responde un 402 falso. Solo deja fuera response_format y reasoning.
+        JSONObject simpleBody=Notes.openrouterBody(Models.NOTE_DEFAULT,p,true);
+        expect(simpleBody.length()==3&&simpleBody.getString("model").equals(Models.NOTE_DEFAULT)&&simpleBody.getJSONArray("messages").length()==2&&simpleBody.getInt("max_tokens")==routerBody.getInt("max_tokens"),"Simple OpenRouter body carries optional fields or lost max_tokens: "+simpleBody.names());
+        Map<String,String> routerHeaders=Notes.openrouterHeaders();
+        // Una sola fuente: los mismos encabezados con que se transcribe (OpenRouterClient.headers()).
+        expect(routerHeaders.equals(OpenRouterClient.headers())&&"Verbapp".equals(routerHeaders.get("X-OpenRouter-Title"))&&routerHeaders.get("HTTP-Referer").startsWith("https://")&&!routerHeaders.containsKey("Authorization"),"OpenRouter headers wrong: "+routerHeaders);
+        expect(Notes.service("openrouter").equals("OpenRouter")&&Notes.service("openai").equals("OpenAI")&&Notes.service("anthropic").equals("Claude")&&Notes.service("").equals("OpenAI"),"Service names wrong");
+        expect(Notes.defaultModel("openrouter").equals(Models.NOTE_DEFAULT)&&Notes.defaultModel("openai").equals("gpt-6-luna")&&Notes.defaultModel("anthropic").equals("claude-sonnet-5-5"),"Default note models wrong");
+        // La nota muestra el modelo que respondió (con un alias, la versión concreta) y el costo: real con OpenRouter, estimado si no.
+        JSONObject routed=new JSONObject(n.toString()).put("provider","openrouter").put("model",Models.NOTE_DEFAULT).put("modelUsed","anthropic/claude-sonnet-5.5").put("costUsd",0.0042).put("costReal",true).put("speakers",new JSONObject(p.tokens));
+        expect(Notes.modelShown(routed).equals("anthropic/claude-sonnet-5.5")&&Notes.modelShown(note).equals("gpt-6-luna")&&Notes.modelShown(null).isEmpty()&&Notes.modelShown(new JSONObject()).isEmpty(),"modelShown() wrong");
+        expect(Notes.credit(routed).equals("Armada con OpenRouter · anthropic/claude-sonnet-5.5 · costó US$0,004"),"Note credit wrong: "+Notes.credit(routed));
+        expect(Notes.credit(note).equals("Armada con OpenAI · gpt-6-luna")&&Notes.credit(new JSONObject(note.toString()).put("costUsd",0.0123)).equals("Armada con OpenAI · gpt-6-luna · ≈ US$0,012")
+            &&Notes.credit(new JSONObject(note.toString()).put("costUsd",0.0002)).equals("Armada con OpenAI · gpt-6-luna · < US$0,001")&&Notes.credit(new JSONObject()).isEmpty()&&Notes.credit(null).isEmpty(),"Note credit for estimated costs wrong");
+        expect(md.contains("nota_ia: \"OpenAI · gpt-6-luna\"\n")&&Notes.markdown(r,routed,t,marks()).contains("nota_ia: \"OpenRouter · anthropic/claude-sonnet-5.5\"\n"),"nota_ia must name the model that answered");
+
         // Título automático: solo el de la app (con o sin fecha), nunca uno escrito por la persona.
         expect(Notes.isDefaultTitle(Recording.defaultTitle(created),created)&&Notes.isDefaultTitle(Recording.withDate(Recording.defaultTitle(created),created),created)&&Notes.isDefaultTitle("2026-09-27 Grabación 16:05",created)&&Notes.isDefaultTitle("",created),"Default title not recognized");
         expect(!Notes.isDefaultTitle("Grabación con Fran",created)&&!Notes.isDefaultTitle("2026-09-29 Reunión",created)&&!Notes.isDefaultTitle("Reunión de presupuesto",created),"User title treated as automatic");
@@ -182,6 +218,8 @@ final class NotesChecks {
         expect(calls[0]==1&&fakeOpenAi.readTimeoutMs==1234,"OpenAI called more than once or timeout not restored");
         JSONObject note=Notes.load(c,a.id);
         expect(note!=null&&note.getInt("version")==1&&note.getString("provider").equals("openai")&&note.getString("model").equals("gpt-6-luna")&&note.getJSONObject("speakers").getString("S1").equals("B")&&note.getJSONObject("usage").getLong("input_tokens")==1000&&note.getDouble("costUsd")>0&&note.getLong("createdAt")>0,"Saved note wrong: "+note);
+        // OpenAI directo sigue igual en la 0.8.0: no informa costo real ni (en esta respuesta) el modelo que respondió.
+        expect(!note.has("modelUsed")&&!note.has("costReal")&&Notes.credit(note).equals("Armada con OpenAI · gpt-6-luna · < US$0,001"),"OpenAI note gained OpenRouter-only fields: "+Notes.credit(note));
         JSONObject st=FilesStore.state(c,a.id);
         expect(st.optString("noteState").equals("ready")&&!st.has("noteError")&&st.optString("suggestedTitle").equals(suggestion),"Note state wrong: "+st);
         Recording afterA=FilesStore.recording(c,a.id);
@@ -251,6 +289,179 @@ final class NotesChecks {
         Notes.delete(c,a.id);JSONObject cleared=FilesStore.state(c,a.id);
         expect(!Notes.exists(c,a.id)&&!cleared.has("noteState")&&!cleared.has("suggestedTitle")&&Notes.load(c,a.id)==null,"Note delete left state behind");
         expect(Inbox.outdated(c,a.id),"Deleted note after an .md save not detected");
+    }
+
+    /** Respuesta de OpenRouter (Chat Completions): además trae el modelo que respondió y el costo real en usage.cost. */
+    private static String routerReply(String title,String model,double cost)throws JSONException{
+        JSONObject usage=new JSONObject().put("prompt_tokens",1500).put("completion_tokens",300).put("total_tokens",1800);if(cost>=0)usage.put("cost",cost);
+        JSONObject reply=new JSONObject().put("id","gen-test").put("object","chat.completion").put("provider","Anthropic").put("choices",new JSONArray().put(new JSONObject().put("index",0).put("finish_reason","stop")
+            .put("message",new JSONObject().put("role","assistant").put("content",answer().put("title",title).toString()).put("refusal",JSONObject.NULL)))).put("usage",usage);
+        if(model!=null)reply.put("model",model);
+        return reply.toString();
+    }
+    private static boolean logged(Context c,String id,String text){
+        JSONArray log=FilesStore.state(c,id).optJSONArray("log");
+        if(log!=null)for(int i=0;i<log.length();i++){JSONObject e=log.optJSONObject(i);if(e!=null&&e.optString("m").contains(text))return true;}
+        return false;
+    }
+    /** Clave de mentira: nunca sale del teléfono (el HttpApi es falso) y no debe aparecer en el pedido, el estado ni la nota. */
+    private static final String ROUTER_KEY="sk-or-test-this-is-not-a-real-key";
+
+    /**
+     * Nota por OpenRouter (0.8.0), sin red: qué IA se usa por defecto, modelo alias, pedido (URL, clave, encabezados,
+     * cuerpo), modelo que respondió y costo real guardados, y errores (402, 404, 401, 400 con reintento simple, error
+     * dentro de un 200). run() deja las preferencias y la clave como estaban.
+     */
+    static void router(Context c,Recording source,Settings settings,List<Recording> fixtures)throws Exception{
+        // IA de la nota: desde la segunda ronda de la 0.8.0 (SPEC-0.8b, decisión 3) la nota va SIEMPRE por OpenRouter. Ni el
+        // proveedor guardado ni una «noteProvider» que haya quedado de antes (OpenAI, Claude, un valor raro) la desvían: así
+        // una clave vieja de OpenAI o de Anthropic nunca se vuelve a enviar. (En la primera ronda esto respetaba la elección.)
+        String[][] cases={{"openrouter",null},{"openai",null},{"custom",null},{"openrouter","openai"},{"openrouter","anthropic"},{"openrouter","otra-cosa"},{"openai","openrouter"},{"openai","anthropic"}};
+        for(String[] k:cases){
+            android.content.SharedPreferences.Editor e=settings.prefs.edit().putString("provider",k[0]);if(k[1]==null)e.remove("noteProvider");else e.putString("noteProvider",k[1]);e.commit();
+            expect(Notes.provider(settings).equals("openrouter"),"The note must always go through OpenRouter (provider "+k[0]+", noteProvider "+k[1]+")");
+        }
+        settings.prefs.edit().putString("provider","openai").putString("noteProvider","openrouter").commit();
+
+        // Modelo: los ids de OpenRouter llevan «autor/»; nunca llegan a OpenAI ni a Claude, y uno de otra IA no va a OpenRouter.
+        settings.prefs.edit().putString("noteModel","~openai/gpt-luna-latest").commit();
+        expect(Notes.model(settings,"openrouter").equals("~openai/gpt-luna-latest")&&Notes.model(settings,"openai").equals(Notes.OPENAI_MODEL)&&Notes.model(settings,"anthropic").equals(Notes.ANTHROPIC_MODEL),"OpenRouter alias rejected or leaked to another provider");
+        settings.prefs.edit().putString("noteModel","google/gemini-3-flash").commit();
+        expect(Notes.model(settings,"openrouter").equals("google/gemini-3-flash"),"Plain OpenRouter id rejected");
+        settings.prefs.edit().putString("noteModel","claude-opus-5-5").commit();
+        expect(Notes.model(settings,"openrouter").equals(Models.NOTE_DEFAULT),"A model without «autor/» was sent to OpenRouter");
+        settings.prefs.edit().putString("noteModel","autor/modelo con espacios").commit();
+        expect(Notes.model(settings,"openrouter").equals(Models.NOTE_DEFAULT),"Malformed model accepted");
+        settings.prefs.edit().remove("noteModel").commit();
+        expect(Notes.model(settings,"openrouter").equals("~anthropic/claude-sonnet-latest"),"Default OpenRouter note model is not the alias");
+
+        // La clave que decide si se puede armar la nota es la de la IA elegida (aquí OpenRouter, transcribiendo con OpenAI).
+        settings.saveKeyFor("openrouter","");
+        expect(!Notes.canGenerate(c),"Note offered without an OpenRouter key");
+        settings.saveKeyFor("openrouter",ROUTER_KEY);
+        expect(Notes.canGenerate(c)&&settings.openRouterKey().equals(ROUTER_KEY)&&!settings.prefs.getString("openrouter_keyEncrypted","").contains("sk-or-test"),"OpenRouter key not usable for the note, or stored as plaintext");
+
+        // Nota completa con los ajustes reales (IA, clave y modelo salen de Settings): URL, encabezados, alias y estado.
+        long now=System.currentTimeMillis();
+        Recording a=fixture(c,source,"Reunión por OpenRouter",now,fixtures);String userTitle=FilesStore.recording(c,a.id).title;
+        int[] calls={0};
+        HttpApi fake=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra)throws Exception{
+            calls[0]++;
+            expect(method.equals("POST")&&url.equals("https://openrouter.ai/api/v1/chat/completions")&&ROUTER_KEY.equals(token)&&"application/json".equals(type),"OpenRouter request line wrong");
+            expect(extra!=null&&"Verbapp".equals(extra.get("X-OpenRouter-Title"))&&extra.get("HTTP-Referer")!=null&&extra.get("HTTP-Referer").startsWith("https://")&&!extra.containsKey("Authorization")&&!extra.containsKey("x-api-key")&&!extra.containsValue(ROUTER_KEY),"OpenRouter headers wrong");
+            expect(FilesStore.state(c,a.id).optString("noteState").equals("working"),"noteState not working during the OpenRouter request");
+            ByteArrayOutputStream out=new ByteArrayOutputStream();body.write(out);expect(out.size()==body.length(),"Body length mismatch");
+            String raw=out.toString(StandardCharsets.UTF_8.name());JSONObject sent=new JSONObject(raw);
+            expect(sent.getString("model").equals("~anthropic/claude-sonnet-latest")&&sent.getJSONObject("response_format").getString("type").equals("json_object")&&!sent.has("reasoning"),"OpenRouter body fields wrong");
+            JSONArray messages=sent.getJSONArray("messages");
+            expect(messages.getJSONObject(0).getString("content").equals(Notes.SYSTEM)&&messages.getJSONObject(1).getString("content").contains("{S1}: Hola, partamos.")&&messages.getJSONObject(1).getString("content").contains("(lo escribió la persona)"),"OpenRouter prompt wrong");
+            expect(!raw.contains(ROUTER_KEY)&&!raw.contains("Fran")&&!raw.contains("Konrad"),"The key or the speakers' names travelled in the note request");
+            return new Response(200,routerReply("Metas del trimestre","anthropic/claude-sonnet-5.5",0.0123),null);
+        }};
+        fake.readTimeoutMs=4321;
+        Notes.generate(c,a,fake);
+        JSONObject note=Notes.load(c,a.id);
+        expect(calls[0]==1&&fake.readTimeoutMs==4321,"OpenRouter called more than once or timeout not restored");
+        expect(note!=null&&note.getInt("version")==1&&note.getString("provider").equals("openrouter")&&note.getString("model").equals("~anthropic/claude-sonnet-latest")&&note.getString("modelUsed").equals("anthropic/claude-sonnet-5.5"),"OpenRouter note lost the alias or the model that answered: "+note);
+        expect(Math.abs(note.getDouble("costUsd")-0.0123)<1e-9&&note.getBoolean("costReal")&&note.getJSONObject("usage").getLong("input_tokens")==1500&&note.getJSONObject("usage").getLong("output_tokens")==300&&note.getJSONObject("speakers").getString("S1").equals("B"),"OpenRouter real cost or usage not saved: "+note);
+        JSONObject st=FilesStore.state(c,a.id);
+        expect(st.optString("noteState").equals("ready")&&!st.has("noteError")&&st.optString("suggestedTitle").equals("Metas del trimestre")&&FilesStore.recording(c,a.id).title.equals(userTitle),"OpenRouter note state wrong, or user title overwritten");
+        expect(logged(c,a.id,"Armando la nota con OpenRouter")&&!st.toString().contains(ROUTER_KEY)&&!note.toString().contains(ROUTER_KEY),"Log does not name OpenRouter, or the key leaked into the state or the note");
+        expect(Notes.credit(note).equals("Armada con OpenRouter · anthropic/claude-sonnet-5.5 · costó US$0,012")&&Notes.markdown(c,FilesStore.recording(c,a.id)).contains("nota_ia: \"OpenRouter · anthropic/claude-sonnet-5.5\"\n"),"The model that answered is not shown: "+Notes.credit(note));
+
+        // Respuesta sin costo y con un «modelo» que no parece un id (nada de esto está confirmado con la API real): la
+        // nota se guarda igual, sin inventar el costo y sin guardar texto libre como modelo.
+        Recording b=fixture(c,source,"Sin modelo ni costo",now,fixtures);
+        HttpApi bare=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra)throws Exception{
+            return new Response(200,routerReply("Otro título","modelo con espacios <b>",-1),null);}};
+        Notes.generate(c,b,bare,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);
+        JSONObject noteB=Notes.load(c,b.id);
+        expect(noteB!=null&&!noteB.has("modelUsed")&&!noteB.has("costUsd")&&!noteB.has("costReal")&&noteB.getJSONObject("usage").getLong("input_tokens")==1500,"Missing cost or model was made up: "+noteB);
+        expect(Notes.modelShown(noteB).equals(Models.NOTE_DEFAULT)&&Notes.credit(noteB).equals("Armada con OpenRouter · ~anthropic/claude-sonnet-latest"),"Fallback to the requested model wrong: "+Notes.credit(noteB));
+
+        // 402: sin saldo. Se explica con su salida, no se reintenta y la nota anterior se conserva.
+        int[] broke={0};
+        HttpApi noCredit=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra){
+            broke[0]++;return new Response(402,"{\"error\":{\"code\":402,\"message\":\"Insufficient credits. Add more using https://openrouter.ai/settings/credits\",\"metadata\":{}}}",null);}};
+        boolean noBalance=false;try{Notes.generate(c,a,noCredit,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);}catch(HttpApi.UserAction e){noBalance=e.getMessage().contains("saldo en OpenRouter");}
+        JSONObject failed=FilesStore.state(c,a.id);
+        expect(noBalance&&broke[0]==1&&failed.optString("noteState").equals("failed")&&failed.optString("noteError").contains("saldo en OpenRouter")&&failed.optString("noteError").contains("openrouter.ai"),"402 not reported as missing credits: "+failed.optString("noteError"));
+        expect(Notes.exists(c,a.id)&&Notes.load(c,a.id).getString("modelUsed").equals("anthropic/claude-sonnet-5.5"),"A failed attempt removed the previous note");
+
+        // 404: OpenRouter retiró el modelo (o ningún proveedor lo ofrece) → elegir otro. 401: la clave.
+        HttpApi gone=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra){
+            return new Response(404,"{\"error\":{\"code\":404,\"message\":\"No endpoints found for anthropic/claude-sonnet-latest.\"}}",null);}};
+        boolean retired=false;try{Notes.generate(c,a,gone,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);}catch(HttpApi.UserAction e){retired=e.getMessage().contains("ya no está disponible en OpenRouter");}
+        expect(retired&&FilesStore.state(c,a.id).optString("noteError").contains("Elige otro"),"404 not reported as a retired model");
+        // Un id que no existe llega como 400: tampoco se reintenta en modo simple (no es una opción del pedido).
+        int[] unknownTries={0};
+        HttpApi unknown=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra){
+            unknownTries[0]++;return new Response(400,"{\"error\":{\"code\":400,\"message\":\"autor/no-existe is not a valid model ID\"}}",null);}};
+        boolean unknownModel=false;try{Notes.generate(c,a,unknown,"openrouter","autor/no-existe",ROUTER_KEY);}catch(HttpApi.UserAction e){unknownModel=e.getMessage().contains("ya no está disponible en OpenRouter");}
+        expect(unknownModel&&unknownTries[0]==1,"Unknown model id retried or not explained (tries: "+unknownTries[0]+")");
+        HttpApi denied=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra){
+            return new Response(401,"{\"error\":{\"code\":401,\"message\":\"No auth credentials found\"}}",null);}};
+        boolean badKey=false;try{Notes.generate(c,a,denied,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);}catch(HttpApi.UserAction e){badKey=e.getMessage().contains("clave de OpenRouter");}
+        expect(badKey,"401 not reported as an OpenRouter key problem");
+
+        // 400 por una opción del pedido: se reintenta UNA vez en modo simple (solo modelo y mensajes) y la nota sale.
+        Recording d=fixture(c,source,"Reintento simple",now,fixtures);
+        int[] tries={0};
+        HttpApi picky=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra)throws Exception{
+            tries[0]++;ByteArrayOutputStream out=new ByteArrayOutputStream();body.write(out);JSONObject sent=new JSONObject(out.toString(StandardCharsets.UTF_8.name()));
+            expect(url.equals(Notes.OPENROUTER_URL)&&ROUTER_KEY.equals(token)&&extra!=null&&"Verbapp".equals(extra.get("X-OpenRouter-Title"))&&sent.getString("model").equals("~openai/gpt-luna-latest")&&sent.getJSONArray("messages").length()==2,"OpenRouter attempt "+tries[0]+" wrong");
+            if(tries[0]==1){
+                expect(sent.has("response_format")&&sent.getJSONObject("reasoning").getString("effort").equals("low"),"First attempt should carry the full options");
+                return new Response(400,"{\"error\":{\"code\":400,\"message\":\"response_format is not supported by this model\"}}",null);
+            }
+            // El reintento simple deja fuera response_format y reasoning, pero no el tope de salida (ver openrouterBody).
+            expect(sent.length()==3&&sent.getInt("max_tokens")>0&&!sent.has("response_format")&&!sent.has("reasoning"),"Simple retry still carries optional fields or lost max_tokens: "+sent.names());
+            return new Response(200,routerReply("Reintento","openai/gpt-6-luna",0.0004),null);
+        }};
+        Notes.generate(c,d,picky,"openrouter","~openai/gpt-luna-latest",ROUTER_KEY);
+        JSONObject noteD=Notes.load(c,d.id);
+        expect(tries[0]==2&&noteD!=null&&noteD.getString("model").equals("~openai/gpt-luna-latest")&&noteD.getString("modelUsed").equals("openai/gpt-6-luna")&&logged(c,d.id,"modo simple"),"400 for an option was not retried once in simple mode (tries: "+tries[0]+")");
+        expect(Notes.credit(noteD).equals("Armada con OpenRouter · openai/gpt-6-luna · costó < US$0,001"),"Tiny real cost shown wrong: "+Notes.credit(noteD));
+
+        // Un 400 por largo no se reintenta (el modo simple no lo arregla) y dice qué hacer.
+        int[] longTries={0};
+        HttpApi tooLong=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra){
+            longTries[0]++;return new Response(400,"{\"error\":{\"code\":400,\"message\":\"This endpoint's maximum context length is 200000 tokens.\"}}",null);}};
+        boolean tooBig=false;try{Notes.generate(c,d,tooLong,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);}catch(HttpApi.UserAction e){tooBig=e.getMessage().contains("demasiado larga");}
+        expect(tooBig&&longTries[0]==1,"Context-length 400 retried or not explained (tries: "+longTries[0]+")");
+        // Lo mismo cuando OpenRouter deja la causa solo en error.metadata.raw (mensaje genérico «Provider returned error»).
+        int[] rawTries={0};
+        HttpApi rawLong=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra){
+            rawTries[0]++;return new Response(400,"{\"error\":{\"code\":400,\"message\":\"Provider returned error\",\"metadata\":{\"raw\":\"prompt is too long: 250000 tokens > 200000 maximum\",\"provider_name\":\"Anthropic\"}}}",null);}};
+        boolean rawBig=false;try{Notes.generate(c,d,rawLong,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);}catch(HttpApi.UserAction e){rawBig=e.getMessage().contains("demasiado larga");}
+        expect(rawBig&&rawTries[0]==1,"metadata.raw not read: too-long prompt retried or not explained (tries: "+rawTries[0]+")");
+
+        // 404 por la privacidad de la cuenta: se dice dónde está ese ajuste, no que el modelo se retiró.
+        HttpApi policy=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra){
+            return new Response(404,"{\"error\":{\"code\":404,\"message\":\"No endpoints found matching your data policy (Free model training). Configure: https://openrouter.ai/settings/privacy\"}}",null);}};
+        String privacy="";try{Notes.generate(c,d,policy,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);}catch(HttpApi.UserAction e){privacy=e.getMessage();}
+        expect(privacy.contains("privacidad")&&privacy.contains("openrouter.ai")&&!privacy.contains("ya no está disponible"),"Data-policy 404 explained as a retired model: "+privacy);
+
+        // usage.cost=0 no es un cobro real (con BYOK OpenRouter informa 0): no se guarda «costó US$0,000».
+        Recording z=fixture(c,source,"Costo cero",now,fixtures);
+        HttpApi free=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra)throws Exception{
+            return new Response(200,routerReply("Costo cero","anthropic/claude-sonnet-5.5",0),null);}};
+        Notes.generate(c,z,free,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);
+        JSONObject noteZ=Notes.load(c,z.id);
+        expect(noteZ!=null&&!noteZ.optBoolean("costReal")&&!Notes.credit(noteZ).contains("costó"),"A zero usage.cost was shown as the real cost: "+Notes.credit(noteZ));
+
+        // OpenRouter puede responder 200 con el error del proveedor adentro: se trata como ese error (aquí, pasajero).
+        HttpApi inside=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra){
+            return new Response(200,"{\"error\":{\"code\":503,\"message\":\"Provider returned error\"}}",null);}};
+        boolean passing=false;try{Notes.generate(c,d,inside,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);}catch(HttpApi.UserAction e){passing=false;}catch(IOException e){passing=!(e instanceof Notes.BadAnswer);}
+        expect(passing&&FilesStore.state(c,d.id).optString("noteState").equals("failed")&&!FilesStore.state(c,d.id).optString("noteError").isEmpty()&&Notes.exists(c,d.id),"An error inside a 200 was not treated as a temporary failure: "+FilesStore.state(c,d.id).optString("noteError"));
+
+        // Sin clave de OpenRouter no se llama a nadie: se avisa qué falta.
+        settings.saveKeyFor("openrouter","");
+        int[] none={0};
+        HttpApi unused=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra){none[0]++;return new Response(200,"{}",null);}};
+        boolean missing=false;try{Notes.generate(c,d,unused);}catch(HttpApi.UserAction e){missing=e.getMessage().contains("clave de OpenRouter");}
+        expect(missing&&none[0]==0&&!Notes.canGenerate(c)&&FilesStore.state(c,d.id).optString("noteError").contains("OpenRouter"),"Missing OpenRouter key not reported before calling the API");
     }
 
     private static Recording fixture(Context c,Recording source,String title,long created,List<Recording> fixtures)throws Exception{

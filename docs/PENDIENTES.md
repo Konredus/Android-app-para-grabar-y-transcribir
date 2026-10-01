@@ -2,6 +2,69 @@
 
 > Lista de mejoras acordadas con el usuario. Al implementar una, muévela al CHANGELOG y, si es una decisión de diseño, regístrala en `diseno/CRITERIOS.md`.
 
+## Diagnóstico 2026-10-01: audio de 4 min que tardó 1:15 (informe del usuario, 0.8.0 adelanto, vivo V2318, Android 16)
+Grabación df1c8d5d, solo texto, MAI-Transcribe 2. El trabajo real fue de 1 minuto. El resto se fue en esperas:
+1. **27 min esperando Wi-Fi** (10:12 → 10:40). El usuario estaba con datos móviles y «Solo con Wi-Fi» viene activado por defecto. La bitácora lo decía, pero no se vio.
+2. **45 min con la tarea pausada por Android** (10:42 → 11:27). La app estaba cerrada, así que no se pudo pasar a primer plano (`ForegroundServiceStartNotAllowedException`, Android 12+) y corrió como tarea de fondo.
+   - La conversión a FLAC tardó **150 s** en segundo plano (31–43 s en primer plano).
+   - Al subir, el teléfono cortó la red: «Software caused connection abort».
+   - JobScheduler la detuvo con STOP_REASON 4 (DEVICE_STATE) y no volvió hasta que el usuario abrió la app.
+   - El informe dice «Optimización de batería: activada». La excepción de batería que el usuario había dado se perdió: la bienvenida aparece en el informe, así que probablemente hubo una instalación nueva.
+3. **La conversión a FLAC es lenta.**
+   - Una parte de 9 min tardó 292 s en primer plano.
+   - La parte 2 tardó 912 s, pero con 10 min de app congelada.
+   - Hay que bajarla al menos 5 veces: float en vez de double, menos coeficientes (para voz bastan ~12–16 por lado), decimación entera 48k→16k y una comprobación del FLAC más barata (o ninguna). El porcentaje de «Preparando audio» debe verse.
+
+Buenas noticias del mismo informe:
+- Las **anclas funcionan con audio real**: «reconoció 1 de 1 voz conocida» en la parte 1 y «2 de 2» en la parte 2 de una reunión de 18 min.
+- Costo real: transcribir 18 min costó US$0,031, y la nota con Claude Sonnet, US$0,042. **La nota cuesta más que la transcripción.**
+
+Qué hacer (ronda 3 de la 0.8):
+- **Esperando Wi-Fi:** en el detalle, un botón grande «Usar datos móviles ahora (≈X MB)» y una notificación con esa acción. Evaluar un tope por defecto: permitir datos móviles para envíos de menos de ~10 MB.
+- **Transferencia iniciada por el usuario** (Android 14+): `JobInfo.Builder.setUserInitiated(true)` con el permiso `RUN_USER_INITIATED_JOBS`. Google la recomienda para transferencias que el usuario pidió, y no sufre las cuotas de las tareas de fondo. Debe programarse con la app visible, al tocar «Transcribir».
+- **La bienvenida pide «Transcribir con el teléfono bloqueado»** (permiso de batería, con la guía de vivo). Hoy una instalación nueva queda optimizada.
+- **Conversión más rápida** (ver el punto 3) y avance visible.
+
+## Para la 0.9: métricas de uso en Ajustes (pedido 2026-09-30)
+> «En Ajustes, alguna sección con métricas de uso, de conversión, de tokens usados y cuánto equivale en USD… un poco más de métricas en general, eso se ve bonito. El público objetivo es alguien que habla mucho y quiere cargar información transcrita en su segundo cerebro.»
+
+Todo se calcula en el teléfono con lo que la app ya guarda, sin enviar nada:
+- **Datos por grabación** (`.sync.json`): `audioMs`, `costUsd` (real, OpenRouter), `inTokens`/`outTokens`/`usageSec`, `provider`/`model`, `bytesSent`, `inboxAt`.
+- **Transcripciones**: palabras y personas.
+- **Notas** (`.note.json`): modelo y, si se guarda, su uso.
+- **Momentos ★.**
+
+Ideas de contenido:
+- **Tu voz en números:**
+  - horas grabadas y palabras transcritas (semana, mes, total);
+  - ritmo al hablar (palabras por minuto);
+  - «tiempo ahorrado» frente a escribir a mano (≈40 palabras por minuto al teclear);
+  - racha de días grabando.
+- **Embudo hacia tu segundo cerebro:** grabadas → transcritas → con nota → guardadas en 0-Inbox, con el % de cada paso y lo que quedó a medio camino (con acceso directo a esas grabaciones).
+- **Costos:**
+  - US$ del mes y del total;
+  - costo por hora de audio;
+  - desglose por proveedor y modelo;
+  - tokens de las notas;
+  - real (OpenRouter informa el costo) frente a estimado (tarifas públicas de OpenAI), siempre rotulado.
+  - Con OpenRouter, además el saldo de la clave.
+- **Gráficos:**
+  - barras por semana (minutos grabados y US$);
+  - mapa de días y horas en que más grabas;
+  - personas con las que más conversas (voces conocidas).
+- **Diseño:** una pantalla propia («Tus métricas»), a la que se entra desde una tarjeta resumen en Ajustes, con la estética Verbapp (tarjetas de vidrio, cifras grandes en Outfit, gráficos en verde). Cargar la guía `dataviz` antes de dibujar gráficos.
+
+## Abierto tras integrar la 0.8.0 (OpenRouter y bienvenida)
+Nada de la 0.8.0 se probó contra OpenRouter real (no había clave) ni con audio real. Lo primero es la lista «qué probar con tu clave» de cada parte. Además quedó anotado:
+- **Etapa «Preparando audio» con OpenRouter.** La conversión a FLAC de cada bloque ocurre antes del envío y puede tardar decenas de segundos en un teléfono; mientras tanto la pantalla dice «Enviando…» en 0 %. Falta una etapa propia y contar ese tiempo en `Transcriber.sendEstimate` (tarea de fondo).
+- **Si un proveedor rechaza el FLAC.** `OrAudio.build(…, false)` sabe armar WAV, pero el cliente no lo usa como respaldo ante un error de formato: hoy solo cae a WAV cuando el teléfono no puede codificar FLAC.
+- **Tres o más personas con MAI-Transcribe 2.** No se envía un máximo de hablantes; si con la clave real salen solo 2 voces, hay que agregarlo en `OpenRouterClient.body`.
+- **Tope del envío en JSON.** No está documentado; la única defensa es el 413, que baja los bloques a la mitad una vez (`orHalf`).
+- **`HTTP-Referer`.** Es la página pública del repositorio (`OpenRouterClient.REFERER`), la misma para transcribir, para la nota y para comprobar la clave. Confirmar que es la dirección que se quiere mostrar en OpenRouter.
+- **Clave de OpenAI comprobada en la bienvenida.** Queda como comprobada en Ajustes solo si el modelo que se usaría hoy es el de voces (lo normal en una instalación nueva); si no, Ajustes sigue pidiendo «Confirma que tu clave funciona».
+- **Saldo en «Comprobar conexión».** `/credits` puede exigir otra clase de clave: si OpenRouter no lo entrega, solo se ve «Clave válida».
+- **Pruebas instrumentadas.** Los empalmes entre partes (encabezados y nombre de servicio únicos, `Models.checkKey`, costo real, hoja del modelo de la nota, comprobación de la bienvenida en Ajustes) solo se compilaron: hay que volver a correr `ModelsChecks`, `NotesChecks`, `OnboardingChecks` y `OpenRouterChecks` en el emulador, y mirar a la vista la hoja «Modelo de la nota» con OpenRouter («Otro modelo de OpenRouter…»).
+
 ## Hechas en la 0.4.3
 - ✅ Confirmar antes de cancelar una transcripción.
 - ✅ Fecha delante del nombre (`2026-09-27 Nombre`), activada por defecto, con opción para aplicarla a las grabaciones existentes.

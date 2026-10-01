@@ -31,12 +31,19 @@ final class AudioParts {
      * Devuelve los bloques; los cortes usados quedan en cutsOut.
      */
     static List<Part> plan(Context c,Recording r,HttpApi http,long targetMs,JSONArray cached,List<Long> cutsOut,Log log)throws Exception{
+        return plan(c,r,http,targetMs,cached,cutsOut,log,SINGLE_MAX_MS);
+    }
+    /**
+     * singleMaxMs: hasta esta duración el audio va en un solo bloque. Con OpenAI son 12 min; con OpenRouter lo decide la
+     * receta del modelo, y baja si el proveedor respondió que el envío era muy grande (ver Transcriber).
+     */
+    static List<Part> plan(Context c,Recording r,HttpApi http,long targetMs,JSONArray cached,List<Long> cutsOut,Log log,long singleMaxMs)throws Exception{
         File source=r.audio(c);long total=r.duration>0?r.duration:AudioConvert.duration(source);targetMs=Math.max(targetMs,60_000);
         List<Long> cuts=new ArrayList<>();
         if(cached!=null&&cached.length()>=2){for(int i=0;i<cached.length();i++)cuts.add(cached.getLong(i));if(log!=null)log.line("Cortes reutilizados del intento anterior ("+(cuts.size()-1)+(cuts.size()==2?" parte)":" partes)"));}
         else{
             cuts.add(0L);
-            if(total>SINGLE_MAX_MS||source.length()>20_000_000){
+            if(total>singleMaxMs||source.length()>20_000_000){
                 if(log!=null)log.line("Buscando pausas para cortar sin partir frases");
                 for(long t=targetMs;t<total-targetMs*0.4;t+=targetMs){
                     long q=quietest(source,t,10_000,http);long last=cuts.get(cuts.size()-1);

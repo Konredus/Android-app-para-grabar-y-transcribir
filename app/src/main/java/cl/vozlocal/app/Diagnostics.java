@@ -18,7 +18,7 @@ final class Diagnostics {
         Context context=app;
         IO.execute(()->{try{
             JSONObject row=new JSONObject().put("time",System.currentTimeMillis()).put("event",event).put("version",version).put("job",job==null?"":job);
-            for(int i=0;i+1<fields.length;i+=2){String key=String.valueOf(fields[i]);Object value=fields[i+1];if((key.equals("action")||key.equals("label"))&&value instanceof String)value=safeAction((String)value);if(Arrays.asList("stage","provider","model","http","request_id","code","type","param","elapsed_ms","bytes","duration_ms","part","parts","action","screen","result","error_class","count","runner","net","reason","local","display","idle","battery","mode","kind","source","label").contains(key))row.put(key,value);}
+            for(int i=0;i+1<fields.length;i+=2){String key=String.valueOf(fields[i]);Object value=fields[i+1];if((key.equals("action")||key.equals("label"))&&value instanceof String)value=safeAction((String)value);if(Arrays.asList("stage","provider","model","http","request_id","code","type","param","elapsed_ms","bytes","duration_ms","part","parts","action","screen","result","error_class","count","runner","net","reason","local","display","idle","battery","mode","kind","source","label","cost","format","anchors","matched").contains(key))row.put(key,value);}
             File dir=new File(context.getFilesDir(),"diagnostics");dir.mkdirs();File file=new File(dir,"events.jsonl"),old=new File(dir,"events.previous.jsonl");
             if(file.length()>2*1024*1024){old.delete();file.renameTo(old);}
             if(old.exists() && old.lastModified()<System.currentTimeMillis()-30L*86400000)old.delete();
@@ -27,9 +27,15 @@ final class Diagnostics {
         }catch(Exception ignored){}});
     }
     static void crash(Throwable error){if(app==null)return;try{JSONObject row=new JSONObject().put("time",System.currentTimeMillis()).put("error_class",error.getClass().getName());org.json.JSONArray frames=new org.json.JSONArray();for(StackTraceElement frame:error.getStackTrace())if(frame.getClassName().startsWith("cl.vozlocal.app."))frames.put(frame.toString());row.put("app_frames",frames);FilesStore.write(new File(app.getFilesDir(),"last-crash.json"),row);}catch(Exception ignored){}}
+    /** Nombre del informe: «Verbapp-soporte-2026-10-01-1132.txt» (fecha y hora local en que se generó). */
+    static String reportName(long at){return "Verbapp-soporte-"+new java.text.SimpleDateFormat("yyyy-MM-dd-HHmm",java.util.Locale.ROOT).format(new java.util.Date(at))+".txt";}
+    /** ¿Es un informe de soporte (el nombre nuevo con fecha o el «support.txt» de antes)? Lo usa AudioProvider para compartirlo. */
+    static boolean isReport(String name){return name!=null&&(name.equals("support.txt")||name.matches("Verbapp-soporte-\\d{4}-\\d{2}-\\d{2}-\\d{4}\\.txt"));}
     static File export(Context c)throws Exception{
         return IO.submit(()->{
-            File export=new File(c.getCacheDir(),"support.txt");StringBuilder out=new StringBuilder("VOZ LOCAL — INFORME DE SOPORTE\nVersión: "+version+"\nAndroid API: "+Build.VERSION.SDK_INT+"\n"+device(c)+"\nNo incluye claves, rutas, títulos, audio ni transcripciones.\n\n");
+            // Cada informe con su fecha y hora en el nombre (pedido 2026-10-01): así no se confunden al compartirlos. Se borran los anteriores.
+            long now=System.currentTimeMillis();File[] old=c.getCacheDir().listFiles();if(old!=null)for(File f:old)if(isReport(f.getName()))f.delete();
+            File export=new File(c.getCacheDir(),reportName(now));StringBuilder out=new StringBuilder("VERBAPP — INFORME DE SOPORTE\nGenerado: "+new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm",java.util.Locale.ROOT).format(new java.util.Date(now))+"\nVersión: "+version+"\nAndroid API: "+Build.VERSION.SDK_INT+"\n"+device(c)+"\nNo incluye claves, rutas, títulos, audio ni transcripciones.\n\n");
             Map<String,Integer> counts=new TreeMap<>();StringBuilder events=new StringBuilder();
             for(String name:new String[]{"events.previous.jsonl","events.jsonl"}){
                 File file=new File(c.getFilesDir(),"diagnostics/"+name);if(!file.exists())continue;
@@ -95,7 +101,7 @@ final class Diagnostics {
         }
         return out;
     }
-    static void clear(Context c){IO.execute(()->{new File(c.getFilesDir(),"last-crash.json").delete();new File(c.getCacheDir(),"support.txt").delete();new File(c.getFilesDir(),"diagnostics/events.jsonl").delete();new File(c.getFilesDir(),"diagnostics/events.previous.jsonl").delete();});}
+    static void clear(Context c){IO.execute(()->{new File(c.getFilesDir(),"last-crash.json").delete();File[] reports=c.getCacheDir().listFiles();if(reports!=null)for(File f:reports)if(isReport(f.getName()))f.delete();new File(c.getFilesDir(),"diagnostics/events.jsonl").delete();new File(c.getFilesDir(),"diagnostics/events.previous.jsonl").delete();});}
 
     // ---------- Etiquetas de botones sin datos personales ----------
     /** Palabras frecuentes que aparecen en títulos sin decir nada de nadie (no se tapan en las etiquetas). */

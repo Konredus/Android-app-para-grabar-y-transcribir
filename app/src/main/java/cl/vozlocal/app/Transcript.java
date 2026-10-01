@@ -16,8 +16,9 @@ final class Transcript {
     /** Una pausa más larga que esto separa dos intervenciones de la misma persona (en pantalla y en el .txt). */
     static final double TURN_GAP_S=20;
     Transcript(JSONObject data) { this.data=data; }
-    static boolean exists(Context c,String id) { return FilesStore.file(c,id,".transcript.json").isFile(); }
-    static Transcript load(Context c,String id) throws Exception { synchronized(FilesStore.LOCK) { Transcript t=new Transcript(FilesStore.read(FilesStore.file(c,id,".transcript.json")));t.clean();return t; } }
+    // Pricing.attach: deja el Context de la app para los costos estimados de OpenRouter (ver Pricing.estimate).
+    static boolean exists(Context c,String id) { Pricing.attach(c); return FilesStore.file(c,id,".transcript.json").isFile(); }
+    static Transcript load(Context c,String id) throws Exception { Pricing.attach(c); synchronized(FilesStore.LOCK) { Transcript t=new Transcript(FilesStore.read(FilesStore.file(c,id,".transcript.json")));t.clean();return t; } }
     /**
      * Guarda la transcripción y deja en el estado su comienzo legible ("snippet", ~120 caracteres) para que la
      * Biblioteca no tenga que leer cada transcripción. Como toda corrección pasa por aquí, el comienzo siempre
@@ -113,6 +114,11 @@ final class Transcript {
         for(int i=0;i<s.length()&&b.length()<max+20;i++)b.append(i==0?"":" ").append(s.getJSONObject(i).getString("text").trim());
         String t=b.toString().replaceAll("\\s+"," ");return t.length()>max?t.substring(0,max-1).trim()+"…":t;
     }
+    /**
+     * ¿Los tramos traen su propio tiempo? Sin voces, OpenAI devuelve un solo tramo por bloque (inicio = fin = comienzo
+     * del bloque); OpenRouter puede devolver cada frase con su tiempo real, y ahí el aviso de «bloques» sobra.
+     */
+    boolean phraseTimes(){JSONArray s=segments();for(int i=0;i<s.length();i++){JSONObject seg=s.optJSONObject(i);if(seg!=null&&seg.optDouble("end",0)>seg.optDouble("start",0))return true;}return false;}
     /** true si el usuario corrigió quién habla en algún tramo. */
     boolean edited(){JSONArray s=segments();for(int i=0;i<s.length();i++)if(s.optJSONObject(i)!=null&&s.optJSONObject(i).has("orig"))return true;return false;}
 
@@ -197,7 +203,7 @@ final class Transcript {
             .append(new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm",new Locale("es","CL")).format(new Date(r.created))).append("\n\n");
         if(data.optBoolean("demo"))text.append("EJEMPLO DE DEMOSTRACIÓN · No proviene de una transcripción real.\n\n");
         if(diarized()){if(!reviewed()&&segments().length()>0)text.append("Voces separadas automáticamente: pueden tener errores.\n\n");}
-        else if(data.optInt("parts",1)>1)text.append("Audio procesado en bloques. Los tiempos indican el inicio de cada bloque, no de cada frase.\n\n");
+        else if(data.optInt("parts",1)>1&&!phraseTimes())text.append("Audio procesado en bloques. Los tiempos indican el inicio de cada bloque, no de cada frase.\n\n");
         Map<String,String> names=speakers(); JSONArray segments=segments();
         // Los tramos seguidos de la misma persona van en un solo párrafo (con la hora del primero).
         for(int i=0;i<segments.length();){
@@ -227,7 +233,7 @@ final class Transcript {
             Map<String,String> map=new HashMap<>();Set<String> legacy=new HashSet<>();Object known=response.opt("_known");
             if(known instanceof JSONObject){JSONObject k=(JSONObject)known;for(Iterator<String> it=k.keys();it.hasNext();){String name=it.next();map.put(name,k.getString(name));}}
             else if(known instanceof JSONArray){JSONArray k=(JSONArray)known;for(int i=0;i<k.length();i++)legacy.add(k.optString(i));}
-            if(source==null)throw new java.io.IOException("OpenAI no devolvió los segmentos de hablantes esperados.");
+            if(source==null)throw new java.io.IOException("El proveedor no devolvió los segmentos de hablantes esperados.");
             for(int i=0;i<source.length();i++){
                 JSONObject segment=source.getJSONObject(i);
                 if(!segment.has("speaker") || !segment.has("start") || !segment.has("end") || !segment.has("text"))throw new java.io.IOException("La transcripción recibida está incompleta.");
@@ -238,7 +244,10 @@ final class Transcript {
                     .put("start",segment.getDouble("start")+offsets.get(p)).put("end",segment.getDouble("end")+offsets.get(p)).put("text",segment.getString("text")));
             }
         }
-        JSONObject data=new JSONObject().put("segments",segments).put("parts",parts.size()).put("names",new JSONObject()).put("diarized",parts.isEmpty()||parts.get(0).optBoolean("_diarized",true)).put("reviewed",false);
+        // Con voces si ALGUNA parte vino con voces (0.8.0): con OpenRouter cada respuesta dice lo suyo, y una parte 1 en
+        // silencio (sin hablantes) no debe dejar como «Texto» a las personas de las demás. Con OpenAI todas traen lo mismo.
+        boolean diarized=parts.isEmpty();for(JSONObject part:parts)if(part.optBoolean("_diarized",true)){diarized=true;break;}
+        JSONObject data=new JSONObject().put("segments",segments).put("parts",parts.size()).put("names",new JSONObject()).put("diarized",diarized).put("reviewed",false);
         if(parts.size()>1)data.put("blocks",new JSONArray(offsets));
         return new Transcript(data);
     }
