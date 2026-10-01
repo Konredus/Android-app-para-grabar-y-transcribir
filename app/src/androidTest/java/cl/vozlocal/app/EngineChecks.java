@@ -136,6 +136,11 @@ final class EngineChecks {
         // «Reintento en…» solo en la que la ronda dejó para reintentar y sigue lista; nunca en una recién pedida.
         check("A".equals(TranscribeService.retryTarget(Arrays.asList("A","B"),id->true))&&"B".equals(TranscribeService.retryTarget(Arrays.asList("A","B"),"B"::equals))
             &&TranscribeService.retryTarget(Collections.<String>emptyList(),id->true)==null&&TranscribeService.retryTarget(Collections.singletonList("A"),id->false)==null,"Retry target wrong");
+        // Aviso «Esperando Wi-Fi» al pasar a «Solo con Wi-Fi»: nunca para la que se está enviando (su parte en curso termina
+        // igual y el aviso quedaba en una grabación ya transcrita); sí para la siguiente que espera.
+        List<String> ids=Arrays.asList("A","B","C");
+        check("B".equals(Pipeline.wifiNoticeFor(ids,"A",id->true))&&"A".equals(Pipeline.wifiNoticeFor(ids,null,id->true))&&"C".equals(Pipeline.wifiNoticeFor(ids,"A",id->!id.equals("B")))
+            &&Pipeline.wifiNoticeFor(Collections.singletonList("A"),"A",id->true)==null&&Pipeline.wifiNoticeFor(ids,null,id->false)==null,"Wi-Fi notice target wrong");
         // La ronda se detiene por el cargador, la batería o internet (sin gastar un intento); no por el Wi-Fi, que es de cada
         // grabación, ni en la tarea de fondo, a la que Android ya retiene por eso mismo.
         check(Transcriber.holds("esperando que conectes el cargador",0)&&Transcriber.holds("esperando conexión a internet",0)&&Transcriber.holds("batería baja: Android espera a que cargues",0),"Round not held for the charger, the battery or the network");

@@ -178,10 +178,13 @@ final class Pipeline {
      * Android no la acepta, se cancela para no bloquear el otro camino. Después, la tarea de fondo con los ajustes nuevos.
      * Sin «Solo con Wi-Fi», el aviso «Esperando Wi-Fi» ya no corresponde. Con «Solo con Wi-Fi» y datos móviles, la primera
      * grabación pedida que ahora espera Wi-Fi lo recibe (con «Usar datos móviles»), como promete Ajustes: si ningún
-     * trabajo corre, nadie más lo pondría y la espera sería silenciosa.
+     * trabajo corre, nadie más lo pondría y la espera sería silenciosa. Nunca la que se está enviando (ver wifiNoticeFor).
      */
     static void settingsChanged(Context c){
-        if(new Settings(c).wifiOnly()){for(Recording r:Recording.list(c))if(waitsForWifi(c,r.id)){waitingWifi(c,r.id);break;}}
+        if(new Settings(c).wifiOnly()){
+            java.util.List<String> ids=new java.util.ArrayList<>();for(Recording r:Recording.list(c))ids.add(r.id);
+            String id=wifiNoticeFor(ids,working()?Transcriber.currentId:null,x->waitsForWifi(c,x));if(id!=null)waitingWifi(c,id);
+        }
         else clearWaitingWifi(c);
         if(Build.VERSION.SDK_INT>=34&&!working()&&pending(c)){
             try{JobScheduler js=c.getSystemService(JobScheduler.class);
@@ -189,6 +192,17 @@ final class Pipeline {
             catch(RuntimeException ignored){}
         }
         schedule(c,true);
+    }
+    /**
+     * De qué grabación es el aviso «Esperando Wi-Fi» al pasar a «Solo con Wi-Fi»: la primera que ahora espera Wi-Fi (waits),
+     * salvo la que el servicio o la transferencia están enviando (sending): el Wi-Fi se revisa antes de cada parte, la parte
+     * en curso termina igual y, si era la última, el aviso quedaba puesto en una grabación ya transcrita. Si le quedan partes,
+     * el motor lo pone al llegar a la siguiente (Transcriber.waitWifi). La tarea de fondo no cuenta (sending null): la
+     * reprogramación la corta y esa grabación sí queda esperando. Separada del teléfono para poder probarla.
+     */
+    static String wifiNoticeFor(java.util.Collection<String> ids,String sending,java.util.function.Predicate<String> waits){
+        for(String id:ids)if(!id.equals(sending)&&waits.test(id))return id;
+        return null;
     }
     /**
      * Hay una transferencia iniciada por el usuario recién programada que todavía no empieza Y que podría empezar ya: el

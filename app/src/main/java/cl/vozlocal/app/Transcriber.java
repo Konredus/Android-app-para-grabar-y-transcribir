@@ -788,6 +788,8 @@ final class Transcriber {
         NotificationManager manager=c.getSystemService(NotificationManager.class);
         try{manager.notify(doneId(r.id),buildDone(c,r,again));}catch(RuntimeException ignored){}
         manager.cancel(NOTIFICATION);
+        // Resguardo: un aviso «Esperando Wi-Fi» de esta grabación (puesto mientras se enviaba su última parte) ya no corresponde.
+        Pipeline.clearWaitingWifi(c,r.id);
     }
     /** Algo falló y necesita al usuario: abre esa grabación. */
     private void attention(Recording r,String title,String text){attention(c,r.id,title,text);}
