@@ -26,7 +26,8 @@ import org.json.JSONObject;
  * - cached() arma la lista desde ese archivo con la tabla de recetas de ESTA versión de la app: si una actualización
  *   aprende a usar un modelo nuevo, la lista guardada lo refleja sin volver a descargar.
  * - El catálogo no dice qué modelo es mejor ni en qué unidad cobra. Por eso «Automático» sale de un orden de preferencia
- *   fijo (modelos ya probados) y el precio por hora solo se calcula para los modelos cuya unidad se conoce.
+ *   fijo (modelos de la tabla, cuyo uso está documentado; ninguno se probó todavía con audio real) y el precio por hora
+ *   solo se calcula para los modelos cuya unidad se conoce. Los textos de la app dicen «recomendado» o «conocido», no «probado».
  * - Nada de esto está probado contra la red real (no había clave al escribirlo): todo campo puede faltar o venir con
  *   otro tipo, y una respuesta rara nunca reemplaza una lista buena.
  */
@@ -197,7 +198,11 @@ final class Models {
         // Una lista vacía es una respuesta rara (cambió el formato o el filtro), no «ya no hay modelos»: no se guarda.
         if(list.isEmpty())throw new IOException("La lista de modelos de OpenRouter llegó vacía.");
         synchronized(LOCK){File f=file(c);FilesStore.write(f,new JSONObject().put("v",1).put("fetchedAt",now).put("models",rows));memo=list;memoAt=now;memoStamp=f.lastModified();memoSize=f.length();}
-        SharedPreferences.Editor e=new Settings(c).prefs.edit();String voices=auto(list,true,now),text=auto(list,false,now);
+        Settings s=new Settings(c);SharedPreferences.Editor e=s.prefs.edit();String voices=auto(list,true,now),text=auto(list,false,now);
+        // Si «Automático» cambia de modelo, se recuerda el anterior: un trabajo a medias lo termina con él (ver resume()).
+        String oldVoices=automatic(s,true),oldText=automatic(s,false);
+        if(!oldVoices.equals(voices.isEmpty()?DEFAULT_SPEAKERS:voices))e.putString("orAutoBeforeSpeakers",oldVoices);
+        if(!oldText.equals(text.isEmpty()?DEFAULT_TEXT:text))e.putString("orAutoBeforeText",oldText);
         // Sin candidato se borra la preferencia: «Automático» vuelve a los DEFAULT_* en vez de quedarse con uno que ya no está.
         if(voices.isEmpty())e.remove("orAutoSpeakers");else e.putString("orAutoSpeakers",voices);
         if(text.isEmpty())e.remove("orAutoText");else e.putString("orAutoText",text);
@@ -416,6 +421,51 @@ final class Models {
             JSONObject d=res.json().optJSONObject("data");double total=number(d,"total_credits"),used=number(d,"total_usage");
             return Double.isNaN(total)||Double.isNaN(used)||total<=0?Double.NaN:total-used;
         }catch(Exception e){return Double.NaN;}
+    }
+    /** Saldo que se muestra al comprobar la clave. Es un dato de la cuenta: queda solo en las preferencias, nunca en el diagnóstico. */
+    static final class Balance{
+        /** US$ que quedan para gastar: el menor entre lo que le queda a la clave (si tiene tope) y el saldo de la cuenta; NaN si no se supo. */
+        final double left;
+        /**
+         * La cuenta todavía no carga créditos: OpenRouter la marca is_free_tier y su saldo no se pudo leer. El tope de la
+         * clave («quedan US$5») no es plata disponible, así que manda este aviso.
+         */
+        final boolean noCredits;
+        Balance(double left,boolean noCredits){this.left=left;this.noCredits=noCredits;}
+    }
+    /**
+     * Junta lo que dice la clave (GET /key) con el saldo de la cuenta (GET /credits; NaN si no se supo). Una sola regla
+     * para Ajustes → «Comprobar conexión» y para la bienvenida (hallazgo de la revisión: la bienvenida mostraba el tope
+     * de la clave como saldo, y Ajustes, otra cosa).
+     */
+    static Balance balance(KeyInfo info,double account){
+        double key=info==null?Double.NaN:info.remaining;boolean known=!Double.isNaN(account)&&!Double.isInfinite(account);
+        if(Double.isInfinite(key))key=Double.NaN;
+        double left=!known?key:Double.isNaN(key)?account:Math.min(key,account);
+        return new Balance(left,info!=null&&info.freeTier&&!known);
+    }
+    /** Igual, pidiendo el saldo de la cuenta (de cortesía: nunca lanza). Llamar fuera del hilo principal. */
+    static Balance balance(HttpApi http,String key,KeyInfo info){return balance(info,credits(http,key));}
+
+    // ---------- Trabajos a medias ----------
+    /**
+     * Modelo con que seguir una transcripción por partes que quedó a medias. Si «Automático» cambió de modelo entre dos
+     * intentos (refresh() lo movió porque OpenRouter lo retira en menos de 30 días o salió de la lista), las partes ya
+     * pagadas se hicieron con el anterior: cambiar de modelo obligaría a reenviarlas y pagarlas de nuevo (hallazgo de la
+     * revisión). Mientras el anterior siga en la lista guardada (y separe voces si se piden), se termina con él.
+     * Solo cuando el trabajo usaba justo el modelo del que se movió «Automático» (refresh() lo deja en orAutoBefore*):
+     * si fue la persona quien cambió de modelo, manda su elección. Con un modelo elegido a mano, sin partes listas o con
+     * otro proveedor, manda chosen(). state: el estado de la grabación (FilesStore.state). Lo usa el motor al armar la
+     * configuración de cada intento.
+     */
+    static String resume(Context c,Settings s,boolean speakers,JSONObject state){
+        String now=chosen(s,speakers),pick=speakers?s.orSpeakersModel():s.orTextModel();
+        if(state==null||!(pick.isEmpty()||AUTO.equals(pick))||!"openrouter".equals(state.optString("provider"))||state.optInt("blocksDone",0)<=0)return now;
+        if(state.has("speakers")&&state.optBoolean("speakers")!=speakers)return now;
+        String before=state.optString("model","");
+        if(before.isEmpty()||before.equals(now)||!before.equals(s.prefs.getString(speakers?"orAutoBeforeSpeakers":"orAutoBeforeText","")))return now;
+        Model m=find(cached(c),before);
+        return m==null||(speakers&&!m.recipe.diarizes)?now:before;
     }
 
     // ---------- Notas (chat completions de OpenRouter) ----------

@@ -24,7 +24,7 @@ final class ModelsChecks {
     private static final long DAY=86_400_000L;
     private static final String MAI="microsoft/mai-transcribe-2",NOVA="deepgram/nova-3",GEMINI="google/gemini-3.5-transcribe",GROK="x-ai/grok-stt-1.0",GPT="openai/gpt-transcribe",NEW="acme/new-asr-1";
     /** Preferencias que tocan estas pruebas: se devuelven a su valor (o a su ausencia) al terminar. */
-    private static final String[] PREFS={"provider","orSpeakersModel","orTextModel","orAutoSpeakers","orAutoText","noteProvider","speakersMode","customBase","customModel","customSpeakers","orCatalogTried",
+    private static final String[] PREFS={"provider","orSpeakersModel","orTextModel","orAutoSpeakers","orAutoText","orAutoBeforeSpeakers","orAutoBeforeText","noteProvider","noteModel","speakersMode","customBase","customModel","customSpeakers","orCatalogTried",
         "keyEncrypted","keyIv","openrouter_keyEncrypted","openrouter_keyIv","custom_keyEncrypted","custom_keyIv","anthropic_keyEncrypted","anthropic_keyIv"};
 
     static void run(Context c,Recording r)throws Exception{
@@ -37,8 +37,12 @@ final class ModelsChecks {
             catalog(now);
             automatic(now);
             cache(c,s,now);
+            resume(c,s);
             key();
+            balance();
+            billed();
             settings(c,s);
+            onlyOpenRouter(s);
         }finally{
             SharedPreferences.Editor e=s.prefs.edit();
             for(String k:PREFS){Object v=before.get(k);
@@ -210,6 +214,7 @@ final class ModelsChecks {
         List<Models.Model> next=Models.refresh(c,catalogHttp(200,fewer.toString(),calls));
         check(next.size()==6&&Models.find(Models.cached(c),MAI)==null,"La lista guardada no se reemplazó por la nueva");
         check(Models.chosen(s,true).equals(NOVA)&&Models.automatic(s,false).equals(NOVA)&&Models.chosen(s,false).equals(GROK),"Automático no siguió al catálogo, o pisó la elección del usuario");
+        check(MAI.equals(s.prefs.getString("orAutoBeforeSpeakers",""))&&MAI.equals(s.prefs.getString("orAutoBeforeText","")),"refresh() no recordó de qué modelo se movió Automático (lo usan los trabajos a medias)");
         check(near(Models.perMinute(c,MAI),0.10/60),"Un modelo de la tabla que salió del catálogo conserva su precio de referencia");
         // Catálogo solo con modelos desconocidos: Automático vuelve a los recomendados fijos.
         Models.refresh(c,catalogHttp(200,new JSONObject().put("data",new JSONArray().put(model(NEW,"Acme: New ASR 1",1L,"0.00005"))).toString(),calls));
@@ -329,5 +334,73 @@ final class ModelsChecks {
         check(rejected&&s.openRouterKey().equals(router),"Una clave con espacios debe rechazarse y conservar la anterior");
         s.prefs.edit().putString("provider","openrouter").commit();s.saveKey("");
         check(!s.hasKey()&&!s.hasOpenRouterKey()&&s.openAiKey().equals(openai),"Eliminar la clave del proveedor activo (OpenRouter) no debe tocar la de OpenAI");
+    }
+
+    // ---------- 0.8.0, segunda ronda: solo OpenRouter ----------
+    /**
+     * Migración del esquema 5 (VozApp.openRouterOnly) para quien venía de OpenAI: pasa a OpenRouter, la nota también, las
+     * claves viejas quedan cifradas y sin uso, y la app sabe explicarle por qué se le pide otra clave. Claves de mentira.
+     */
+    static void onlyOpenRouter(Settings s)throws Exception{
+        String openai="sk-prueba-openai-migracion",router="sk-or-v1-prueba-migracion";
+        s.prefs.edit().remove("provider").remove("noteProvider").remove("noteModel").remove("keyEncrypted").remove("keyIv").remove("openrouter_keyEncrypted").remove("openrouter_keyIv").remove("custom_keyEncrypted").remove("custom_keyIv").commit();
+        check(s.provider().equals("openrouter")&&s.openRouter()&&s.oldService()==null,"Sin nada guardado, el proveedor por defecto es OpenRouter y no hay clave vieja que explicar");
+        // Quien venía de la 0.7 con OpenAI: proveedor, su clave, la nota con Claude y un modelo de nota de OpenAI.
+        s.prefs.edit().putString("provider","openai").putString("noteProvider","anthropic").putString("noteModel","gpt-5.5-mini").commit();s.saveKeyFor("openai",openai);
+        check(s.hasKey()&&s.oldService().equals("OpenAI"),"Datos de partida de la migración mal armados");
+        VozApp.openRouterOnly(s,s.prefs.edit()).commit();
+        check(s.openRouter()&&!s.prefs.contains("noteProvider")&&!s.prefs.contains("noteModel")&&Notes.provider(s).equals("openrouter"),"La migración no dejó OpenRouter para transcribir y para la nota");
+        check(s.hasOpenAiKey()&&s.openAiKey().equals(openai)&&!s.hasKey()&&!s.hasOpenRouterKey()&&"OpenAI".equals(s.oldService()),"La migración borró la clave vieja, o no se ve que falta la de OpenRouter");
+        // Un modelo de nota de OpenRouter (de quien probó la primera ronda) se conserva; la clave de OpenRouter, también.
+        s.prefs.edit().putString("provider","openai").putString("noteModel","~openai/gpt-luna-latest").commit();s.saveKeyFor("openrouter",router);
+        VozApp.openRouterOnly(s,s.prefs.edit()).commit();
+        check(s.openRouter()&&"~openai/gpt-luna-latest".equals(s.noteModel())&&s.hasKey()&&s.apiKey().equals(router)&&s.openAiKey().equals(openai),"La migración tocó un modelo de nota de OpenRouter o una clave");
+        // Quien usaba su servidor: la explicación nombra el servidor.
+        s.saveKeyFor("openai","");s.saveKeyFor("custom","clave-prueba-servidor");
+        check("tu servidor".equals(s.oldService()),"La clave vieja de un servidor propio no se reconoce");
+        s.saveKeyFor("custom","");s.saveKeyFor("openrouter","");
+    }
+
+    /** Saldo al comprobar la clave: una sola regla para Ajustes y la bienvenida (Models.balance y SettingsActivity.balanceText). */
+    static void balance(){
+        Models.KeyInfo capped=new Models.KeyInfo("",1,4.2,false),open=new Models.KeyInfo("",1,Double.NaN,false),fresh=new Models.KeyInfo("",0,5,true);
+        Models.Balance b=Models.balance(capped,Double.NaN);
+        check(near(b.left,4.2)&&!b.noCredits,"Sin saldo de la cuenta, queda lo de la clave");
+        check(near(Models.balance(new Models.KeyInfo("",0,5,false),0.4).left,0.4)&&near(Models.balance(open,3).left,3),"El saldo es el menor entre la clave y la cuenta");
+        b=Models.balance(fresh,Double.NaN);
+        check(b.noCredits&&near(b.left,5),"Una cuenta sin créditos (is_free_tier) con clave con tope no tiene plata disponible");
+        b=Models.balance(fresh,2);
+        check(!b.noCredits&&near(b.left,2),"Si se supo el saldo de la cuenta, manda el saldo");
+        check(Double.isNaN(Models.balance(null,Double.NaN).left)&&!Models.balance(null,Double.NaN).noCredits&&Double.isNaN(Models.balance(open,Double.NaN).left),"Sin datos, no se inventa un saldo");
+        check("quedan US$4,20".equals(SettingsActivity.balanceText(4.2,false))&&SettingsActivity.balanceText(0.001,false).startsWith("sin saldo")&&SettingsActivity.balanceText(Double.NaN,false)==null,"Texto del saldo");
+        check(SettingsActivity.balanceText(5,true).contains("sin créditos")&&SettingsActivity.balanceText(Double.NaN,true).contains("sin créditos"),"Sin créditos manda sobre el tope de la clave");
+    }
+
+    /** Audio que cobra OpenRouter con voces conocidas (anclas delante de cada bloque), para los estimados. */
+    static void billed(){
+        long anchor=Math.min(Voices.MAX_MS,OrAudio.ANCHOR_MAX_MS)+OrAudio.GAP_MS,block=Transcriber.orBlockMax(Models.recipe(MAI),true),min=60_000L,half=30*min;
+        check(RecordingActions.billedMs("openai",MAI,min,4,false)==min&&RecordingActions.billedMs("openrouter",MAI,min,0,false)==min&&RecordingActions.billedMs("openrouter",MAI,0,2,false)==0,"Sin OpenRouter o sin muestras, se cobra la duración tal cual");
+        check(RecordingActions.billedMs("openrouter",MAI,min,2,false)==min+2*anchor,"Un bloque con dos muestras");
+        long blocks=(half+block-1)/block;
+        check(blocks>1&&RecordingActions.billedMs("openrouter",MAI,half,1,false)==half+blocks*anchor&&RecordingActions.billedMs("openrouter",MAI,half,1,true)==half+anchor,"Las muestras se cobran en cada bloque (y una vez «sin cortar»)");
+    }
+
+    /** Un trabajo a medias no cambia de modelo porque «Automático» se movió entre dos intentos (Models.resume). */
+    static void resume(Context c,Settings s)throws Exception{
+        FilesStore.write(Models.file(c),new JSONObject().put("v",1).put("fetchedAt",System.currentTimeMillis()).put("models",new JSONArray()
+            .put(new JSONObject().put("id",MAI).put("name","Microsoft: MAI Transcribe 2").put("created",2).put("prompt",0.10).put("expires",0))
+            .put(new JSONObject().put("id",NOVA).put("name","Deepgram: Nova-3").put("created",1).put("prompt",0.0000722).put("expires",0))));Models.forget();
+        s.prefs.edit().remove("orSpeakersModel").remove("orTextModel").putString("orAutoSpeakers",NOVA).putString("orAutoBeforeSpeakers",MAI).commit();
+        JSONObject job=new JSONObject().put("provider","openrouter").put("model",MAI).put("blocksDone",1).put("speakers",true);
+        check(Models.resume(c,s,true,job).equals(MAI),"Un trabajo a medias debe terminar con el modelo con que empezó");
+        check(Models.resume(c,s,true,new JSONObject(job.toString()).put("blocksDone",0)).equals(NOVA)&&Models.resume(c,s,true,null).equals(NOVA),"Sin partes listas, manda Automático de hoy");
+        check(Models.resume(c,s,true,new JSONObject(job.toString()).put("model",GEMINI)).equals(NOVA),"Solo se conserva el modelo del que se movió Automático");
+        check(Models.resume(c,s,false,job).equals(Models.chosen(s,false))&&Models.resume(c,s,true,new JSONObject(job.toString()).put("provider","openai")).equals(NOVA),"Otro modo de voces u otro proveedor: manda la elección de hoy");
+        s.prefs.edit().putString("orSpeakersModel",GROK).commit();
+        check(Models.resume(c,s,true,job).equals(GROK),"Un modelo elegido a mano manda sobre el trabajo a medias");
+        s.prefs.edit().remove("orSpeakersModel").commit();
+        FilesStore.write(Models.file(c),new JSONObject().put("v",1).put("fetchedAt",System.currentTimeMillis()).put("models",new JSONArray().put(new JSONObject().put("id",NOVA).put("name","Deepgram: Nova-3").put("created",1).put("prompt",0.0000722).put("expires",0))));Models.forget();
+        check(Models.resume(c,s,true,job).equals(NOVA),"Si el modelo anterior salió de la lista, se sigue con Automático");
+        s.prefs.edit().remove("orAutoSpeakers").remove("orAutoBeforeSpeakers").commit();
     }
 }

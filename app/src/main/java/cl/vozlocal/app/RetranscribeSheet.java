@@ -48,9 +48,24 @@ final class RetranscribeSheet {
     }
     /** «≈ US$0,048», o "" si no se conoce la tarifa (p. ej. servidor propio, o un modelo de OpenRouter sin precio por minuto). */
     static String cost(Context c,Recording r,Retranscribe.Mode mode){
-        // Retranscribe.cost ya resuelve proveedor y modelo de esta alternativa y pregunta a Pricing.estimate con el Context.
-        try{double v=Retranscribe.cost(c,r,mode);return v<0?"":"≈ "+Pricing.usd(v);}
-        catch(Exception e){return "";}
+        // Lo mismo que Retranscribe.cost (proveedor y modelo de esta alternativa, precio con el Context), más lo que OpenRouter
+        // cobra por las muestras de voz que van delante de cada bloque (RecordingActions.billedMs; hallazgo de la revisión).
+        try{
+            Settings s=new Settings(c);ProviderConfig config=s.config(Retranscribe.speakers(mode));
+            double v=Pricing.estimate(c,config.provider,config.model,RecordingActions.billedMs(config.provider,config.model,r.duration,anchors(c,r,mode,config),mode==Retranscribe.Mode.SINGLE));
+            return v<0?"":"≈ "+Pricing.usd(v);
+        }catch(Exception e){return "";}
+    }
+    /**
+     * Muestras de voz que irían en cada envío de esta alternativa: las voces conocidas (hasta Transcriber.MAX_KNOWN) y, en
+     * la segunda pasada, además una por cada persona de la versión actual, sin pasar del mismo tope. Es una cuenta para
+     * el estimado («≈»): el motor decide al enviar cuáles van de verdad.
+     */
+    private static int anchors(Context c,Recording r,Retranscribe.Mode mode,ProviderConfig config){
+        if(!config.speakers||!TranscribeClient.knowsVoices(config.provider))return 0;
+        int n=Voices.selected(c).size();
+        if(mode==Retranscribe.Mode.CORRECTIONS)try{n+=Transcript.load(c,r.id).speakers().size();}catch(Exception ignored){}
+        return Math.min(Transcriber.MAX_KNOWN,n);
     }
     private static boolean available(Context c,Recording r,Retranscribe.Mode mode){try{return Retranscribe.available(c,r,mode);}catch(Exception e){return false;}}
     private static String reason(Context c,Recording r,Retranscribe.Mode mode){
