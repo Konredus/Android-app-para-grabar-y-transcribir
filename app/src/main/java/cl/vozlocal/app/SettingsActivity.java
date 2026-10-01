@@ -42,6 +42,10 @@ import static cl.vozlocal.app.AppTheme.*;
  * el modelo de la nota y el idioma. Arriba, la tarjeta «Tus métricas» abre MetricsActivity. OpenAI directo, el servidor
  * compatible y la clave de Anthropic siguen en el código (los cubren pruebas), pero esta pantalla ya no lleva a ellos.
  *
+ * 0.8.0, tercera ronda (SPEC-0.8c): «Red para enviar audio» cuenta que, con «Solo Wi-Fi», cada transcripción en espera
+ * ofrece «Usar datos móviles ahora» (solo para esa grabación). «Comprobar conexión» y la bienvenida calculan el saldo
+ * con la misma regla (Models.balance): una cuenta sin créditos no guarda el tope de la clave como saldo.
+ *
  * Extras del intent: focusKey (pedir la clave si falta), voice (grabar tu voz, o ver las voces conocidas, y volver), back (Atrás vuelve a
  * la pantalla anterior), inbox (elegir la carpeta de guardado rápido y volver) y noteAi (abrir «IA de la nota»).
  */
@@ -171,12 +175,20 @@ public class SettingsActivity extends Screen {
 
         // 3. Energía y red: cuándo se envía el audio.
         page.addView(ui.section("Energía y red"));LinearLayout energy=ui.group();page.addView(energy,Ui.fill());
-        add(energy,row(R.drawable.ic_wifi,"Red para enviar audio",null,settings.wifiOnly()?"Solo Wi-Fi":"Wi-Fi y datos").onClick(v->
-            sheet("Red para enviar audio","Los audios pueden pesar varios MB.").choice("Solo Wi-Fi","O cualquier red no medida",settings.wifiOnly(),()->{settings.prefs.edit().putBoolean("wifi",true).apply();changed("wifi");})
-                .choice("Wi-Fi y datos móviles","Empieza antes, usa tu plan de datos",!settings.wifiOnly(),()->{settings.prefs.edit().putBoolean("wifi",false).apply();changed("wifi");}).show()));
+        // «Solo Wi-Fi» viene activado y, con datos móviles, la transcripción espera sin que se note (diagnóstico del
+        // 2026-10-01: 27 min esperando Wi-Fi). Desde la tercera ronda de la 0.8.0, cada transcripción que espera ofrece
+        // «Usar datos móviles ahora» (en su detalle y en la notificación), solo para esa grabación: la fila lo dice, así
+        // no hace falta cambiar este ajuste para salir del paso.
+        boolean wifi=settings.wifiOnly();
+        add(energy,row(R.drawable.ic_wifi,"Red para enviar audio",wifi?"Cada transcripción en espera ofrece «Usar datos móviles ahora»":null,wifi?"Solo Wi-Fi":"Wi-Fi y datos").onClick(v->
+            sheet("Red para enviar audio","Los audios pueden pesar varios MB. Con «Solo Wi-Fi», cada transcripción que espera Wi-Fi ofrece «Usar datos móviles ahora» en su detalle y en la notificación: vale solo para esa grabación y no cambia este ajuste.")
+                .choice("Solo Wi-Fi","O cualquier red no medida. Con datos móviles, la transcripción espera",wifi,()->{settings.prefs.edit().putBoolean("wifi",true).apply();changed("wifi");})
+                .choice("Wi-Fi y datos móviles","Empieza antes, usa tu plan de datos",!wifi,()->{settings.prefs.edit().putBoolean("wifi",false).apply();changed("wifi");}).show()));
         add(energy,toggleRow(R.drawable.ic_battery,"Solo mientras carga",null,settings.charging(),on->toggle("charging",on)));
         batteryRow=row(R.drawable.ic_battery,"Con la pantalla bloqueada",null,batteryValue());batteryRow.onClick(v->RecordingActions.allowBackground(this));add(energy,batteryRow);
-        page.addView(more("Aplica también cuando transcribes a mano.","Energía y red","Con batería baja, el trabajo espera. Android puede retrasarlo unos minutos.\n\nPara que transcriba con el teléfono bloqueado, permite a Verbapp usar batería en segundo plano («Con la pantalla bloqueada»). Solo la usa mientras transcribe."));
+        page.addView(more("Aplica también cuando transcribes a mano.","Energía y red","Con batería baja, el trabajo espera. Android puede retrasarlo unos minutos.\n\n"
+            +"Solo Wi-Fi: si estás con datos móviles, la transcripción queda esperando Wi-Fi. Su detalle muestra «Usar datos móviles ahora», con el tamaño aproximado del envío, y la notificación «Esperando Wi-Fi» trae la misma acción. Vale solo para esa grabación: las siguientes vuelven a esperar Wi-Fi mientras este ajuste siga así.\n\n"
+            +"Para que transcriba con el teléfono bloqueado, permite a Verbapp usar batería en segundo plano («Con la pantalla bloqueada»). Solo la usa mientras transcribe."));
 
         // 4. Copias
         page.addView(ui.section("Copias"));LinearLayout storage=ui.group();page.addView(storage,Ui.fill());

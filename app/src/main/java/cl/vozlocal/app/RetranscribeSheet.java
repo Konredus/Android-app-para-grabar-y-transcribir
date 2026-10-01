@@ -48,13 +48,23 @@ final class RetranscribeSheet {
     }
     /** «≈ US$0,048», o "" si no se conoce la tarifa (p. ej. servidor propio, o un modelo de OpenRouter sin precio por minuto). */
     static String cost(Context c,Recording r,Retranscribe.Mode mode){
-        // Lo mismo que Retranscribe.cost (proveedor y modelo de esta alternativa, precio con el Context), más lo que OpenRouter
-        // cobra por las muestras de voz que van delante de cada bloque (RecordingActions.billedMs; hallazgo de la revisión).
+        // Lo mismo que Retranscribe.cost (proveedor y modelo de esta alternativa, precio con el Context), sobre el audio que
+        // OpenRouter cobra de verdad: la duración más las muestras de voz que van delante de cada bloque (billed).
         try{
             Settings s=new Settings(c);ProviderConfig config=s.config(Retranscribe.speakers(mode));
-            double v=Pricing.estimate(c,config.provider,config.model,RecordingActions.billedMs(config.provider,config.model,r.duration,anchors(c,r,mode,config),mode==Retranscribe.Mode.SINGLE));
+            double v=Pricing.estimate(c,config.provider,config.model,billed(c,r,mode,config));
             return v<0?"":"≈ "+Pricing.usd(v);
         }catch(Exception e){return "";}
+    }
+    /**
+     * Audio que se cobraría con esta alternativa, con la regla única del motor (Pricing.orBilledMs). «Separar voces de
+     * nuevo» y «Solo el texto» son lo mismo que una transcripción nueva con lo elegido en Ajustes: van tal cual por la
+     * versión con Context, como «¿Separar voces?». «Sin cortar» (un solo envío) y la segunda pasada (más muestras: las
+     * personas de la versión actual) cambian la cuenta, así que pasan por RecordingActions.billedMs, que usa la misma regla.
+     */
+    private static long billed(Context c,Recording r,Retranscribe.Mode mode,ProviderConfig config){
+        if(mode==Retranscribe.Mode.SPEAKERS||mode==Retranscribe.Mode.TEXT||!config.speakers)return Pricing.orBilledMs(c,r.duration,config.speakers);
+        return RecordingActions.billedMs(config.provider,config.model,r.duration,anchors(c,r,mode,config),mode==Retranscribe.Mode.SINGLE);
     }
     /**
      * Muestras de voz que irían en cada envío de esta alternativa: las voces conocidas (hasta Transcriber.MAX_KNOWN) y, en

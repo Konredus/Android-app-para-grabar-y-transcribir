@@ -39,8 +39,13 @@ final class MetricsChecks {
             synthetic(c,dir);
             File again=new File(dir,"otra-pasada");check(again.mkdirs(),"No se pudo crear la subcarpeta de prueba");retranscribing(c,again);
         }finally{deleteTree(dir);}
-        // El contrato de la tarjeta de Ajustes, con los datos reales (solo lectura): nunca vacío ni con error.
-        check(!Metrics.summaryLine(c).isEmpty(),"summaryLine con datos reales no debe quedar vacío");
+        // El contrato de la tarjeta de Ajustes, con los datos reales (solo lectura): nunca lanza, y queda vacío solo si no
+        // hay grabaciones (antes exigía que nunca quedara vacío: la tarjeta pasó a mostrar su propia invitación en ese caso).
+        String line=Metrics.summaryLine(c);boolean none=Metrics.compute(c,false).total==0;
+        check(line!=null&&line.isEmpty()==none,"summaryLine con datos reales: vacío solo sin grabaciones: «"+line+"»");
+        check(none||line.contains(" · "),"summaryLine lleva la cifra grande antes de « · »: «"+line+"»");
+        // La segunda llamada, sin cambios de por medio, sale del recuerdo y dice lo mismo.
+        check(line.equals(Metrics.summaryLine(c)),"summaryLine cambió sin que cambiara nada");
     }
 
     /** Contar palabras: tramos con alguna letra o número. */
@@ -67,6 +72,8 @@ final class MetricsChecks {
         Metrics.Data d=Metrics.compute(c,dir,at(9,24,15,0),"Konrad",false,true);
         check(d.total==0&&d.all.recordings==0&&d.streak==0&&d.best==0,"Carpeta vacía: sin grabaciones ni racha");
         check(Metrics.summary(d).line().equals("0 grabaciones · aquí verás tu voz en números"),"Resumen vacío: "+Metrics.summary(d).line());
+        // La línea de la tarjeta de Ajustes queda vacía: la tarjeta muestra su propia invitación (contrato con Ajustes).
+        check(Metrics.summaryLine(d).isEmpty()&&Metrics.summaryLine((Metrics.Data)null).isEmpty(),"summaryLine sin grabaciones debe ser vacío");
     }
 
     private static void synthetic(Context c,File dir)throws Exception{
@@ -165,6 +172,7 @@ final class MetricsChecks {
         check(light.total==9&&light.all.words==0&&light.all.people().isEmpty(),"La pasada liviana no lee transcripciones");
         Metrics.Summary s=Metrics.summary(light);
         check(s.figure.equals("2,5 h")&&s.label.equals("grabadas")&&s.detail.equals("≈ US$0,452 este mes"),"Resumen: «2,5 h grabadas · ≈ US$0,452 este mes»: "+s.line());
+        check(Metrics.summaryLine(light).equals("2,5 h grabadas · ≈ US$0,452 este mes"),"La línea de Ajustes con grabaciones: "+Metrics.summaryLine(light));
 
         // ---- Caché por archivo: si la transcripción cambia, se vuelve a leer ----
         transcript(dir,b,"openai","gpt-4o-transcribe",false,new Object[][]{{"text",0,1800,3700}},null);

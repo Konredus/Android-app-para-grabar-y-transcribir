@@ -368,7 +368,8 @@ final class ModelsChecks {
         check(near(b.left,4.2)&&!b.noCredits,"Sin saldo de la cuenta, queda lo de la clave");
         check(near(Models.balance(new Models.KeyInfo("",0,5,false),0.4).left,0.4)&&near(Models.balance(open,3).left,3),"El saldo es el menor entre la clave y la cuenta");
         b=Models.balance(fresh,Double.NaN);
-        check(b.noCredits&&near(b.left,5),"Una cuenta sin créditos (is_free_tier) con clave con tope no tiene plata disponible");
+        // El tope de la clave (US$5) no se guarda como saldo: queda «no sabido», igual que en la bienvenida (OnboardingActivity.valid).
+        check(b.noCredits&&Double.isNaN(b.left),"Una cuenta sin créditos (is_free_tier) con clave con tope no tiene plata disponible");
         b=Models.balance(fresh,2);
         check(!b.noCredits&&near(b.left,2),"Si se supo el saldo de la cuenta, manda el saldo");
         check(Double.isNaN(Models.balance(null,Double.NaN).left)&&!Models.balance(null,Double.NaN).noCredits&&Double.isNaN(Models.balance(open,Double.NaN).left),"Sin datos, no se inventa un saldo");
@@ -383,6 +384,8 @@ final class ModelsChecks {
         check(RecordingActions.billedMs("openrouter",MAI,min,2,false)==min+2*anchor,"Un bloque con dos muestras");
         long blocks=(half+block-1)/block;
         check(blocks>1&&RecordingActions.billedMs("openrouter",MAI,half,1,false)==half+blocks*anchor&&RecordingActions.billedMs("openrouter",MAI,half,1,true)==half+anchor,"Las muestras se cobran en cada bloque (y una vez «sin cortar»)");
+        // Una sola regla (tercera ronda): las pantallas no tienen su propia cuenta, usan la del motor (Pricing.orBilledMs).
+        check(RecordingActions.billedMs("openrouter",MAI,half,2,false)==Pricing.orBilledMs(half,2,Models.recipe(MAI))&&RecordingActions.billedMs("openrouter",MAI,half,9,false)==Pricing.orBilledMs(half,9,Models.recipe(MAI)),"billedMs debe ser la misma cuenta de Pricing.orBilledMs");
     }
 
     /** Un trabajo a medias no cambia de modelo porque «Automático» se movió entre dos intentos (Models.resume). */

@@ -104,11 +104,43 @@ final class Metrics {
         Summary(String figure,String label,String detail){this.figure=figure;this.label=label;this.detail=detail;}
         String line(){return detail.isEmpty()?figure+" "+label:figure+" "+label+" · "+detail;}
     }
-    /** Resumen de una línea para la tarjeta de Ajustes, p. ej. «12 h grabadas · US$3,40 este mes». Lee disco: llamar fuera del hilo principal. */
-    static String summaryLine(Context c){Summary s=summary(c);return s==null?"":s.line();}
     /**
-     * Lo mismo, en partes, para quien quiera mostrar la cifra en grande. Hace la pasada liviana (sin leer transcripciones):
-     * la tarjeta de Ajustes se pinta en cada visita. null si algo falló (la tarjeta queda sin cifra, nunca se cae).
+     * Resumen de una línea para la tarjeta de Ajustes: «<cifra grande> · <detalle>», p. ej. «12 h grabadas · US$3,40 este
+     * mes» (Ajustes muestra en grande lo que va antes del primer « · »). Contrato acordado con Ajustes (SPEC-0.8b):
+     * - "" si todavía no hay grabaciones: la tarjeta muestra su propia invitación en vez de «0 grabaciones»;
+     * - nunca lanza: si algo falla, también "" (la tarjeta queda sin cifra, nunca se cae);
+     * - rápida: Ajustes la pide en cada visita. Hace la pasada liviana (sin leer transcripciones) y recuerda el último
+     *   resultado mientras nada cambie (ver lastLine).
+     * Lee disco: llamar fuera del hilo principal.
+     */
+    static String summaryLine(Context c){
+        try{
+            if(c==null)return "";Context app=c.getApplicationContext()!=null?c.getApplicationContext():c;
+            String key=summaryKey(app);
+            synchronized(Metrics.class){if(key!=null&&key.equals(lastKey))return lastLine;}
+            String line=summaryLine(compute(app,false));
+            synchronized(Metrics.class){lastKey=key;lastLine=line;}
+            return line;
+        }catch(RuntimeException e){return "";}
+    }
+    /** La línea a partir de un cálculo ya hecho: "" sin grabaciones (así se puede probar con una carpeta de prueba). */
+    static String summaryLine(Data d){return d==null||d.total==0?"":summary(d).line();}
+    /**
+     * Último resumen y la «huella» con que se calculó. La huella cambia con cualquier escritura de la app en las
+     * grabaciones (FilesStore.version y la fecha de la carpeta, que se toca con cada archivo nuevo, borrado o reescrito),
+     * con el día (el mes y «este mes» cambian a medianoche) y con la lista de modelos (los estimados salen de sus precios).
+     * Vive mientras dure el proceso: al reiniciar la app se recalcula una vez.
+     */
+    private static String lastKey,lastLine="";
+    private static String summaryKey(Context c){
+        try{
+            File dir=Recording.directory(c);
+            return FilesStore.version.get()+"|"+(dir==null?0:dir.lastModified())+"|"+LocalDate.now().toEpochDay()+"|"+Models.fetchedAt(c)+"|"+RecorderService.activeId;
+        }catch(RuntimeException e){return null;}
+    }
+    /**
+     * Lo mismo, en partes, para quien quiera mostrar la cifra en grande. Hace la pasada liviana (sin leer transcripciones).
+     * null si algo falló (la tarjeta queda sin cifra, nunca se cae).
      */
     static Summary summary(Context c){try{return summary(compute(c,false));}catch(RuntimeException e){return null;}}
     static Summary summary(Data d){
@@ -270,13 +302,14 @@ final class Metrics {
 
     /**
      * Saldo de OpenRouter guardado por «Comprobar conexión» (Ajustes) o por la bienvenida, solo si esa comprobación es de
-     * la clave vigente (la misma huella que usa Ajustes: proveedor + clave cifrada). No se consulta la red.
+     * la clave vigente (la huella de SettingsActivity.verifyTarget: proveedor + clave cifrada). No se consulta la red.
+     * Una cuenta que aún no carga créditos (verifyFree) no tiene saldo que mostrar: lo que pudo quedar guardado ahí es el
+     * tope de la clave (así lo guardaba Ajustes antes de la tercera ronda), y no es plata disponible.
      */
     private static void balance(Context c,Data d){
         try{
-            Settings s=new Settings(c);if(!s.openRouter()||!s.prefs.getBoolean("verifyOk",false))return;
-            String target=s.provider()+"|"+s.prefs.getString(s.prefix()+"keyEncrypted","").hashCode();
-            if(!target.equals(s.prefs.getString("verifyFor","")))return;
+            Settings s=new Settings(c);if(!s.openRouter()||!s.prefs.getBoolean("verifyOk",false)||s.prefs.getBoolean("verifyFree",false))return;
+            if(!SettingsActivity.verifyTarget(s).equals(s.prefs.getString("verifyFor","")))return;
             double v=Double.parseDouble(s.prefs.getString("verifyBalance",""));if(Double.isNaN(v)||v<0)return;
             d.balance=v;d.balanceAt=s.prefs.getLong("verifyAt",0);
         }catch(RuntimeException ignored){}

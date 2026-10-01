@@ -424,7 +424,10 @@ final class Models {
     }
     /** Saldo que se muestra al comprobar la clave. Es un dato de la cuenta: queda solo en las preferencias, nunca en el diagnóstico. */
     static final class Balance{
-        /** US$ que quedan para gastar: el menor entre lo que le queda a la clave (si tiene tope) y el saldo de la cuenta; NaN si no se supo. */
+        /**
+         * US$ que quedan para gastar: el menor entre lo que le queda a la clave (si tiene tope) y el saldo de la cuenta;
+         * NaN si no se supo, y también si la cuenta aún no tiene créditos (noCredits).
+         */
         final double left;
         /**
          * La cuenta todavía no carga créditos: OpenRouter la marca is_free_tier y su saldo no se pudo leer. El tope de la
@@ -437,12 +440,15 @@ final class Models {
      * Junta lo que dice la clave (GET /key) con el saldo de la cuenta (GET /credits; NaN si no se supo). Una sola regla
      * para Ajustes → «Comprobar conexión» y para la bienvenida (hallazgo de la revisión: la bienvenida mostraba el tope
      * de la clave como saldo, y Ajustes, otra cosa).
+     * Una cuenta sin créditos deja el saldo en NaN, igual que la bienvenida (OnboardingActivity.valid): si se guardara el
+     * tope de la clave, «Tus métricas» y cualquier pantalla que lea verifyBalance lo mostrarían como plata disponible.
      */
     static Balance balance(KeyInfo info,double account){
         double key=info==null?Double.NaN:info.remaining;boolean known=!Double.isNaN(account)&&!Double.isInfinite(account);
         if(Double.isInfinite(key))key=Double.NaN;
-        double left=!known?key:Double.isNaN(key)?account:Math.min(key,account);
-        return new Balance(left,info!=null&&info.freeTier&&!known);
+        boolean none=info!=null&&info.freeTier&&!known;
+        double left=none?Double.NaN:!known?key:Double.isNaN(key)?account:Math.min(key,account);
+        return new Balance(left,none);
     }
     /** Igual, pidiendo el saldo de la cuenta (de cortesía: nunca lanza). Llamar fuera del hilo principal. */
     static Balance balance(HttpApi http,String key,KeyInfo info){return balance(info,credits(http,key));}
