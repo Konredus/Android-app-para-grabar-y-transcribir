@@ -253,7 +253,19 @@ final class RecordingActions {
         return s.openRouter()?Models.chosen(s,speakers):s.prefs.getString("customModel","whisper-1");
     }
     // Costos: el estimado sale de Pricing.estimate(Context, proveedor, modelo, ms) (OpenAI por su tabla; OpenRouter por el
-    // catálogo guardado, que Models ya recuerda en memoria) y el real, de Pricing.real(estado). Aquí no se repite esa lógica.
+    // catálogo guardado, que Models ya recuerda en memoria) y el real, de Pricing.real(estado). Aquí no se repite esa lógica:
+    // solo se suma el audio de las voces conocidas que OpenRouter también cobra (billedMs).
+    /**
+     * Audio que cobra OpenRouter al transcribir (ms), para los estimados con «≈»: el audio más las voces conocidas que van
+     * delante de CADA bloque («anclas»: cada muestra, de hasta Voices.MAX_MS, con 1 s de silencio; ver OrAudio). Sin esto el
+     * estimado quedaba por debajo de lo cobrado (hallazgo de la revisión). anchors: muestras por envío; single: un solo
+     * envío («sin cortar»); si no, los bloques del motor (Transcriber.orBlockMax). Otro proveedor, o sin muestras: la duración.
+     */
+    static long billedMs(String provider,String model,long durationMs,int anchors,boolean single){
+        if(!"openrouter".equals(provider)||anchors<=0||durationMs<=0)return Math.max(0,durationMs);
+        long block=Math.max(60_000L,Transcriber.orBlockMax(Models.recipe(model),true)),blocks=single?1:Math.max(1,(durationMs+block-1)/block);
+        return durationMs+blocks*anchors*(Math.min(Voices.MAX_MS,OrAudio.ANCHOR_MAX_MS)+OrAudio.GAP_MS);
+    }
 
     /** Encola la transcripción. Si falta la clave, lleva directo a configurarla; si ya está transcrita, ofrece volver a transcribir. */
     static void transcribe(Screen s,Recording r,Runnable changed){
@@ -263,10 +275,16 @@ final class RecordingActions {
         if(settings.canSeparate()&&settings.speakersMode().equals("ask")){askSpeakers(s,r,changed,settings);return;}
         start(s,r,changed,settings.defaultSpeakers());
     }
-    /** Falta la clave: el error trae su salida («Configurar ahora»). */
+    /**
+     * Falta la clave de OpenRouter: el error trae su salida («Configurar ahora», que abre directo el campo de la clave).
+     * A quien actualizó desde una versión con OpenAI (o su servidor) se le explica por qué se le pide otra clave: la que
+     * tenía queda guardada, pero la app ya no la usa (SPEC-0.8b, decisión 2).
+     */
     static void missingKey(Screen s){
-        Settings settings=new Settings(s);boolean own=!paid(settings);
-        Sheet sheet=s.sheet("Falta tu clave de API",own?"Para transcribir, Verbapp necesita la clave de tu servidor.":"Para transcribir, Verbapp usa tu propia cuenta de "+providerName(settings)+". Solo pagas lo que usas.");
+        String old=new Settings(s).oldService();
+        Sheet sheet=s.sheet(old!=null?"Verbapp ahora usa OpenRouter":"Falta tu clave de OpenRouter",old!=null
+            ?"Para transcribir y armar tus notas, Verbapp ahora usa OpenRouter: una sola clave para elegir entre varios modelos. La clave de "+old+" que tenías queda guardada, pero ya no se usa. Pega una de OpenRouter para seguir transcribiendo."
+            :"Para transcribir, Verbapp usa tu propia cuenta de OpenRouter: una sola clave para varios modelos y para tus notas. Solo pagas lo que usas.");
         SheetParts.hero(sheet,R.drawable.ic_key,false);
         sheet.primary("Configurar ahora",()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("focusKey",true))).secondary("Más tarde",null).show();
     }
@@ -276,12 +294,14 @@ final class RecordingActions {
      */
     static void askSpeakers(Screen s,Recording r,Runnable changed,Settings settings){
         try{
-            String voices=settings.config(true).model,text=settings.config(false).model;
-            String provider=settings.provider();String costVoices=Pricing.usd(Pricing.estimate(s,provider,voices,r.duration)),costText=Pricing.usd(Pricing.estimate(s,provider,text,r.duration));
+            ProviderConfig withVoices=settings.config(true);String voices=withVoices.model,text=settings.config(false).model,provider=settings.provider();
             // El texto en vivo solo existe con gpt-transcribe de OpenAI directo (OpenRouter responde todo al final).
             boolean live=provider.equals("openai")&&text.equals("gpt-transcribe");
             // Voces conocidas que van en este audio (hasta 4, la tuya primero): se dice a quién reconoce desde el inicio.
             List<Voices.Voice> known=TranscribeClient.knowsVoices(provider)?Voices.selected(s):Collections.emptyList();
+            // Con voces, OpenRouter cobra también las muestras que van delante de cada bloque: el estimado las suma.
+            long billed=billedMs(provider,voices,r.duration,withVoices.speakers?known.size():0,false);
+            String costVoices=Pricing.usd(Pricing.estimate(s,provider,voices,billed)),costText=Pricing.usd(Pricing.estimate(s,provider,text,r.duration));
             boolean onlyMe=known.size()==1&&known.get(0).me;
             // Con OpenRouter el reconocimiento usa «anclas», una técnica nueva: se promete el intento, no el resultado.
             boolean sure=!settings.openRouter();

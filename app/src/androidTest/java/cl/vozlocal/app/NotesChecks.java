@@ -145,8 +145,10 @@ final class NotesChecks {
         expect(routerMessages.length()==2&&routerMessages.getJSONObject(0).getString("role").equals("system")&&routerMessages.getJSONObject(0).getString("content").equals(Notes.SYSTEM)
             &&routerMessages.getJSONObject(1).getString("role").equals("user")&&routerMessages.getJSONObject(1).getString("content").equals(p.text),"OpenRouter messages wrong");
         expect(Notes.openrouterBody("~openai/gpt-luna-latest",p,false).getJSONObject("reasoning").getString("effort").equals("low")&&Notes.openrouterBody("~google/gemini-flash-latest",p,false).has("reasoning"),"Reasoning effort not lowered for models that reason by default");
+        // El modo simple conserva el tope de salida (0.8.0, segunda ronda): sin max_tokens OpenRouter reserva el máximo del
+        // modelo y, con poco saldo, responde un 402 falso. Solo deja fuera response_format y reasoning.
         JSONObject simpleBody=Notes.openrouterBody(Models.NOTE_DEFAULT,p,true);
-        expect(simpleBody.length()==2&&simpleBody.getString("model").equals(Models.NOTE_DEFAULT)&&simpleBody.getJSONArray("messages").length()==2,"Simple OpenRouter body carries optional fields: "+simpleBody.names());
+        expect(simpleBody.length()==3&&simpleBody.getString("model").equals(Models.NOTE_DEFAULT)&&simpleBody.getJSONArray("messages").length()==2&&simpleBody.getInt("max_tokens")==routerBody.getInt("max_tokens"),"Simple OpenRouter body carries optional fields or lost max_tokens: "+simpleBody.names());
         Map<String,String> routerHeaders=Notes.openrouterHeaders();
         // Una sola fuente: los mismos encabezados con que se transcribe (OpenRouterClient.headers()).
         expect(routerHeaders.equals(OpenRouterClient.headers())&&"Verbapp".equals(routerHeaders.get("X-OpenRouter-Title"))&&routerHeaders.get("HTTP-Referer").startsWith("https://")&&!routerHeaders.containsKey("Authorization"),"OpenRouter headers wrong: "+routerHeaders);
@@ -311,21 +313,15 @@ final class NotesChecks {
      * dentro de un 200). run() deja las preferencias y la clave como estaban.
      */
     static void router(Context c,Recording source,Settings settings,List<Recording> fixtures)throws Exception{
-        // IA de la nota: quien transcribe con OpenRouter y nunca eligió usa OpenRouter; una elección hecha se respeta.
-        settings.prefs.edit().remove("noteProvider").putString("provider","openrouter").commit();
-        expect(Notes.provider(settings).equals("openrouter"),"OpenRouter users without a choice should get their note from OpenRouter");
-        settings.prefs.edit().putString("provider","openai").commit();
-        expect(Notes.provider(settings).equals("openai"),"OpenAI users must keep OpenAI as the default note provider");
-        settings.prefs.edit().putString("provider","custom").commit();
-        expect(Notes.provider(settings).equals("openai"),"Custom-server users must keep the 0.7 default note provider");
-        settings.prefs.edit().putString("provider","openrouter").putString("noteProvider","openai").commit();
-        expect(Notes.provider(settings).equals("openai"),"An explicit note provider was overridden by the transcription provider");
-        settings.prefs.edit().putString("noteProvider","anthropic").commit();
-        expect(Notes.provider(settings).equals("anthropic"),"Claude choice lost with OpenRouter as transcription provider");
-        settings.prefs.edit().putString("noteProvider","otra-cosa").commit();
-        expect(Notes.provider(settings).equals("openai"),"Unknown note provider must fall back to OpenAI");
+        // IA de la nota: desde la segunda ronda de la 0.8.0 (SPEC-0.8b, decisión 3) la nota va SIEMPRE por OpenRouter. Ni el
+        // proveedor guardado ni una «noteProvider» que haya quedado de antes (OpenAI, Claude, un valor raro) la desvían: así
+        // una clave vieja de OpenAI o de Anthropic nunca se vuelve a enviar. (En la primera ronda esto respetaba la elección.)
+        String[][] cases={{"openrouter",null},{"openai",null},{"custom",null},{"openrouter","openai"},{"openrouter","anthropic"},{"openrouter","otra-cosa"},{"openai","openrouter"},{"openai","anthropic"}};
+        for(String[] k:cases){
+            android.content.SharedPreferences.Editor e=settings.prefs.edit().putString("provider",k[0]);if(k[1]==null)e.remove("noteProvider");else e.putString("noteProvider",k[1]);e.commit();
+            expect(Notes.provider(settings).equals("openrouter"),"The note must always go through OpenRouter (provider "+k[0]+", noteProvider "+k[1]+")");
+        }
         settings.prefs.edit().putString("provider","openai").putString("noteProvider","openrouter").commit();
-        expect(Notes.provider(settings).equals("openrouter"),"OpenRouter note provider not honored when transcribing with OpenAI");
 
         // Modelo: los ids de OpenRouter llevan «autor/»; nunca llegan a OpenAI ni a Claude, y uno de otra IA no va a OpenRouter.
         settings.prefs.edit().putString("noteModel","~openai/gpt-luna-latest").commit();
@@ -418,7 +414,8 @@ final class NotesChecks {
                 expect(sent.has("response_format")&&sent.getJSONObject("reasoning").getString("effort").equals("low"),"First attempt should carry the full options");
                 return new Response(400,"{\"error\":{\"code\":400,\"message\":\"response_format is not supported by this model\"}}",null);
             }
-            expect(sent.length()==2,"Simple retry still carries optional fields: "+sent.names());
+            // El reintento simple deja fuera response_format y reasoning, pero no el tope de salida (ver openrouterBody).
+            expect(sent.length()==3&&sent.getInt("max_tokens")>0&&!sent.has("response_format")&&!sent.has("reasoning"),"Simple retry still carries optional fields or lost max_tokens: "+sent.names());
             return new Response(200,routerReply("Reintento","openai/gpt-6-luna",0.0004),null);
         }};
         Notes.generate(c,d,picky,"openrouter","~openai/gpt-luna-latest",ROUTER_KEY);
@@ -432,6 +429,26 @@ final class NotesChecks {
             longTries[0]++;return new Response(400,"{\"error\":{\"code\":400,\"message\":\"This endpoint's maximum context length is 200000 tokens.\"}}",null);}};
         boolean tooBig=false;try{Notes.generate(c,d,tooLong,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);}catch(HttpApi.UserAction e){tooBig=e.getMessage().contains("demasiado larga");}
         expect(tooBig&&longTries[0]==1,"Context-length 400 retried or not explained (tries: "+longTries[0]+")");
+        // Lo mismo cuando OpenRouter deja la causa solo en error.metadata.raw (mensaje genérico «Provider returned error»).
+        int[] rawTries={0};
+        HttpApi rawLong=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra){
+            rawTries[0]++;return new Response(400,"{\"error\":{\"code\":400,\"message\":\"Provider returned error\",\"metadata\":{\"raw\":\"prompt is too long: 250000 tokens > 200000 maximum\",\"provider_name\":\"Anthropic\"}}}",null);}};
+        boolean rawBig=false;try{Notes.generate(c,d,rawLong,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);}catch(HttpApi.UserAction e){rawBig=e.getMessage().contains("demasiado larga");}
+        expect(rawBig&&rawTries[0]==1,"metadata.raw not read: too-long prompt retried or not explained (tries: "+rawTries[0]+")");
+
+        // 404 por la privacidad de la cuenta: se dice dónde está ese ajuste, no que el modelo se retiró.
+        HttpApi policy=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra){
+            return new Response(404,"{\"error\":{\"code\":404,\"message\":\"No endpoints found matching your data policy (Free model training). Configure: https://openrouter.ai/settings/privacy\"}}",null);}};
+        String privacy="";try{Notes.generate(c,d,policy,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);}catch(HttpApi.UserAction e){privacy=e.getMessage();}
+        expect(privacy.contains("privacidad")&&privacy.contains("openrouter.ai")&&!privacy.contains("ya no está disponible"),"Data-policy 404 explained as a retired model: "+privacy);
+
+        // usage.cost=0 no es un cobro real (con BYOK OpenRouter informa 0): no se guarda «costó US$0,000».
+        Recording z=fixture(c,source,"Costo cero",now,fixtures);
+        HttpApi free=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra)throws Exception{
+            return new Response(200,routerReply("Costo cero","anthropic/claude-sonnet-5.5",0),null);}};
+        Notes.generate(c,z,free,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);
+        JSONObject noteZ=Notes.load(c,z.id);
+        expect(noteZ!=null&&!noteZ.optBoolean("costReal")&&!Notes.credit(noteZ).contains("costó"),"A zero usage.cost was shown as the real cost: "+Notes.credit(noteZ));
 
         // OpenRouter puede responder 200 con el error del proveedor adentro: se trata como ese error (aquí, pasajero).
         HttpApi inside=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra){

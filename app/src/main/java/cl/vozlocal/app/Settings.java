@@ -15,7 +15,12 @@ final class Settings {
     boolean charging() { return prefs.getBoolean("charging", false); }
     boolean askTitle() { return prefs.getBoolean("askTitle", true); }
     String language() { return prefs.getString("language", "es"); }
-    String provider(){return prefs.getString("provider","openai");}
+    /**
+     * Servicio de transcripción. Desde la segunda ronda de la 0.8.0 la app usa solo OpenRouter (SPEC-0.8b, decisión 1):
+     * es el valor por defecto y la migración del esquema 5 (VozApp) se lo pone a quien venía de OpenAI o de su servidor.
+     * "openai" y "custom" siguen funcionando en el código (los cubren las pruebas), pero la interfaz ya no lleva a ellos.
+     */
+    String provider(){return prefs.getString("provider","openrouter");}
     /** Prefijo de las preferencias de la clave: "" (OpenAI), "openrouter_" u "custom_" (servidor propio). Cada proveedor guarda la suya. */
     String prefix(){return prefix(provider());}
     static String prefix(String provider){return provider.equals("openai")?"":provider.equals("openrouter")?"openrouter_":"custom_";}
@@ -61,13 +66,19 @@ final class Settings {
     /** Guarda la clave de un proveedor ("openai", "openrouter", "custom" o "anthropic") sin cambiar el proveedor activo. Vacía = borrarla. */
     void saveKeyFor(String provider,String value)throws Exception{encrypt(provider.equals("anthropic")?"anthropic_":prefix(provider),value);}
     void saveOpenRouterKey(String value)throws Exception{encrypt("openrouter_",value);}
+    /**
+     * Servicio de una clave de antes que ya no se usa («OpenAI» o «tu servidor»), o null. Con «solo OpenRouter» esas
+     * claves quedan cifradas y sin uso (SPEC-0.8b, decisión 2): sirve para explicarle a quien actualiza por qué se le pide
+     * otra clave, sin mostrar ni borrar la vieja.
+     */
+    String oldService(){return hasOpenAiKey()?"OpenAI":prefs.contains("custom_keyEncrypted")?"tu servidor":null;}
     // ---------- 0.6.0 ----------
     /** Armar la «Nota para tu segundo cerebro» al terminar cada transcripción. */
     boolean noteAuto(){return prefs.getBoolean("noteAuto",true);}
     /**
-     * IA que arma la nota: "openai" (clave de OpenAI), "anthropic" (Claude, su clave) u "openrouter" (clave de OpenRouter; 0.8.0).
-     * Quien nunca eligió una usa la de siempre (OpenAI), salvo que transcriba con OpenRouter: ahí la nota sale con la
-     * misma clave, sin configurar nada más. Elegir una en Ajustes la deja fija aunque después cambie el proveedor.
+     * Preferencia "noteProvider" tal como quedó guardada: "openai", "anthropic" u "openrouter" (sin ella, el valor que
+     * correspondía al proveedor). Desde la segunda ronda de la 0.8.0 la nota va SIEMPRE por OpenRouter (Notes.provider no
+     * mira esto) y la migración del esquema 5 la borra; queda solo para la lógica de la bienvenida que todavía la lee.
      */
     String noteProvider(){return prefs.getString("noteProvider",openRouter()?"openrouter":"openai");}
     /** Modelo de la nota; vacío = el recomendado del proveedor (ver Notes). */
