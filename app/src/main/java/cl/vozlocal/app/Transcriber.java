@@ -120,6 +120,26 @@ final class Transcriber {
      */
     volatile boolean lostWifi;
     /**
+     * Grabaciones que esta ronda dejó para reintentar en el mismo trabajo (falló un intento que se repite, o se fue el Wi-Fi
+     * a mitad), en orden. TranscribeService.waitBeforeRetry fija retryingId con la primera que sigue pedida y lista: solo
+     * esa dice «Reintento en…»; una recién pedida que espera su turno sigue «En cola».
+     */
+    private final Set<String> retrying=Collections.synchronizedSet(new LinkedHashSet<>());
+    Collection<String> retrying(){synchronized(retrying){return new ArrayList<>(retrying);}}
+    /**
+     * Esta ronda se detuvo porque falta algo que no es el Wi-Fi (cargador, batería, internet; ver holds): no fue un fallo,
+     * así que no sube la escala de esperas.
+     */
+    volatile boolean held;
+    /**
+     * ¿Detener la ronda antes de esta grabación? Falta el cargador (con «Solo mientras carga»), la batería está baja o no hay
+     * internet: lo mismo que dicen las pantallas («Esperando el cargador…»). Antes el servicio en primer plano la enviaba
+     * igual (y sin internet gastaba un intento). Valen para todas, por eso se detiene la ronda; el Wi-Fi es de cada una
+     * (waitsForWifi). La tarea de fondo (budgetMs>0) no: Android ya la retiene con esas mismas condiciones, y si las mide
+     * distinto que blocker (p. ej. otro umbral de batería baja) se reprogramaría en bucle.
+     */
+    static boolean holds(String blocker,long budgetMs){return budgetMs<=0&&blocker!=null&&!Pipeline.WIFI_WAIT.equals(blocker);}
+    /**
      * «Solo con Wi-Fi» y ahora hay datos móviles, visto justo antes de enviar una parte (0.8.0, tercera ronda): antes se
      * miraba solo al empezar cada grabación, y lo que quedaba se subía por datos móviles. No gasta un intento y las partes
      * listas se conservan: la grabación queda esperando Wi-Fi, con el aviso «Usar datos móviles».
@@ -184,7 +204,9 @@ final class Transcriber {
     static volatile String currentId;
     /**
      * Grabación que el trabajo en curso espera para reintentar (entre intentos currentId queda en null): la fija y la
-     * limpia TranscribeService.waitBeforeRetry. Las pantallas la leen con Pipeline.processing.
+     * limpia TranscribeService.waitBeforeRetry (solo la que la ronda dejó para reintentar, sigue pedida y nada la retiene;
+     * al pasar a esperar Wi-Fi se limpia), y TranscribeService.rounds la limpia al terminar el trabajo. Las pantallas la
+     * leen con Pipeline.processing.
      */
     static volatile String retryingId;
     /** En la última ronda hubo un corte del propio teléfono (el servicio reintenta pronto, sin esperas largas). */
@@ -208,6 +230,10 @@ final class Transcriber {
                 JSONObject state=FilesStore.state(c,r.id);if(!state.optBoolean("requested"))continue;
                 if(RecorderService.activeId!=null){retry=true;Pipeline.log(c,r.id,"En espera: hay una grabación en curso");break;}
                 if(budgetMs>0&&System.currentTimeMillis()-started>budgetMs){retry=true;break;}
+                // Falta el cargador, la batería o internet: la ronda se detiene sin gastar un intento y el trabajo espera a que
+                // se cumpla (TranscribeService.waitBeforeRetry), como dicen las pantallas.
+                String wait=Pipeline.blocker(c,r.id);
+                if(holds(wait,budgetMs)){retry=true;held=true;Pipeline.log(c,r.id,"En cola · "+wait);break;}
                 // «Solo con Wi-Fi» y ahora hay datos móviles (0.8.0, tercera ronda): esta grabación espera, salvo que se hayan
                 // permitido los datos móviles para ella («Usar datos móviles ahora»). Las demás siguen; la que espera la
                 // retoma la tarea de fondo al haber Wi-Fi. Antes, un trabajo que empezó con Wi-Fi seguía con datos móviles.
@@ -236,7 +262,7 @@ final class Transcriber {
                     // proveedor ni se reintenta por datos móviles: espera el Wi-Fi sin gastar un intento, con el aviso.
                     if(Pipeline.waitsForWifi(c,r.id)){waitWifi(r,true);retry=true;continue;}
                     JSONObject st=FilesStore.state(c,r.id);long now=System.currentTimeMillis();Outcome o=outcome(st,e,now);
-                    sawLocalCut|=o.local;retry|=o.again;
+                    sawLocalCut|=o.local;retry|=o.again;if(o.again)retrying.add(r.id);
                     String reason=describe(e);
                     // «Volver a transcribir» que se rinde: vuelve la versión anterior en vez de pedir Reintentar.
                     boolean restoring=!o.again&&Retranscribe.hasPrevious(c,r.id)&&!Transcript.exists(c,r.id);
@@ -270,15 +296,19 @@ final class Transcriber {
     /**
      * Esta grabación espera Wi-Fi («Solo con Wi-Fi» y ahora hay datos móviles): sigue pedida, no gasta un intento, sus partes
      * listas se conservan y se avisa con la salida «Usar datos móviles». midway: se fue el Wi-Fi a mitad de la transcripción
-     * (ver lostWifi); si no, se saltó al comenzarla.
+     * (ver lostWifi); si no, se saltó al comenzarla. A mitad, la notificación de avance también lo dice: antes quedaba
+     * congelada en «Enviando parte 2 de 3 · 45 %» junto al aviso «Esperando Wi-Fi» (la tarea de fondo la quita al terminar).
      */
     void waitWifi(Recording r,boolean midway){
-        if(midway)lostWifi=true;else waitingWifi.add(r.id);
+        if(midway){lostWifi=true;retrying.add(r.id);}else waitingWifi.add(r.id);
         Pipeline.log(c,r.id,midway?"Se fue el Wi-Fi a mitad del envío · no se usan datos móviles y las partes ya listas se conservan: puedes usarlos para esta grabación desde su detalle"
             :"En espera de Wi-Fi · ahora hay datos móviles: puedes usarlos para esta grabación desde su detalle");
         if(midway)Diagnostics.event("wifi_lost",r.id,"stage",failedStage,"net",Pipeline.networkName(c));
         Pipeline.waitingWifi(c,r.id);
+        if(midway)notice(WIFI_WAIT_TEXT,true,-1);
     }
+    /** Lo que dice la notificación de avance mientras se espera el Wi-Fi (aquí y en TranscribeService.wifiWait). */
+    static final String WIFI_WAIT_TEXT="Esperando Wi-Fi · se retoma sola cuando vuelva";
     /** Traduce fallos técnicos a una causa comprensible. */
     private String describe(Exception e){
         if(e instanceof HttpApi.Stalled||e instanceof HttpApi.PrepareStalled)return e.getMessage();
@@ -714,14 +744,23 @@ final class Transcriber {
     private void liveText(Recording r,int block,int chars){long now=System.currentTimeMillis();if(now-lastLive<800)return;lastLive=now;try{FilesStore.update(c,r.id,s->s.put("liveChars",chars));}catch(Exception ignored){}}
 
     // ---------- Notificaciones ----------
-    /** Notificación de avance (también la del servicio en primer plano). Mientras transcribe, abre esa grabación. */
+    /**
+     * ¿El texto de la notificación de avance dice una espera? («Esperando Wi-Fi…», «En pausa…», «… se retoma sola…»,
+     * «… se reintenta solo»): mientras tanto no se envía nada.
+     */
+    static boolean waiting(String text){return text!=null&&(text.startsWith("Esperando")||text.startsWith("En pausa")||text.contains("se retoma sola")||text.endsWith("se reintenta solo"));}
+    /**
+     * Notificación de avance (también la del servicio en primer plano). Mientras transcribe, abre esa grabación. Una espera
+     * (ver waiting) se titula «En pausa» y no lleva la barra ocupada: antes decía «Transcribiendo — Esperando Wi-Fi…» con
+     * la barra girando hasta 15 min, sin enviar nada.
+     */
     static Notification build(Context c,String text,boolean ongoing,int percent){
         NotificationManager manager=c.getSystemService(NotificationManager.class);manager.createNotificationChannel(new NotificationChannel("processing","Transcripciones",NotificationManager.IMPORTANCE_LOW));
-        String id=currentId;
+        String id=currentId;boolean paused=ongoing&&waiting(text);
         PendingIntent open=id!=null?PendingIntent.getActivity(c,NOTIFICATION,openIntent(c,id),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE)
             :PendingIntent.getActivity(c,NOTIFICATION,new Intent(c,MainActivity.class).putExtra("library",true),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        Notification.Builder b=new Notification.Builder(c,"processing").setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle(ongoing?"Transcribiendo":"Verbapp").setContentText(text).setContentIntent(open).setOngoing(ongoing).setAutoCancel(!ongoing).setOnlyAlertOnce(true);
-        if(ongoing){if(percent>=0)b.setProgress(100,percent,false);else b.setProgress(0,0,true);}
+        Notification.Builder b=new Notification.Builder(c,"processing").setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle(paused?"En pausa":ongoing?"Transcribiendo":"Verbapp").setContentText(text).setContentIntent(open).setOngoing(ongoing).setAutoCancel(!ongoing).setOnlyAlertOnce(true);
+        if(ongoing&&!paused){if(percent>=0)b.setProgress(100,percent,false);else b.setProgress(0,0,true);}
         return b.build();
     }
     private void notice(String text,boolean ongoing,int percent){
