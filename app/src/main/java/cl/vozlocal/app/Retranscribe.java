@@ -60,9 +60,17 @@ final class Retranscribe {
         }
     }
     static boolean speakers(Mode m){return m!=Mode.TEXT;}
-    /** Costo estimado en US$ de volver a transcribir todo el audio con esta alternativa (-1 si no se conoce). */
+    /**
+     * Costo estimado en US$ de volver a transcribir todo el audio con esta alternativa (-1 si no se conoce). Con OpenRouter
+     * y voces suma las muestras de voz que viajan delante de cada envío (Pricing.billedMs, la regla única; «sin cortar» las
+     * lleva una sola vez). Solo cuenta las voces conocidas: las muestras de la segunda pasada dependen de la transcripción.
+     */
     static double cost(Context c,Recording r,Mode m){
-        try{Settings s=new Settings(c);ProviderConfig config=s.config(speakers(m));return Pricing.estimate(c,config.provider,config.model,r.duration);}catch(Exception e){return -1;}
+        try{
+            Settings s=new Settings(c);ProviderConfig config=s.config(speakers(m));
+            int anchors=config.speakers&&TranscribeClient.knowsVoices(config.provider)?Voices.selected(c).size():0;
+            return Pricing.estimate(c,config.provider,config.model,Pricing.billedMs(config.provider,config.model,r.duration,anchors,m==Mode.SINGLE));
+        }catch(Exception e){return -1;}
     }
     /** Alternativa en curso (o pendiente de elegir versión) según el estado; null si no es una repetición. */
     static Mode mode(JSONObject state){
@@ -113,7 +121,7 @@ final class Retranscribe {
         if(f.previous)return CHOOSE_FIRST;
         // La nota que se está armando es de esta versión: si cambiara ahora, se perdería.
         if(f.noteWorking)return "Se está armando la nota. Espera a que termine.";
-        if(!f.hasKey)return "Agrega tu clave de API en Ajustes para volver a transcribir.";
+        if(!f.hasKey)return "Agrega tu clave de OpenRouter en Ajustes para volver a transcribir.";
         switch(mode){
             case CORRECTIONS:
                 if(!f.openai&&!f.openrouter)return "Solo funciona con OpenRouter u OpenAI: tu servicio de transcripción no acepta muestras de voz.";

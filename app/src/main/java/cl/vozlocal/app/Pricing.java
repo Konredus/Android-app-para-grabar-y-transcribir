@@ -60,22 +60,39 @@ final class Pricing {
         if(state==null||!state.has("costUsd"))return -1;double v=state.optDouble("costUsd",-1);return Double.isNaN(v)||v<=0?-1:v;
     }
     /**
+     * Audio que se cobra al transcribir (ms), para los costos con «≈» de las pantallas: LA regla, la única (0.8.0, tercera
+     * ronda: antes había dos, esta y RecordingActions.billedMs, con resultados distintos).
      * OpenRouter cobra el audio que recibe, y con voces conocidas cada envío lleva antes sus muestras («anclas», de hasta
-     * Voices.MAX_MS cada una, más 1 s de silencio). Esto es lo que se estima que se cobrará: la duración más las anclas de
-     * cada bloque. Para los costos con «≈» de las pantallas (sin esto, el estimado salía menor que lo cobrado).
+     * Voices.MAX_MS cada una, más 1 s de silencio; ver OrAudio): se suma eso por cada bloque del motor
+     * (Transcriber.orBlockMax), o una sola vez si es un solo envío («sin cortar»). Sin esto, el estimado salía menor que lo
+     * cobrado (hallazgo de la revisión).
+     * - provider: otro proveedor que no sea "openrouter" cobra la duración tal cual (OpenAI recibe las voces aparte).
+     * - model: con un modelo que no separa voces, las muestras no viajan (OpenRouterClient solo las antepone si la receta
+     *   separa voces).
+     * - anchors: muestras por envío; se cuentan a lo más Transcriber.MAX_KNOWN (el tope del motor).
      * No cuenta las muestras automáticas de la parte 1 (dependen de lo que se diga): sigue siendo un estimado.
+     * Firma estable: la usan las pantallas (detalle, «¿Separar voces?», «Volver a transcribir») y el aviso de datos móviles.
      */
-    static long orBilledMs(long durationMs,int voices,Models.Recipe recipe){
-        if(durationMs<=0||voices<=0||recipe==null||!recipe.diarizes)return durationMs;
-        long block=Transcriber.orBlockMax(recipe,true),blocks=Math.max(1,(durationMs+block-1)/block);
-        return durationMs+blocks*Math.min(voices,Transcriber.MAX_KNOWN)*(Math.min(Voices.MAX_MS,OrAudio.ANCHOR_MAX_MS)+OrAudio.GAP_MS);
+    static long billedMs(String provider,String model,long durationMs,int anchors,boolean single){
+        return "openrouter".equals(provider)?billed(Models.recipe(model),durationMs,anchors,single):Math.max(0,durationMs);
     }
-    /** Lo mismo con lo elegido en Ajustes (OpenRouter, separando voces y con voces conocidas activas); si no, la duración tal cual. */
-    static long orBilledMs(Context c,long durationMs,boolean speakers){
-        if(c==null||!speakers||durationMs<=0)return durationMs;
-        try{Settings s=new Settings(c);if(!s.openRouter())return durationMs;return orBilledMs(durationMs,Voices.selected(c).size(),Models.recipe(Models.chosen(s,true)));}
+    /** La cuenta en sí, con la receta del modelo ya buscada. */
+    private static long billed(Models.Recipe recipe,long durationMs,int anchors,boolean single){
+        if(anchors<=0||durationMs<=0||recipe==null||!recipe.diarizes)return Math.max(0,durationMs);
+        long block=Math.max(60_000L,Transcriber.orBlockMax(recipe,true)),blocks=single?1:Math.max(1,(durationMs+block-1)/block);
+        return durationMs+blocks*Math.min(anchors,Transcriber.MAX_KNOWN)*(Math.min(Voices.MAX_MS,OrAudio.ANCHOR_MAX_MS)+OrAudio.GAP_MS);
+    }
+    /** Igual que billedMs, con lo elegido en Ajustes (modelo con voces y voces conocidas activas). speakers=false: la duración. */
+    static long billedMs(Context c,long durationMs,boolean speakers){
+        if(c==null||!speakers||durationMs<=0)return Math.max(0,durationMs);
+        try{Settings s=new Settings(c);String provider=s.provider();
+            return billedMs(provider,Models.chosen(s,true),durationMs,TranscribeClient.knowsVoices(provider)?Voices.selected(c).size():0,false);}
         catch(RuntimeException e){return durationMs;}
     }
+    /** Lo de antes, por compatibilidad: delega en billedMs (una sola regla). */
+    static long orBilledMs(long durationMs,int voices,Models.Recipe recipe){return billed(recipe,durationMs,voices,false);}
+    /** Lo de antes, por compatibilidad: delega en billedMs(Context, …). */
+    static long orBilledMs(Context c,long durationMs,boolean speakers){return billedMs(c,durationMs,speakers);}
     /** Formato chileno: US$0,012 (3 decimales bajo 1 dólar). */
     static String usd(double value){
         if(value<0)return "—";

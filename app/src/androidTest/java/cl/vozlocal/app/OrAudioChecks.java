@@ -14,6 +14,7 @@ import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -39,6 +40,7 @@ final class OrAudioChecks {
             anchors(dir);
             failures(dir);
             secondRound(dir);
+            thirdRound(dir);
             android.util.Log.i("VozLocalTest","OrAudio checks: "+(SystemClock.elapsedRealtime()-started)+" ms");
         }finally{clear(dir);}
     }
@@ -199,6 +201,54 @@ final class OrAudioChecks {
         boolean encoder=new MediaCodecList(MediaCodecList.REGULAR_CODECS).findEncoderForFormat(MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_FLAC,16000,1))!=null;
         OrAudio.Built after=OrAudio.build(new File(dir,"mix.wav"),null,new File(dir,"after-stall"),new HttpApi());
         if(encoder&&Build.VERSION.SDK_INT>=29)check(after.format.equals("flac"),"A stalled preparation turned FLAC off: "+OrAudio.flacIssue);
+    }
+
+    // ---------- Tercera ronda: velocidad, avance en % y comprobación barata del FLAC ----------
+    /**
+     * Topes holgados para el emulador (lo esperado es varias veces menos). Antes de la tercera ronda un bloque de 4 min
+     * tardaba 31–43 s en un teléfono con la app abierta (~8 s por minuto): estos topes fallan si la conversión vuelve a
+     * ese orden. El tiempo medido queda en el registro («VozLocalTest») y en el mensaje si falla.
+     */
+    static final long SPEED_LIMIT_MS=5_000,FILTER_LIMIT_MS=2_000;
+    private static void thirdRound(File dir)throws Exception{
+        // 1. Caminos directos 48 → 16 kHz (×3) y 32 → 16 kHz (×2): la misma calidad que el polifásico. 12 kHz, sin filtro,
+        // reaparecería como un tono falso de 4 kHz en los dos casos.
+        for(int rate:new int[]{48000,32000}){
+            File mix=wav(new File(dir,"mix"+rate+".wav"),rate,1,2000,(ch,t)->tone(1000,10000,t)+tone(12000,10000,t));
+            OrAudio.Built b=OrAudio.build(mix,null,new File(dir,"out-"+rate),new HttpApi());short[] s=samples(b);
+            check(Math.abs(b.durationMs-2000)<=50&&Math.abs(b.durationMs*16-s.length)<=8,rate+" Hz duration wrong: "+b.durationMs+" ms, "+s.length+" samples");
+            double kept=amplitude(s,1600,30400,1000),alias=amplitude(s,1600,30400,4000);
+            check(Math.abs(kept-10000)<300,rate+" Hz: 1 kHz tone not preserved: "+kept);
+            check(alias<50,rate+" Hz: 12 kHz tone aliased into 4 kHz: "+alias);
+        }
+        // 2. El filtro solo (sin el decodificador): 60 s a 44,1 kHz dan exactamente 960 000 muestras de 16 kHz.
+        float[] pcm=new float[44100*60];for(int i=0;i<pcm.length;i++)pcm[i]=(float)tone(440,8000,i/44100d);
+        long started=SystemClock.elapsedRealtime();long produced=OrAudio.resample(44100,pcm,(data,count)->{});long filter=SystemClock.elapsedRealtime()-started;
+        android.util.Log.i("VozLocalTest","OrAudio filter: 60 s at 44.1 kHz in "+filter+" ms");
+        check(produced==960_000,"Resampler output length wrong: "+produced);
+        check(filter<FILTER_LIMIT_MS,"Resampling filter too slow: 60 s took "+filter+" ms (limit "+FILTER_LIMIT_MS+" ms)");
+        // 3. De punta a punta, como graba la app (AAC a 44,1 kHz), con el avance en % que ve la etapa «Preparando audio».
+        File source=wav(new File(dir,"speech60.wav"),44100,1,60_000,(ch,t)->tone(220,6000,t)+tone(1800,2000,t));
+        File aac=new File(dir,"speech60.m4a");AudioConvert.convert(source,aac,0,60_000,new HttpApi());source.delete();
+        List<Integer> seen=new ArrayList<>();HttpApi watch=new HttpApi();watch.onPrepareProgress=seen::add;watch.startPreparing();
+        started=SystemClock.elapsedRealtime();OrAudio.Built b=OrAudio.build(aac,null,new File(dir,"speed"),watch);long took=SystemClock.elapsedRealtime()-started;
+        watch.endPreparing(true);
+        android.util.Log.i("VozLocalTest","OrAudio speed: 60 s AAC 44.1 kHz -> "+b.format+" in "+took+" ms");
+        check(Math.abs(b.durationMs-60_000)<300,"60 s conversion duration wrong: "+b.durationMs);
+        check(took<SPEED_LIMIT_MS,"Conversion too slow: 60 s of audio took "+took+" ms (limit "+SPEED_LIMIT_MS+" ms)");
+        boolean rising=true;for(int i=1;i<seen.size();i++)rising&=seen.get(i)>seen.get(i-1);
+        check(seen.size()>=5&&rising&&seen.get(seen.size()-1)==100,"Preparation progress not reported in rising % ending at 100: "+seen);
+        // 4. La comprobación barata cuenta lo mismo que un decodificador de verdad, y nota un final cortado o un byte dañado.
+        if(b.format.equals("flac")){
+            check(OrAudio.flacSamples(b.file)==samples(b).length,"Cheap FLAC check counts a different length than the decoder");
+            byte[] all=Files.readAllBytes(b.file.toPath());long whole=OrAudio.flacSamples(b.file);
+            File cut=new File(dir,"cut.flac");Files.write(cut.toPath(),Arrays.copyOf(all,all.length-200));
+            boolean caught=false;try{caught=OrAudio.flacSamples(cut)!=whole;}catch(IOException e){caught=true;}
+            check(caught,"Cut FLAC passed the cheap check");
+            byte[] bad=all.clone();bad[bad.length/2]^=0x5a;File broken=new File(dir,"broken.flac");Files.write(broken.toPath(),bad);
+            caught=false;try{caught=OrAudio.flacSamples(broken)!=whole;}catch(IOException e){caught=true;}
+            check(caught,"Damaged FLAC frame passed the cheap check");
+        }
     }
 
     // ---------- Utilidades ----------

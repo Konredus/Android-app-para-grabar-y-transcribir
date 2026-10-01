@@ -23,10 +23,74 @@ final class EngineChecks {
         sizing();
         corrections();
         server(c);
+        route();
+        mobileData(c,r);
+        userJob(c);
         Recording d=copy(c,r);
         try{versions(c,d);snippet(c,d);notification(c,d);}
         catch(Throwable failure){try{d.delete(c);}catch(Exception ignored){}throw failure;}
         deleteAll(c,d);
+    }
+
+    // ---------- 0.8.0, tercera ronda: por dónde corre el trabajo ----------
+    /** La decisión de usar la transferencia iniciada por el usuario, sin depender del teléfono. */
+    static void route(){
+        check(Pipeline.route(34,true,true,true,false)==Pipeline.Route.USER_JOB&&Pipeline.route(35,true,true,true,false)==Pipeline.Route.USER_JOB,"A tap with the app visible on Android 14+ should be a user-initiated transfer");
+        check(Pipeline.route(33,true,true,true,false)==Pipeline.Route.CLASSIC&&Pipeline.route(26,true,true,true,false)==Pipeline.Route.CLASSIC,"Android 13 or older must keep the foreground-service path");
+        check(Pipeline.route(35,false,true,true,false)==Pipeline.Route.CLASSIC,"Automatic work (no tap) must stay as before");
+        check(Pipeline.route(35,true,false,true,false)==Pipeline.Route.CLASSIC,"With the app not visible Android refuses it: the old path must be used");
+        check(Pipeline.route(35,true,true,false,false)==Pipeline.Route.CLASSIC,"Without RUN_USER_INITIATED_JOBS the old path must be used");
+        // Con un trabajador andando no se programa otro: con el mismo id, Android detendría la subida en curso.
+        check(Pipeline.route(35,true,true,true,true)==Pipeline.Route.RUNNING&&Pipeline.route(30,false,false,false,true)==Pipeline.Route.RUNNING,"A running worker would be replaced");
+    }
+
+    // ---------- 0.8.0, tercera ronda: «Usar datos móviles ahora» ----------
+    static void mobileData(Context c,Recording r)throws Exception{
+        JSONObject waiting=new JSONObject().put("requested",true);
+        check(Pipeline.waitsForWifi(true,true,false,waiting),"A requested recording on mobile data with Wi-Fi only should wait for Wi-Fi");
+        check(!Pipeline.waitsForWifi(true,true,true,waiting)&&!Pipeline.waitsForWifi(false,true,false,waiting)&&!Pipeline.waitsForWifi(true,false,false,waiting),"Wi-Fi wait offered on Wi-Fi, without the preference, or offline (mobile data cannot help there)");
+        check(!Pipeline.waitsForWifi(true,true,false,new JSONObject(waiting.toString()).put("mobileOk",true))&&!Pipeline.waitsForWifi(true,true,false,new JSONObject())&&!Pipeline.waitsForWifi(true,true,false,null),"A recording with mobile data allowed, or not requested, still waits for Wi-Fi");
+        // Tamaño estimado del envío: FLAC (~20 KB por segundo) en base64 con las muestras de voz; lo ya transcrito no se sube.
+        String mai="microsoft/mai-transcribe-2";long four=Pipeline.uploadBytes("openrouter",mai,4*60_000,0,0,3_000_000);
+        check(four==HttpApi.base64Length(4*60_000L*Retranscribe.OR_BYTES_PER_MS)&&Pipeline.megabytes(four).equals("≈6,4 MB"),"Upload estimate for 4 min wrong: "+four+" "+Pipeline.megabytes(four));
+        check(Pipeline.uploadBytes("openrouter",mai,4*60_000,3*60_000,0,3_000_000)*4<four+16&&Pipeline.uploadBytes("openrouter",mai,4*60_000,0,2,3_000_000)>four,"Upload estimate ignores the parts already done or the voice samples");
+        check(Pipeline.uploadBytes("openai","gpt-transcribe",60_000,30_000,0,1_000_000)==500_000&&Pipeline.uploadBytes("openrouter",mai,60_000,90_000,0,1)==0,"Upload estimate for the m4a, or for nothing left, wrong");
+        check(Pipeline.megabytes(26_400_000).equals("≈26 MB")&&Pipeline.megabytes(10).equals("≈0,1 MB"),"Megabytes format wrong");
+        // En una grabación desechable: el permiso es de ESA grabación, una sola vez, queda en la bitácora sin el título y
+        // cancelar lo quita. La ventana con "requested" es mínima (nada la envía: no hay runner ni red en esta prueba).
+        Recording d=new Recording(UUID.randomUUID().toString(),"Prueba datos móviles",System.currentTimeMillis(),r.duration);
+        java.nio.file.Files.copy(r.audio(c).toPath(),d.audio(c).toPath());d.save(c);
+        try{
+            check(!Pipeline.allowMobile(c,d.id),"Mobile data allowed for a recording that is not requested");
+            FilesStore.update(c,d.id,s->s.put("requested",true));
+            boolean allowed=Pipeline.allowMobile(c,d.id);JSONObject st=FilesStore.state(c,d.id);boolean again=Pipeline.allowMobile(c,d.id);
+            String blocker=Pipeline.blocker(c,d.id);
+            Pipeline.cancel(c,d.id);JSONObject after=FilesStore.state(c,d.id);
+            String log=st.optJSONArray("log")==null?"":st.optJSONArray("log").toString();
+            check(allowed&&st.optBoolean("mobileOk")&&!again,"Use mobile data now not stored once");
+            check(has(log,"Usarás datos móviles")&&!has(log,d.title)&&!has(log,"«"),"Mobile data log line wrong or not private: "+log);
+            check(blocker==null||!blocker.startsWith("esperando Wi-Fi"),"A recording with mobile data allowed still waits for Wi-Fi");
+            check(!after.optBoolean("requested")&&!after.has("mobileOk"),"Cancelling kept the mobile data permission");
+        }finally{d.delete(c);}
+    }
+
+    // ---------- 0.8.0, tercera ronda: transferencia iniciada por el usuario (Android 14+) ----------
+    static void userJob(Context c){
+        Settings s=new Settings(c);boolean wifi=s.wifiOnly(),charging=s.charging();
+        try{
+            s.prefs.edit().putBoolean("wifi",true).putBoolean("charging",false).commit();
+            // La tarea de fondo deja de esperar Wi-Fi si alguna grabación pedida tiene permiso para datos móviles.
+            check(Pipeline.jobInfo(c,s).getNetworkType()==android.app.job.JobInfo.NETWORK_TYPE_UNMETERED&&Pipeline.jobInfo(c,s,true).getNetworkType()==android.app.job.JobInfo.NETWORK_TYPE_ANY,"Background job network with mobile data allowed wrong");
+            if(android.os.Build.VERSION.SDK_INT>=34){
+                // Persistida si este Android lo acepta (Pipeline.scheduleUserJob hace lo mismo: si no, la pide sin persistir).
+                android.app.job.JobInfo job;boolean persisted=true;
+                try{job=Pipeline.userJobInfo(c,s,false,6_400_000,true);}
+                catch(IllegalArgumentException e){persisted=false;job=Pipeline.userJobInfo(c,s,false,6_400_000,false);android.util.Log.i("VozLocalTest","User-initiated job not persisted on this Android: "+e.getMessage());}
+                check(job.isUserInitiated()&&job.getId()==Pipeline.USER_JOB_ID&&job.getId()!=Pipeline.JOB_ID&&job.getPriority()==android.app.job.JobInfo.PRIORITY_MAX
+                    &&job.getNetworkType()==android.app.job.JobInfo.NETWORK_TYPE_UNMETERED&&job.getEstimatedNetworkUploadBytes()==6_400_000&&job.isPersisted()==persisted,"User-initiated transfer job wrong");
+                check(Pipeline.userJobInfo(c,s,true,0,false).getNetworkType()==android.app.job.JobInfo.NETWORK_TYPE_ANY,"User-initiated transfer waits for Wi-Fi although mobile data was allowed");
+            }
+        }finally{s.prefs.edit().putBoolean("wifi",wifi).putBoolean("charging",charging).commit();}
     }
 
     // ---------- Disponibilidad y motivos ----------

@@ -30,6 +30,10 @@ import java.util.concurrent.*;
  * vigilante mide aparte; y ninguna transcripción queda dando vueltas sin avisar: que el proveedor no responda gasta un
  * intento, los cortes del teléfono dejan de ser gratis si se repiten 15 min, la notificación dice cada reintento y, al
  * rendirse, avisa. Diagnostics guarda en qué paso quedó cada envío fallido ("part_failed", "job_retry", "job_failed").
+ *
+ * 0.8.0, tercera ronda: «Preparando el audio» muestra su avance en % ("prepPct" en el estado y la notificación); una
+ * grabación que espera Wi-Fi no usa datos móviles salvo que se le permita a ella ("mobileOk", ver Pipeline); y «Automático»
+ * sigue la regla única de Models.resume para no cambiar de modelo a mitad de una transcripción.
  */
 final class Transcriber {
     static final java.util.concurrent.locks.ReentrantLock RUNNING=new java.util.concurrent.locks.ReentrantLock();
@@ -106,6 +110,14 @@ final class Transcriber {
     private final Set<String> waitingForeground=ConcurrentHashMap.newKeySet();
     /** La primera grabación que quedó esperando la app abierta, o null. */
     String waitingForeground(){for(String id:waitingForeground)return id;return null;}
+    /** Grabaciones que esta ronda dejó esperando Wi-Fi (sin permiso para usar datos móviles). */
+    private final Set<String> waitingWifi=ConcurrentHashMap.newKeySet();
+    /** ¿Lo único que queda pedido espera Wi-Fi (o la app abierta)? Entonces no sirve reintentar en esta ronda. */
+    boolean onlyWaitingWifi(){
+        if(waitingWifi.isEmpty())return false;
+        for(Recording r:Recording.list(c))if(FilesStore.state(c,r.id).optBoolean("requested")&&!waitingWifi.contains(r.id)&&!waitingForeground.contains(r.id))return false;
+        return true;
+    }
     /** Cortes del propio teléfono que se reintentan sin gastar intentos; pasado este número sí cuentan. */
     static final int MAX_LOCAL_CUTS=12;
     /**
@@ -152,6 +164,8 @@ final class Transcriber {
     private final java.util.concurrent.atomic.AtomicBoolean sentThisRun=new java.util.concurrent.atomic.AtomicBoolean();
 
     private final Context c;private final HttpApi http;private final long budgetMs;private final long started=System.currentTimeMillis();
+    /** Quién corre esta ronda, para Diagnostics: "fgs", "uij" (transferencia iniciada por el usuario) o "job"; null = según el presupuesto. */
+    String runner;
     private final Map<Integer,long[]> uploads=new ConcurrentHashMap<>();private volatile long lastProgress;
     Transcriber(Context c,HttpApi http,long budgetMs){this.c=c;this.http=http;this.budgetMs=budgetMs;Pricing.attach(c);}
 
@@ -164,6 +178,16 @@ final class Transcriber {
                 JSONObject state=FilesStore.state(c,r.id);if(!state.optBoolean("requested"))continue;
                 if(RecorderService.activeId!=null){retry=true;Pipeline.log(c,r.id,"En espera: hay una grabación en curso");break;}
                 if(budgetMs>0&&System.currentTimeMillis()-started>budgetMs){retry=true;break;}
+                // «Solo con Wi-Fi» y ahora hay datos móviles (0.8.0, tercera ronda): esta grabación espera, salvo que se hayan
+                // permitido los datos móviles para ella («Usar datos móviles ahora»). Las demás siguen; la que espera la
+                // retoma la tarea de fondo al haber Wi-Fi. Antes, un trabajo que empezó con Wi-Fi seguía con datos móviles.
+                if(Pipeline.waitsForWifi(c,r.id)){
+                    waitingWifi.add(r.id);retry=true;
+                    Pipeline.log(c,r.id,"En espera de Wi-Fi · ahora hay datos móviles: puedes usarlos para esta grabación desde su detalle");
+                    Pipeline.waitingWifi(c,r.id);
+                    continue;
+                }
+                Pipeline.clearWaitingWifi(c,r.id);
                 http.jobId=r.id;currentId=r.id;failedStage="";
                 try{process(r);}
                 catch(Yield y){retry=true;Pipeline.log(c,r.id,"Pausa corta para no exceder el límite de Android · continúa enseguida");break;}
@@ -273,14 +297,17 @@ final class Transcriber {
         if(carry>0)s.put("costUsd",carry);else s.remove("costUsd");
     }
     /**
-     * «Automático» no cambia de modelo a mitad de una transcripción: si ya hay partes listas con un modelo que sigue en el
-     * catálogo, se termina con ese. Si no, el perfil cambiaba, se descartaban partes ya pagadas y se cobraban de nuevo.
+     * «Automático» no cambia de modelo a mitad de una transcripción: si ya hay partes listas con el modelo del que se movió
+     * «Automático» y ese modelo sigue en el catálogo (y separa voces, si se piden), se termina con él. Si no, el perfil
+     * cambiaba, se descartaban partes ya pagadas y se cobraban de nuevo.
+     * Una sola regla, la de Models.resume (0.8.0, tercera ronda: antes el motor tenía la suya, más amplia, que también
+     * retenía el modelo anterior cuando era la PERSONA quien había cambiado a «Automático»; ahí manda su elección).
      */
     private ProviderConfig keepAutoModel(Recording r,Settings settings,ProviderConfig config,JSONObject st,boolean wantSpeakers){
         try{
-            if(!"openrouter".equals(config.provider)||!"openrouter".equals(st.optString("provider"))||st.optInt("blocksDone")<=0)return config;
-            String pref=wantSpeakers?settings.orSpeakersModel():settings.orTextModel(),saved=st.optString("model");
-            if(!(pref.isEmpty()||Models.AUTO.equals(pref))||saved.isEmpty()||saved.equals(config.model)||Models.find(Models.cached(c),saved)==null)return config;
+            if(!"openrouter".equals(config.provider))return config;
+            String saved=Models.resume(c,settings,wantSpeakers,st);
+            if(saved==null||saved.isEmpty()||saved.equals(config.model)||saved.equals(Models.chosen(settings,wantSpeakers)))return config;
             ProviderConfig kept=new ProviderConfig("openrouter",Models.BASE,saved,config.key,wantSpeakers&&Models.recipe(saved).diarizes);
             // Sin « »: el informe de soporte tapa lo que va entre comillas angulares.
             Pipeline.log(c,r.id,"El modelo automático cambió de recomendación · esta transcripción termina con el que empezó (las partes listas no se vuelven a pagar)");
@@ -293,7 +320,7 @@ final class Transcriber {
         Retranscribe.Mode mode=Retranscribe.mode(initial);
         if(!Transcript.exists(c,r.id)){
             ProviderConfig resolved=settings.config(wantSpeakers);
-            if(resolved.key.isEmpty())throw new HttpApi.UserAction("openrouter".equals(resolved.provider)?"Agrega tu clave de OpenRouter en Ajustes y pulsa Reintentar.":"Agrega una clave de API en Ajustes y pulsa Reintentar.");
+            if(resolved.key.isEmpty())throw new HttpApi.UserAction("Agrega tu clave de OpenRouter en Ajustes y pulsa Reintentar.");
             ProviderConfig config=keepAutoModel(r,settings,resolved,initial,wantSpeakers);
             // OpenRouter (0.8.0): el tamaño de los bloques sale de la receta del modelo y no del peso del m4a. La mitad tras
             // un 413 vale solo para el modelo que lo respondió.
@@ -329,8 +356,8 @@ final class Transcriber {
             }
             // "prepping": partes preparando su audio ahora mismo (la etapa «Preparar audio» en pantalla). Aquí no hay ninguna:
             // si Android mató un intento a mitad de una preparación, la cuenta no queda pegada.
-            FilesStore.update(c,r.id,s->s.put("model",config.model).put("speakers",config.speakers).put("audioMs",r.duration).put("provider",config.provider).put("prepping",0));
-            Diagnostics.event("job_start",r.id,"provider",config.provider,"model",config.model,"bytes",bytes,"duration_ms",r.duration,"net",Pipeline.networkName(c),"runner",budgetMs>0?"job":"fgs","mode",mode==null?"":mode.name());
+            FilesStore.update(c,r.id,s->{s.put("model",config.model).put("speakers",config.speakers).put("audioMs",r.duration).put("provider",config.provider).put("prepping",0);s.remove("prepPct");});
+            Diagnostics.event("job_start",r.id,"provider",config.provider,"model",config.model,"bytes",bytes,"duration_ms",r.duration,"net",Pipeline.networkName(c),"runner",runner!=null?runner:budgetMs>0?"job":"fgs","mode",mode==null?"":mode.name());
             stage(r,"Preparando audio",-1);long prepStart=System.currentTimeMillis();
             List<Long> cuts=new ArrayList<>();List<AudioParts.Part> parts;
             if(single){parts=Collections.singletonList(new AudioParts.Part(r.audio(c),0,audioMs));cuts.add(0L);cuts.add(audioMs);Pipeline.log(c,r.id,"Sin cortar: el audio completo va en un solo envío · tarda más, pero no hay uniones donde las voces se crucen");}
@@ -389,7 +416,7 @@ final class Transcriber {
                 boolean note=settings.noteAuto()&&transcript.hasText()&&canNote();
                 // Se guarda solo si nadie canceló entretanto: cancelar una repetición devuelve la versión anterior.
                 synchronized(FilesStore.LOCK){check(r);transcript.save(c,r.id);if(note)FilesStore.update(c,r.id,s->s.put("notePending",true));}
-            }finally{http.onUploaded=null;http.onProgress=null;http.onPreparing=null;http.onBilled=null;}
+            }finally{http.onUploaded=null;http.onProgress=null;http.onPreparing=null;http.onPrepareProgress=null;http.onBilled=null;}
             // Los bloques se conservan entre intentos; se borran solo con la transcripción ya guardada.
             AudioParts.clearBlocks(c,r.id);
         }
@@ -397,7 +424,7 @@ final class Transcriber {
         if(FilesStore.state(c,r.id).optBoolean("notePending"))note(r);
         check(r);long queued=FilesStore.state(c,r.id).optLong("queuedAt",start);long total=System.currentTimeMillis()-queued;
         boolean again=FilesStore.state(c,r.id).has("retranscribe");
-        FilesStore.update(c,r.id,s->s.put("requested",false).put("failed",false).put("attempts",0).put("doneIn",total).put("upSent",0).put("upTotal",0).put("doneAudioMs",r.duration).put("doneAt",System.currentTimeMillis()));
+        FilesStore.update(c,r.id,s->{s.put("requested",false).put("failed",false).put("attempts",0).put("doneIn",total).put("upSent",0).put("upTotal",0).put("doneAudioMs",r.duration).put("doneAt",System.currentTimeMillis());s.remove("prepPct");});
         Pipeline.log(c,r.id,"Transcripción lista · tiempo total "+Recording.time(total));
         if(again)Pipeline.log(c,r.id,"Nueva versión lista · elige si te quedas con ella");
         LocalStorage.enqueue(c,r.id);done(r,again);Diagnostics.event("job_complete",r.id,"elapsed_ms",System.currentTimeMillis()-start,"mode",mode==null?"":mode.name());
@@ -516,16 +543,19 @@ final class Transcriber {
             try{
                 long now=android.os.SystemClock.elapsedRealtime();
                 if(begin){
-                    prepStart.set(now);prepActive.set(0);prepCut.set(false);
+                    prepStart.set(now);prepActive.set(0);prepCut.set(false);preparing.put(i,0);
                     stage(r,"Preparando el audio "+(n>1?"de la "+label:"para enviarlo"),-1);
-                    FilesStore.update(c,r.id,s->s.put("prepping",s.optInt("prepping")+1));
+                    FilesStore.update(c,r.id,s->s.put("prepping",s.optInt("prepping")+1).put("prepPct",prepPercent()));
                 }else{
-                    long took=Math.max(0,now-prepStart.get());
-                    FilesStore.update(c,r.id,s->{s.put("prepping",Math.max(0,s.optInt("prepping")-1));if(ok)s.put("prepMsSum",s.optLong("prepMsSum")+took).put("prepCount",s.optInt("prepCount")+1);});
+                    long took=Math.max(0,now-prepStart.get());preparing.remove(i);int left=preparing.size(),shown=prepPercent();
+                    // "prepPct": el % de lo que se está preparando ahora; sin nada en preparación, desaparece.
+                    FilesStore.update(c,r.id,s->{s.put("prepping",Math.max(0,s.optInt("prepping")-1));if(left>0)s.put("prepPct",shown);else s.remove("prepPct");if(ok)s.put("prepMsSum",s.optLong("prepMsSum")+took).put("prepCount",s.optInt("prepCount")+1);});
                     if(ok)stage(r,"Enviando "+label+" · preparado en "+Recording.time(took),0);
                 }
             }catch(Exception ignored){}
         };
+        // Avance de la conversión en % (0.8.0, tercera ronda): la etapa «Preparando audio» ya no se ve detenida.
+        h.onPrepareProgress=percent->prepProgress(r,i,percent,label,n);
         // Un envío cobrado y descartado dentro del cliente (y cuyo reenvío falló) se suma igual al costo real.
         h.onBilled=usd->{try{if(usd>0)FilesStore.update(c,r.id,s->s.put("costUsd",s.optDouble("costUsd",0)+usd));}catch(Exception ignored){}};
         OpenAiClient.Delta delta=chars->liveText(r,i,chars);long limit=responseLimit(config.provider,partMs);
@@ -614,6 +644,21 @@ final class Transcriber {
         publishUploads(r);long[] sum=sum();notice("Enviando "+label,true,(int)(sum[0]*100/Math.max(1,sum[1])));
     }
     private long[] sum(){long s=0,t=0;for(long[] u:uploads.values()){s+=u[0];t+=u[1];}return new long[]{s,t};}
+    /** Avance de la etapa «Preparando audio» de cada parte que se está convirtiendo ahora (0–100). */
+    private final Map<Integer,Integer> preparing=new ConcurrentHashMap<>();private volatile long lastPrep;
+    /** El % que se muestra: el promedio de las partes que se están preparando a la vez (hasta PARALLEL). */
+    private int prepPercent(){int sum=0,count=0;for(int v:preparing.values()){sum+=v;count++;}return count==0?0:sum/count;}
+    /**
+     * Avance de la conversión: en el estado ("prepPct", que lee el detalle) y en la notificación, cada ~0,7 s como la
+     * subida. Nunca hace fallar el envío.
+     */
+    private void prepProgress(Recording r,int part,int percent,String label,int n){
+        if(!preparing.containsKey(part))return;
+        preparing.put(part,percent);long now=System.currentTimeMillis();if(now-lastPrep<700&&percent<100)return;lastPrep=now;
+        int shown=prepPercent(),together=preparing.size();
+        try{FilesStore.update(c,r.id,s->s.put("prepPct",shown));}catch(Exception ignored){}
+        notice("Preparando el audio "+(together>1?"de "+together+" partes":n>1?"de la "+label:"para enviarlo")+" · "+shown+" %",true,shown);
+    }
     private void publishUploads(Recording r){long[] sum=sum();try{FilesStore.update(c,r.id,s->s.put("upSent",sum[0]).put("upTotal",sum[1]));}catch(Exception ignored){}}
     private volatile long lastLive;
     /** Texto recibido en vivo (modelo con streaming). */
