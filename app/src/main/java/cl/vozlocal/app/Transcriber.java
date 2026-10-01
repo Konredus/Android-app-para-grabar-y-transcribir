@@ -111,15 +111,24 @@ final class Transcriber {
     private final Set<String> waitingForeground=ConcurrentHashMap.newKeySet();
     /** La primera grabación que quedó esperando la app abierta, o null. */
     String waitingForeground(){for(String id:waitingForeground)return id;return null;}
-    /** Grabaciones que esta ronda dejó esperando Wi-Fi (sin permiso para usar datos móviles). */
+    /** Grabaciones que esta ronda saltó al comenzarlas porque esperan Wi-Fi (sin permiso para usar datos móviles). */
     private final Set<String> waitingWifi=ConcurrentHashMap.newKeySet();
+    /**
+     * En esta ronda se fue el Wi-Fi a mitad de una grabación. No cuenta para onlyWaitingWifi: el servicio en primer plano o
+     * la transferencia iniciada por el usuario esperan ahí a que vuelva (TranscribeService.waitBeforeRetry, con el aviso)
+     * en vez de cederla a la tarea de fondo, que Android pausa; con la app cerrada, ninguno de los dos se vuelve a abrir.
+     */
+    volatile boolean lostWifi;
     /**
      * «Solo con Wi-Fi» y ahora hay datos móviles, visto justo antes de enviar una parte (0.8.0, tercera ronda): antes se
      * miraba solo al empezar cada grabación, y lo que quedaba se subía por datos móviles. No gasta un intento y las partes
      * listas se conservan: la grabación queda esperando Wi-Fi, con el aviso «Usar datos móviles».
      */
     static final class WaitWifi extends Exception{WaitWifi(){super("Esperando Wi-Fi");}}
-    /** ¿Lo único que queda pedido espera Wi-Fi (o la app abierta)? Entonces no sirve reintentar en esta ronda. */
+    /**
+     * ¿Lo único que queda pedido espera Wi-Fi desde el comienzo de la ronda (o la app abierta)? Entonces no sirve reintentar
+     * en esta ronda. Una a la que se le fue el Wi-Fi a mitad no está en waitingWifi (ver lostWifi): da false.
+     */
     boolean onlyWaitingWifi(){
         List<String> requested=new ArrayList<>();for(Recording r:Recording.list(c))if(FilesStore.state(c,r.id).optBoolean("requested"))requested.add(r.id);
         return onlyWaitingWifi(requested,waitingWifi,waitingForeground,id->Pipeline.waitsForWifi(c,id));
@@ -255,10 +264,11 @@ final class Transcriber {
     }
     /**
      * Esta grabación espera Wi-Fi («Solo con Wi-Fi» y ahora hay datos móviles): sigue pedida, no gasta un intento, sus partes
-     * listas se conservan y se avisa con la salida «Usar datos móviles». midway: se fue el Wi-Fi a mitad de la transcripción.
+     * listas se conservan y se avisa con la salida «Usar datos móviles». midway: se fue el Wi-Fi a mitad de la transcripción
+     * (ver lostWifi); si no, se saltó al comenzarla.
      */
-    private void waitWifi(Recording r,boolean midway){
-        waitingWifi.add(r.id);
+    void waitWifi(Recording r,boolean midway){
+        if(midway)lostWifi=true;else waitingWifi.add(r.id);
         Pipeline.log(c,r.id,midway?"Se fue el Wi-Fi a mitad del envío · no se usan datos móviles y las partes ya listas se conservan: puedes usarlos para esta grabación desde su detalle"
             :"En espera de Wi-Fi · ahora hay datos móviles: puedes usarlos para esta grabación desde su detalle");
         if(midway)Diagnostics.event("wifi_lost",r.id,"stage",failedStage,"net",Pipeline.networkName(c));

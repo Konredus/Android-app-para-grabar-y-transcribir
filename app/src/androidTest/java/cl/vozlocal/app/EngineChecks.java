@@ -77,6 +77,11 @@ final class EngineChecks {
             check(has(log,"Usarás datos móviles")&&!has(log,d.title)&&!has(log,"«"),"Mobile data log line wrong or not private: "+log);
             check(blocker==null||!blocker.startsWith("esperando Wi-Fi"),"A recording with mobile data allowed still waits for Wi-Fi");
             check(!after.optBoolean("requested")&&!after.has("mobileOk"),"Cancelling kept the mobile data permission");
+            // Se fue el Wi-Fi a mitad de la grabación: no cuenta como «solo queda esperar Wi-Fi», así que el servicio o la
+            // transferencia iniciada por el usuario esperan ahí (TranscribeService.waitBeforeRetry) en vez de cederla a la tarea
+            // de fondo que Android pausa. Ceder de inmediato queda solo para la que esperaba Wi-Fi al comenzar la ronda.
+            Transcriber t=new Transcriber(c,new HttpApi(),0);t.waitWifi(d,true);Pipeline.clearWaitingWifi(c,d.id);
+            check(t.lostWifi&&!t.onlyWaitingWifi(),"Wi-Fi lost midway, but the worker hands the recording to the background job");
         }finally{d.delete(c);}
     }
 
