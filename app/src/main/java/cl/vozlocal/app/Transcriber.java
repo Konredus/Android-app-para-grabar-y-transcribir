@@ -182,6 +182,11 @@ final class Transcriber {
     static long responseLimit(String provider,long partMs){long limit=responseLimit(partMs);return "openrouter".equals(provider)?Math.min(limit,OR_RESPONSE_MAX_MS):limit;}
     /** Grabación que se está transcribiendo: la notificación de avance abre su detalle. */
     static volatile String currentId;
+    /**
+     * Grabación que el trabajo en curso espera para reintentar (entre intentos currentId queda en null): la fija y la
+     * limpia TranscribeService.waitBeforeRetry. Las pantallas la leen con Pipeline.processing.
+     */
+    static volatile String retryingId;
     /** En la última ronda hubo un corte del propio teléfono (el servicio reintenta pronto, sin esperas largas). */
     volatile boolean sawLocalCut;
     private volatile long frozenLoggedAt;

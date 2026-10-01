@@ -97,6 +97,11 @@ final class Pipeline {
     }
     /** El servicio en primer plano o la transferencia iniciada por el usuario están trabajando. Lo usan las pantallas. */
     static boolean working(){return TranscribeService.running||PipelineJob.userRunning;}
+    /**
+     * ¿El trabajo en curso tiene ESTA grabación? La está transcribiendo (Transcriber.currentId) o espera para reintentarla
+     * (Transcriber.retryingId). Una pedida que no cumple esto está en cola. La regla única de las pantallas.
+     */
+    static boolean processing(String id){return id!=null&&working()&&(id.equals(Transcriber.currentId)||id.equals(Transcriber.retryingId));}
     /** Arranca lo pedido por el camino que corresponda. byUser: viene de un toque de la persona. */
     static void start(Context c,boolean byUser){
         Route route=route(Build.VERSION.SDK_INT,byUser,visible(),canRunUserJobs(c),working());
