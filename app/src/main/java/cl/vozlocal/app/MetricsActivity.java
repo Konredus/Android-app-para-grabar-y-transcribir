@@ -441,11 +441,26 @@ public class MetricsActivity extends Screen {
             addRow(list,costRow(Metrics.count(t.notes,"nota","notas"),sub,value));card.addView(list,Ui.fill());
         }
         StringBuilder foot=new StringBuilder();
-        if(t.unknown>0)foot.append(Metrics.count(t.unknown,"transcripción","transcripciones")).append(" con tu servidor: sin tarifa conocida.\n");
+        if(t.unknown>0)foot.append(unknownNote(t));
         if(!Double.isNaN(data.balance))foot.append("Saldo en OpenRouter: ").append(Pricing.usd(data.balance)).append(" (al comprobar tu clave el ").append(new SimpleDateFormat("d MMM",Metrics.CL).format(new Date(data.balanceAt)).replace(".","")).append(").\n");
         foot.append("Cobrado: lo que informó OpenRouter. ≈ Estimado: duración × tarifa pública del modelo; el cobro final lo ves en tu cuenta.");
         TextView f=ui.text(foot.toString(),Type.BODY_SMALL,p.onSurfaceVariant);f.setPadding(ui.dp(S1),ui.dp(S4),ui.dp(S1),0);card.addView(f);
         return card;
+    }
+    /**
+     * Pie de «Costos» para las transcripciones sin costo conocido, por servicio (una línea cada uno, "" si no hay). «Con tu
+     * servidor» solo para un servidor propio: en OpenRouter es que no vino el costo y el modelo no tiene tarifa por minuto
+     * (p. ej. uno nuevo), y quien solo usó OpenRouter nunca tuvo servidor. Suma el "unknown" de cada modelo (Metrics.spend
+     * lo cuenta en el período y en el modelo a la vez).
+     */
+    static String unknownNote(Metrics.Totals t){
+        int router=0,openai=0,server=0;
+        for(Metrics.ModelUse u:t.models.values()){if(u.unknown<=0)continue;if("openrouter".equals(u.provider))router+=u.unknown;else if("openai".equals(u.provider))openai+=u.unknown;else server+=u.unknown;}
+        StringBuilder s=new StringBuilder();
+        if(router>0)s.append(Metrics.count(router,"transcripción","transcripciones")).append(" de OpenRouter sin precio conocido: no informó el costo y el modelo no tiene tarifa por minuto.\n");
+        if(openai>0)s.append(Metrics.count(openai,"transcripción","transcripciones")).append(" de OpenAI sin tarifa conocida para su modelo.\n");
+        if(server>0)s.append(Metrics.count(server,"transcripción","transcripciones")).append(" con tu servidor: sin tarifa conocida.\n");
+        return s.toString();
     }
     /** Fila de costo: nombre y detalle a la izquierda, monto (cifras fijas) a la derecha. No se toca: nada se registra. */
     private View costRow(String title,String sub,String value){

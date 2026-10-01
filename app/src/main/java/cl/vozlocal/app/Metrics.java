@@ -22,8 +22,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * - Lo GASTADO va en el día en que se cobró: la transcripción al terminar ("doneAt"; si no, al pedirla) y la nota al
  *   armarse ("createdAt"). Así «US$ del mes» calza con lo que el proveedor cobra ese mes.
  * - Costo real = lo que informó OpenRouter (Pricing.real, la única regla: un 0 es «dato que no vino»). Si no hay real,
- *   el estimado de Pricing (duración × tarifa pública), siempre rotulado «≈». Un servidor propio no tiene tarifa: no
- *   se inventa un costo, se cuenta aparte ("unknown").
+ *   el estimado de Pricing (duración × tarifa pública), siempre rotulado «≈». Sin ninguno de los dos (un servidor propio,
+ *   o un modelo de OpenRouter sin tarifa por minuto cuyo costo no vino) no se inventa un costo: se cuenta aparte
+ *   ("unknown", por modelo; MetricsActivity.unknownNote lo explica según el servicio).
  * - Una versión anterior de «Volver a transcribir» que todavía existe también se pagó: su costo se suma.
  * - Las grabaciones de ejemplo ("demo") no son del usuario: no cuentan.
  *
@@ -252,10 +253,12 @@ final class Metrics {
      * Costo de una pasada de transcripción. st es el estado (o el «before» de la versión anterior): provider, model,
      * audioMs, costUsd, doneAt. Sin modelo guardado se usa el de la transcripción, y sin proveedor, OpenAI (lo único que
      * existía antes de la 0.8).
+     * Una pasada sin terminar (en curso o esperando reintento) va en el día en que se pidió ("queuedAt"): el estado todavía
+     * trae el "doneAt" de la pasada anterior (solo se escribe al terminar) y lo ya cobrado de la nueva quedaba en ese día.
      */
     private static void spend(Context c,Data d,JSONObject st,boolean transcribed,String tProvider,String tModel,long duration,long created,long weekStart,long monthStart,long weeksEnd){
         double real=Pricing.real(st);if(real<0&&!transcribed)return;
-        long at=st.optLong("doneAt",0);if(at<=0)at=st.optLong("queuedAt",0);if(at<=0)at=created;
+        long at=st.optLong("doneAt",0);if(!transcribed)at=Math.max(at,st.optLong("queuedAt",0));if(at<=0)at=st.optLong("queuedAt",0);if(at<=0)at=created;
         String provider=st.optString("provider","");if(provider.isEmpty())provider=tProvider==null||tProvider.isEmpty()?"openai":tProvider;
         String model=st.optString("model","");if(model.isEmpty())model=tModel==null?"":tModel;
         long audio=st.optLong("audioMs",0);if(audio<=0)audio=duration;
