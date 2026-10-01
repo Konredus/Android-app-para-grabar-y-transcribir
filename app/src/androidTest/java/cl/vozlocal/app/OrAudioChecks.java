@@ -38,6 +38,7 @@ final class OrAudioChecks {
             recording(dir,r.audio(c));
             anchors(dir);
             failures(dir);
+            secondRound(dir);
             android.util.Log.i("VozLocalTest","OrAudio checks: "+(SystemClock.elapsedRealtime()-started)+" ms");
         }finally{clear(dir);}
     }
@@ -175,6 +176,29 @@ final class OrAudioChecks {
         HttpApi token=new HttpApi();int[] writes={0};stopped=false;
         try{OrAudio.decode(longer,Long.MAX_VALUE,token,(data,count)->{writes[0]++;token.cancel();});}catch(InterruptedIOException e){stopped=true;}
         check(stopped&&writes[0]>=1&&writes[0]<=8,"Decoder kept going after cancel: "+writes[0]+" writes");
+    }
+
+    // ---------- Segunda ronda: disco lleno, audio vacío y preparación cortada por el vigilante ----------
+    private static void secondRound(File dir)throws Exception{
+        // Disco lleno se decide por la causa del error (ENOSPC), no por el espacio libre medido después de limpiar.
+        check(OrAudio.diskFull(new IOException("write failed: ENOSPC (No space left on device)"))
+            &&OrAudio.diskFull(new IOException("flac-encode",new IOException("x",new android.system.ErrnoException("write",android.system.OsConstants.ENOSPC))))
+            &&!OrAudio.diskFull(new IOException("No audio track"))&&!OrAudio.diskFull(new IOException("Audio decoder stopped advancing"))&&!OrAudio.diskFull(null),"Disk-full detection wrong");
+        // Menos de una décima de segundo de audio: un error propio (el cliente se lo dice al usuario en vez de reintentar), sin restos.
+        File blip=wav(new File(dir,"blip.wav"),16000,1,50,(ch,t)->tone(440,8000,t));boolean tooShort=false;
+        try{OrAudio.build(blip,null,new File(dir,"blip-out"),new HttpApi());}catch(OrAudio.TooShort e){tooShort=true;}
+        check(tooShort&&leftovers(dir,"blip-out")==0,"Near-empty audio not reported as too short, or left files");
+        // El vigilante corta una preparación trabada: el error pasa tal cual (InterruptedIOException), no queda nada a medias
+        // y el FLAC NO se apaga para los bloques siguientes (no fue culpa del codificador).
+        File longer=new File(dir,"long.wav");if(!longer.isFile())longer=wav(longer,44100,1,10_000,(ch,t)->tone(500,6000,t));
+        HttpApi slow=new HttpApi(){int checks;@Override void check()throws InterruptedIOException{if(++checks==4)abortPreparing("preparar el audio tardó más de 03:00");super.check();}};
+        slow.startPreparing();boolean stalled=false;
+        try{OrAudio.build(longer,null,new File(dir,"stalled"),slow);}catch(HttpApi.PrepareStalled e){stalled=true;}
+        check(stalled&&leftovers(dir,"stalled")==0,"Stalled preparation did not stop cleanly");
+        slow.endPreparing(false);
+        boolean encoder=new MediaCodecList(MediaCodecList.REGULAR_CODECS).findEncoderForFormat(MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_FLAC,16000,1))!=null;
+        OrAudio.Built after=OrAudio.build(new File(dir,"mix.wav"),null,new File(dir,"after-stall"),new HttpApi());
+        if(encoder&&Build.VERSION.SDK_INT>=29)check(after.format.equals("flac"),"A stalled preparation turned FLAC off: "+OrAudio.flacIssue);
     }
 
     // ---------- Utilidades ----------

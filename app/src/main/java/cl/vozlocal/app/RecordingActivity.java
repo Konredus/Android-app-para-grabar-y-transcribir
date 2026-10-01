@@ -504,11 +504,15 @@ public class RecordingActivity extends Screen {
         if(s.openRouter())Models.cached(this);
         card.addView(sparkTile(44));
         TextView h=ui.heading("Transcribe este audio",Type.TITLE_LARGE);h.setPadding(0,ui.dp(S4),0,ui.dp(S1));card.addView(h);
-        card.addView(ui.text(s.hasKey()?"Toca «Transcribir» abajo. Al transcribir eliges si separar voces. Proveedor: "+SettingsActivity.modelSummary(s)+".":"Agrega tu clave de API para transcribir: toca «Transcribir» abajo. Solo pagas lo que usas en tu cuenta del proveedor.",Type.BODY_MEDIUM,p.onSurfaceVariant));
+        // Sin clave se nombra a OpenRouter (0.8.0: es el único proveedor que ofrece la app) y se dice que el audio viaja allá.
+        card.addView(ui.text(s.hasKey()?"Toca «Transcribir» abajo. Al transcribir eliges si separar voces. Proveedor: "+SettingsActivity.modelSummary(s)+"."
+            :s.openRouter()?"Agrega tu clave de OpenRouter para transcribir: toca «Transcribir» abajo. El audio se envía a OpenRouter y pagas solo lo que usas."
+            :"Agrega tu clave de API para transcribir: toca «Transcribir» abajo. Solo pagas lo que usas en tu cuenta del proveedor.",Type.BODY_MEDIUM,p.onSurfaceVariant));
         // Costos con el proveedor y los modelos reales (0.8.0: también OpenRouter, con el precio de su catálogo). Un servidor
         // propio no tiene tarifa conocida y no muestra nada; un modelo que no separa voces muestra solo el del texto.
+        // Con voces y OpenRouter, el estimado cuenta las muestras de voz que viajan con cada parte (Pricing.orBilledMs).
         if(s.hasKey()){String provider=s.provider();
-            double voices=s.canSeparate()?Pricing.estimate(this,provider,RecordingActions.model(s,true),recording.duration):-1,text=Pricing.estimate(this,provider,RecordingActions.model(s,false),recording.duration);
+            double voices=s.canSeparate()?Pricing.estimate(this,provider,RecordingActions.model(s,true),Pricing.orBilledMs(this,recording.duration,true)):-1,text=Pricing.estimate(this,provider,RecordingActions.model(s,false),recording.duration);
             // Los dos costos como píldoras, una bajo la otra (juntas no caben en un teléfono angosto): se comparan de un vistazo.
             if(voices>=0){TextView both=Ui.tabular(ui.chip("≈ "+Pricing.usd(voices)+" separando voces",p.onPrimaryContainer,p.primaryContainer));LinearLayout.LayoutParams bl=Ui.wrap();bl.topMargin=ui.dp(S3);card.addView(both,bl);}
             if(text>=0){TextView plain=Ui.tabular(ui.chip("≈ "+Pricing.usd(text)+" solo el texto",p.onSurfaceVariant,0));plain.setBackground(outline(this,chipFill(),p.outlineVariant,R_FULL,false));
@@ -563,12 +567,18 @@ public class RecordingActivity extends Screen {
         if(logList!=null){JSONArray log=st.optJSONArray("log");int n=log==null?0:log.length();JSONObject last=n==0?null:log.optJSONObject(n-1);long lastT=last==null?0:last.optLong("t");
             if(n!=logCount||lastT!=logLast){logCount=n;logLast=lastT;renderLog(logList,log);}}
     }
-    /** Etapas reales: Subido · Partes x/n · Unir voces · Nota · Lista. La barra avanza solo con partes terminadas de verdad. */
+    /**
+     * Etapas reales: (Preparar audio) · Subido · Partes x/n · Unir voces · Nota · Lista. La barra avanza solo con partes
+     * terminadas de verdad. «Preparar audio» (0.8.0) es la conversión que hace OpenRouter antes de cada envío: mientras
+     * dura, «Subido» no aparece en curso (antes se veía «Enviando… 0 %» con el audio todavía convirtiéndose).
+     */
     private void renderStages(JSONObject st){
         if(progStages==null)return;progStages.removeAllViews();
         int blocks=st.optInt("blocks"),done=st.optInt("blocksDone");long sent=st.optLong("upSent"),total=st.optLong("upTotal");
         boolean uploaded=done>0||(total>0&&sent>=total)||logHas(st,"enviado"),partsDone=blocks>0&&done>=blocks;
-        stage("Subido",uploaded?2:TranscribeService.running?1:0);
+        boolean preparing=st.optInt("prepping")>0||st.optString("status").startsWith("Preparando");
+        if("openrouter".equals(st.optString("provider")))stage("Preparar audio",preparing?1:(uploaded||st.optInt("prepCount")>0)?2:0);
+        stage("Subido",uploaded?2:TranscribeService.running&&!preparing?1:0);
         stage(blocks>1?"Partes "+done+"/"+blocks:"Texto",partsDone?2:uploaded?1:0);
         if(st.optBoolean("speakers")&&blocks>1)stage("Unir voces",partsDone?1:0);
         if(new Settings(this).noteAuto()&&Notes.canGenerate(this))stage("Nota",0);
@@ -589,20 +599,27 @@ public class RecordingActivity extends Screen {
     /** Qué pasa ahora: tranquilidad si trabaja, o por qué espera; «Empezar ahora» solo si Android la está demorando. */
     private void refreshWaiting(String blocker){
         if(progNote==null)return;boolean running=TranscribeService.running;
-        progNote.setText(running?"Puedes cerrar la app: te aviso cuando esté lista.":blocker!=null?"Esperando: "+blocker+". Empieza sola cuando se cumpla; puedes cerrar la app.":"Android aún no la empieza. Se hará sola, o toca «Empezar ahora».");
+        // Un paso que lleva mucho en lo mismo (0.8.0): se dice, y qué va a pasar, en vez de solo «Puedes cerrar la app».
+        boolean slow=running&&System.currentTimeMillis()-phaseSince>15*60_000L;
+        progNote.setText(slow?"Este paso tarda más de lo normal. Si no avanza, se corta y se reintenta solo; si no resulta, te aviso.":running?"Puedes cerrar la app: te aviso cuando esté lista.":blocker!=null?"Esperando: "+blocker+". Empieza sola cuando se cumpla; puedes cerrar la app.":"Android aún no la empieza. Se hará sola, o toca «Empezar ahora».");
         startNow.setVisibility(!running&&blocker==null?View.VISIBLE:View.GONE);
         refreshEstimate();
     }
     private void refreshEstimate(){if(progEstimate==null)return;String est=TranscribeService.running&&liveState!=null?estimate(liveState):"";progEstimate.setText(est);progEstimate.setVisibility(est.isEmpty()?View.GONE:View.VISIBLE);lastEstimateAt=System.currentTimeMillis();}
     /**
-     * Estimación honesta y como rango. Con varias partes, por lo que tardaron las ya listas; con una sola (≤ 12 min),
-     * por tiempo: la separación de voces tarda ~0,15× la duración del audio.
+     * Estimación honesta y como rango. Con varias partes, por lo que tardaron las ya listas (eso ya incluye preparar el
+     * audio); con una sola (≤ 12 min), por tiempo: la separación de voces tarda ~0,15× la duración del audio, y con
+     * OpenRouter se suma lo que tarda prepararlo (Transcriber.prepEstimate, o lo medido si ya se preparó).
      */
     private String estimate(JSONObject st){
         long now=System.currentTimeMillis(),audio=st.optLong("audioMs",recording.duration),sum=st.optLong("blockMsSum");int blocks=st.optInt("blocks"),done=st.optInt("blocksDone"),count=st.optInt("blockCount");
         long left;
         if(blocks>1&&count>0){if(done>=blocks)return "casi lista";int rounds=(blocks-done+Transcriber.PARALLEL-1)/Transcriber.PARALLEL;long avg=sum/count;left=Math.max(avg/5,rounds*avg-(now-st.optLong("since",now)));}
-        else{double factor=st.optBoolean("speakers",true)?0.16:0.08;left=(long)(audio*factor)+20000-(now-startedAt(st));}
+        else{
+            double factor=st.optBoolean("speakers",true)?0.16:0.08;int prepared=st.optInt("prepCount");
+            long prep="openrouter".equals(st.optString("provider"))?(prepared>0?st.optLong("prepMsSum")/prepared:Transcriber.prepEstimate(audio)):0;
+            left=(long)(audio*factor)+20000+prep-(now-startedAt(st));
+        }
         if(left<=20000)return left>-120000?"casi lista":"";
         long lo=Math.max(1,Math.round(left*0.8/60000.0)),hi=Math.max(lo+1,Math.round(left*1.3/60000.0));
         return hi>=60?"≈ "+Ui.humanDuration(left):"≈ "+lo+"–"+hi+" min";
@@ -666,7 +683,12 @@ public class RecordingActivity extends Screen {
         if(live)cells.add(new String[]{"Restante (aprox.)",remaining(st)});
         cells.add(new String[]{"Audio procesado",Recording.time(live?doneAudio:audio)+" de "+Recording.time(audio)});
         long speedBase=live?doneAudio:audio;if(speedBase>0&&elapsed>0)cells.add(new String[]{"Velocidad",String.format(Locale.ROOT,"%.1f",speedBase/(double)elapsed).replace('.',',')+"× tiempo real"});
-        String provider=st.optString("provider","openai");double spent=Pricing.estimate(this,provider,model,live?doneAudio:audio),total=Pricing.estimate(this,provider,model,audio);
+        // OpenRouter: cuánto tomó convertir el audio antes de enviarlo (la etapa «Preparar audio»), sumado entre partes.
+        long prepMs=st.optLong("prepMsSum");int prepN=st.optInt("prepCount");
+        if(prepMs>0)cells.add(new String[]{"Preparar el audio",(prepMs<1000?"< 1 s":Recording.time(prepMs))+(prepN>1?" ("+prepN+" partes)":"")});
+        // Con OpenRouter se cobra también lo que suenan las muestras de voz que van antes de cada parte (ver Pricing.orBilledMs).
+        String provider=st.optString("provider","openai");long billed="openrouter".equals(provider)?Pricing.orBilledMs(this,audio,st.optBoolean("speakers")):audio;
+        double spent=Pricing.estimate(this,provider,model,live?doneAudio:billed),total=Pricing.estimate(this,provider,model,billed);
         // Costo real (0.8.0): OpenRouter informa lo que cobró cada envío y el motor lo suma en "costUsd". Si existe, va en
         // vez del estimado (sin «≈»); mientras se transcribe, junto al total estimado si se conoce.
         double real=Pricing.real(st);
@@ -1067,7 +1089,8 @@ public class RecordingActivity extends Screen {
     /** Arma la nota en segundo plano; mientras tanto se ve «Armando la nota…». */
     private void generateNote(){
         if(noteBusy||demo)return;
-        if(!Notes.canGenerate(this)){sheet("Falta configurar la IA de la nota","Elige en Ajustes con qué IA se arma la nota y agrega su clave (OpenRouter, OpenAI o Claude).").primary("Ir a Ajustes",this::openNoteAi).secondary("Ahora no",null).show();return;}
+        // 0.8.0: la nota se arma con OpenRouter, con la misma clave con que se transcribe.
+        if(!Notes.canGenerate(this)){sheet("Falta tu clave de OpenRouter","La nota se arma con OpenRouter, con la misma clave con que transcribes. Agrégala en Ajustes.").primary("Ir a Ajustes",this::openNoteAi).secondary("Ahora no",null).show();return;}
         noteBusy=true;reload();Diagnostics.event("note_requested",id);
         Context app=getApplicationContext();Recording r=recording;
         new Thread(()->{String error=null;

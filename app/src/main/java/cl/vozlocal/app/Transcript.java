@@ -244,7 +244,10 @@ final class Transcript {
                     .put("start",segment.getDouble("start")+offsets.get(p)).put("end",segment.getDouble("end")+offsets.get(p)).put("text",segment.getString("text")));
             }
         }
-        JSONObject data=new JSONObject().put("segments",segments).put("parts",parts.size()).put("names",new JSONObject()).put("diarized",parts.isEmpty()||parts.get(0).optBoolean("_diarized",true)).put("reviewed",false);
+        // Con voces si ALGUNA parte vino con voces (0.8.0): con OpenRouter cada respuesta dice lo suyo, y una parte 1 en
+        // silencio (sin hablantes) no debe dejar como «Texto» a las personas de las demás. Con OpenAI todas traen lo mismo.
+        boolean diarized=parts.isEmpty();for(JSONObject part:parts)if(part.optBoolean("_diarized",true)){diarized=true;break;}
+        JSONObject data=new JSONObject().put("segments",segments).put("parts",parts.size()).put("names",new JSONObject()).put("diarized",diarized).put("reviewed",false);
         if(parts.size()>1)data.put("blocks",new JSONArray(offsets));
         return new Transcript(data);
     }

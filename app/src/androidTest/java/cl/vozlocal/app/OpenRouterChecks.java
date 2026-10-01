@@ -32,7 +32,10 @@ final class OpenRouterChecks {
         client(c);
         errors(c);
         fallbacks(c);
+        preparing(c);
+        memory();
         rules();
+        retries();
         device(c,r);
     }
 
@@ -88,15 +91,24 @@ final class OpenRouterChecks {
         final byte[] data=bytes(70_001);final long blockMs;final long[][] windows;
         /** Cuántas anclas se pidieron en cada llamada, los clips recibidos y los archivos creados. */
         final List<Integer> asked=new ArrayList<>();final List<byte[]> clips=new ArrayList<>();final List<File> made=new ArrayList<>(),given=new ArrayList<>();
+        /** En qué paso decía estar el envío mientras se armaba el audio (debe ser PREPARE), y cuántas veces se pidió WAV. */
+        final List<Integer> phases=new ArrayList<>();int wavs;
         FakeAudio(long blockMs,long[]... windows){this.blockMs=blockMs;this.windows=windows;}
-        @Override public OrAudio.Built build(File audio,List<File> anchors,File outBase,HttpApi cancel)throws Exception{
-            int n=anchors==null?0:anchors.size();asked.add(n);
+        @Override public OrAudio.Built build(File audio,List<File> anchors,File outBase,HttpApi cancel)throws Exception{return make(audio,anchors,outBase,cancel,"flac");}
+        @Override public OrAudio.Built wav(File audio,List<File> anchors,File outBase,HttpApi cancel)throws Exception{wavs++;return make(audio,anchors,outBase,cancel,"wav");}
+        OrAudio.Built make(File audio,List<File> anchors,File outBase,HttpApi cancel,String format)throws Exception{
+            int n=anchors==null?0:anchors.size();asked.add(n);phases.add(cancel.phase);
             if(anchors!=null)for(File f:anchors){clips.add(java.nio.file.Files.readAllBytes(f.toPath()));given.add(f);}
-            File out=write(new File(outBase.getPath()+".flac"),data);made.add(out);
-            if(n==0)return new OrAudio.Built(out,"flac",0,new long[0][],blockMs);
+            File out=write(new File(outBase.getPath()+"."+format),data);made.add(out);
+            if(n==0)return new OrAudio.Built(out,format,0,new long[0][],blockMs);
             long lead=windows[n-1][1]+OrAudio.GAP_MS;
-            return new OrAudio.Built(out,"flac",lead,Arrays.copyOf(windows,n),lead+blockMs);
+            return new OrAudio.Built(out,format,lead,Arrays.copyOf(windows,n),lead+blockMs);
         }
+    }
+    /** OrAudio simulado que falla siempre con el error dado (para la etapa «Preparando audio»). */
+    private static final class FailingAudio extends FakeAudio{
+        final Exception error;FailingAudio(Exception error){super(5000);this.error=error;}
+        @Override OrAudio.Built make(File audio,List<File> anchors,File outBase,HttpApi cancel,String format)throws Exception{asked.add(anchors==null?0:anchors.size());phases.add(cancel.phase);throw error;}
     }
     private static OpenRouterClient client(Context c,HttpApi http,OpenRouterClient.Builder audio,List<String> lines){
         OpenRouterClient client=new OpenRouterClient(c,http);client.builder=audio;client.log=lines::add;return client;
@@ -266,6 +278,11 @@ final class OpenRouterChecks {
         JSONObject blind=new JSONObject().put("segments",list(seg(1,0.5,7.5,"Esta es mi voz"),seg(0,16.0,20.0,"uno dos tres cuatro cinco seis siete ocho")));
         out=OpenRouterClient.finish(OpenRouterClient.read(blind,true,48_000),lead,two,refs);s=contract(out);
         check(s.length()==1&&text(s,0).equals("cuatro cinco seis siete ocho")&&near(start(s,0),0)&&near(end(s,0),2.0)&&speaker(s,0).equals("voz_1"),"Straddling segment not cut in proportion: "+out);
+        // … pero un tramo que empieza en el silencio entre la última ancla (fin 17 s) y el audio (18 s) no trae nada del
+        // ancla: no pierde palabras (antes se iba «Hola»).
+        JSONObject quietStart=new JSONObject().put("segments",list(seg(1,0.2,7.6,"Esta es mi voz"),seg(0,9.3,16.5,"Y esta es la otra"),seg(0,17.2,19.0,"Hola partamos ya mismo")));
+        out=OpenRouterClient.finish(OpenRouterClient.read(quietStart,true,48_000),lead,two,refs);s=contract(out);
+        check(s.length()==1&&text(s,0).equals("Hola partamos ya mismo")&&near(start(s,0),0)&&near(end(s,0),1.0)&&speaker(s,0).equals("voz_1"),"Segment starting in the silence after the anchors lost real words: "+out);
         // 7. La respuesta no trae voces: igual se borra la zona de anclas y se restan los tiempos.
         JSONObject mute=new JSONObject().put("segments",list(seg(null,0.5,7.5,"Esta es mi voz"),seg(null,9.2,16.0,"Otra muestra"),seg(null,18.2,20.0,"Hola a todos")));
         OpenRouterClient.Parsed parsed=OpenRouterClient.read(mute,true,48_000);out=OpenRouterClient.finish(parsed,lead,two,refs);s=contract(out);
@@ -400,9 +417,14 @@ final class OpenRouterChecks {
             // Silencio sí es una respuesta válida: texto vacío, ningún tramo.
             JSONObject silent=client(c,new Fake().reply(200,"{\"text\":\"\"}"),new FakeAudio(5000),new ArrayList<>()).transcribe(audio,config("microsoft/mai-transcribe-2",false),"es",null,null);
             check(contract(silent).length()==0,"Silence should give an empty transcript, not an error");
-            // Un 400 que no es por el formato no se reintenta en modo simple.
-            http=new Fake().reply(400,"{\"error\":{\"code\":400,\"message\":\"Audio file is corrupted\"}}");e=failure(c,audio,http,true);
+            // Un 400 que no es por el formato (ni de la respuesta ni del audio) no se reintenta. (Hasta la primera ronda esta
+            // prueba usaba «Audio file is corrupted»; desde la segunda, ese 400 apunta al FLAC y se repite una vez en WAV:
+            // ver wav() en fallbacks.)
+            http=new Fake().reply(400,"{\"error\":{\"code\":400,\"message\":\"Audio duration exceeds the maximum allowed\"}}");e=failure(c,audio,http,true);
             check(action(e)&&http.calls==1,"Unrelated 400 was retried: "+e);
+            // 429 de OpenRouter: se reintenta, con un mensaje que dice qué pasó.
+            e=failure(c,audio,new Fake().reply(429,"{\"error\":{\"code\":429,\"message\":\"Rate limit exceeded\"}}"),true);
+            check(e instanceof IOException&&has(e.getMessage(),"pidió esperar"),"OpenRouter 429 not explained: "+e);
             // OpenAI y el servidor propio siguen igual: los textos de OpenRouter solo salen con su nombre de servicio.
             String openai=null;try{HttpApi.require(new HttpApi.Response(402,"",null),"OpenAI");}catch(HttpApi.UserAction x){openai=x.getMessage();}
             check(has(openai,"HTTP 402")&&!has(openai,"OpenRouter"),"402 from another provider changed: "+openai);
@@ -419,25 +441,34 @@ final class OpenRouterChecks {
         File audio=write(new File(c.getCacheDir(),"or-check-audio.m4a"),bytes(2000));
         String rejected="{\"error\":{\"code\":400,\"message\":\"Provider returned error\",\"metadata\":{\"raw\":\"response_format 'verbose_json' is not supported by this model\",\"provider_name\":\"Azure\"}}}";
         List<String[]> refs=Collections.singletonList(new String[]{"voz_1",url(bytes(900)),"block0:0","Persona 1"});
+        String mai="microsoft/mai-transcribe-2";
         try{
             // 1. 400 por el formato: una vez más en modo simple (json, sin voces, sin tiempos y sin anclas).
             Fake http=new Fake().reply(400,rejected).reply(200,"{\"text\":\"Hola mundo\",\"usage\":{\"seconds\":30,\"cost\":0.001}}");
             FakeAudio fake=new FakeAudio(30_000,new long[]{0,8000});List<String> lines=new ArrayList<>();
-            JSONObject out=client(c,http,fake,lines).transcribe(audio,config("microsoft/mai-transcribe-2",true),"es",refs,null);JSONArray s=contract(out);
+            JSONObject out=client(c,http,fake,lines).transcribe(audio,config(mai,true),"es",refs,null);JSONArray s=contract(out);
             JSONObject again=http.sent.get(1);
-            check(http.calls==2&&http.sent.get(0).has("provider")&&again.getString("response_format").equals("json")&&!again.has("timestamp_granularities")&&!again.has("provider")&&!again.has("diarize")&&again.getString("model").equals("microsoft/mai-transcribe-2"),"Simple retry body wrong");
+            check(http.calls==2&&http.sent.get(0).has("provider")&&again.getString("response_format").equals("json")&&!again.has("timestamp_granularities")&&!again.has("provider")&&!again.has("diarize")&&again.getString("model").equals(mai),"Simple retry body wrong");
             // Las anclas no pueden ir en modo simple (sin tiempos no se podrían quitar): el audio se arma de nuevo sin ellas.
             check(fake.asked.equals(Arrays.asList(1,0))&&s.length()==1&&speaker(s,0).equals("text")&&text(s,0).equals("Hola mundo")&&!out.getBoolean("_diarized")&&!out.has("_anchors"),"Simple retry result wrong: "+out);
             check(near(out.getJSONObject("usage").getDouble("cost"),0.001)&&lines.size()==1&&has(lines.get(0),"solo el texto"),"Simple retry not logged once, or cost wrong: "+lines);
             for(File f:fake.made)check(!f.exists(),"Converted audio left behind after a retry");
+            // … y se recuerda: el bloque siguiente con ese modelo va directo en modo simple (un solo envío, sin anclas ni aviso nuevo).
+            check(OpenRouterClient.PLAIN.contains(mai),"Simple mode not remembered for the model");
+            http=new Fake().reply(200,"{\"text\":\"Sigo\"}");fake=new FakeAudio(30_000,new long[]{0,8000});
+            out=client(c,http,fake,lines).transcribe(audio,config(mai,true),"es",refs,null);
+            check(http.calls==1&&http.sent.get(0).getString("response_format").equals("json")&&!http.sent.get(0).has("provider")&&fake.asked.equals(Collections.singletonList(0))&&lines.size()==1&&text(contract(out),0).equals("Sigo"),"Next block of a simple-mode model uploaded twice: "+http.calls+" "+lines);
+            OpenRouterClient.PLAIN.remove(mai);
             // 2. Si el modo simple también falla, no hay un tercer envío.
             http=new Fake().reply(400,rejected).reply(400,rejected);Exception e=null;
-            try{client(c,http,new FakeAudio(5000),lines).transcribe(audio,config("microsoft/mai-transcribe-2",true),"es",null,null);}catch(HttpApi.UserAction x){e=x;}
+            try{client(c,http,new FakeAudio(5000),lines).transcribe(audio,config(mai,true),"es",null,null);}catch(HttpApi.UserAction x){e=x;}
             check(e!=null&&http.calls==2,"Simple retry repeated more than once");
+            OpenRouterClient.PLAIN.remove(mai);
             // 3. Solo texto con tiempos rechazados: el mismo archivo se reenvía (no hay anclas que quitar).
             http=new Fake().reply(400,"{\"error\":{\"code\":400,\"message\":\"timestamp_granularities is not supported\"}}").reply(200,"{\"text\":\"Hola\"}");fake=new FakeAudio(5000);
-            out=client(c,http,fake,new ArrayList<>()).transcribe(audio,config("microsoft/mai-transcribe-2",false),"es",null,null);
+            out=client(c,http,fake,new ArrayList<>()).transcribe(audio,config(mai,false),"es",null,null);
             check(http.calls==2&&fake.asked.equals(Collections.singletonList(0))&&text(contract(out),0).equals("Hola"),"Text-only simple retry wrong");
+            OpenRouterClient.PLAIN.remove(mai);
 
             // 4. Con anclas y una respuesta sin tiempos no se sabe dónde terminan las muestras: se reenvía sin ellas.
             String model="deepgram/nova-3";
@@ -463,7 +494,126 @@ final class OpenRouterChecks {
             http=new Fake().reply(200,new JSONObject().put("segments",list(seg(0,0.2,1.8,"Hola"))).toString());
             out=client(c,http,broken,new ArrayList<>()).transcribe(audio,config("microsoft/mai-transcribe-2",true),"es",refs,null);s=contract(out);
             check(http.calls==1&&broken.asked.equals(Arrays.asList(1,0))&&s.length()==1&&speaker(s,0).equals("0")&&!out.has("_anchors"),"A failing voice sample broke the transcription");
+            wav(c,audio);
+            untimed(c,audio);
+        }finally{audio.delete();OpenRouterClient.PLAIN.remove(mai);}
+    }
+
+    // ---------- Segunda ronda: WAV si el proveedor no puede con el FLAC ----------
+    private static void wav(Context c,File audio)throws Exception{
+        String mai="microsoft/mai-transcribe-2",corrupt="{\"error\":{\"code\":400,\"message\":\"Provider returned error\",\"metadata\":{\"raw\":\"Audio file is corrupted or in an unsupported format\"}}}";
+        // Qué 400 apuntan al audio y cuáles no.
+        check(OpenRouterClient.audioRejected(corrupt)&&OpenRouterClient.audioRejected("Unsupported audio format: flac")&&OpenRouterClient.audioRejected("Could not decode audio file")
+            &&!OpenRouterClient.audioRejected("response_format 'verbose_json' is not supported for this audio")&&!OpenRouterClient.audioRejected("timestamp_granularities is not supported")
+            &&!OpenRouterClient.audioRejected("Audio duration exceeds the maximum allowed")&&!OpenRouterClient.audioRejected("Insufficient credits")&&!OpenRouterClient.audioRejected(null),"Audio-format rejection detection wrong");
+        try{
+            // 1. FLAC rechazado: una vez más en WAV, con las mismas voces; queda en la bitácora y se recuerda para el modelo.
+            Fake http=new Fake().reply(400,corrupt).reply(200,"{\"segments\":[{\"speaker\":0,\"start\":0.2,\"end\":1.8,\"text\":\"Hola\"}],\"usage\":{\"seconds\":5,\"cost\":0.001}}");
+            FakeAudio fake=new FakeAudio(5000);List<String> lines=new ArrayList<>();
+            JSONObject out=client(c,http,fake,lines).transcribe(audio,config(mai,true),"es",null,null);JSONArray s=contract(out);
+            check(http.calls==2&&http.sent.get(0).getJSONObject("input_audio").getString("format").equals("flac")&&http.sent.get(1).getJSONObject("input_audio").getString("format").equals("wav")
+                &&http.sent.get(1).has("provider")&&fake.wavs==1&&out.getString("_format").equals("wav")&&s.length()==1&&speaker(s,0).equals("0"),"Rejected FLAC not resent as WAV: "+http.calls+" "+out);
+            check(lines.size()==1&&has(lines.get(0),"WAV")&&OpenRouterClient.NO_FLAC.contains(mai),"WAV retry not logged or not remembered: "+lines);
+            for(File f:fake.made)check(!f.exists(),"Converted audio left behind after the WAV retry");
+            // 2. El bloque siguiente con ese modelo va directo en WAV (sin subir el FLAC para que lo rechacen otra vez).
+            http=new Fake().reply(200,"{\"text\":\"Sigo\"}");fake=new FakeAudio(5000);
+            client(c,http,fake,lines).transcribe(audio,config(mai,false),"es",null,null);
+            check(http.calls==1&&http.sent.get(0).getJSONObject("input_audio").getString("format").equals("wav")&&fake.wavs==1,"Model that refused FLAC got FLAC again");
+            OpenRouterClient.NO_FLAC.remove(mai);
+            // 3. Si el WAV también se rechaza, el error llega al usuario (no hay un tercer envío) y no se recuerda nada.
+            http=new Fake().reply(400,corrupt).reply(400,corrupt);Exception e=null;
+            try{client(c,http,new FakeAudio(5000),new ArrayList<>()).transcribe(audio,config(mai,true),"es",null,null);}catch(HttpApi.UserAction x){e=x;}
+            check(e!=null&&!(e instanceof HttpApi.TooLarge)&&http.calls==2&&!OpenRouterClient.NO_FLAC.contains(mai),"Rejected WAV retried again or remembered: "+e);
+            // 4. Un audio que ya salió en WAV (teléfono sin FLAC) no se «reintenta en WAV».
+            FakeAudio already=new FakeAudio(5000){@Override public OrAudio.Built build(File a,List<File> anchors,File outBase,HttpApi cancel)throws Exception{return make(a,anchors,outBase,cancel,"wav");}};
+            http=new Fake().reply(400,corrupt);e=null;
+            try{client(c,http,already,new ArrayList<>()).transcribe(audio,config(mai,true),"es",null,null);}catch(HttpApi.UserAction x){e=x;}
+            check(e!=null&&http.calls==1,"A WAV upload was retried as WAV");
+        }finally{OpenRouterClient.NO_FLAC.remove(mai);}
+    }
+
+    // ---------- Segunda ronda: «sin tiempos» se aprende en la primera respuesta, y el costo descartado no se pierde ----------
+    private static void untimed(Context c,File audio)throws Exception{
+        String fish="fish-audio/transcribe-1-pro",grok="x-ai/grok-stt-1.0",nova="deepgram/nova-3";
+        List<String[]> refs=Collections.singletonList(new String[]{"voz_1",url(bytes(900)),"block0:0","Persona 1"});
+        try{
+            // 1. Parte 1 sin anclas y con marcas de voz sin tiempos: se anota el modelo ya, y la respuesta lo dice (_timed=false)
+            // para que el motor no saque muestras de tiempos repartidos.
+            Fake http=new Fake().reply(200,"{\"text\":\"<|speaker:1|>Hola a todos<|speaker:2|>Buenas tardes\"}");FakeAudio fake=new FakeAudio(10_000);
+            JSONObject out=client(c,http,fake,new ArrayList<>()).transcribe(audio,config(fish,true),"es",null,null);
+            check(OpenRouterClient.NO_TIMES.contains(fish)&&!out.getBoolean("_timed")&&out.getBoolean("_diarized")&&contract(out).length()==2,"Model without times not learned from the first answer: "+out);
+            // Las partes que siguen ya no llevan anclas (no se pagan dos veces).
+            http=new Fake().reply(200,"{\"text\":\"<|speaker:1|>Sigo\"}");fake=new FakeAudio(10_000,new long[]{0,8000});
+            client(c,http,fake,new ArrayList<>()).transcribe(audio,config(fish,true),"es",refs,null);
+            check(http.calls==1&&fake.asked.equals(Collections.singletonList(0)),"Parts after an untimed answer still carried anchors");
+            // 2. Un silencio (texto vacío) no es prueba de que el modelo no dé tiempos.
+            http=new Fake().reply(200,"{\"text\":\"\"}");
+            out=client(c,http,new FakeAudio(10_000),new ArrayList<>()).transcribe(audio,config(grok,true),"es",null,null);
+            check(!OpenRouterClient.NO_TIMES.contains(grok)&&contract(out).length()==0,"Silence marked the model as untimed");
+            // 3. Una respuesta con tiempos lo dice (_timed=true).
+            http=new Fake().reply(200,new JSONObject().put("segments",list(seg(0,0.2,1.8,"Hola"))).toString());
+            out=client(c,http,new FakeAudio(10_000),new ArrayList<>()).transcribe(audio,config(grok,true),"es",null,null);
+            check(out.getBoolean("_timed"),"Timed answer not flagged as timed");
+            // 4. Envío cobrado y descartado (sin tiempos, con anclas) cuyo reenvío falla: su costo llega al motor igual.
+            List<Double> billed=new ArrayList<>();
+            http=new Fake().reply(200,"{\"text\":\"esta es mi voz hola\",\"usage\":{\"cost\":0.002}}").reply(503,"{\"error\":{\"code\":503,\"message\":\"Provider returned error\"}}");
+            http.onBilled=billed::add;Exception e=null;
+            try{client(c,http,new FakeAudio(10_000,new long[]{0,8000}),new ArrayList<>()).transcribe(audio,config(nova,true),"es",refs,null);}catch(IOException x){e=x;}
+            check(e!=null&&http.calls==2&&billed.size()==1&&near(billed.get(0),0.002),"Cost of a discarded request lost when the resend failed: "+billed);
+            // … y si el reenvío sale bien, va en la respuesta (no se avisa aparte: se contaría dos veces).
+            OpenRouterClient.NO_TIMES.remove(nova);billed.clear();
+            http=new Fake().reply(200,"{\"text\":\"esta es mi voz hola\",\"usage\":{\"cost\":0.002}}").reply(200,"{\"text\":\"hola\",\"usage\":{\"cost\":0.001}}");http.onBilled=billed::add;
+            out=client(c,http,new FakeAudio(10_000,new long[]{0,8000}),new ArrayList<>()).transcribe(audio,config(nova,true),"es",refs,null);
+            check(billed.isEmpty()&&near(out.getJSONObject("usage").getDouble("cost"),0.003),"Discarded cost reported twice: "+billed);
+        }finally{OpenRouterClient.NO_TIMES.remove(fish);OpenRouterClient.NO_TIMES.remove(grok);OpenRouterClient.NO_TIMES.remove(nova);}
+    }
+
+    // ---------- Segunda ronda: la etapa «Preparando audio» ----------
+    static void preparing(Context c)throws Exception{
+        File audio=write(new File(c.getCacheDir(),"or-check-audio.m4a"),bytes(2000));String mai="microsoft/mai-transcribe-2";
+        try{
+            // 1. El cliente avisa cuándo empieza y termina, y el envío dice «preparando» mientras se arma el audio.
+            Fake http=new Fake().reply(200,new JSONObject().put("segments",list(seg(0,0.2,1.8,"Hola"))).toString());List<String> events=new ArrayList<>();
+            http.onPreparing=(begin,ok)->events.add(begin?"start":ok?"ok":"fail");FakeAudio fake=new FakeAudio(5000);
+            client(c,http,fake,new ArrayList<>()).transcribe(audio,config(mai,true),"es",null,null);
+            check(events.equals(Arrays.asList("start","ok"))&&fake.phases.equals(Collections.singletonList(HttpApi.PREPARE))&&http.phase==HttpApi.IDLE&&http.lastActivity>0,"Preparing stage not announced: "+events+" "+fake.phases);
+            // 2. Una conversión que falla: se avisa el fin (sin éxito), cuenta como intento (IOException, no UserAction) con un
+            // motivo claro, y no se envía nada.
+            events.clear();http=new Fake();http.onPreparing=(begin,ok)->events.add(begin?"start":ok?"ok":"fail");
+            Exception e=null;try{client(c,http,new FailingAudio(new IllegalStateException("codec")),new ArrayList<>()).transcribe(audio,config(mai,true),"es",null,null);}catch(Exception x){e=x;}
+            check(e instanceof IOException&&!(e instanceof InterruptedIOException)&&has(e.getMessage(),"preparar el audio")&&http.calls==0&&events.equals(Arrays.asList("start","fail")),"Failed conversion mishandled: "+e+" "+events);
+            // 3. Lo que reintentar no arregla se le dice al usuario de inmediato: audio vacío, sin pista de audio, disco lleno.
+            http=new Fake();e=null;try{client(c,http,new FailingAudio(new OrAudio.TooShort()),new ArrayList<>()).transcribe(audio,config(mai,true),"es",null,null);}catch(Exception x){e=x;}
+            check(e instanceof HttpApi.UserAction&&has(e.getMessage(),"vacío")&&http.calls==0,"Empty audio should ask the user, not retry: "+e);
+            e=null;try{client(c,new Fake(),new FailingAudio(new OrAudio.NoTrack()),new ArrayList<>()).transcribe(audio,config(mai,true),"es",null,null);}catch(Exception x){e=x;}
+            check(e instanceof HttpApi.UserAction&&has(e.getMessage(),"pista de audio"),"Audio without a track should ask the user: "+e);
+            // Disco lleno con anclas: no se intenta otra vez sin ellas (el problema no son las muestras).
+            List<String[]> refs=Collections.singletonList(new String[]{"voz_1",url(bytes(900)),"block0:0","Persona 1"});
+            FailingAudio full=new FailingAudio(new HttpApi.UserAction(OrAudio.NO_SPACE));e=null;
+            try{client(c,new Fake(),full,new ArrayList<>()).transcribe(audio,config(mai,true),"es",refs,null);}catch(Exception x){e=x;}
+            check(e instanceof HttpApi.UserAction&&has(e.getMessage(),"espacio")&&full.asked.equals(Collections.singletonList(1)),"Disk full retried without the anchors: "+full.asked);
+            // 4. El vigilante cortó una preparación trabada: llega tal cual (no como falla del FLAC ni como «pausa de Android»).
+            e=null;try{client(c,new Fake(),new FailingAudio(new HttpApi.PrepareStalled("preparar el audio tardó más de 03:00")),new ArrayList<>()).transcribe(audio,config(mai,true),"es",null,null);}catch(Exception x){e=x;}
+            check(e instanceof HttpApi.PrepareStalled&&!Transcriber.localCut(e),"Stalled preparation not reported as such: "+e);
+            // 5. HttpApi: abortPreparing hace fallar el próximo check() solo mientras dura esa preparación.
+            HttpApi h=new HttpApi();h.startPreparing();check(h.phase==HttpApi.PREPARE,"Phase not PREPARE while preparing");
+            h.abortPreparing("tardó");boolean stopped=false;try{h.check();}catch(HttpApi.PrepareStalled x){stopped=true;}
+            check(stopped,"Aborted preparation did not stop the conversion");
+            h.endPreparing(false);h.check();check(h.phase==HttpApi.IDLE&&h.lastActivity>0&&HttpApi.PHASES[h.lastPhase].equals("prepare"),"Preparation end not recorded");
         }finally{audio.delete();}
+    }
+
+    // ---------- Segunda ronda: Transcript con partes que vienen con y sin voces ----------
+    static void memory()throws Exception{
+        // Parte 1 en silencio (sin voces) y parte 2 con voces: la transcripción queda «con voces» (antes, toda como «Texto»).
+        JSONObject silent=new JSONObject().put("_diarized",false).put("segments",new JSONArray());
+        JSONObject voiced=new JSONObject().put("_diarized",true).put("segments",list(seg("0",0,2,"Hola"),seg("1",2,4,"Chao")));
+        Transcript t=Transcript.fromParts(Arrays.asList(silent,voiced),Arrays.asList(0d,600d));
+        check(t.diarized()&&t.speakers().size()==2&&!t.speakers().containsValue("Texto"),"A silent first part made the whole transcript text-only");
+        JSONObject textOnly=new JSONObject().put("_diarized",false).put("segments",list(seg("text",0,2,"Hola")));
+        check(!Transcript.fromParts(Arrays.asList(textOnly,new JSONObject(textOnly.toString())),Arrays.asList(0d,600d)).diarized(),"Text-only parts became diarized");
+        // Respuestas de OpenAI (sin "_diarized") siguen como siempre: con voces.
+        check(Transcript.fromParts(Collections.singletonList(new JSONObject().put("segments",list(seg("A",0,1,"Hola")))),Collections.singletonList(0d)).diarized(),"OpenAI-style part not diarized");
     }
 
     // ---------- Reglas del motor (sin teléfono) ----------
@@ -502,6 +652,51 @@ final class OpenRouterChecks {
         check(Pricing.real(null)<0&&Pricing.real(new JSONObject())<0&&near(Pricing.real(new JSONObject().put("costUsd",0.25)),0.25),"Real cost not read from the state");
     }
 
+    // ---------- Segunda ronda: ninguna transcripción da vueltas más de una hora sin avisar ----------
+    static void retries()throws Exception{
+        long now=1_000_000_000L,min=60_000L;
+        // Que el proveedor no responda (el vigilante cortó con el teléfono funcionando) gasta un intento: antes eran 12 «gratis».
+        Transcriber.Outcome o=Transcriber.outcome(new JSONObject(),new IOException("x",new HttpApi.Stalled("OpenRouter no respondió en 03:00",false)),now);
+        check(!o.cut&&!o.local&&o.attempts==1&&o.again&&!Transcriber.localCut(new HttpApi.Stalled("x",false)),"Provider timeout treated as a phone cut");
+        // El envío dejó de avanzar (o Android congeló la app mientras esperaba): no gasta un intento…
+        o=Transcriber.outcome(new JSONObject(),new HttpApi.Stalled("el envío dejó de avanzar"),now);
+        check(o.cut&&o.local&&o.attempts==0&&o.cuts==1&&o.cutSince==now,"Phone cut not free: "+o.attempts);
+        o=Transcriber.outcome(new JSONObject().put("localCuts",2).put("cutSince",now-5*min),new HttpApi.Stalled("x"),now);
+        check(o.local&&o.cutSince==now-5*min,"Phone-cut window not kept");
+        // … salvo que se repita durante más de 15 min sin avanzar, o más de 12 veces.
+        o=Transcriber.outcome(new JSONObject().put("localCuts",3).put("cutSince",now-16*min),new java.net.SocketException("Software caused connection abort"),now);
+        check(o.cut&&!o.local&&o.attempts==1&&o.cuts==4&&o.cutSince==now-16*min,"Phone cuts free for more than 15 min");
+        o=Transcriber.outcome(new JSONObject().put("localCuts",12).put("cutSince",now-min),new HttpApi.Stalled("x"),now);
+        check(!o.local&&o.attempts==1&&o.cuts==13,"More than 12 free phone cuts");
+        // Una parte lista vuelve a cero la cuenta (localCuts=0): la ventana empieza de nuevo aunque quede una fecha vieja.
+        o=Transcriber.outcome(new JSONObject().put("localCuts",0).put("cutSince",now-60*min),new HttpApi.Stalled("x"),now);
+        check(o.local&&o.cutSince==now,"Old phone-cut window reused after progress");
+        // Al quinto intento se rinde (y avisa). Una preparación trabada cuenta como intento.
+        o=Transcriber.outcome(new JSONObject().put("attempts",4),new IOException("OpenRouter no está disponible temporalmente (502)."),now);
+        check(o.attempts==5&&!o.again,"Fifth failure did not give up");
+        o=Transcriber.outcome(new JSONObject(),new HttpApi.PrepareStalled("preparar el audio tardó más de 03:00"),now);
+        check(!o.cut&&o.attempts==1,"Stalled preparation retried for free");
+        // Peor caso de un audio corto al que nunca le responden: 15 min de cortes gratis + 5 intentos de 3 min con sus esperas
+        // (20 s, 1, 2 y 5 min). Menos de una hora, y termina con un aviso.
+        long worst=Transcriber.LOCAL_CUT_WINDOW_MS+5*Transcriber.responseLimit("openrouter",30_000)+(20+60+120+300)*1000L;
+        check(worst<60*min,"Worst case for a short audio still over an hour: "+worst);
+        // Tiempos de la etapa «Preparando audio» y del envío con OpenRouter: un bloque de 12 min cabe en la tarea de fondo.
+        check(Transcriber.prepEstimate(12*min)==41_000&&Transcriber.prepareLimit(12*min)==6*min&&Transcriber.prepareLimit(30_000)==3*min,"Preparation estimates wrong");
+        check(Transcriber.sendEstimate("openrouter",12*min)<=Transcriber.JOB_SEND_LIMIT_MS&&Transcriber.sendEstimate("openrouter",20*min)>Transcriber.JOB_SEND_LIMIT_MS
+            &&Transcriber.sendEstimate("openrouter",5*min)>=Transcriber.prepEstimate(5*min)+90_000&&Transcriber.sendEstimate("openai",12*min)==Transcriber.sendEstimate(12*min),"Send estimate by provider wrong");
+        // 413 en «sin cortar»: la mitad del audio completo (18 min → 9), no la de un bloque normal (4,5).
+        check(Transcriber.orTarget(18*min,12*min,true,true)==9*min&&Transcriber.orTarget(18*min,12*min,true,false)==Transcriber.orBlockMs(18*min,12*min,true)
+            &&Transcriber.orTarget(18*min,12*min,false,false)==9*min&&Transcriber.orTarget(18*min,12*min,true,false)==9*min/2,"Halving after a single-request 413 wrong");
+        // Lo ya cobrado antes de achicar los bloques no se pierde al reiniciar las métricas.
+        JSONObject s=new JSONObject().put("costUsd",0.3).put("costCarry",0.2);Transcriber.restartCost(s);
+        check(near(s.optDouble("costUsd",-1),0.2)&&!s.has("costCarry"),"Carried cost lost on restart");
+        s=new JSONObject().put("costUsd",0.3);Transcriber.restartCost(s);check(!s.has("costUsd"),"Cost of the discarded pass kept");
+        // Costo estimado con las muestras de voz que viajan antes de cada parte (hasta 4 por envío).
+        Models.Recipe maiRecipe=Models.recipe("microsoft/mai-transcribe-2");long anchor=Voices.MAX_MS+OrAudio.GAP_MS;
+        check(Pricing.orBilledMs(60_000,2,maiRecipe)==60_000+2*anchor&&Pricing.orBilledMs(30*min,1,maiRecipe)==30*min+3*anchor&&Pricing.orBilledMs(60_000,9,maiRecipe)==60_000+4*anchor
+            &&Pricing.orBilledMs(60_000,0,maiRecipe)==60_000&&Pricing.orBilledMs(60_000,2,Models.recipe("openai/gpt-transcribe"))==60_000,"Billed estimate with anchors wrong");
+    }
+
     // ---------- En el teléfono: cliente por proveedor, costos y el motor completo ----------
     static void device(Context c,Recording r)throws Exception{
         check(TranscribeClient.of(c,new HttpApi(),config("deepgram/nova-3",true)) instanceof OpenRouterClient
@@ -518,20 +713,54 @@ final class OpenRouterChecks {
     }
     private static String log(JSONObject state){StringBuilder b=new StringBuilder();JSONArray log=state.optJSONArray("log");for(int i=0;log!=null&&i<log.length();i++)b.append(log.optJSONObject(i).optString("m")).append('\n');return b.toString();}
     /**
+     * Lo que la prueba del motor aparta del teléfono y devuelve al final: preferencias (con la clave real), voces guardadas
+     * y el catálogo de modelos. Queda escrito en disco (preferencias «orcheck-backup», carpeta «voices-backup-orcheck» y
+     * «orcheck-catalog.json») antes de tocar nada: si una corrida murió a mitad (se cerró el emulador, adb la mató), la
+     * siguiente lo devuelve primero, en vez de borrar el respaldo con las voces reales (hallazgo de la revisión 0.8).
+     */
+    private static final String[] KEYS={"provider","orSpeakersModel","orTextModel","orAutoSpeakers","speakersMode","noteAuto","openrouter_keyEncrypted","openrouter_keyIv"};
+    private static final class Aside{
+        final SharedPreferences prefs,backup;final File voices,aside,catalog,copy;
+        Aside(Context c){prefs=new Settings(c).prefs;backup=c.getSharedPreferences("orcheck-backup",Context.MODE_PRIVATE);
+            voices=new File(c.getFilesDir(),"voices");aside=new File(c.getFilesDir(),"voices-backup-orcheck");catalog=Models.file(c);copy=new File(c.getFilesDir(),"orcheck-catalog.json");}
+        /** Una corrida anterior que no terminó: se devuelve lo que dejó apartado. */
+        void recover(){
+            if(backup.getBoolean("saved",false))putBack();
+            if(aside.exists()){deleteTree(voices);if(!aside.renameTo(voices))throw new AssertionError("Could not recover the voices set aside by a previous run");}
+        }
+        void save()throws Exception{
+            if(catalog.isFile())java.nio.file.Files.copy(catalog.toPath(),copy.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);else copy.delete();
+            SharedPreferences.Editor e=backup.edit().clear();Map<String,?> all=prefs.getAll();
+            for(String key:KEYS){Object v=all.get(key);if(v instanceof String)e.putString("v_"+key,(String)v);else if(v instanceof Boolean)e.putBoolean("v_"+key,(Boolean)v);}
+            if(!e.putBoolean("catalog",catalog.isFile()).putBoolean("saved",true).commit())throw new AssertionError("Could not save the settings backup");
+            if(voices.exists()&&!voices.renameTo(aside))throw new AssertionError("Could not set the real voices aside");
+        }
+        void putBack(){
+            Map<String,?> saved=backup.getAll();SharedPreferences.Editor e=prefs.edit();
+            for(String key:KEYS){Object v=saved.get("v_"+key);if(v instanceof String)e.putString(key,(String)v);else if(v instanceof Boolean)e.putBoolean(key,(Boolean)v);else e.remove(key);}
+            e.commit();
+            try{if(backup.getBoolean("catalog",false)&&copy.isFile())java.nio.file.Files.copy(copy.toPath(),catalog.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                else if(!backup.getBoolean("catalog",false))new android.util.AtomicFile(catalog).delete();}catch(IOException ignored){}
+            Models.forget();
+        }
+        void restore(){
+            putBack();
+            deleteTree(voices);if(aside.exists()&&!aside.renameTo(voices))throw new AssertionError("Could not restore the real voices");
+            backup.edit().clear().commit();copy.delete();
+        }
+    }
+    /**
      * El motor completo (Transcriber.process) con OpenRouter como proveedor y todo simulado: la primera respuesta es un
      * 413 (envío muy grande) y la segunda, la transcripción. Comprueba el 413 sin gastar intento, el costo real en el
-     * estado, el perfil y la bitácora. Las preferencias, la clave y las voces reales se apartan y se devuelven al final.
+     * estado, el perfil, la etapa «Preparando audio» y la bitácora; que la mitad tras un 413 es solo de ese modelo; y que
+     * «Automático» no cambia de modelo a mitad de una transcripción. Lo real del teléfono se aparta y se devuelve (Aside).
      */
     static void engine(Context c,Recording r)throws Exception{
-        Settings settings=new Settings(c);SharedPreferences prefs=settings.prefs;
-        String[] keys={"provider","orSpeakersModel","noteAuto","openrouter_keyEncrypted","openrouter_keyIv"};
-        Map<String,Object> before=new HashMap<>();Map<String,?> all=prefs.getAll();for(String key:keys)if(all.containsKey(key))before.put(key,all.get(key));
-        File voices=new File(c.getFilesDir(),"voices"),aside=new File(c.getFilesDir(),"voices-backup-orcheck");
-        deleteTree(aside);boolean had=voices.exists();
-        if(had&&!voices.renameTo(aside))throw new AssertionError("Could not set the real voices aside");
-        OpenRouterClient.Builder real=OpenRouterClient.defaultBuilder;Recording first=null,second=null;
+        Settings settings=new Settings(c);SharedPreferences prefs=settings.prefs;String mai="microsoft/mai-transcribe-2",nova="deepgram/nova-3";
+        Aside kept=new Aside(c);kept.recover();kept.save();
+        OpenRouterClient.Builder real=OpenRouterClient.defaultBuilder;Recording first=null,second=null,third=null;
         try{
-            prefs.edit().putString("provider","openrouter").putString("orSpeakersModel","microsoft/mai-transcribe-2").putBoolean("noteAuto",false).commit();
+            prefs.edit().putString("provider","openrouter").putString("orSpeakersModel",mai).putBoolean("noteAuto",false).commit();
             settings.saveKeyFor("openrouter","sk-or-prueba-no-es-una-clave-real");
             FakeAudio fake=new FakeAudio(r.duration);OpenRouterClient.defaultBuilder=fake;
             first=copy(c,r,"Prueba OpenRouter");String id=first.id;
@@ -543,12 +772,15 @@ final class OpenRouterChecks {
             JSONObject st=FilesStore.state(c,id);String log=log(st);
             check(http.calls==2&&Transcript.exists(c,id),"Engine did not retry after a 413, or did not save the transcript. Log:\n"+log);
             Transcript t=Transcript.load(c,id);JSONArray segs=t.segments();
-            check(segs.length()==2&&speaker(segs,0).equals("0")&&speaker(segs,1).equals("1")&&t.diarized()&&t.data.optString("provider").equals("openrouter")&&t.data.optString("model").equals("microsoft/mai-transcribe-2"),"Transcript from OpenRouter wrong: "+t.data);
-            // El 413 no gasta un intento: los bloques bajan a la mitad una vez ("orHalf") y sigue de inmediato.
-            check(st.optBoolean("orHalf")&&!st.optBoolean("requested")&&!st.optBoolean("failed")&&st.optInt("attempts")==0,"413 should halve the blocks without spending an attempt: "+st.optBoolean("orHalf")+" "+st.optInt("attempts"));
+            check(segs.length()==2&&speaker(segs,0).equals("0")&&speaker(segs,1).equals("1")&&t.diarized()&&t.data.optString("provider").equals("openrouter")&&t.data.optString("model").equals(mai),"Transcript from OpenRouter wrong: "+t.data);
+            // El 413 no gasta un intento: los bloques bajan a la mitad una vez ("orHalf", con el modelo que lo respondió) y sigue de inmediato.
+            check(mai.equals(st.optString("orHalf"))&&!st.optBoolean("requested")&&!st.optBoolean("failed")&&st.optInt("attempts")==0&&!st.has("costCarry"),"413 should halve the blocks without spending an attempt: "+st.optString("orHalf")+" "+st.optInt("attempts"));
             // Costo real y métricas del estado.
             check(near(st.optDouble("costUsd",-1),0.0021)&&near(Pricing.real(st),0.0021)&&near(st.optDouble("usageSec",-1),5.2)&&st.optInt("blocksDone")==1&&st.optLong("bytesSent")==http.lastLength,"Real cost or metrics not stored: "+st.optDouble("costUsd",-1)+" "+st.optDouble("usageSec",-1)+" "+st.optLong("bytesSent"));
-            check(st.optString("provider").equals("openrouter")&&st.optString("model").equals("microsoft/mai-transcribe-2")&&st.optString("profile").contains(OpenRouterClient.PROFILE)&&st.optString("profile").contains("|half"),"Profile does not carry the OpenRouter format and block size");
+            check(st.optString("provider").equals("openrouter")&&st.optString("model").equals(mai)&&st.optString("profile").contains(OpenRouterClient.PROFILE)&&st.optString("profile").contains("|half"),"Profile does not carry the OpenRouter format and block size");
+            // Etapa «Preparando audio»: en la bitácora (antes de «Enviando…») y en el estado, sin quedar «preparando» al terminar.
+            check(has(log,"Preparando el audio para enviarlo")&&has(log,"Enviando audio · preparado en")&&log.indexOf("Preparando el audio para enviarlo")<log.indexOf("Enviando audio · preparado en")
+                &&st.optInt("prepCount")==1&&st.optInt("prepping")==0&&st.has("prepMsSum")&&fake.phases.equals(Arrays.asList(HttpApi.PREPARE,HttpApi.PREPARE)),"Preparing stage missing from the log or the state:\n"+log);
             check(has(log,"OpenRouter está transcribiendo")&&has(log,"partes de la mitad")&&has(log,"Transcripción lista")&&!has(log,"sk-or-"),"Engine log wrong:\n"+log);
             // Lo que se envió: receta Azure con voces, sin anclas (no hay voces guardadas), y el audio «convertido».
             JSONObject sent=http.sent.get(1);
@@ -557,9 +789,10 @@ final class OpenRouterChecks {
             // «Volver a transcribir» con OpenRouter: disponible, con los topes del modelo.
             Retranscribe.Facts facts=Retranscribe.facts(c,first);
             check(facts.openrouter&&!facts.openai&&facts.hasKey&&facts.canSeparate&&facts.transcribed&&facts.saved==0&&facts.singleMaxMs==20*60_000L&&facts.singleMaxBytes==Long.MAX_VALUE&&Retranscribe.singleMaxMs(c)==20*60_000L,"Retranscribe facts for OpenRouter wrong");
-            // El costo real vuelve con la versión anterior, y «orHalf» no pasa al intento nuevo.
+            // El costo real vuelve con la versión anterior, y «orHalf» (ni lo arrastrado) no pasa al intento nuevo.
+            FilesStore.update(c,id,s->s.put("costCarry",0.1));
             Retranscribe.prepare(c,first,Retranscribe.Mode.TEXT,null);st=FilesStore.state(c,id);
-            check(!st.has("orHalf")&&near(st.getJSONObject("retranscribe").getJSONObject("before").optDouble("costUsd",-1),0.0021),"Real cost not kept with the previous version: "+st.optJSONObject("retranscribe"));
+            check(!st.has("orHalf")&&!st.has("costCarry")&&near(st.getJSONObject("retranscribe").getJSONObject("before").optDouble("costUsd",-1),0.0021),"Real cost not kept with the previous version: "+st.optJSONObject("retranscribe"));
             FilesStore.update(c,id,s->s.put("costUsd",0.5));
             Retranscribe.restorePrevious(c,id);
             check(near(Pricing.real(FilesStore.state(c,id)),0.0021),"Real cost of the previous version not restored");
@@ -569,15 +802,28 @@ final class OpenRouterChecks {
             FilesStore.update(c,other,s->s.put("requested",true).put("speakers",true).put("queuedAt",System.currentTimeMillis()));
             Fake full=new Fake().reply(413,"").reply(413,"");full.jobId=other;boolean tooLarge=false;
             try{new Transcriber(c,full,0).process(second);}catch(HttpApi.TooLarge e){tooLarge=true;}
-            check(tooLarge&&full.calls==2&&!Transcript.exists(c,other)&&FilesStore.state(c,other).optBoolean("orHalf"),"A second 413 should reach the user after one halving");
+            check(tooLarge&&full.calls==2&&!Transcript.exists(c,other)&&mai.equals(FilesStore.state(c,other).optString("orHalf")),"A second 413 should reach the user after one halving");
+            // La mitad es cosa de ese modelo: con otro modelo y «Reintentar», los bloques vuelven a su tamaño normal.
+            prefs.edit().putString("orSpeakersModel",nova).commit();
+            FilesStore.update(c,other,s->s.put("requested",true).put("failed",false));
+            JSONObject words=new JSONObject().put("words",list(word(0,0.1,0.4,"Hola"),word(1,1.3,1.6,"Buenas")));
+            Fake retry=new Fake().reply(200,words.toString());retry.jobId=other;
+            new Transcriber(c,retry,0).process(second);st=FilesStore.state(c,other);
+            check(retry.calls==1&&Transcript.exists(c,other)&&nova.equals(st.optString("model"))&&!st.optString("profile").contains("|half")&&retry.sent.get(0).getJSONObject("provider").getJSONObject("options").has("deepgram"),"Halving of one model applied to another: "+st.optString("profile"));
+
+            // «Automático» cambió de recomendación con una parte ya lista: la transcripción termina con el modelo con que empezó.
+            long now=System.currentTimeMillis();
+            FilesStore.write(Models.file(c),new JSONObject().put("v",1).put("fetchedAt",now).put("models",new JSONArray().put(new JSONObject().put("id",mai).put("name","Microsoft: MAI Transcribe 2").put("created",1).put("prompt",0.10).put("expires",0))));Models.forget();
+            prefs.edit().putString("orSpeakersModel",Models.AUTO).putString("orAutoSpeakers",nova).commit();
+            third=copy(c,r,"Prueba Automático");String auto=third.id;
+            FilesStore.update(c,auto,s->s.put("requested",true).put("speakers",true).put("queuedAt",now).put("provider","openrouter").put("model",mai).put("blocksDone",1));
+            Fake pinned=new Fake().reply(200,answer.toString());pinned.jobId=auto;
+            new Transcriber(c,pinned,0).process(third);st=FilesStore.state(c,auto);
+            check(pinned.calls==1&&mai.equals(st.optString("model"))&&pinned.sent.get(0).getString("model").equals(mai)&&pinned.sent.get(0).getJSONObject("provider").getJSONObject("options").has("azure")&&has(log(st),"termina con el que empezó"),"Automatic switched models halfway through a transcription: "+st.optString("model"));
         }finally{
             OpenRouterClient.defaultBuilder=real;
-            if(first!=null)first.delete(c);if(second!=null)second.delete(c);
-            deleteTree(voices);
-            SharedPreferences.Editor e=prefs.edit();
-            for(String key:keys){Object v=before.get(key);if(v instanceof String)e.putString(key,(String)v);else if(v instanceof Boolean)e.putBoolean(key,(Boolean)v);else e.remove(key);}
-            e.commit();
-            if(had&&!aside.renameTo(voices))throw new AssertionError("Could not restore the real voices");
+            if(first!=null)first.delete(c);if(second!=null)second.delete(c);if(third!=null)third.delete(c);
+            kept.restore();
         }
     }
 }
