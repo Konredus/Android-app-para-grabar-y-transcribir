@@ -32,7 +32,8 @@ import java.util.concurrent.*;
  * rendirse, avisa. Diagnostics guarda en qué paso quedó cada envío fallido ("part_failed", "job_retry", "job_failed").
  *
  * 0.8.0, tercera ronda: «Preparando el audio» muestra su avance en % ("prepPct" en el estado y la notificación); una
- * grabación que espera Wi-Fi no usa datos móviles salvo que se le permita a ella ("mobileOk", ver Pipeline); y «Automático»
+ * grabación que espera Wi-Fi no usa datos móviles salvo que se le permita a ella ("mobileOk", ver Pipeline; se revisa antes
+ * de cada parte, ver WaitWifi); y «Automático»
  * sigue la regla única de Models.resume para no cambiar de modelo a mitad de una transcripción.
  */
 final class Transcriber {
@@ -110,12 +111,36 @@ final class Transcriber {
     private final Set<String> waitingForeground=ConcurrentHashMap.newKeySet();
     /** La primera grabación que quedó esperando la app abierta, o null. */
     String waitingForeground(){for(String id:waitingForeground)return id;return null;}
-    /** Grabaciones que esta ronda dejó esperando Wi-Fi (sin permiso para usar datos móviles). */
+    /** Grabaciones que esta ronda saltó al comenzarlas porque esperan Wi-Fi (sin permiso para usar datos móviles). */
     private final Set<String> waitingWifi=ConcurrentHashMap.newKeySet();
-    /** ¿Lo único que queda pedido espera Wi-Fi (o la app abierta)? Entonces no sirve reintentar en esta ronda. */
+    /**
+     * En esta ronda se fue el Wi-Fi a mitad de una grabación. No cuenta para onlyWaitingWifi: el servicio en primer plano o
+     * la transferencia iniciada por el usuario esperan ahí a que vuelva (TranscribeService.waitBeforeRetry, con el aviso)
+     * en vez de cederla a la tarea de fondo, que Android pausa; con la app cerrada, ninguno de los dos se vuelve a abrir.
+     */
+    volatile boolean lostWifi;
+    /**
+     * «Solo con Wi-Fi» y ahora hay datos móviles, visto justo antes de enviar una parte (0.8.0, tercera ronda): antes se
+     * miraba solo al empezar cada grabación, y lo que quedaba se subía por datos móviles. No gasta un intento y las partes
+     * listas se conservan: la grabación queda esperando Wi-Fi, con el aviso «Usar datos móviles».
+     */
+    static final class WaitWifi extends Exception{WaitWifi(){super("Esperando Wi-Fi");}}
+    /**
+     * ¿Lo único que queda pedido espera Wi-Fi desde el comienzo de la ronda (o la app abierta)? Entonces no sirve reintentar
+     * en esta ronda. Una a la que se le fue el Wi-Fi a mitad no está en waitingWifi (ver lostWifi): da false.
+     */
     boolean onlyWaitingWifi(){
-        if(waitingWifi.isEmpty())return false;
-        for(Recording r:Recording.list(c))if(FilesStore.state(c,r.id).optBoolean("requested")&&!waitingWifi.contains(r.id)&&!waitingForeground.contains(r.id))return false;
+        List<String> requested=new ArrayList<>();for(Recording r:Recording.list(c))if(FilesStore.state(c,r.id).optBoolean("requested"))requested.add(r.id);
+        return onlyWaitingWifi(requested,waitingWifi,waitingForeground,id->Pipeline.waitsForWifi(c,id));
+    }
+    /**
+     * La regla, separada del teléfono para poder probarla. stillWaits: si la grabación sigue esperando Wi-Fi AHORA, no solo
+     * cuando la vio la ronda: si entretanto se tocó «Usar datos móviles ahora» o volvió el Wi-Fi, se reintenta en este mismo
+     * trabajo (antes se cedía a la tarea de fondo, el camino lento del diagnóstico del 2026-10-01).
+     */
+    static boolean onlyWaitingWifi(Collection<String> requested,Set<String> wifi,Set<String> foreground,java.util.function.Predicate<String> stillWaits){
+        if(wifi.isEmpty())return false;
+        for(String id:requested){if(foreground.contains(id))continue;if(!wifi.contains(id)||!stillWaits.test(id))return false;}
         return true;
     }
     /** Cortes del propio teléfono que se reintentan sin gastar intentos; pasado este número sí cuentan. */
@@ -181,16 +206,13 @@ final class Transcriber {
                 // «Solo con Wi-Fi» y ahora hay datos móviles (0.8.0, tercera ronda): esta grabación espera, salvo que se hayan
                 // permitido los datos móviles para ella («Usar datos móviles ahora»). Las demás siguen; la que espera la
                 // retoma la tarea de fondo al haber Wi-Fi. Antes, un trabajo que empezó con Wi-Fi seguía con datos móviles.
-                if(Pipeline.waitsForWifi(c,r.id)){
-                    waitingWifi.add(r.id);retry=true;
-                    Pipeline.log(c,r.id,"En espera de Wi-Fi · ahora hay datos móviles: puedes usarlos para esta grabación desde su detalle");
-                    Pipeline.waitingWifi(c,r.id);
-                    continue;
-                }
+                if(Pipeline.waitsForWifi(c,r.id)){waitWifi(r,false);retry=true;continue;}
                 Pipeline.clearWaitingWifi(c,r.id);
                 http.jobId=r.id;currentId=r.id;failedStage="";
                 try{process(r);}
                 catch(Yield y){retry=true;Pipeline.log(c,r.id,"Pausa corta para no exceder el límite de Android · continúa enseguida");break;}
+                // Se fue el Wi-Fi antes de enviar una parte: espera como las demás (ver WaitWifi).
+                catch(WaitWifi w){waitWifi(r,true);retry=true;}
                 catch(NeedsForeground f){
                     // Sigue pedida; no se reintenta desde aquí (daría vueltas sin avanzar): la retoma el primer plano.
                     waitingForeground.add(r.id);
@@ -205,6 +227,9 @@ final class Transcriber {
                 catch(Exception e){
                     if(http.cancelled)break;
                     if(!r.audio(c).exists()||!FilesStore.state(c,r.id).optBoolean("requested"))continue;
+                    // Un envío que se cortó porque se fue el Wi-Fi («Solo con Wi-Fi» y ahora hay datos móviles) no es culpa del
+                    // proveedor ni se reintenta por datos móviles: espera el Wi-Fi sin gastar un intento, con el aviso.
+                    if(Pipeline.waitsForWifi(c,r.id)){waitWifi(r,true);retry=true;continue;}
                     JSONObject st=FilesStore.state(c,r.id);long now=System.currentTimeMillis();Outcome o=outcome(st,e,now);
                     sawLocalCut|=o.local;retry|=o.again;
                     String reason=describe(e);
@@ -236,6 +261,18 @@ final class Transcriber {
             if(!retry)for(Recording r:Recording.list(c))if(!waitingForeground.contains(r.id)&&FilesStore.state(c,r.id).optBoolean("requested")){retry=true;break;}
         }catch(Exception e){retry=true;Diagnostics.event("pipeline_failure",null,"error_class",e.getClass().getSimpleName());}
         return retry;
+    }
+    /**
+     * Esta grabación espera Wi-Fi («Solo con Wi-Fi» y ahora hay datos móviles): sigue pedida, no gasta un intento, sus partes
+     * listas se conservan y se avisa con la salida «Usar datos móviles». midway: se fue el Wi-Fi a mitad de la transcripción
+     * (ver lostWifi); si no, se saltó al comenzarla.
+     */
+    void waitWifi(Recording r,boolean midway){
+        if(midway)lostWifi=true;else waitingWifi.add(r.id);
+        Pipeline.log(c,r.id,midway?"Se fue el Wi-Fi a mitad del envío · no se usan datos móviles y las partes ya listas se conservan: puedes usarlos para esta grabación desde su detalle"
+            :"En espera de Wi-Fi · ahora hay datos móviles: puedes usarlos para esta grabación desde su detalle");
+        if(midway)Diagnostics.event("wifi_lost",r.id,"stage",failedStage,"net",Pipeline.networkName(c));
+        Pipeline.waitingWifi(c,r.id);
     }
     /** Traduce fallos técnicos a una causa comprensible. */
     private String describe(Exception e){
@@ -416,7 +453,7 @@ final class Transcriber {
                 boolean note=settings.noteAuto()&&transcript.hasText()&&canNote();
                 // Se guarda solo si nadie canceló entretanto: cancelar una repetición devuelve la versión anterior.
                 synchronized(FilesStore.LOCK){check(r);transcript.save(c,r.id);if(note)FilesStore.update(c,r.id,s->s.put("notePending",true));}
-            }finally{http.onUploaded=null;http.onProgress=null;http.onPreparing=null;http.onPrepareProgress=null;http.onBilled=null;}
+            }finally{http.onUploaded=null;http.onProgress=null;http.onPreparing=null;http.onPrepareProgress=null;http.onBilled=null;http.beforeSend=null;}
             // Los bloques se conservan entre intentos; se borran solo con la transcripción ya guardada.
             AudioParts.clearBlocks(c,r.id);
         }
@@ -524,8 +561,13 @@ final class Transcriber {
         if(budgetMs>0){long partEstimate=sendEstimate(config.provider,partMs);
             if(partEstimate>JOB_SEND_LIMIT_MS)throw new NeedsForeground(n>1?"El envío de la parte "+(i+1)+" de "+n:"El envío del audio");
             if(sentThisRun.get()&&System.currentTimeMillis()-started+partEstimate>JOB_SEND_LIMIT_MS)throw new Yield();}
+        // «Solo con Wi-Fi» se revisa antes de cada parte, no solo al empezar la grabación: si se fue el Wi-Fi (p. ej. mientras
+        // se enviaba otra parte), no se prepara ni se sube nada por datos móviles. La conexión lo revisa otra vez justo antes
+        // de enviar (HttpApi.beforeSend), porque preparar el audio puede tardar minutos.
+        HttpApi.Gate wifi=()->{if(Pipeline.waitsForWifi(c,r.id))throw new WaitWifi();};
+        wifi.pass();
         sentThisRun.set(true);
-        HttpApi h=http.child();h.jobId=r.id;
+        HttpApi h=http.child();h.jobId=r.id;h.beforeSend=wifi;
         // La espera escala con la duración: un bloque con separación de voces puede tardar varios minutos.
         // (Con OpenRouter no pasa de 6 min: ver responseLimit.)
         h.readTimeoutMs=(int)Math.min(router?6*60_000L:20*60_000L,Math.max(240_000L,120_000L+partMs));
@@ -594,6 +636,8 @@ final class Transcriber {
                 response=TranscribeClient.of(c,h,config).transcribe(part.file,config,settings.language(),null,delta);refs=null;
             }
         }catch(Exception e){
+            // Esperar el Wi-Fi no es un envío fallido: no se envió nada.
+            if(e instanceof WaitWifi)throw e;
             // Dónde quedó el envío que falló (preparar, subir, esperar o leer) y cuánto tardó: con eso se diagnostica un caso
             // «bloqueado» desde el informe de soporte. Solo nombres de clases y números, nada del usuario.
             failedStage=HttpApi.PHASES[h.lastPhase];

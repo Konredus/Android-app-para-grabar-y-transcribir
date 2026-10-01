@@ -244,6 +244,10 @@ final class Retranscribe {
                 // (Tampoco «orHalf»: que un envío fuera muy grande para el proveedor es cosa de ese intento y de ese modelo; ni
                 // «costCarry», lo ya cobrado de la pasada anterior antes de achicar los bloques.)
                 s.remove("cuts");s.remove("profile");s.remove("orHalf");s.remove("costCarry");s.remove("noteState");s.remove("noteError");s.remove("noteStartedAt");s.remove("suggestedTitle");s.remove("snippet");s.remove("notePending");s.remove("opened");
+                // Ni el avance de la pasada anterior (quedan en "before"): leído como avance de la nueva, el envío parecía de
+                // ≈0,1 MB («Usar datos móviles»), la biblioteca la mostraba completa y «Automático» seguía con el modelo de
+                // entonces (Models.resume cree que hay partes listas).
+                s.remove("blocks");s.remove("blocksDone");s.remove("doneAudioMs");
             });
         }
         clearCheckpoints(c,id);AudioParts.clearBlocks(c,id);Transcriber.clearDone(c,id);

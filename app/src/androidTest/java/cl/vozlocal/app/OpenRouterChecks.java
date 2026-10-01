@@ -33,6 +33,7 @@ final class OpenRouterChecks {
         errors(c);
         fallbacks(c);
         preparing(c);
+        gate(c);
         memory();
         rules();
         retries();
@@ -603,6 +604,25 @@ final class OpenRouterChecks {
         }finally{audio.delete();}
     }
 
+    // ---------- Tercera ronda: «Solo con Wi-Fi» se revisa justo antes de cada envío ----------
+    static void gate(Context c)throws Exception{
+        // La revisión va antes de abrir la conexión: si dice que no, no sale nada (ni siquiera se intenta conectar).
+        HttpApi h=new HttpApi();int[] asked={0};h.beforeSend=()->{asked[0]++;throw new Transcriber.WaitWifi();};
+        Exception e=null;try{h.request("POST","https://openrouter.test/api/v1/audio/transcriptions","k","application/json",HttpApi.bytes(new byte[]{1}),null);}catch(Exception x){e=x;}
+        check(e instanceof Transcriber.WaitWifi&&asked[0]==1&&h.phase==HttpApi.IDLE,"Wi-Fi check did not stop the request: "+e);
+        // Si deja pasar, el envío sigue como siempre (aquí lo frena la regla de solo HTTPS, sin tocar la red).
+        h.beforeSend=()->asked[0]++;e=null;try{h.request("GET","http://openrouter.test/x",null,null,null,null);}catch(Exception x){e=x;}
+        check(e instanceof SecurityException&&asked[0]==2,"Request after a passing Wi-Fi check wrong: "+e);
+        // Con el cliente de OpenRouter y la conexión de verdad: el audio se prepara pero no se envía, y no quedan temporales.
+        File audio=write(new File(c.getCacheDir(),"or-check-gate.m4a"),bytes(2000));
+        try{
+            HttpApi real=new HttpApi();real.beforeSend=()->{throw new Transcriber.WaitWifi();};FakeAudio fake=new FakeAudio(5000);e=null;
+            try{client(c,real,fake,new ArrayList<>()).transcribe(audio,config("microsoft/mai-transcribe-2",true),"es",null,null);}catch(Exception x){e=x;}
+            boolean left=false;for(File f:fake.made)left|=f.exists();
+            check(e instanceof Transcriber.WaitWifi&&fake.made.size()==1&&!left,"OpenRouter client sent, or kept files, after the Wi-Fi check said no: "+e+" "+fake.made.size());
+        }finally{audio.delete();}
+    }
+
     // ---------- Segunda ronda: Transcript con partes que vienen con y sin voces ----------
     static void memory()throws Exception{
         // Parte 1 en silencio (sin voces) y parte 2 con voces: la transcripción queda «con voces» (antes, toda como «Texto»).
@@ -725,7 +745,7 @@ final class OpenRouterChecks {
      * «orcheck-catalog.json») antes de tocar nada: si una corrida murió a mitad (se cerró el emulador, adb la mató), la
      * siguiente lo devuelve primero, en vez de borrar el respaldo con las voces reales (hallazgo de la revisión 0.8).
      */
-    private static final String[] KEYS={"provider","orSpeakersModel","orTextModel","orAutoSpeakers","orAutoBeforeSpeakers","speakersMode","noteAuto","openrouter_keyEncrypted","openrouter_keyIv"};
+    private static final String[] KEYS={"provider","orSpeakersModel","orTextModel","orAutoSpeakers","orAutoBeforeSpeakers","speakersMode","noteAuto","openrouter_keyEncrypted","openrouter_keyIv","wifi"};
     private static final class Aside{
         final SharedPreferences prefs,backup;final File voices,aside,catalog,copy;
         Aside(Context c){prefs=new Settings(c).prefs;backup=c.getSharedPreferences("orcheck-backup",Context.MODE_PRIVATE);
@@ -767,7 +787,9 @@ final class OpenRouterChecks {
         Aside kept=new Aside(c);kept.recover();kept.save();
         OpenRouterClient.Builder real=OpenRouterClient.defaultBuilder;Recording first=null,second=null,third=null;
         try{
-            prefs.edit().putString("provider","openrouter").putString("orSpeakersModel",mai).putBoolean("noteAuto",false).commit();
+            // Sin «Solo con Wi-Fi»: el motor lo revisa antes de cada parte (Transcriber.WaitWifi) y esta prueba no depende de la
+            // red del emulador (sus envíos son simulados).
+            prefs.edit().putString("provider","openrouter").putString("orSpeakersModel",mai).putBoolean("noteAuto",false).putBoolean("wifi",false).commit();
             settings.saveKeyFor("openrouter","sk-or-prueba-no-es-una-clave-real");
             FakeAudio fake=new FakeAudio(r.duration);OpenRouterClient.defaultBuilder=fake;
             first=copy(c,r,"Prueba OpenRouter");String id=first.id;
@@ -789,6 +811,8 @@ final class OpenRouterChecks {
             check(has(log,"Preparando el audio para enviarlo")&&has(log,"Enviando audio · preparado en")&&log.indexOf("Preparando el audio para enviarlo")<log.indexOf("Enviando audio · preparado en")
                 &&st.optInt("prepCount")==1&&st.optInt("prepping")==0&&st.has("prepMsSum")&&fake.phases.equals(Arrays.asList(HttpApi.PREPARE,HttpApi.PREPARE)),"Preparing stage missing from the log or the state:\n"+log);
             check(has(log,"OpenRouter está transcribiendo")&&has(log,"partes de la mitad")&&has(log,"Transcripción lista")&&!has(log,"sk-or-"),"Engine log wrong:\n"+log);
+            // La revisión de «Solo con Wi-Fi» antes de enviar es de cada parte: no queda puesta en la conexión del trabajo.
+            check(http.beforeSend==null,"Wi-Fi check left on the worker connection");
             // Lo que se envió: receta Azure con voces, sin anclas (no hay voces guardadas), y el audio «convertido».
             JSONObject sent=http.sent.get(1);
             check(http.url.equals(Models.BASE+"/audio/transcriptions")&&"sk-or-prueba-no-es-una-clave-real".equals(http.token)&&sent.getJSONObject("provider").getJSONObject("options").getJSONObject("azure").getJSONObject("diarization").getBoolean("enabled")

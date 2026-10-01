@@ -63,12 +63,18 @@ public class PipelineJob extends JobService {
                 boolean locked=false;try{locked=Transcriber.RUNNING.tryLock(60,java.util.concurrent.TimeUnit.SECONDS);}catch(InterruptedException ignored){}
                 if(locked){try{retry=TranscribeService.rounds(this,http,"uij",new java.util.concurrent.atomic.AtomicBoolean());}finally{Transcriber.RUNNING.unlock();}}
             }finally{try{if(wifi!=null&&wifi.isHeld())wifi.release();}catch(RuntimeException ignored){}}
-            boolean again=retry&&!http.cancelled;actives.remove(params.getJobId(),http);
+            // onStopJob saca la entrada antes de cortar: si sigue aquí, Android no detuvo esta transferencia. Antes se miraba
+            // http.cancelled, que también queda en true cuando la persona cancela la grabación que se enviaba (Pipeline.cancel):
+            // entonces nunca se llamaba jobFinished y la transferencia seguía «activa» para Android, con su notificación
+            // congelada, hasta el límite de tiempo.
+            boolean stopped=!actives.remove(params.getJobId(),http);
+            // Tras «Cancelar», lo demás pedido lo retoma la tarea de fondo (schedule no hace nada si no queda nada).
+            boolean again=!stopped&&(retry||http.cancelled);
             new Handler(getMainLooper()).post(()->{
                 // Solo si sigue siendo la transferencia en curso: Android pudo detenerla y empezar otra mientras esta terminaba.
                 if(current==http){userRunning=false;current=null;}
-                // Cancelada por Android (onStopJob): ahí ya se decidió si se repite; no se llama jobFinished.
-                if(!http.cancelled)jobFinished(params,false);
+                // Detenida por Android (onStopJob): ahí ya se decidió si se repite; no se llama jobFinished.
+                if(!stopped)jobFinished(params,false);
                 // Lo que quede (p. ej. una grabación que espera Wi-Fi) lo retoma la tarea de fondo.
                 if(again)Pipeline.schedule(this,true);
             });
@@ -81,7 +87,8 @@ public class PipelineJob extends JobService {
         HttpApi h=actives.remove(params.getJobId());
         if(h!=null){h.cancel();String id=h.jobId;
             if(id!=null){Pipeline.log(this,id,byApp?"Continúa en primer plano (sigue aunque bloquees el teléfono)":(user?"Android pausó la transferencia: ":"Android pausó la tarea de fondo: ")+stopReason(reason)+" · se reanudará");
-                if(reason==JobParameters.STOP_REASON_TIMEOUT)timedOut(id);}}
+                if(reason==JobParameters.STOP_REASON_TIMEOUT)timedOut(id);
+                if(reason==JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY)wifiNotice(id);}}
         if(user&&current==h){userRunning=false;current=null;}
         // La notificación de avance es compartida: si otro trabajador la está usando (el servicio en primer plano o la
         // transferencia que tomó el relevo), no se quita.
@@ -112,6 +119,23 @@ public class PipelineJob extends JobService {
                 }else Transcriber.attention(app,id,"La transcripción necesita atención","Android cortó la tarea de fondo 5 veces. Abre la grabación y pulsa Reintentar.");
             }catch(Exception e){Diagnostics.event("job_timeout_failed",id,"error_class",e.getClass().getSimpleName());}
         },"VozLocal-timeout").start();
+    }
+    /**
+     * Android detuvo el trabajo porque cambió la red: con «Solo con Wi-Fi», se fue el Wi-Fi y quedaron los datos móviles (la
+     * transferencia exige Wi-Fi). Si la grabación queda esperando Wi-Fi, se avisa con la salida «Usar datos móviles»: antes
+     * solo lo decía la bitácora y la espera volvía a ser silenciosa (diagnóstico del 2026-10-01). Se mira unos segundos
+     * después, y hasta 30 s: mientras el teléfono pasa del Wi-Fi a los datos móviles, a veces no hay ninguna red.
+     */
+    private void wifiNotice(String id){
+        android.content.Context app=getApplicationContext();
+        new Thread(()->{
+            for(int i=0;i<6;i++){
+                SystemClock.sleep(5_000);
+                if(Pipeline.network(app)==null)continue;
+                if(Pipeline.waitsForWifi(app,id))Pipeline.waitingWifi(app,id);
+                return;
+            }
+        },"VozLocal-wifi-wait").start();
     }
     /** Un envío que solo se puede hacer en primer plano: el aviso abre esa grabación, y abrirla lo retoma. */
     private void openAppToSend(String id){
