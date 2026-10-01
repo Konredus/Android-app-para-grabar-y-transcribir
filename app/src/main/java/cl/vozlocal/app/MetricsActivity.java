@@ -50,6 +50,12 @@ import static cl.vozlocal.app.AppTheme.*;
  *
  * El cálculo (Metrics.compute) va en un hilo de disco. Al volver a la pantalla, si algo cambió, se recalcula manteniendo
  * lo anterior a media opacidad (sin parpadeo ni saltos).
+ *
+ * Tercera ronda de la 0.8.0 (revisión de lo que pidió la integración, sin emulador): con TalkBack los gráficos de semanas
+ * se ajustan como un deslizador; con letra grande no se recortan la cifra principal, los rótulos de los datos ni las
+ * iniciales del mapa de días; desplazar la pantalla sobre un gráfico ya no cambia lo elegido; la pantalla se rehace si
+ * cambió el día, el saldo o la lista de modelos (no solo las grabaciones); y «A medio camino» avisa cuando la Biblioteca
+ * va a mostrar más grabaciones que las del período.
  */
 public class MetricsActivity extends Screen {
     /** Abre «Tus métricas». El botón ← dice a dónde vuelve: Grabar («Tu semana») o Ajustes. */
@@ -62,7 +68,7 @@ public class MetricsActivity extends Screen {
     private static final int LIB_SAVE=1,LIB_WORKING=2,LIB_NEW=3,LIB_FAILED=4;
 
     private final ExecutorService disk=Executors.newSingleThreadExecutor();
-    private Metrics.Data data;private int shownVersion=-1;private boolean loading;private int restoreScroll;
+    private Metrics.Data data;private String shownKey;private boolean loading;private int restoreScroll;
     private Metrics.Period period=Metrics.Period.MONTH;private int week=Metrics.WEEKS-1;
     private SharedPreferences prefs;private LinearLayout content,periodBox,chips;
     private Bars minutesBars,usdBars;private TextView weekValue,weekTitle,weekUsd,weekUsdLabel;
@@ -85,11 +91,21 @@ public class MetricsActivity extends Screen {
     @Override protected void onDestroy(){if(counter!=null)counter.cancel();disk.shutdownNow();super.onDestroy();}
 
     /**
-     * Calcula en el hilo de disco. Solo si cambió algo desde lo que se muestra (FilesStore.version sube con cada
-     * escritura). Mientras recalcula, lo anterior queda a media opacidad: no hay pantallazo en blanco ni saltos.
+     * Lo que puede cambiar las cifras sin que se toque una grabación, además de las grabaciones mismas (FilesStore.version
+     * sube con cada escritura): el día (la racha, «Graba hoy…» y «este mes» cambian a medianoche), la última comprobación
+     * de la clave (el saldo de OpenRouter) y la lista de modelos (los estimados salen de sus precios). Antes solo se miraba
+     * FilesStore.version: al volver al día siguiente, la racha seguía diciendo lo de ayer.
+     */
+    private String freshness(){
+        long verifyAt=0;try{verifyAt=new Settings(this).prefs.getLong("verifyAt",0);}catch(RuntimeException ignored){}
+        return FilesStore.version.get()+"|"+java.time.LocalDate.now().toEpochDay()+"|"+verifyAt+"|"+Models.fetchedAt(this);
+    }
+    /**
+     * Calcula en el hilo de disco. Solo si cambió algo desde lo que se muestra (ver freshness). Mientras recalcula, lo
+     * anterior queda a media opacidad: no hay pantallazo en blanco ni saltos.
      */
     private void load(){
-        int version=FilesStore.version.get();if(loading||(data!=null&&version==shownVersion))return;
+        String version=freshness();if(loading||(data!=null&&version.equals(shownKey)))return;
         loading=true;Context app=getApplicationContext();long t0=SystemClock.elapsedRealtime();
         if(data!=null)content.animate().alpha(0.6f).setDuration(MOTION_FAST).start();
         try{
@@ -102,7 +118,7 @@ public class MetricsActivity extends Screen {
                 runOnUiThread(()->{
                     loading=false;if(isDestroyed())return;content.animate().cancel();content.setAlpha(1f);
                     if(result==null){if(data==null){content.removeAllViews();content.addView(errorView(),Ui.fill());}return;}
-                    boolean first=data==null;data=result;shownVersion=version;render(first);
+                    boolean first=data==null;data=result;shownKey=version;render(first);
                 });
             });
         }catch(RuntimeException e){loading=false;}
@@ -151,7 +167,10 @@ public class MetricsActivity extends Screen {
         TextView big=Ui.tabular(ui.text(figure,Type.DISPLAY_MEDIUM,p.onSurface));big.setMaxLines(1);big.setIncludeFontPadding(false);
         // La cifra cabe siempre en una línea (letra grande del sistema, millones de palabras): se achica sola hasta 24 sp.
         big.setAutoSizeTextTypeUniformWithConfiguration(24,Type.DISPLAY_MEDIUM.size,1,TypedValue.COMPLEX_UNIT_SP);
-        LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(-1,ui.dp(60));bp.topMargin=ui.dp(S2);card.addView(big,bp);
+        // El alto es fijo (el ajuste automático lo necesita), pero nunca menor que el piso de 24 sp con la letra del
+        // sistema: con la letra al 200 % esos 24 sp ya miden 48 dp y en 60 dp la cifra quedaba recortada abajo.
+        int bigH=Math.max(ui.dp(60),Math.round(sp(big,24)*1.35f));
+        LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(-1,bigH);bp.topMargin=ui.dp(S2);card.addView(big,bp);
         card.addView(ui.text(words?(all.words==1?"palabra transcrita":"palabras transcritas"):"grabadas, todavía sin transcribir",Type.TITLE_MEDIUM,p.onSurfaceVariant));
         String saved=words?"≈ "+span(all.savedMs())+" que no tuviste que escribir a mano":"Transcribe tus audios y aquí verás cuántas palabras llevas.";
         card.addView(line(words?R.drawable.ic_hourglass:R.drawable.ic_info,saved,Type.BODY_MEDIUM,p.onSurface),ui.top(S4));
@@ -245,6 +264,12 @@ public class MetricsActivity extends Screen {
         weekTitle.setText(weekName(i)+" · "+(count==0?"sin grabaciones":Metrics.count(count,"grabación","grabaciones")));
         weekUsd.setText(real+est>0?(est>0?"≈ ":"")+Pricing.usd(real+est):"US$0");
         weekUsdLabel.setText(real+est>0?(est>0&&real>0?"cobrado y estimado":est>0?"estimado":"cobrado"):"sin gasto");
+        // Con TalkBack, cada gráfico se maneja como un deslizador (Bars): su «valor» es la semana elegida, dicha completa.
+        if(android.os.Build.VERSION.SDK_INT>=30){
+            String state=weekName(i)+": "+(ms>0?Ui.humanDuration(ms):"sin grabaciones");
+            if(minutesBars!=null)minutesBars.setStateDescription(state);
+            if(usdBars!=null)usdBars.setStateDescription(weekName(i)+": "+(real+est>0?(est>0?"unos ":"")+Pricing.usd(real+est):"sin gasto"));
+        }
     }
     private String weekName(int i){
         if(i==Metrics.WEEKS-1)return "Esta semana";if(i==Metrics.WEEKS-2)return "Semana pasada";
@@ -264,7 +289,7 @@ public class MetricsActivity extends Screen {
     private String describeMinutes(String[] spoken){
         StringBuilder b=new StringBuilder("Gráfico de minutos grabados por semana. ");
         for(int i=0;i<spoken.length;i++)b.append(capital(spoken[i])).append(": ").append(data.weekMs[i]>0?Ui.humanDuration(data.weekMs[i]):"nada").append(". ");
-        return b.append("Usa las flechas o toca una semana para elegirla.").toString();
+        return b.append("Ajústalo como un deslizador, usa las flechas o toca una semana para elegirla.").toString();
     }
     private String describeUsd(String[] spoken){
         StringBuilder b=new StringBuilder("Gráfico de gasto por semana. ");
@@ -332,11 +357,12 @@ public class MetricsActivity extends Screen {
         }
         // A medio camino: solo lo que existe. Cada fila lleva a esas grabaciones.
         LinearLayout stalls=ui.column();
-        stall(stalls,R.drawable.ic_alert,"Con error","Revisa qué pasó y reintenta",t.failed,LIB_FAILED);
-        stall(stalls,R.drawable.ic_hourglass,"En proceso","Transcribiéndose ahora",t.queued,LIB_WORKING);
-        stall(stalls,R.drawable.ic_transcribe,"Sin transcribir","Solo audio, por ahora",t.pending,LIB_NEW);
-        stall(stalls,R.drawable.ic_note,"Transcritas sin nota",t.noNote.size()>1?"Abre la más reciente":"Ábrela para armar la nota",t.noNote,-1);
-        if(data.inboxOn)stall(stalls,R.drawable.ic_inbox,"Por guardar en 0-Inbox","Guárdalas con un toque",t.notSaved,LIB_SAVE);
+        stall(stalls,R.drawable.ic_alert,"Con error","Revisa qué pasó y reintenta",t.failed,data.all.failed.size(),LIB_FAILED);
+        stall(stalls,R.drawable.ic_hourglass,"En proceso","Transcribiéndose ahora",t.queued,data.all.queued.size(),LIB_WORKING);
+        stall(stalls,R.drawable.ic_transcribe,"Sin transcribir","Solo audio, por ahora",t.pending,data.all.pending.size(),LIB_NEW);
+        stall(stalls,R.drawable.ic_note,"Transcritas sin nota",t.noNote.size()>1?"Abre la más reciente":"Ábrela para armar la nota",t.noNote,-1,-1);
+        // «Por guardar» de la Biblioteca también cuenta las que cambiaron después de guardarse: no se promete un total.
+        if(data.inboxOn)stall(stalls,R.drawable.ic_inbox,"Por guardar en 0-Inbox","Guárdalas con un toque",t.notSaved,-1,LIB_SAVE);
         else if(t.transcribed>0){Ui.Row r=ui.listRow(R.drawable.ic_inbox,"Elige tu carpeta 0-Inbox","Para guardar cada nota con un toque",null);
             r.onClick(v->startActivity(new Intent(this,SettingsActivity.class).putExtra("inbox",true)));addRow(stalls,r);}
         if(stalls.getChildCount()>0){
@@ -349,18 +375,29 @@ public class MetricsActivity extends Screen {
         }
         return card;
     }
-    private void stall(LinearLayout list,int icon,String title,String hint,List<String> ids,int filter){
+    /**
+     * Una fila de «A medio camino». total: cuántas hay en ese mismo estado desde el comienzo (-1 si no se sabe). La
+     * Biblioteca filtra por estado, no por fecha: si el período muestra 2 y al tocar aparecen 5, la fila lo avisa antes
+     * («5 en total en la Biblioteca»), así la diferencia no parece un error.
+     */
+    private void stall(LinearLayout list,int icon,String title,String hint,List<String> ids,int total,int filter){
         if(ids.isEmpty())return;
-        Ui.Row r=ui.listRow(icon,title,hint,Metrics.number(ids.size()));Ui.tabular(r.value);r.value.setTextColor(p.onSurface);
+        boolean more=filter>=0&&ids.size()>1&&total>ids.size();
+        String sub=more?hint+" · "+Metrics.number(total)+" en total en la Biblioteca":hint;
+        Ui.Row r=ui.listRow(icon,title,sub,Metrics.number(ids.size()));Ui.tabular(r.value);r.value.setTextColor(p.onSurface);
         r.onClick(v->openStage(ids,filter));addRow(list,r);
+        r.setContentDescription(title+": "+Metrics.number(ids.size())+". "+sub);
     }
     private void addRow(LinearLayout list,View row){if(list.getChildCount()>0)list.addView(ui.separator(S4+24+S4));list.addView(row,Ui.fill());}
     /**
-     * Una sola grabación: su detalle. Varias: la Biblioteca con el filtro que corresponde (extra «filter», que lee
-     * MainActivity); sin filtro que sirva (p. ej. «sin nota»), la más reciente.
+     * Una sola grabación: su detalle. Varias: la Biblioteca con el filtro que corresponde. Va en los extras «library»
+     * (true) y «filter» (el número del chip de la Biblioteca: LIB_*), que MainActivity lee al abrirse y en onNewIntent;
+     * llega por onNewIntent cuando Grabar ya estaba abierta debajo (CLEAR_TOP + SINGLE_TOP, sin apilar otra). Sin filtro
+     * que sirva (p. ej. «sin nota»), la más reciente.
      */
     private void openStage(List<String> ids,int filter){
         if(ids.size()==1||filter<0){startActivity(new Intent(this,RecordingActivity.class).putExtra("id",ids.get(0)));return;}
+        Diagnostics.event("ui_action",null,"screen","MetricsActivity","action","library_filter","result",filter);
         startActivity(new Intent(this,MainActivity.class).putExtra("library",true).putExtra("filter",filter).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP));
     }
     /** Cuatro pasos de un mismo verde, de claro a oscuro (en tema oscuro, de oscuro a claro): escala ordenada validada. */
@@ -544,12 +581,13 @@ public class MetricsActivity extends Screen {
         r.addView(ui.icon(icon,p.primary,18),lp);r.addView(ui.text(text,type,color),new LinearLayout.LayoutParams(0,-2,1));return r;
     }
     /**
-     * Un dato de vidrio del kit (ui.stat, el de «Tu semana») a lo ancho que le toque. El rótulo puede ir en dos líneas y
-     * la cifra se achica si no cabe (letra grande del sistema), en vez de cortarse con «…».
+     * Un dato de vidrio del kit (ui.stat, el de «Tu semana») a lo ancho que le toque. El rótulo puede ir en hasta tres
+     * líneas (con la letra al 200 %, «Ahorrado al no teclear» en un tercio de pantalla no cabía en dos y se cortaba sin
+     * aviso) y la cifra se achica si no cabe (letra grande del sistema), en vez de cortarse con «…».
      */
     private void addStat(LinearLayout row,int icon,String value,String label){
         LinearLayout s=ui.stat(icon,value,label);
-        for(int k=0;k<s.getChildCount();k++)if(s.getChildAt(k) instanceof TextView){TextView t=(TextView)s.getChildAt(k);if(k==s.getChildCount()-1){t.setSingleLine(false);t.setMaxLines(2);t.setEllipsize(null);}else shrinkToFit(t,12);}
+        for(int k=0;k<s.getChildCount();k++)if(s.getChildAt(k) instanceof TextView){TextView t=(TextView)s.getChildAt(k);if(k==s.getChildCount()-1){t.setSingleLine(false);t.setMaxLines(3);t.setEllipsize(null);}else shrinkToFit(t,12);}
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-1,1);if(row.getChildCount()>0)lp.setMarginStart(ui.dp(S2));row.addView(s,lp);
     }
     /** Achica un texto de una línea hasta que quepa entero, sin bajar de minSp (igual que «Tu semana» en Grabar). */
@@ -581,6 +619,32 @@ public class MetricsActivity extends Screen {
 
     // ---------- Gráficos propios (Canvas) ----------
     static float sp(View v,float n){return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,n,v.getResources().getDisplayMetrics());}
+
+    /**
+     * Cuándo un toque sobre un gráfico elige algo. Los gráficos van dentro de una pantalla que se desplaza: antes se
+     * elegía apenas el dedo tocaba, así que al desplazar la pantalla empezando sobre un gráfico la semana (o la casilla)
+     * elegida cambiaba sola. Ahora:
+     * - un toque corto elige al soltar;
+     * - un arrastre horizontal elige mientras se mueve, y la pantalla no se desplaza mientras tanto;
+     * - un arrastre vertical es para desplazar la pantalla: ella se lo lleva (llega ACTION_CANCEL) y no se elige nada.
+     */
+    static final class Swipe {
+        static final int NONE=0,PICK=1;
+        private float x,y;private boolean dragging;
+        int track(View v,MotionEvent e){
+            switch(e.getActionMasked()){
+                case MotionEvent.ACTION_DOWN:x=e.getX();y=e.getY();dragging=false;return NONE;
+                case MotionEvent.ACTION_MOVE:
+                    if(!dragging){
+                        float dx=Math.abs(e.getX()-x),dy=Math.abs(e.getY()-y);int slop=android.view.ViewConfiguration.get(v.getContext()).getScaledTouchSlop();
+                        if(dx>slop&&dx>dy){dragging=true;if(v.getParent()!=null)v.getParent().requestDisallowInterceptTouchEvent(true);}
+                    }
+                    return dragging?PICK:NONE;
+                case MotionEvent.ACTION_UP:return PICK;
+                default:return NONE;
+            }
+        }
+    }
 
     /**
      * Barras verticales por semana (una serie, o dos apiladas: lo cobrado abajo y lo estimado encima, con 2 dp de aire).
@@ -655,18 +719,43 @@ public class MetricsActivity extends Screen {
             for(int k=0;k<8;k++)radii[k]=k<4?rad:0;
             path.reset();rect.set(l,t,r,b);path.addRoundRect(rect,radii,Path.Direction.CW);fill.setColor(color);canvas.drawPath(path,fill);
         }
+        private final Swipe swipe=new Swipe();
         @Override public boolean onTouchEvent(MotionEvent e){
             if(solid.length==0||pick==null)return super.onTouchEvent(e);
-            int a=e.getActionMasked();
-            if(a==MotionEvent.ACTION_DOWN||a==MotionEvent.ACTION_MOVE){int i=index(e.getX());if(i!=selected){selected=i;invalidate();Ui.haptic(this,Ui.Haptic.TICK);pick.pick(i);}return true;}
-            if(a==MotionEvent.ACTION_UP){performClick();return true;}
-            return a==MotionEvent.ACTION_CANCEL||super.onTouchEvent(e);
+            int at=swipe.track(this,e);
+            if(at==Swipe.PICK){int i=index(e.getX());if(i!=selected){selected=i;invalidate();Ui.haptic(this,Ui.Haptic.TICK);pick.pick(i);}}
+            if(e.getActionMasked()==MotionEvent.ACTION_UP)performClick();
+            return true;
         }
         @Override public boolean performClick(){return super.performClick();}
         @Override public boolean onKeyDown(int code,KeyEvent e){
             int n=solid.length;
-            if(n>0&&pick!=null&&(code==KeyEvent.KEYCODE_DPAD_LEFT||code==KeyEvent.KEYCODE_DPAD_RIGHT)){int i=Math.max(0,Math.min(n-1,(selected<0?n-1:selected)+(code==KeyEvent.KEYCODE_DPAD_LEFT?-1:1)));if(i!=selected){selected=i;invalidate();pick.pick(i);}return true;}
+            if(n>0&&pick!=null&&(code==KeyEvent.KEYCODE_DPAD_LEFT||code==KeyEvent.KEYCODE_DPAD_RIGHT)){step(code==KeyEvent.KEYCODE_DPAD_LEFT?-1:1);return true;}
             return super.onKeyDown(code,e);
+        }
+        /** Elige la semana vecina (-1 la anterior, +1 la siguiente), sin salirse de las 8. */
+        private void step(int by){
+            int n=solid.length;if(n==0||pick==null)return;int i=Math.max(0,Math.min(n-1,(selected<0?n-1:selected)+by));
+            if(i!=selected){selected=i;invalidate();pick.pick(i);}
+        }
+        /*
+         * TalkBack: las flechas solo sirven con teclado y tocar una barra no elige nada con el lector activo (el toque
+         * enfoca). Por eso el gráfico se presenta como un deslizador, igual que la posición del audio en el detalle
+         * (RecordingActivity): el gesto de ajustar elige la semana siguiente o la anterior y su lectura queda como el
+         * «valor» del deslizador (setStateDescription, en paintWeek). El gráfico decorativo del estado vacío no tiene
+         * pick: no se ofrece como control.
+         */
+        @Override public void onInitializeAccessibilityNodeInfo(android.view.accessibility.AccessibilityNodeInfo info){
+            super.onInitializeAccessibilityNodeInfo(info);
+            if(pick==null||solid.length==0)return;
+            info.setClassName(android.widget.SeekBar.class.getName());
+            if(selected<solid.length-1)info.addAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD);
+            if(selected>0)info.addAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD);
+        }
+        @Override public boolean performAccessibilityAction(int action,Bundle args){
+            if(pick!=null&&(action==android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD||action==android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)){
+                step(action==android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD?1:-1);return true;}
+            return super.performAccessibilityAction(action,args);
         }
     }
 
@@ -690,11 +779,17 @@ public class MetricsActivity extends Screen {
         @Override protected void onDetachedFromWindow(){if(anim!=null){anim.cancel();grow=1f;}super.onDetachedFromWindow();}
         private float left(){return Math.max(label.measureText("M"),label.measureText("D"))+AppTheme.dp(getContext(),8);}
         private float cell(float w){float d=AppTheme.dp(getContext(),1);return Math.max(10*d,Math.min(18*d,(w-left())/24f));}
-        @Override protected void onMeasure(int w,int h){int width=getDefaultSize(getSuggestedMinimumWidth(),w);float ch=cell(width);setMeasuredDimension(width,Math.round(7*ch+(-label.ascent()+label.descent())+AppTheme.dp(getContext(),8)));}
+        /**
+         * Alto de cada fila: el de la casilla, pero nunca menos que la inicial del día. La letra va en sp y las casillas en
+         * dp: con la letra grande del sistema las iniciales (L, M, M…) medían más que la fila y se montaban unas sobre otras.
+         * Las casillas quedan entonces algo más altas que anchas.
+         */
+        private float row(float w){return Math.max(cell(w),-label.ascent()+label.descent()+AppTheme.dp(getContext(),2));}
+        @Override protected void onMeasure(int w,int h){int width=getDefaultSize(getSuggestedMinimumWidth(),w);float ch=row(width);setMeasuredDimension(width,Math.round(7*ch+(-label.ascent()+label.descent())+AppTheme.dp(getContext(),8)));}
         /** 0 = vacía; 1 a 4 = cuartos del máximo. */
         private int level(long v){if(v<=0||max<=0)return 0;double f=(double)v/max;return f<=0.25?1:f<=0.5?2:f<=0.75?3:4;}
         @Override protected void onDraw(Canvas canvas){
-            float lw=left(),cw=(getWidth()-lw)/24f,ch=cell(getWidth()),gap=1f,r=AppTheme.dp(getContext(),3);
+            float lw=left(),cw=(getWidth()-lw)/24f,ch=row(getWidth()),gap=1f,r=AppTheme.dp(getContext(),3);
             for(int d=0;d<7;d++){
                 float cy=d*ch+ch/2f;label.setTextAlign(Paint.Align.LEFT);canvas.drawText(DAYS[d],0,cy-(label.ascent()+label.descent())/2f,label);
                 for(int h=0;h<24;h++){
@@ -708,16 +803,16 @@ public class MetricsActivity extends Screen {
             float y=7*ch-label.ascent()+AppTheme.dp(getContext(),4);label.setTextAlign(Paint.Align.LEFT);
             for(int h=0;h<24;h+=6)canvas.drawText(h+" h",lw+h*cw+gap,y,label);
         }
+        private final Swipe swipe=new Swipe();
         @Override public boolean onTouchEvent(MotionEvent e){
-            if(pick==null)return super.onTouchEvent(e);int a=e.getActionMasked();
-            if(a==MotionEvent.ACTION_DOWN||a==MotionEvent.ACTION_MOVE){
-                float lw=left(),cw=(getWidth()-lw)/24f,ch=cell(getWidth());
+            if(pick==null)return super.onTouchEvent(e);
+            if(swipe.track(this,e)==Swipe.PICK){
+                float lw=left(),cw=(getWidth()-lw)/24f,ch=row(getWidth());
                 int h=Math.max(0,Math.min(23,(int)((e.getX()-lw)/cw))),d=Math.max(0,Math.min(6,(int)(e.getY()/ch)));
                 if(d!=day||h!=hour){day=d;hour=h;invalidate();Ui.haptic(this,Ui.Haptic.TICK);pick.pick(d,h);}
-                return true;
             }
-            if(a==MotionEvent.ACTION_UP){performClick();return true;}
-            return a==MotionEvent.ACTION_CANCEL||super.onTouchEvent(e);
+            if(e.getActionMasked()==MotionEvent.ACTION_UP)performClick();
+            return true;
         }
         @Override public boolean performClick(){return super.performClick();}
         @Override public boolean onKeyDown(int code,KeyEvent e){

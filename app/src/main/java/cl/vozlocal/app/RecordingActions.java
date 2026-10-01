@@ -253,18 +253,23 @@ final class RecordingActions {
         return s.openRouter()?Models.chosen(s,speakers):s.prefs.getString("customModel","whisper-1");
     }
     // Costos: el estimado sale de Pricing.estimate(Context, proveedor, modelo, ms) (OpenAI por su tabla; OpenRouter por el
-    // catálogo guardado, que Models ya recuerda en memoria) y el real, de Pricing.real(estado). Aquí no se repite esa lógica:
-    // solo se suma el audio de las voces conocidas que OpenRouter también cobra (billedMs).
+    // catálogo guardado, que Models ya recuerda en memoria) y el real, de Pricing.real(estado). El audio que se cobra (con
+    // las muestras de voz que OpenRouter recibe delante de cada bloque) también es una regla única del motor:
+    // Pricing.orBilledMs. Aquí no se repite: «¿Separar voces?» usa la versión con Context (lo elegido en Ajustes) y
+    // billedMs solo adapta la misma cuenta a las alternativas de «Volver a transcribir» que cambian cuántas muestras van
+    // o en cuántos envíos.
     /**
-     * Audio que cobra OpenRouter al transcribir (ms), para los estimados con «≈»: el audio más las voces conocidas que van
-     * delante de CADA bloque («anclas»: cada muestra, de hasta Voices.MAX_MS, con 1 s de silencio; ver OrAudio). Sin esto el
-     * estimado quedaba por debajo de lo cobrado (hallazgo de la revisión). anchors: muestras por envío; single: un solo
-     * envío («sin cortar»); si no, los bloques del motor (Transcriber.orBlockMax). Otro proveedor, o sin muestras: la duración.
+     * Audio que cobra OpenRouter al transcribir (ms), para los estimados con «≈». anchors: muestras de voz por envío;
+     * single: un solo envío («sin cortar»); si no, los bloques del motor. La cuenta es la de Pricing.orBilledMs (bloques,
+     * largo de cada muestra y su silencio): un envío «sin cortar» paga las muestras una vez, lo mismo que suman en un
+     * bloque cualquiera. Otro proveedor, o sin muestras: la duración.
      */
     static long billedMs(String provider,String model,long durationMs,int anchors,boolean single){
         if(!"openrouter".equals(provider)||anchors<=0||durationMs<=0)return Math.max(0,durationMs);
-        long block=Math.max(60_000L,Transcriber.orBlockMax(Models.recipe(model),true)),blocks=single?1:Math.max(1,(durationMs+block-1)/block);
-        return durationMs+blocks*anchors*(Math.min(Voices.MAX_MS,OrAudio.ANCHOR_MAX_MS)+OrAudio.GAP_MS);
+        Models.Recipe recipe=Models.recipe(model);
+        if(!single)return Pricing.orBilledMs(durationMs,anchors,recipe);
+        // Lo que suenan las muestras en UN envío: la cuenta de Pricing para un audio que cabe en un solo bloque, menos ese audio.
+        return durationMs+Math.max(0,Pricing.orBilledMs(1,anchors,recipe)-1);
     }
 
     /** Encola la transcripción. Si falta la clave, lleva directo a configurarla; si ya está transcrita, ofrece volver a transcribir. */
@@ -299,8 +304,9 @@ final class RecordingActions {
             boolean live=provider.equals("openai")&&text.equals("gpt-transcribe");
             // Voces conocidas que van en este audio (hasta 4, la tuya primero): se dice a quién reconoce desde el inicio.
             List<Voices.Voice> known=TranscribeClient.knowsVoices(provider)?Voices.selected(s):Collections.emptyList();
-            // Con voces, OpenRouter cobra también las muestras que van delante de cada bloque: el estimado las suma.
-            long billed=billedMs(provider,voices,r.duration,withVoices.speakers?known.size():0,false);
+            // Con voces, OpenRouter cobra también las muestras que van delante de cada bloque: el estimado las suma con la
+            // regla única del motor (Pricing.orBilledMs, con lo elegido en Ajustes), la misma que usa el detalle de la grabación.
+            long billed=Pricing.orBilledMs(s,r.duration,withVoices.speakers);
             String costVoices=Pricing.usd(Pricing.estimate(s,provider,voices,billed)),costText=Pricing.usd(Pricing.estimate(s,provider,text,r.duration));
             boolean onlyMe=known.size()==1&&known.get(0).me;
             // Con OpenRouter el reconocimiento usa «anclas», una técnica nueva: se promete el intento, no el resultado.
