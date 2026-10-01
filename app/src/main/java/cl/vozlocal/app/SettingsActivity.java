@@ -555,7 +555,7 @@ public class SettingsActivity extends Screen {
         if(settings.hasOpenRouterKey()){sheet("Clave de OpenRouter","Configurada y cifrada en este teléfono. Sirve para transcribir y para armar tus notas, y nunca aparece en informes.")
             .action(R.drawable.ic_edit,"Reemplazar clave",false,this::keyInput)
             .action(R.drawable.ic_trash,"Eliminar clave",true,()->confirm("¿Eliminar la clave de OpenRouter?","Sin clave no se puede transcribir ni armar notas. Las transcripciones pendientes quedarán en espera hasta que agregues otra.","Eliminar",true,()->{
-                try{settings.saveOpenRouterKey("");getSystemService(JobScheduler.class).cancel(Pipeline.JOB_ID);Diagnostics.event("setting_changed",null,"action","api_key","result","deleted");render();}catch(Exception e){message("Clave","No se pudo eliminar.");}})).show();return;}
+                try{settings.saveOpenRouterKey("");JobScheduler js=getSystemService(JobScheduler.class);js.cancel(Pipeline.JOB_ID);if(!Pipeline.working())js.cancel(Pipeline.USER_JOB_ID);Diagnostics.event("setting_changed",null,"action","api_key","result","deleted");render();}catch(Exception e){message("Clave","No se pudo eliminar.");}})).show();return;}
         keyInput();
     }
     /**
