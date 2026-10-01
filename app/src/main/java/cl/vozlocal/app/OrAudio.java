@@ -39,6 +39,7 @@ import java.util.List;
  * espera cuando no hay nada que hacer), el filtro usa menos coeficientes (16 cruces por lado, corte en 7,28 kHz), 48 y
  * 32 kHz tienen un camino directo (decimación entera ×3 y ×2, con la mitad de las multiplicaciones), el FLAC se comprueba
  * sin decodificarlo entero y el avance se informa en % (HttpApi.prepared) para la etapa «Preparando audio».
+ * Revisión r3: «el códec dejó de avanzar» se mide por espera real (Stall), no por reloj: una app congelada no lo dispara.
  * Deja en Diagnostics «or_audio» (formato, duración, bytes, anclas usadas, tiempo) y «or_audio_fallback» (por qué no hubo FLAC).
  */
 final class OrAudio {
@@ -66,7 +67,31 @@ final class OrAudio {
     private static final double MAX_BOOST=8,CEILING=29204;
     /** El volumen del audio se mide en sus primeros 20 s: basta para comparar y cuesta una fracción de segundo. */
     private static final long LEVEL_MS=20_000;
+    /** Un códec que en este tiempo de espera REAL no toma ni entrega nada se da por trabado (ver Stall). */
     private static final long STALL_MS=30_000;
+
+    /**
+     * Cuánto se ha esperado de verdad a un códec sin que tome ni entregue nada (revisión r3). Antes se medía con el reloj
+     * desde la última salida, y una app congelada 30 s o más (el congelador de vivo y las pausas de Android, ver
+     * docs/PENDIENTES.md) se leía como un códec trabado: el bloque fallaba y, en el FLAC, se apagaba para los siguientes.
+     * Ahora solo suman las esperas con plazo que vuelven vacías, cada una con lo que duró pero nunca más que su plazo más
+     * SLACK_NS: en segundo plano Android alarga los temporizadores hasta 40 ms y una espera de 10 ms dura de verdad 20–50 ms
+     * (contarla como 10 llevaba un códec trabado a fallar recién tras 60–150 s). Un congelamiento en medio de una espera
+     * cuenta a lo más 60 ms, y fuera de las esperas no cuenta nada. Cualquier entrada entregada o salida recogida vuelve la
+     * cuenta a cero. Un códec trabado de verdad falla tras unos STALL_MS de espera real, con la app abierta o en segundo
+     * plano. Sin dormir nada: no frena la tubería.
+     */
+    static final class Stall{
+        /** Holgura sobre el plazo de cada espera: cubre los 40 ms que Android alarga los temporizadores en segundo plano. */
+        private static final long SLACK_NS=50_000_000L;
+        private final long limitNs;private long idleNs;
+        Stall(long limitMs){limitNs=limitMs*1_000_000L;}
+        /** El códec tomó o entregó algo. */
+        void moved(){idleNs=0;}
+        /** Una espera de hasta «timeoutUs» volvió vacía tras «tookNs» de reloj (sin plazo no cuenta). Devuelve over(). */
+        boolean waited(long timeoutUs,long tookNs){if(timeoutUs>0)idleNs+=Math.max(0,Math.min(tookNs,timeoutUs*1000+SLACK_NS));return over();}
+        boolean over(){return idleNs>limitNs;}
+    }
 
     /** Resultado de build(). */
     static final class Built{
@@ -242,7 +267,7 @@ final class OrAudio {
             long totalUs=format.containsKey(MediaFormat.KEY_DURATION)?Math.max(0,format.getLong(MediaFormat.KEY_DURATION)):0;
             final long[] done={0};Sink capped=(data,count)->{int n=(int)Math.min(count,limit-done[0]);if(n>0){sink.write(data,n);done[0]+=n;}};
             Resampler resampler=null;Mixer mixer=new Mixer();MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();
-            boolean inputDone=false,outputDone=false;long lastOutput=SystemClock.elapsedRealtime();
+            boolean inputDone=false,outputDone=false;Stall stall=new Stall(STALL_MS);
             while(!outputDone&&done[0]<limit){
                 alive(cancel);
                 // 1. Entrada: todos los búferes libres, sin esperar ninguno.
@@ -254,18 +279,23 @@ final class OrAudio {
                     else{long at=extractor.getSampleTime();codec.queueInputBuffer(in,0,size,Math.max(0,at),0);extractor.advance();if(advance!=null&&at>=0)advance.at(at,totalUs);}
                     fed=true;
                 }
+                if(fed)stall.moved();
                 // 2. Salida: todo lo que esté listo. Si no se pudo entregar nada, el decodificador está ocupado: se espera su
-                // próxima salida (vuelve apenas existe; el plazo es solo un tope).
-                int out=codec.dequeueOutputBuffer(info,fed?0:CODEC_WAIT_US);
+                // próxima salida (vuelve apenas existe; el plazo es solo un tope). Solo esa espera, si vuelve vacía, cuenta
+                // como «trabado»: el tiempo que la app pasó congelada fuera de ella no cuenta.
+                long waitUs=fed?0:CODEC_WAIT_US,asked=waitUs>0?SystemClock.elapsedRealtimeNanos():0;
+                int out=codec.dequeueOutputBuffer(info,waitUs);
+                if(out==MediaCodec.INFO_TRY_AGAIN_LATER&&waitUs>0&&stall.waited(waitUs,SystemClock.elapsedRealtimeNanos()-asked))throw new IOException("Audio decoder stopped advancing");
                 while(out!=MediaCodec.INFO_TRY_AGAIN_LATER){
                     if(out==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED){
+                        stall.moved();
                         MediaFormat f=codec.getOutputFormat();int newRate=number(f,MediaFormat.KEY_SAMPLE_RATE,rate);
                         channels=number(f,MediaFormat.KEY_CHANNEL_COUNT,channels);encoding=number(f,MediaFormat.KEY_PCM_ENCODING,AudioFormat.ENCODING_PCM_16BIT);
                         // Cambio de frecuencia a mitad de camino (raro): se cierra el filtro actual y se parte con otro.
                         if(resampler!=null&&newRate!=rate){resampler.finish(capped);resampler=null;}
                         rate=newRate;
                     }else if(out>=0){
-                        lastOutput=SystemClock.elapsedRealtime();
+                        stall.moved();
                         // Se revisa la cancelación en cada búfer: al cancelar, la conversión se detiene en el acto.
                         try{alive(cancel);}catch(InterruptedIOException e){codec.releaseOutputBuffer(out,false);throw e;}
                         if(info.size>0&&(info.flags&MediaCodec.BUFFER_FLAG_CODEC_CONFIG)==0){
@@ -285,7 +315,6 @@ final class OrAudio {
                     // (INFO_OUTPUT_BUFFERS_CHANGED no importa: los búferes se piden por índice.)
                     out=codec.dequeueOutputBuffer(info,0);
                 }
-                if(!outputDone&&SystemClock.elapsedRealtime()-lastOutput>STALL_MS)throw new IOException("Audio decoder stopped advancing");
             }
             if(resampler!=null&&done[0]<limit)resampler.finish(capped);
             return done[0];
@@ -433,6 +462,8 @@ final class OrAudio {
     private static final class FlacOut implements Out{
         private final File file;private final HttpApi cancel;private MediaCodec codec;private OutputStream out;private final MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();
         private long fed;private boolean begun,ended;private byte[] header,csd;
+        /** Espera real sin que el codificador tome ni entregue nada (un congelamiento de la app no cuenta). */
+        private final Stall stall=new Stall(STALL_MS);
         FlacOut(File file,HttpApi cancel)throws IOException{
             this.file=file;this.cancel=cancel;
             try{
@@ -446,39 +477,47 @@ final class OrAudio {
         }
         @Override public void write(short[] data,int count)throws IOException{
             try{
-                int position=0;long waiting=SystemClock.elapsedRealtime();
+                int position=0;
                 while(position<count){
                     alive(cancel);int index=codec.dequeueInputBuffer(0);
                     if(index>=0){
                         ByteBuffer buffer=codec.getInputBuffer(index);if(buffer==null)throw new IOException("No encoder input buffer");
                         buffer.clear();int n=Math.min(count-position,buffer.remaining()/2);if(n<=0)throw new IOException("Encoder buffer too small");
                         buffer.order(ByteOrder.nativeOrder()).asShortBuffer().put(data,position,n);
-                        codec.queueInputBuffer(index,0,n*2,fed*1_000_000L/RATE,0);fed+=n;position+=n;waiting=SystemClock.elapsedRealtime();
+                        codec.queueInputBuffer(index,0,n*2,fed*1_000_000L/RATE,0);fed+=n;position+=n;stall.moved();
                         drain(false);
                     }else{
                         // Sin entrada libre, el codificador está ocupado o espera que se recojan sus salidas: se espera su
                         // próxima salida (vuelve apenas existe), en vez de dormir a ciegas esperando una entrada.
-                        if(SystemClock.elapsedRealtime()-waiting>STALL_MS)throw new IOException("Encoder stopped taking audio");
                         drain(false,CODEC_WAIT_US);
+                        if(stall.over())throw new IOException("Encoder stopped taking audio");
                     }
                 }
             }catch(InterruptedIOException e){throw e;}catch(Exception e){throw new FlacFailed("flac-encode",e);}
         }
         private void drain(boolean toEnd)throws Exception{drain(toEnd,0);}
-        /** Guarda lo que el codificador tenga listo (la primera consulta puede esperar firstWaitUs); con toEnd espera hasta el final del flujo. */
+        /**
+         * Guarda lo que el codificador tenga listo (la primera consulta puede esperar firstWaitUs); con toEnd espera hasta el
+         * final del flujo. Las esperas que vuelven vacías se anotan en «stall»: sin toEnd, quien llama decide con stall.over().
+         */
         private void drain(boolean toEnd,long firstWaitUs)throws Exception{
-            long waiting=SystemClock.elapsedRealtime();boolean first=true;
+            boolean first=true;
             while(!ended){
-                int index=codec.dequeueOutputBuffer(info,toEnd?10_000:first?firstWaitUs:0);first=false;
+                long waitUs=toEnd?CODEC_WAIT_US:first?firstWaitUs:0,asked=waitUs>0?SystemClock.elapsedRealtimeNanos():0;
+                int index=codec.dequeueOutputBuffer(info,waitUs);first=false;
                 if(index==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED){
+                    stall.moved();
                     ByteBuffer c=codec.getOutputFormat().getByteBuffer("csd-0");if(c!=null){c=c.duplicate();c.rewind();csd=new byte[c.remaining()];c.get(csd);}
                 }else if(index>=0){
-                    waiting=SystemClock.elapsedRealtime();
+                    stall.moved();
                     if(info.size>0){ByteBuffer data=codec.getOutputBuffer(index);if(data!=null){byte[] chunk=new byte[info.size];data.position(info.offset);data.limit(info.offset+info.size);data.get(chunk);store(chunk,(info.flags&MediaCodec.BUFFER_FLAG_CODEC_CONFIG)!=0);}}
                     if((info.flags&MediaCodec.BUFFER_FLAG_END_OF_STREAM)!=0)ended=true;
                     codec.releaseOutputBuffer(index,false);
-                }else if(!toEnd)return;
-                else{alive(cancel);if(SystemClock.elapsedRealtime()-waiting>STALL_MS)throw new IOException("Encoder did not finish");}
+                }else{
+                    if(waitUs>0)stall.waited(waitUs,SystemClock.elapsedRealtimeNanos()-asked);
+                    if(!toEnd)return;
+                    alive(cancel);if(stall.over())throw new IOException("Encoder did not finish");
+                }
             }
         }
         /**
@@ -493,12 +532,11 @@ final class OrAudio {
         @Override public long finish()throws IOException{
             try{
                 // El fin va en un búfer vacío y aparte: hay codificadores (Android 8 y 9) que descartan los datos que llegan junto con él.
-                long waiting=SystemClock.elapsedRealtime();
                 while(true){
                     alive(cancel);int index=codec.dequeueInputBuffer(0);
-                    if(index>=0){codec.queueInputBuffer(index,0,0,fed*1_000_000L/RATE,MediaCodec.BUFFER_FLAG_END_OF_STREAM);break;}
-                    if(SystemClock.elapsedRealtime()-waiting>STALL_MS)throw new IOException("Encoder stopped taking audio");
+                    if(index>=0){codec.queueInputBuffer(index,0,0,fed*1_000_000L/RATE,MediaCodec.BUFFER_FLAG_END_OF_STREAM);stall.moved();break;}
                     drain(false,CODEC_WAIT_US);
+                    if(stall.over())throw new IOException("Encoder stopped taking audio");
                 }
                 drain(true);out.close();out=null;release();
                 if(!begun)throw new IOException("Encoder produced no audio");
