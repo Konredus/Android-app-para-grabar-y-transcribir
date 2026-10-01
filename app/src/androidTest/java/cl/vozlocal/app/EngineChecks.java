@@ -26,6 +26,7 @@ final class EngineChecks {
         route();
         mobileData(c,r);
         userJob(c);
+        waits(c);
         Recording d=copy(c,r);
         try{versions(c,d);snippet(c,d);notification(c,d);}
         catch(Throwable failure){try{d.delete(c);}catch(Exception ignored){}throw failure;}
@@ -81,7 +82,11 @@ final class EngineChecks {
             // transferencia iniciada por el usuario esperan ahí (TranscribeService.waitBeforeRetry) en vez de cederla a la tarea
             // de fondo que Android pausa. Ceder de inmediato queda solo para la que esperaba Wi-Fi al comenzar la ronda.
             Transcriber t=new Transcriber(c,new HttpApi(),0);t.waitWifi(d,true);Pipeline.clearWaitingWifi(c,d.id);
+            // waitWifi a mitad también pone la notificación de avance en «Esperando Wi-Fi»: la prueba no la deja puesta.
+            if(!Pipeline.working())c.getSystemService(NotificationManager.class).cancel(Transcriber.NOTIFICATION);
             check(t.lostWifi&&!t.onlyWaitingWifi(),"Wi-Fi lost midway, but the worker hands the recording to the background job");
+            // Queda para reintentar en el mismo trabajo: si vuelve el Wi-Fi durante la espera, las pantallas la ven en proceso.
+            check(t.retrying().contains(d.id),"Wi-Fi lost midway, but the recording is not held for the retry");
         }finally{d.delete(c);}
     }
 
@@ -107,9 +112,45 @@ final class EngineChecks {
             }
             // La misma regla con el cargador, en la tarea de fondo (cualquier Android).
             check(Pipeline.couldStart(Pipeline.jobInfo(c,s,true),false,false)&&!Pipeline.couldStart(Pipeline.jobInfo(c,s),false,true),"Job network constraint not read");
+            // Android detuvo la transferencia por el Wi-Fi que ya no se pide («Wi-Fi y datos móviles», o datos móviles permitidos
+            // a una grabación): la retoma la tarea de fondo con los ajustes de ahora. Si exigía cualquier red (se perdió toda
+            // conexión), o los ajustes siguen pidiendo Wi-Fi, no.
+            int net=android.app.job.JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY,power=android.app.job.JobParameters.STOP_REASON_CONSTRAINT_CHARGING;
+            android.app.job.JobInfo wifiJob=Pipeline.jobInfo(c,s),anyJob=Pipeline.jobInfo(c,s,true);
+            check(PipelineJob.staleStop(net,wifiJob,false,false)&&!PipelineJob.staleStop(net,wifiJob,true,false),"Transfer stopped for Wi-Fi no longer required not handed over");
+            check(!PipelineJob.staleStop(net,anyJob,false,false)&&!PipelineJob.staleStop(power,anyJob,false,false),"Transfer stopped for a condition it never required treated as stale");
+            check(PipelineJob.staleStop(net,null,false,false)&&!PipelineJob.staleStop(net,null,true,false)&&!PipelineJob.staleStop(android.app.job.JobParameters.STOP_REASON_TIMEOUT,wifiJob,false,false),"Stale stop without the job, or for another reason, wrong");
             s.prefs.edit().putBoolean("charging",true).commit();android.app.job.JobInfo plugged=Pipeline.jobInfo(c,s,true);
             check(!Pipeline.couldStart(plugged,true,false)&&Pipeline.couldStart(plugged,false,true),"Job charger constraint not read");
+            // Lo mismo con «Solo mientras carga» quitado mientras trabajaba.
+            check(PipelineJob.staleStop(power,plugged,false,false)&&!PipelineJob.staleStop(power,plugged,false,true),"Transfer stopped for a charger no longer required not handed over");
         }finally{s.prefs.edit().putBoolean("wifi",wifi).putBoolean("charging",charging).commit();}
+    }
+
+    // ---------- 0.8.0, revisión r4: lo que se dice mientras se espera ----------
+    private static String title(Notification n){return String.valueOf(n.extras.getCharSequence(Notification.EXTRA_TITLE));}
+    static void waits(Context c){
+        // Titular al pedir: lo que espera, o su turno detrás de la que se transcribe (como el aviso y el botón).
+        check(Pipeline.queuedLine(null,false).equals("En cola · empezando")&&Pipeline.queuedLine(null,true).equals("En cola · empieza cuando termine la transcripción en curso")
+            &&Pipeline.queuedLine("esperando que conectes el cargador",true).equals("En cola · esperando que conectes el cargador"),"Queued headline wrong");
+        // «Reintento en…» solo en la que la ronda dejó para reintentar y sigue lista; nunca en una recién pedida.
+        check("A".equals(TranscribeService.retryTarget(Arrays.asList("A","B"),id->true))&&"B".equals(TranscribeService.retryTarget(Arrays.asList("A","B"),"B"::equals))
+            &&TranscribeService.retryTarget(Collections.<String>emptyList(),id->true)==null&&TranscribeService.retryTarget(Collections.singletonList("A"),id->false)==null,"Retry target wrong");
+        // Aviso «Esperando Wi-Fi» al pasar a «Solo con Wi-Fi»: nunca para la que se está enviando (su parte en curso termina
+        // igual y el aviso quedaba en una grabación ya transcrita); sí para la siguiente que espera.
+        List<String> ids=Arrays.asList("A","B","C");
+        check("B".equals(Pipeline.wifiNoticeFor(ids,"A",id->true))&&"A".equals(Pipeline.wifiNoticeFor(ids,null,id->true))&&"C".equals(Pipeline.wifiNoticeFor(ids,"A",id->!id.equals("B")))
+            &&Pipeline.wifiNoticeFor(Collections.singletonList("A"),"A",id->true)==null&&Pipeline.wifiNoticeFor(ids,null,id->false)==null,"Wi-Fi notice target wrong");
+        // La ronda se detiene por el cargador, la batería o internet (sin gastar un intento); no por el Wi-Fi, que es de cada
+        // grabación, ni en la tarea de fondo, a la que Android ya retiene por eso mismo.
+        check(Transcriber.holds("esperando que conectes el cargador",0)&&Transcriber.holds("esperando conexión a internet",0)&&Transcriber.holds("batería baja: Android espera a que cargues",0),"Round not held for the charger, the battery or the network");
+        check(!Transcriber.holds(Pipeline.WIFI_WAIT,0)&&!Transcriber.holds(null,0)&&!Transcriber.holds("esperando que conectes el cargador",Transcriber.JOB_BUDGET_MS),"Round held for Wi-Fi, for nothing, or in the background job");
+        // Una espera no se titula «Transcribiendo» ni lleva la barra ocupada; un envío sí.
+        Notification wait=Transcriber.build(c,Transcriber.WIFI_WAIT_TEXT,true,-1),send=Transcriber.build(c,"Enviando parte 1 de 3",true,40);
+        check("En pausa".equals(title(wait))&&wait.extras.getInt(Notification.EXTRA_PROGRESS_MAX)==0&&!wait.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE),"Waiting notification titled as working or with a busy bar");
+        check("Transcribiendo".equals(title(send))&&send.extras.getInt(Notification.EXTRA_PROGRESS)==40&&send.extras.getInt(Notification.EXTRA_PROGRESS_MAX)==100,"Progress notification lost its title or bar");
+        check(Transcriber.waiting("Intento 2 de 5 no resultó · se reintenta solo")&&Transcriber.waiting("Esperando que conectes el cargador · se retoma sola al cumplirse")
+            &&!Transcriber.waiting("Preparando…")&&!Transcriber.waiting("Transcribiendo · 2 de 3 partes listas")&&!Transcriber.waiting("Enviando parte 1 de 3"),"Waiting notification texts wrong");
     }
 
     // ---------- Disponibilidad y motivos ----------

@@ -47,7 +47,7 @@ final class Pipeline {
         if(again!=null){JSONArray fixed=state.optJSONArray("fixedRefs");int people=Retranscribe.people(fixed);
             log(c,id,"Volver a transcribir: «"+Retranscribe.label(again)+"»"+(again==Retranscribe.Mode.CORRECTIONS&&people>0?" · muestras de "+people+(people==1?" persona":" personas"):"")+" · la versión anterior queda guardada");}
         String blocker=blocker(c,id);
-        log(c,id,blocker==null?"En cola · empezando":"En cola · "+blocker);
+        log(c,id,queuedLine(blocker,behind(id)));
         // Esperando Wi-Fi con datos móviles a mano: se avisa con la salida («Usar datos móviles»). Antes solo lo decía la
         // bitácora, y nadie lo veía (27 min de espera en el diagnóstico del 2026-10-01).
         if(waitsForWifi(c,id))waitingWifi(c,id);
@@ -102,6 +102,20 @@ final class Pipeline {
      * (Transcriber.retryingId). Una pedida que no cumple esto está en cola. La regla única de las pantallas.
      */
     static boolean processing(String id){return id!=null&&working()&&(id.equals(Transcriber.currentId)||id.equals(Transcriber.retryingId));}
+    /**
+     * ¿El trabajo en curso está con OTRA grabación (la transcribe o espera para reintentarla)? Entonces esta, recién pedida,
+     * espera su turno: no se arranca otro trabajo (Route.RUNNING).
+     */
+    static boolean behind(String id){String cur=Transcriber.currentId,again=Transcriber.retryingId;return working()&&(cur!=null&&!cur.equals(id)||again!=null&&!again.equals(id));}
+    /**
+     * La línea de la bitácora (y el titular del detalle) al pedir: qué espera (blocker), o que espera su turno detrás de la
+     * transcripción en curso (behind), como dicen el aviso, la nota y el botón. Antes decía «En cola · empezando» también
+     * detrás de otra. Separada del teléfono para poder probarla.
+     */
+    static String queuedLine(String blocker,boolean behind){
+        if(blocker!=null)return "En cola · "+blocker;
+        return behind?"En cola · empieza cuando termine la transcripción en curso":"En cola · empezando";
+    }
     /** Arranca lo pedido por el camino que corresponda. byUser: viene de un toque de la persona. */
     static void start(Context c,boolean byUser){
         Route route=route(Build.VERSION.SDK_INT,byUser,visible(),canRunUserJobs(c),working());
@@ -162,16 +176,33 @@ final class Pipeline {
      * Ajustes cambió «Red para enviar audio» o «Solo mientras carga» (llamar con la pantalla a la vista). Una transferencia
      * iniciada por el usuario que aún espera se vuelve a programar con las condiciones nuevas (mismo id: la reemplaza); si
      * Android no la acepta, se cancela para no bloquear el otro camino. Después, la tarea de fondo con los ajustes nuevos.
-     * Sin «Solo con Wi-Fi», el aviso «Esperando Wi-Fi» ya no corresponde.
+     * Sin «Solo con Wi-Fi», el aviso «Esperando Wi-Fi» ya no corresponde. Con «Solo con Wi-Fi» y datos móviles, la primera
+     * grabación pedida que ahora espera Wi-Fi lo recibe (con «Usar datos móviles»), como promete Ajustes: si ningún
+     * trabajo corre, nadie más lo pondría y la espera sería silenciosa. Nunca la que se está enviando (ver wifiNoticeFor).
      */
     static void settingsChanged(Context c){
-        if(!new Settings(c).wifiOnly())clearWaitingWifi(c);
+        if(new Settings(c).wifiOnly()){
+            java.util.List<String> ids=new java.util.ArrayList<>();for(Recording r:Recording.list(c))ids.add(r.id);
+            String id=wifiNoticeFor(ids,working()?Transcriber.currentId:null,x->waitsForWifi(c,x));if(id!=null)waitingWifi(c,id);
+        }
+        else clearWaitingWifi(c);
         if(Build.VERSION.SDK_INT>=34&&!working()&&pending(c)){
             try{JobScheduler js=c.getSystemService(JobScheduler.class);
                 if(js.getPendingJob(USER_JOB_ID)!=null&&!scheduleUserJob(c))js.cancel(USER_JOB_ID);}
             catch(RuntimeException ignored){}
         }
         schedule(c,true);
+    }
+    /**
+     * De qué grabación es el aviso «Esperando Wi-Fi» al pasar a «Solo con Wi-Fi»: la primera que ahora espera Wi-Fi (waits),
+     * salvo la que el servicio o la transferencia están enviando (sending): el Wi-Fi se revisa antes de cada parte, la parte
+     * en curso termina igual y, si era la última, el aviso quedaba puesto en una grabación ya transcrita. Si le quedan partes,
+     * el motor lo pone al llegar a la siguiente (Transcriber.waitWifi). La tarea de fondo no cuenta (sending null): la
+     * reprogramación la corta y esa grabación sí queda esperando. Separada del teléfono para poder probarla.
+     */
+    static String wifiNoticeFor(java.util.Collection<String> ids,String sending,java.util.function.Predicate<String> waits){
+        for(String id:ids)if(!id.equals(sending)&&waits.test(id))return id;
+        return null;
     }
     /**
      * Hay una transferencia iniciada por el usuario recién programada que todavía no empieza Y que podría empezar ya: el
@@ -331,6 +362,8 @@ final class Pipeline {
         Diagnostics.event("job_cancelled",id);FilesStore.update(c,id,s -> {s.put("requested",false);s.remove("mobileOk");s.remove("prepPct");});log(c,id,"Transcripción cancelada");AudioParts.clearBlocks(c,id);
         // El envío en curso se corta ya, lo haga el servicio en primer plano o la transferencia iniciada por el usuario.
         for(HttpApi active:new HttpApi[]{TranscribeService.current,PipelineJob.current})if(active!=null&&id.equals(active.jobId))active.cancel();
+        // Si el trabajo esperaba para reintentarla, ya no la tiene (Pipeline.processing).
+        if(id.equals(Transcriber.retryingId))Transcriber.retryingId=null;
         clearWaitingWifi(c,id);
         // La grabación nunca queda sin transcripción por cancelar una versión nueva.
         if(restorePrevious&&Retranscribe.hasPrevious(c,id)&&!Transcript.exists(c,id)){

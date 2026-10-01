@@ -37,8 +37,11 @@ public class PipelineJob extends JobService {
             boolean again=retry;String needsApp=waiting;actives.remove(params.getJobId(),http);
             // Se programa una tarea nueva (sin espera exponencial) en vez de pedir reintento con backoff.
             // Un envío que solo cabe en primer plano no reprograma nada: el aviso pide abrir la app, que lo retoma.
+            // La notificación de avance de esta tarea es una común (no la de un servicio): si nadie más la usa, se quita al
+            // terminar. Antes quedaba, p. ej., «Enviando parte 2 de 3 · 45 %» junto a «Esperando Wi-Fi» hasta que volviera.
             if(!http.cancelled)new Handler(getMainLooper()).post(()->{jobFinished(params,false);if(again)Pipeline.schedule(this,true);
-                if(needsApp!=null)openAppToSend(needsApp);else if(!again)getSystemService(NotificationManager.class).cancel(OPEN_APP_NOTIFICATION);});
+                if(needsApp!=null)openAppToSend(needsApp);else if(!again)getSystemService(NotificationManager.class).cancel(OPEN_APP_NOTIFICATION);
+                if(!Pipeline.working())getSystemService(NotificationManager.class).cancel(Transcriber.NOTIFICATION);});
         },"VozLocal-transcribe").start();return true;
     }
     /**
@@ -84,15 +87,51 @@ public class PipelineJob extends JobService {
     @Override public boolean onStopJob(JobParameters params){
         int reason=Build.VERSION.SDK_INT>=31?params.getStopReason():-1;boolean byApp=reason==JobParameters.STOP_REASON_CANCELLED_BY_APP;
         boolean user=Build.VERSION.SDK_INT>=34&&params.isUserInitiatedJob();
+        // Detenida por una condición que los ajustes de ahora ya no piden (ver staleStop): la tarea de fondo, con las
+        // condiciones de ahora, sigue ya. Esta queda programada como estaba; si vuelve a cumplirse antes, toma el relevo.
+        boolean stale=false;
+        if(user&&(reason==JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY||reason==JobParameters.STOP_REASON_CONSTRAINT_CHARGING)){
+            JobInfo job=null;try{job=getSystemService(JobScheduler.class).getPendingJob(params.getJobId());}catch(RuntimeException ignored){}
+            Settings s=new Settings(this);stale=staleStop(reason,job,s.wifiOnly()&&!Pipeline.anyMobileOk(this),s.charging());
+        }
         HttpApi h=actives.remove(params.getJobId());
         if(h!=null){h.cancel();String id=h.jobId;
-            if(id!=null){Pipeline.log(this,id,byApp?"Continúa en primer plano (sigue aunque bloquees el teléfono)":(user?"Android pausó la transferencia: ":"Android pausó la tarea de fondo: ")+stopReason(reason)+" · se reanudará");
-                if(reason==JobParameters.STOP_REASON_TIMEOUT)timedOut(id);
-                if(reason==JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY)wifiNotice(id);}}
+            // La línea va a una grabación que sigue pedida: http.jobId es la última que tomó el trabajo, que pudo terminar
+            // mientras esperaba para seguir con otra (antes «se reanudará» quedaba en una ya transcrita).
+            String shown=byApp?(requested(id)?id:null):pausedId(id);
+            if(shown!=null)Pipeline.log(this,shown,byApp?"Continúa en primer plano (sigue aunque bloquees el teléfono)":(user?"Android pausó la transferencia: ":"Android pausó la tarea de fondo: ")+stopReason(reason)+(stale?" · sigue la tarea de fondo con tus ajustes de ahora":" · se reanudará"));
+            if(id!=null&&reason==JobParameters.STOP_REASON_TIMEOUT)timedOut(id);
+            if(reason==JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY)wifiNotice();}
         if(user&&current==h){userRunning=false;current=null;}
+        if(stale){Diagnostics.event("user_job",null,"result","stale","runner","uij","reason",reason);android.content.Context app=getApplicationContext();new Handler(getMainLooper()).post(()->Pipeline.schedule(app,true));}
         // La notificación de avance es compartida: si otro trabajador la está usando (el servicio en primer plano o la
         // transferencia que tomó el relevo), no se quita.
         if(!Pipeline.working())getSystemService(NotificationManager.class).cancel(Transcriber.NOTIFICATION);Diagnostics.event("job_interrupted",null,"reason",reason,"runner",user?"uij":"job");return true;
+    }
+    /**
+     * ¿Android detuvo la transferencia iniciada por el usuario por una condición que los ajustes de ahora ya no piden? Se
+     * programa con las condiciones de ese momento y, mientras trabaja, Pipeline.settingsChanged no la reemplaza (cortaría la
+     * subida). Si entretanto se eligió «Wi-Fi y datos móviles» (o se permitieron los datos móviles a una grabación) o se quitó
+     * «Solo mientras carga», al irse el Wi-Fi o desconectar el cargador Android la detiene y la retiene con la condición
+     * vieja: la transcripción esperaba en silencio algo que ya no se pide. job: la detenida (null si no se pudo leer: cuenta
+     * solo el motivo). wifiNow, chargingNow: lo que piden los ajustes de ahora. Separada del teléfono para poder probarla.
+     */
+    static boolean staleStop(int reason,JobInfo job,boolean wifiNow,boolean chargingNow){
+        // Pipeline.couldStart con lo demás cumplido dice si la tarea exigía Wi-Fi (o el cargador).
+        if(reason==JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY)return !wifiNow&&(job==null||!Pipeline.couldStart(job,false,true));
+        if(reason==JobParameters.STOP_REASON_CONSTRAINT_CHARGING)return !chargingNow&&(job==null||!Pipeline.couldStart(job,true,false));
+        return false;
+    }
+    private boolean requested(String id){return id!=null&&FilesStore.state(this,id).optBoolean("requested");}
+    /**
+     * A quién le corresponde «Android pausó…»: la del envío si sigue pedida; si no, la que el trabajo esperaba para reintentar
+     * (Transcriber.retryingId) o la primera pedida. null si no queda ninguna.
+     */
+    private String pausedId(String id){
+        if(requested(id))return id;
+        String again=Transcriber.retryingId;if(requested(again))return again;
+        for(Recording r:Recording.list(this))if(requested(r.id))return r.id;
+        return null;
     }
     /**
      * Resguardo: Android cortó la tarea por tiempo en medio de un envío (el trabajo no alcanza a registrar el fallo). Cuenta
@@ -124,15 +163,17 @@ public class PipelineJob extends JobService {
      * Android detuvo el trabajo porque cambió la red: con «Solo con Wi-Fi», se fue el Wi-Fi y quedaron los datos móviles (la
      * transferencia exige Wi-Fi). Si la grabación queda esperando Wi-Fi, se avisa con la salida «Usar datos móviles»: antes
      * solo lo decía la bitácora y la espera volvía a ser silenciosa (diagnóstico del 2026-10-01). Se mira unos segundos
-     * después, y hasta 30 s: mientras el teléfono pasa del Wi-Fi a los datos móviles, a veces no hay ninguna red.
+     * después, y hasta 30 s: mientras el teléfono pasa del Wi-Fi a los datos móviles, a veces no hay ninguna red. El aviso es
+     * de la primera grabación pedida que espera Wi-Fi, no de http.jobId: esa pudo terminar mientras el trabajo esperaba para
+     * seguir con otra, y entonces la que de verdad esperaba se quedaba sin aviso.
      */
-    private void wifiNotice(String id){
+    private void wifiNotice(){
         android.content.Context app=getApplicationContext();
         new Thread(()->{
             for(int i=0;i<6;i++){
                 SystemClock.sleep(5_000);
                 if(Pipeline.network(app)==null)continue;
-                if(Pipeline.waitsForWifi(app,id))Pipeline.waitingWifi(app,id);
+                for(Recording r:Recording.list(app))if(Pipeline.waitsForWifi(app,r.id)){Pipeline.waitingWifi(app,r.id);break;}
                 return;
             }
         },"VozLocal-wifi-wait").start();
