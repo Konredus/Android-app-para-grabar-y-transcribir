@@ -153,6 +153,21 @@ final class Pipeline {
             userJobAt=System.currentTimeMillis();return true;
         }catch(RuntimeException e){Diagnostics.event("user_job",null,"result","failed","error_class",e.getClass().getSimpleName());return false;}
     }
+    /**
+     * Ajustes cambió «Red para enviar audio» o «Solo mientras carga» (llamar con la pantalla a la vista). Una transferencia
+     * iniciada por el usuario que aún espera se vuelve a programar con las condiciones nuevas (mismo id: la reemplaza); si
+     * Android no la acepta, se cancela para no bloquear el otro camino. Después, la tarea de fondo con los ajustes nuevos.
+     * Sin «Solo con Wi-Fi», el aviso «Esperando Wi-Fi» ya no corresponde.
+     */
+    static void settingsChanged(Context c){
+        if(!new Settings(c).wifiOnly())clearWaitingWifi(c);
+        if(Build.VERSION.SDK_INT>=34&&!working()&&pending(c)){
+            try{JobScheduler js=c.getSystemService(JobScheduler.class);
+                if(js.getPendingJob(USER_JOB_ID)!=null&&!scheduleUserJob(c))js.cancel(USER_JOB_ID);}
+            catch(RuntimeException ignored){}
+        }
+        schedule(c,true);
+    }
     /** Hay una transferencia iniciada por el usuario recién programada que todavía no empieza: el primer plano le cede el turno. */
     static boolean userJobFresh(Context c){
         if(Build.VERSION.SDK_INT<34||System.currentTimeMillis()-userJobAt>USER_JOB_GRACE_MS)return false;
