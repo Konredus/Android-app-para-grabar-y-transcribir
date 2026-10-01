@@ -242,6 +242,12 @@ final class OnboardingChecks {
             OnboardingActivity.Verdict no=OnboardingActivity.saved(s.prefs,target);
             check(no!=null&&no.state==OnboardingActivity.Check.REJECTED&&"La clave del proveedor no es válida o fue revocada.".equals(no.message),"Tras volver a la app, una clave rechazada debe seguir rechazada");
             check(OnboardingActivity.saved(s.prefs,"openrouter|otra-clave")==null&&OnboardingActivity.saved(s.prefs,null)==null,"La comprobación de otra clave no cuenta");
+            // Un fallo que no habla de la clave (sin red, OpenRouter caído) no es rechazo: «no se pudo comprobar», sin mandar a cambiarla.
+            for(String why:new String[]{"No se pudo conectar. Revisa tu conexión a internet.","OpenRouter no está disponible temporalmente (503)."}){
+                SettingsActivity.saveVerify(s,target,false,900,why,Double.NaN,false);
+                OnboardingActivity.Verdict off=OnboardingActivity.saved(s.prefs,target);
+                check(off!=null&&off.state==OnboardingActivity.Check.UNKNOWN&&OnboardingActivity.UNCHECKED.equals(off.message)&&!off.empty(),"«"+why+"» guardado no debe mandar a revisar la clave");
+            }
             // Válida sin saldo, o de una cuenta sin créditos: sin ✓ (así todavía no transcribe), con el texto de Ajustes.
             SettingsActivity.saveVerify(s,target,true,900,null,0,false);
             OnboardingActivity.Verdict empty=OnboardingActivity.saved(s.prefs,target);

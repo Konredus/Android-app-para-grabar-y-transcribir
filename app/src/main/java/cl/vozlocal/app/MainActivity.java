@@ -136,11 +136,12 @@ public class MainActivity extends Screen {
         /**
          * Con lo que espera ESTA grabación (0.8.0, tercera ronda): el motivo de todas no ve el Wi-Fi si otra pedida puede
          * usar datos móviles, y «hay un trabajo andando» puede ser con otra. Así una que espera Wi-Fi, o su turno detrás de
-         * la que se está transcribiendo, no dice «Transcribiendo».
+         * la que se está transcribiendo, no dice «Transcribiendo». Sin trabajo andando tampoco (Android negó el servicio y
+         * el trabajo de fondo aún no parte): «En cola», como el botón del detalle (Next.working).
          */
         String progressText(){
-            String current=Transcriber.currentId;boolean working=Pipeline.working(),mine=working&&r.id.equals(current);
-            String wait=mine?null:blocker!=null?"En cola · "+blocker.replaceFirst(" \\(.*$",""):working&&current!=null?"En cola":null;
+            String current=Transcriber.currentId;boolean mine=Pipeline.working()&&r.id.equals(current);
+            String wait=mine?null:blocker!=null?"En cola · "+blocker.replaceFirst(" \\(.*$",""):"En cola";
             int b=blocks();if(b>1)return (wait!=null?wait:"Transcribiendo")+" · "+blocksDone()+" de "+b+" partes";
             return wait!=null?wait:"Transcribiendo…";
         }

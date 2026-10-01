@@ -342,9 +342,17 @@ final class RecordingActions {
      * detalle (RecordingActivity.inDetail). doing: «Transcribiendo» o «Volviendo a transcribir».
      */
     static String queuedToast(Screen s,Recording r,String doing){
-        String blocker=Pipeline.blocker(s,r.id);
-        if(blocker==null)return doing+" · sigue aunque bloquees el teléfono";
-        return "En cola · "+(s instanceof RecordingActivity?RecordingActivity.inDetail(blocker):blocker);
+        String blocker=Pipeline.blocker(s,r.id),cur=Transcriber.currentId;
+        return queuedToast(doing,blocker,Pipeline.working()&&cur!=null&&!cur.equals(r.id),s instanceof RecordingActivity);
+    }
+    /**
+     * Lo mismo con lo ya sabido. behind: el trabajo andando está con OTRA grabación (Pipeline.start no arranca otro: esta
+     * espera su turno), y entonces dice «En cola», como el botón, la nota del detalle y la Biblioteca; antes decía
+     * «Transcribiendo». detail: el aviso sale en el detalle.
+     */
+    static String queuedToast(String doing,String blocker,boolean behind,boolean detail){
+        if(blocker!=null)return "En cola · "+(detail?RecordingActivity.inDetail(blocker):blocker);
+        return behind?"En cola · empieza cuando termine la transcripción en curso":doing+" · sigue aunque bloquees el teléfono";
     }
     /** Android 13+: el aviso de «lista» necesita permiso de notificaciones; se pide al encolar. */
     static void askNotifications(Screen s){
