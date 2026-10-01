@@ -242,11 +242,15 @@ final class OnboardingChecks {
             OnboardingActivity.Verdict no=OnboardingActivity.saved(s.prefs,target);
             check(no!=null&&no.state==OnboardingActivity.Check.REJECTED&&"La clave del proveedor no es válida o fue revocada.".equals(no.message),"Tras volver a la app, una clave rechazada debe seguir rechazada");
             check(OnboardingActivity.saved(s.prefs,"openrouter|otra-clave")==null&&OnboardingActivity.saved(s.prefs,null)==null,"La comprobación de otra clave no cuenta");
+            // Ajustes («Comprobar conexión») y Grabar leen el mismo rechazo (revisión r4): no «No se pudo conectar» ni ✓ «Listo».
+            check(SettingsActivity.keyRejected(s.prefs,target)&&!SettingsActivity.keyRejected(s.prefs,"openrouter|otra-clave"),"Ajustes y Grabar deben ver la clave rechazada, y solo la de esta clave");
+            check(SettingsActivity.failedText(true,System.currentTimeMillis()).startsWith("Clave rechazada")&&SettingsActivity.failedText(false,System.currentTimeMillis()).startsWith("No se pudo conectar"),"La fila de Ajustes debe nombrar la clave rechazada");
             // Un fallo que no habla de la clave (sin red, OpenRouter caído) no es rechazo: «no se pudo comprobar», sin mandar a cambiarla.
             for(String why:new String[]{"No se pudo conectar. Revisa tu conexión a internet.","OpenRouter no está disponible temporalmente (503)."}){
                 SettingsActivity.saveVerify(s,target,false,900,why,Double.NaN,false);
                 OnboardingActivity.Verdict off=OnboardingActivity.saved(s.prefs,target);
                 check(off!=null&&off.state==OnboardingActivity.Check.UNKNOWN&&OnboardingActivity.UNCHECKED.equals(off.message)&&!off.empty(),"«"+why+"» guardado no debe mandar a revisar la clave");
+                check(!SettingsActivity.keyRejected(s.prefs,target),"«"+why+"» no es una clave rechazada en Ajustes ni en Grabar");
             }
             // Válida sin saldo, o de una cuenta sin créditos: sin ✓ (así todavía no transcribe), con el texto de Ajustes.
             SettingsActivity.saveVerify(s,target,true,900,null,0,false);
@@ -259,6 +263,7 @@ final class OnboardingChecks {
             SettingsActivity.saveVerify(s,target,true,900,null,4.2,false);
             OnboardingActivity.Verdict paid=OnboardingActivity.saved(s.prefs,target);
             check(paid!=null&&paid.state==OnboardingActivity.Check.VALID&&!paid.empty()&&"Clave válida · quedan US$4,20".equals(paid.message),"Una clave con saldo debe quedar lista");
+            check(!SettingsActivity.keyRejected(s.prefs,target),"Una clave válida no queda rechazada en Ajustes ni en Grabar");
             SettingsActivity.saveVerify(s,target,true,900,null,Double.NaN,false);
             OnboardingActivity.Verdict unknown=OnboardingActivity.saved(s.prefs,target);
             check(unknown!=null&&!unknown.empty()&&"Clave válida".equals(unknown.message),"Sin saldo informado, la clave vale igual");

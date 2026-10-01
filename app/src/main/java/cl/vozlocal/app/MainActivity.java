@@ -82,6 +82,10 @@ public class MainActivity extends Screen {
     private Ui.Btn stop,pause;private ImageButton mark;private Waveform wave;
     // Estado
     private int workingCount,failedCount,workingBlocks,workingDone;private String workingTitle="",workingId,failedId,reviewId,reviewTitle="";
+    /** workingRuns: la grabación de workingTitle se procesa ahora (Pipeline.processing); si no, workingWait dice por qué espera. */
+    private boolean workingRuns;private String workingWait;
+    /** El trabajo de transcripción tal como se dibujó (Pipeline.working y sus ids): si cambia, se redibuja sin esperar al disco. */
+    private boolean shownWorking;private String shownCurrent,shownRetrying;
     private String lastState="",shownTitle,shownImport,levelsId;private boolean starting,shownActive;private int shownMarks;
     /** Niveles de la grabación en curso: de aquí sale la onda chica de la hoja al terminar. */
     private final Levels levels=new Levels();
@@ -133,14 +137,17 @@ public class MainActivity extends Screen {
         int blocksDone(){return Math.min(blocks(),state.optInt("blocksDone"));}
         /** Avance real 0..1 (partes listas o audio procesado); -1 si todavía no se sabe. Nunca un porcentaje inventado. */
         float progress(){int b=blocks();if(b>1)return blocksDone()/(float)b;long a=state.optLong("audioMs"),d=state.optLong("doneAudioMs");return a>0&&d>0?Math.min(1f,d/(float)a):-1f;}
+        /** Lo que dibuja su anillo: el avance real; sin saberlo, gira solo si se procesa (Pipeline.processing). En cola, quieto. */
+        float ring(){float f=progress();return f<0&&!Pipeline.processing(r.id)?0f:f;}
         /**
          * Con lo que espera ESTA grabación (0.8.0, tercera ronda): el motivo de todas no ve el Wi-Fi si otra pedida puede
          * usar datos móviles, y «hay un trabajo andando» puede ser con otra. Así una que espera Wi-Fi, o su turno detrás de
          * la que se está transcribiendo, no dice «Transcribiendo». Sin trabajo andando tampoco (Android negó el servicio y
-         * el trabajo de fondo aún no parte): «En cola», como el botón del detalle (Next.working).
+         * el trabajo de fondo aún no parte): «En cola», como el botón del detalle (Next.working). «Se procesa» es la regla
+         * única Pipeline.processing: también entre intentos, cuando el trabajo la retiene para reintentarla.
          */
         String progressText(){
-            String current=Transcriber.currentId;boolean mine=Pipeline.working()&&r.id.equals(current);
+            boolean mine=Pipeline.processing(r.id);
             String wait=mine?null:blocker!=null?"En cola · "+blocker.replaceFirst(" \\(.*$",""):"En cola";
             int b=blocks();if(b>1)return (wait!=null?wait:"Transcribiendo")+" · "+blocksDone()+" de "+b+" partes";
             return wait!=null?wait:"Transcribiendo…";
@@ -437,17 +444,21 @@ public class MainActivity extends Screen {
         requestFit();
     }
     /**
-     * Estado, con esta prioridad: falta la clave > transcribiendo > error > una transcripción lista sin abrir > todo bien.
+     * Estado, con esta prioridad: falta la clave > transcribiendo o en cola > error > clave rechazada > una transcripción
+     * lista sin abrir > todo bien.
      * Arriba a la derecha va siempre como un botón redondo (llave, anillo que gira, alerta, documento o ✓); si algo pide
      * atención, además se dice con palabras en la píldora bajo el saludo. Ambos hacen lo mismo que el chip de 0.6.
      * La clave es la de OpenRouter (0.8.0, SPEC-0.8b: solo OpenRouter): sin ella, «Configurar transcripción» abre Ajustes
      * directo en la hoja de esa clave (extra focusKey), aunque quede guardada una clave vieja de OpenAI.
      */
     private void renderChip(){
-        boolean ready=new Settings(this).hasOpenRouterKey();String text,description;int icon;boolean spin=false,quiet=false,alert=false,fresh=false;View.OnClickListener click;
+        Settings settings=new Settings(this);boolean ready=settings.hasOpenRouterKey();String text,description;int icon;boolean spin=false,quiet=false,alert=false,fresh=false;View.OnClickListener click;
         if(!ready){text="Configurar transcripción";icon=R.drawable.ic_key;click=v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Configurar transcripción");startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true));};}
-        else if(workingCount>0){text=workingCount>1?"Transcribiendo "+workingCount+" audios":"Transcribiendo «"+workingTitle+"»"+(workingBlocks>1?" · "+workingDone+" de "+workingBlocks:"");icon=R.drawable.ic_wave;spin=true;click=v->{if(workingCount>1){filter=2;section(true);render();}else open(workingId);};}
+        else if(workingCount>0){text=queueText(workingCount,workingRuns?workingTitle:null,workingBlocks,workingDone,workingTitle,workingWait);icon=workingRuns?R.drawable.ic_wave:R.drawable.ic_clock;spin=workingRuns;click=v->{if(workingCount>1){filter=2;section(true);render();}else open(workingId);};}
         else if(failedCount>0){text=failedCount>1?failedCount+" necesitan atención":"Revisar transcripción";icon=R.drawable.ic_alert;alert=true;click=v->{if(failedCount>1){filter=4;section(true);render();}else open(failedId);};}
+        // La última comprobación rechazó la clave (la regla de la bienvenida y de Ajustes): no se dice «Listo» con ✓ de una
+        // clave con la que la próxima transcripción va a fallar. Abre Ajustes directo en la hoja de la clave.
+        else if(SettingsActivity.keyRejected(settings)){text="Revisa tu clave de OpenRouter";icon=R.drawable.ic_alert;alert=true;click=v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Revisa tu clave");startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true));};}
         else if(reviewId!=null){String id=reviewId;text="Revisar · «"+reviewTitle+"»";icon=R.drawable.ic_doc;fresh=true;click=v->open(id);}
         else{text="Listo para transcribir";icon=R.drawable.ic_check;quiet=true;click=v->startActivity(new Intent(this,SettingsActivity.class));}
         description=quiet?"Listo para transcribir. Abrir ajustes":!ready?"Configurar transcripción: agrega tu clave de OpenRouter":text;
@@ -460,6 +471,17 @@ public class MainActivity extends Screen {
         attention.setVisibility(quiet?View.INVISIBLE:View.VISIBLE);setText(attentionText,text);attention.setOnClickListener(click);attention.setContentDescription(description);
         attentionRing.setVisibility(spin?View.VISIBLE:View.GONE);attentionIcon.setVisibility(spin?View.GONE:View.VISIBLE);
         attentionIcon.setImageResource(icon);attentionIcon.setImageTintList(ColorStateList.valueOf(alert?p.error:p.primary));
+    }
+    /**
+     * La píldora con grabaciones pedidas (0.8.0, revisión r4): «Transcribiendo «X»» (con sus partes y cuántas esperan
+     * detrás) solo si X se procesa ahora (Pipeline.processing, la regla de la tarjeta «Última grabación» y la Biblioteca).
+     * Si ninguna se procesa: «N audios en cola» o, con una sola, «X» y por qué espera (Item.progressText). Antes decía
+     * «Transcribiendo «X»», con el anillo girando, de una que esperaba Wi-Fi, bajo una tarjeta que decía «En cola».
+     * running: título de la que se procesa (null: ninguna); first y wait: la primera pedida y su progressText.
+     */
+    static String queueText(int count,String running,int blocks,int done,String first,String wait){
+        if(running!=null)return "Transcribiendo «"+running+"»"+(blocks>1?" · "+done+" de "+blocks:"")+(count>1?" · "+(count-1)+" en cola":"");
+        return count>1?count+" audios en cola":"«"+first+"» · "+(wait!=null?wait:"En cola");
     }
     /** Cambia el texto solo si cambió: las regiones «en vivo» no se vuelven a anunciar en cada actualización. */
     private static void setText(TextView t,String value){if(!value.contentEquals(t.getText()))t.setText(value);}
@@ -529,6 +551,9 @@ public class MainActivity extends Screen {
         String saved=RecorderService.lastSavedId;if(saved!=null&&!active){RecorderService.lastSavedId=null;afterSave(saved);}
         renderImport();
         int version=FilesStore.version.get();if(dataVersion!=version){dataVersion=version;load();}
+        // El trabajo empezó, terminó, pasó a otra grabación o a esperar su reintento sin escribir nada en disco (p. ej. una
+        // espera de minutos entre intentos): se redibuja con lo ya leído, así la píldora y la tarjeta no quedan atrás.
+        else if(!items.isEmpty()&&(Pipeline.working()!=shownWorking||!Objects.equals(Transcriber.currentId,shownCurrent)||!Objects.equals(Transcriber.retryingId,shownRetrying)))render();
     }
     /** Cambio de estado (reposo, grabando, en pausa): la composición cambia con un fundido; la barra se esconde al grabar. */
     private void applyState(boolean active,boolean paused,boolean animate,boolean was){
@@ -760,7 +785,7 @@ public class MainActivity extends Screen {
         String status,label;int actionIcon;Ui.Style style;View.OnClickListener action;float bar=Float.NaN;
         View.OnClickListener transcribe=v->{Ui.haptic(v,Ui.Haptic.CONFIRM);RecordingActions.transcribe(this,r,this::load);};
         switch(i.status.kind){
-            case QUEUED:icon=R.drawable.ic_clock;tone=1;status=i.progressText();statusColor=p.primary;bar=i.progress();label="Ver avance";actionIcon=R.drawable.ic_clock;style=Ui.Style.TONAL;action=v->open(r.id);break;
+            case QUEUED:icon=R.drawable.ic_clock;tone=1;status=i.progressText();statusColor=p.primary;bar=i.ring();label="Ver avance";actionIcon=R.drawable.ic_clock;style=Ui.Style.TONAL;action=v->open(r.id);break;
             case FAILED:icon=R.drawable.ic_alert;tone=2;status="No se pudo transcribir";statusColor=p.error;label="Reintentar";actionIcon=R.drawable.ic_refresh;style=Ui.Style.PRIMARY;action=transcribe;break;
             case NEW:icon=R.drawable.ic_wave;status=dur+" · Sin transcribir";label="Transcribir";actionIcon=R.drawable.ic_sparkle;style=Ui.Style.PRIMARY;action=transcribe;break;
             default:{
@@ -774,7 +799,7 @@ public class MainActivity extends Screen {
                 }
             }
         }
-        // Transcribiendo: el ícono va dentro de un anillo con el avance real (gira si todavía no se sabe).
+        // Pedida: el ícono va dentro de un anillo con el avance real (Item.ring: gira si aún no se sabe y se procesa ahora).
         lastLead.addView(Float.isNaN(bar)?leadCircle(icon,tone,44,22):progressLead(bar,icon,20,3),new FrameLayout.LayoutParams(-1,-1));if(i.fresh)lastLead.addView(newDot(),new FrameLayout.LayoutParams(ui.dp(12),ui.dp(12),Gravity.TOP|Gravity.END));
         setText(lastTitle,r.title);setText(lastStatus,status);lastStatus.setTextColor(statusColor);
         lastAction(label,actionIcon,style,action);
@@ -915,15 +940,20 @@ public class MainActivity extends Screen {
     private static long newSince(Context c){SharedPreferences sp=c.getSharedPreferences("home",Context.MODE_PRIVATE);long v=sp.getLong("newSince",0);if(v==0){v=System.currentTimeMillis();sp.edit().putLong("newSince",v).apply();}return v;}
     private boolean matches(Item i,int f){switch(f){case 1:return inboxOn?i.toSave():i.done();case 2:return i.status.kind==RecState.Kind.QUEUED;case 3:return i.status.kind==RecState.Kind.NEW;case 4:return i.status.kind==RecState.Kind.FAILED;default:return true;}}
     private String signature(){
-        StringBuilder b=new StringBuilder().append(filter).append('|').append(query).append('|').append(inboxOn).append('|').append(Pipeline.working()).append('|').append(Transcriber.currentId).append('|').append(Calendar.getInstance().get(Calendar.DAY_OF_YEAR));
+        StringBuilder b=new StringBuilder().append(filter).append('|').append(query).append('|').append(inboxOn).append('|').append(Pipeline.working()).append('|').append(Transcriber.currentId).append('|').append(Transcriber.retryingId).append('|').append(Calendar.getInstance().get(Calendar.DAY_OF_YEAR));
         for(Item i:items){Meta m=i.meta;b.append('\n').append(i.r.id).append(i.r.title).append(i.r.duration).append(i.status.kind).append(i.blocker).append(i.blocks()).append(i.blocksDone()).append(i.state.optLong("doneAudioMs")).append(i.savedAt).append(i.outdated).append(i.fresh).append(i.state.optString("snippet"));if(m!=null)b.append(m.snippet).append(m.names).append(m.colors).append(m.reviewed);}
         return b.toString();
     }
     private void render(){
         int[] counts=new int[5];int done=0;for(Item i:items){if(i.done())done++;for(int f=0;f<5;f++)if(matches(i,f))counts[f]++;}
         // Grabar: estado, «Última grabación», «Tu semana» y el saludo.
-        Item working=null,failed=null,review=null;for(Item i:items){if(i.status.kind==RecState.Kind.QUEUED&&working==null)working=i;if(i.status.kind==RecState.Kind.FAILED&&failed==null)failed=i;if(i.fresh&&review==null)review=i;}
-        workingCount=counts[2];failedCount=counts[4];workingTitle=working==null?"":working.r.title;workingId=working==null?null:working.r.id;workingBlocks=working==null?0:working.blocks();workingDone=working==null?0:working.blocksDone();
+        // run: la pedida que se procesa ahora (Pipeline.processing), la única de la que la píldora dice «Transcribiendo».
+        // Lo que se ve del trabajo se anota ANTES de mirarlo: si cambia mientras se dibuja, el bucle de UI redibuja.
+        shownWorking=Pipeline.working();shownCurrent=Transcriber.currentId;shownRetrying=Transcriber.retryingId;
+        Item working=null,run=null,failed=null,review=null;
+        for(Item i:items){if(i.status.kind==RecState.Kind.QUEUED){if(working==null)working=i;if(run==null&&Pipeline.processing(i.r.id))run=i;}if(i.status.kind==RecState.Kind.FAILED&&failed==null)failed=i;if(i.fresh&&review==null)review=i;}
+        Item shown=run!=null?run:working;workingRuns=run!=null;workingWait=run==null&&working!=null?working.progressText():null;
+        workingCount=counts[2];failedCount=counts[4];workingTitle=shown==null?"":shown.r.title;workingId=shown==null?null:shown.r.id;workingBlocks=shown==null?0:shown.blocks();workingDone=shown==null?0:shown.blocksDone();
         failedId=failed==null?null:failed.r.id;reviewId=review==null?null:review.r.id;reviewTitle=review==null?"":review.r.title;renderChip();
         nav.badge(1,counts[2]>0);renderLast();renderWeek();renderGreeting();
         // Biblioteca (solo se rearma si cambió algo: no salta mientras se actualiza el avance de otra grabación).
@@ -997,7 +1027,7 @@ public class MainActivity extends Screen {
     private View lead(Item i){
         FrameLayout f=new FrameLayout(this);f.setClipChildren(false);View base;
         switch(i.status.kind){
-            case QUEUED:base=progressLead(i.progress(),R.drawable.ic_wave,18,3);break;
+            case QUEUED:base=progressLead(i.ring(),R.drawable.ic_wave,18,3);break;
             case FAILED:base=leadCircle(R.drawable.ic_alert,2,40,20);break;
             case NEW:base=leadCircle(R.drawable.ic_wave,0,40,20);break;
             default:{boolean review=i.toReview(),save=i.toSave();base=leadCircle(review?R.drawable.ic_people:save?R.drawable.ic_save:R.drawable.ic_doc,review||save?1:0,40,20);}

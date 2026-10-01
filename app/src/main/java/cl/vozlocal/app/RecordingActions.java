@@ -41,7 +41,7 @@ final class Next {
     static Next of(Context c,Recording r){
         JSONObject st=FilesStore.state(c,r.id);
         // Pedida (también al volver a transcribir, cuando la versión actual pasó a "anterior"): el trabajo va solo.
-        if(st.optBoolean("requested")){boolean mine=Pipeline.working()&&r.id.equals(Transcriber.currentId);
+        if(st.optBoolean("requested")){boolean mine=Pipeline.processing(r.id);
             return new Next(Step.WORKING,working(st.has("retranscribe"),mine,mine?null:Pipeline.blocker(c,r.id)),R.drawable.ic_clock);}
         if(!Transcript.exists(c,r.id)){
             if(st.optBoolean("failed"))return new Next(Step.RETRY,"Reintentar",R.drawable.ic_refresh);
@@ -56,8 +56,9 @@ final class Next {
     }
     /**
      * El botón de una grabación pedida (0.8.0, tercera ronda): «Transcribiendo…» solo si es ESTA la que se procesa ahora
-     * (mine: Pipeline.working() y Transcriber.currentId); si no, por qué espera (blocker: Pipeline.blocker con su id) o
-     * «En cola…». Antes decía «Transcribiendo…» con la grabación en cola, esperando Wi-Fi o el cargador.
+     * (mine: Pipeline.processing, que cuenta también la espera entre intentos); si no, por qué espera (blocker:
+     * Pipeline.blocker con su id) o «En cola…». Antes decía «Transcribiendo…» con la grabación en cola, esperando Wi-Fi o
+     * el cargador; y en cada espera para reintentar pasaba a «En cola…» (Transcriber.currentId queda en null entre intentos).
      */
     static String working(boolean again,boolean mine,String blocker){
         if(mine)return again?"Volviendo a transcribir…":"Transcribiendo…";
@@ -342,9 +343,16 @@ final class RecordingActions {
      * detalle (RecordingActivity.inDetail). doing: «Transcribiendo» o «Volviendo a transcribir».
      */
     static String queuedToast(Screen s,Recording r,String doing){
-        String blocker=Pipeline.blocker(s,r.id),cur=Transcriber.currentId;
-        return queuedToast(doing,blocker,Pipeline.working()&&cur!=null&&!cur.equals(r.id),s instanceof RecordingActivity);
+        return queuedToast(doing,Pipeline.blocker(s,r.id),behind(r.id),s instanceof RecordingActivity);
     }
+    /**
+     * ¿El trabajo andando está con OTRA grabación? La transcribe (Transcriber.currentId) o espera para reintentarla
+     * (Transcriber.retryingId): esta espera su turno. Antes solo miraba currentId, y detrás de una que esperaba su reintento
+     * decía «Transcribiendo · sigue aunque bloquees el teléfono».
+     */
+    static boolean behind(String id){return behind(Pipeline.working(),Pipeline.processing(id),Transcriber.currentId,Transcriber.retryingId);}
+    /** Lo mismo con lo ya leído (separado del teléfono para poder probarlo). mine: Pipeline.processing de esta grabación. */
+    static boolean behind(boolean working,boolean mine,String current,String retrying){return working&&!mine&&(current!=null||retrying!=null);}
     /**
      * Lo mismo con lo ya sabido. behind: el trabajo andando está con OTRA grabación (Pipeline.start no arranca otro: esta
      * espera su turno), y entonces dice «En cola», como el botón, la nota del detalle y la Biblioteca; antes decía

@@ -361,7 +361,8 @@ public class MetricsActivity extends Screen {
         // A medio camino: solo lo que existe. Cada fila lleva a esas grabaciones.
         LinearLayout stalls=ui.column();
         stall(stalls,R.drawable.ic_alert,"Con error","Revisa qué pasó y reintenta",t.failed,data.all.failed.size(),LIB_FAILED);
-        stall(stalls,R.drawable.ic_hourglass,"En proceso","Transcribiéndose ahora",t.queued,data.all.queued.size(),LIB_WORKING);
+        // Las pedidas: solo una se transcribe a la vez; las demás esperan su turno, el Wi-Fi o el cargador.
+        stall(stalls,R.drawable.ic_hourglass,"En proceso","En cola o transcribiéndose",t.queued,data.all.queued.size(),LIB_WORKING);
         stall(stalls,R.drawable.ic_transcribe,"Sin transcribir","Solo audio, por ahora",t.pending,data.all.pending.size(),LIB_NEW);
         stall(stalls,R.drawable.ic_note,"Transcritas sin nota",t.noNote.size()>1?"Abre la más reciente":"Ábrela para armar la nota",t.noNote,-1,-1);
         // «Por guardar» de la Biblioteca también cuenta las que cambiaron después de guardarse: no se promete un total.

@@ -607,21 +607,24 @@ public class RecordingActivity extends Screen {
     private static boolean logHas(JSONObject st,String word){JSONArray log=st.optJSONArray("log");if(log!=null)for(int i=0;i<log.length();i++){JSONObject e=log.optJSONObject(i);if(e!=null&&e.optString("m").contains(word))return true;}return false;}
     /** Qué pasa ahora: tranquilidad si trabaja, o por qué espera; «Empezar ahora» solo si Android la está demorando. */
     private void refreshWaiting(String blocker){
-        if(progNote==null)return;boolean running=Pipeline.working(),mine=mine();String current=Transcriber.currentId;
+        if(progNote==null)return;boolean running=Pipeline.working(),mine=mine();
         // Un paso que lleva mucho en lo mismo (0.8.0): se dice, y qué va a pasar. Solo si ESTA grabación está en ese paso.
         boolean slow=mine&&System.currentTimeMillis()-phaseSince>15*60_000L;
-        progNote.setText(waitingNote(mine,running,running&&current!=null&&!current.equals(id),slow,blocker));
+        progNote.setText(waitingNote(mine,running,RecordingActions.behind(running,mine,Transcriber.currentId,Transcriber.retryingId),slow,blocker));
         startNow.setVisibility(!running&&blocker==null?View.VISIBLE:View.GONE);
         refreshEstimate();
     }
     /**
-     * ¿ESTA grabación es la que se procesa ahora? (Transcriber.currentId). Pipeline.working() dice que hay un trabajo
-     * andando, pero puede estar con otra grabación mientras esta sigue en cola o esperando Wi-Fi.
+     * ¿ESTA grabación es la que se procesa ahora? La regla única Pipeline.processing: la transcribe o espera para
+     * reintentarla. Pipeline.working() dice que hay un trabajo andando, pero puede estar con otra grabación mientras esta
+     * sigue en cola o esperando Wi-Fi. Con solo Transcriber.currentId (en null entre intentos), cada espera para reintentar
+     * pasaba el botón a «En cola…» y escondía la estimación.
      */
-    private boolean mine(){return Pipeline.working()&&id!=null&&id.equals(Transcriber.currentId);}
+    private boolean mine(){return Pipeline.processing(id);}
     /**
      * La nota de la tarjeta según qué pasa con ESTA grabación (0.8.0, tercera ronda). mine: es la que se procesa ahora;
-     * running: hay un trabajo andando; other: ese trabajo está con otra grabación; slow: lleva más de 15 min en el mismo
+     * running: hay un trabajo andando; other: ese trabajo está con otra grabación (RecordingActions.behind: la transcribe o
+     * espera para reintentarla); slow: lleva más de 15 min en el mismo
      * paso; blocker: por qué espera esta grabación (Pipeline.blocker con su id) o null. Antes bastaba un trabajo andando
      * con cualquiera: una grabación en cola o esperando Wi-Fi decía «Puedes cerrar la app» y, a los 15 min, «Este paso
      * tarda más de lo normal… se corta y se reintenta solo», sin estar en ningún paso.
@@ -693,7 +696,7 @@ public class RecordingActivity extends Screen {
             condition(netOk,!online?"Sin conexión a internet":s.wifiOnly()?(wifi?"Wi-Fi conectado":mobileOk?"Datos móviles, solo para esta grabación":"Se requiere Wi-Fi · ahora usas datos móviles"):(wifi?"Conectado por Wi-Fi":"Conectado por datos móviles"));
             // Espera Wi-Fi teniendo datos móviles: la salida a la vista, grande, con lo que pesaría el envío (0.8.0, tercera
             // ronda). Vale solo para esta grabación; «Solo con Wi-Fi» sigue igual para las demás.
-            if(Pipeline.waitsForWifi(s.wifiOnly(),online,wifi,st)&&!id.equals(Transcriber.currentId)){
+            if(Pipeline.waitsForWifi(s.wifiOnly(),online,wifi,st)&&!mine()){
                 String size=Pipeline.megabytes(Pipeline.uploadBytes(this,recording));
                 Ui.Btn mobile=ui.button("Usar datos móviles ahora ("+size+")",R.drawable.ic_upload,Ui.Style.PRIMARY,v->useMobile());
                 mobile.setContentDescription("Usar datos móviles ahora para esta grabación, "+size.replace("≈","aproximadamente "));
@@ -726,7 +729,7 @@ public class RecordingActivity extends Screen {
     private void condition(boolean ok,String text){LinearLayout r=ui.row();r.setPadding(0,ui.dp(3),0,ui.dp(3));r.addView(ui.icon(ok?R.drawable.ic_check_circle:R.drawable.ic_clock,ok?p.primary:p.error,18));r.addView(ui.space(S2));r.addView(ui.text(text,Type.BODY_MEDIUM,ok?p.onSurfaceVariant:p.onSurface),new LinearLayout.LayoutParams(0,-2,1));conditions.addView(r);}
     /** Cada 250 ms: cronómetros; cada segundo la estimación; cada 3 s las condiciones. */
     private void tickProcess(){
-        if(liveTotal!=null&&liveState!=null&&liveTotal.isAttachedToWindow()){liveTotal.setText(Recording.time(System.currentTimeMillis()-liveState.optLong("queuedAt",System.currentTimeMillis())));if(liveRemaining!=null)liveRemaining.setText(remaining(liveState));}
+        if(liveTotal!=null&&liveState!=null&&liveTotal.isAttachedToWindow()){liveTotal.setText(Recording.time(System.currentTimeMillis()-liveState.optLong("queuedAt",System.currentTimeMillis())));if(liveRemaining!=null)liveRemaining.setText(remainingText(liveState));}
         if(mode!=Mode.QUEUED||phaseElapsed==null||!phaseElapsed.isAttachedToWindow())return;
         long now=System.currentTimeMillis();
         phaseElapsed.setText("En este paso hace "+Recording.time(now-phaseSince));
@@ -744,7 +747,7 @@ public class RecordingActivity extends Screen {
         long elapsed=live?now-queued:st.optLong("doneIn",now-queued);String model=st.optString("model","");
         List<String[]> cells=new ArrayList<>();
         cells.add(new String[]{"Tiempo total",Recording.time(elapsed)});
-        if(live)cells.add(new String[]{"Restante (aprox.)",remaining(st)});
+        if(live)cells.add(new String[]{"Restante (aprox.)",remainingText(st)});
         cells.add(new String[]{"Audio procesado",Recording.time(live?doneAudio:audio)+" de "+Recording.time(audio)});
         long speedBase=live?doneAudio:audio;if(speedBase>0&&elapsed>0)cells.add(new String[]{"Velocidad",String.format(Locale.ROOT,"%.1f",speedBase/(double)elapsed).replace('.',',')+"× tiempo real"});
         // OpenRouter: cuánto tomó convertir el audio antes de enviarlo (la etapa «Preparar audio»), sumado entre partes.
@@ -778,6 +781,12 @@ public class RecordingActivity extends Screen {
         if(!model.isEmpty()){TextView m=ui.text("Modelo: "+model+(st.optBoolean("speakers")?" · separa voces":"")+priced,Type.BODY_SMALL,p.onSurfaceVariant);m.setPadding(0,ui.dp(S2),0,0);grid.addView(m);}
         if(live)liveState=st;return grid;
     }
+    /**
+     * «Restante (aprox.)» con la regla de la estimación de arriba (refreshEstimate): solo la grabación que se procesa tiene
+     * un restante que cumplir. Una en cola o esperando Wi-Fi dice «en espera»; antes la cuenta bajaba igual hasta un
+     * mínimo y se quedaba ahí durante toda la espera, junto a «Esperando: Wi-Fi».
+     */
+    private String remainingText(JSONObject st){return mine()?remaining(st):"en espera";}
     /** Estimación: promedio por bloque × rondas restantes (bloques de a PARALLEL en paralelo). */
     private String remaining(JSONObject st){
         int blocks=st.optInt("blocks"),done=st.optInt("blocksDone"),count=st.optInt("blockCount");long sum=st.optLong("blockMsSum");
