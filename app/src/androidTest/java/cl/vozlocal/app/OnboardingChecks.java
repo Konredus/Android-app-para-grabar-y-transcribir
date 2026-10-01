@@ -29,6 +29,7 @@ final class OnboardingChecks {
         texts();
         verdicts();
         preferences(c);
+        savedVerdict(c);
         battery(c);
         libraryFilter();
         UiChecks.onMain(()->{drawables(c);views(c,false);views(c,true);});
@@ -220,6 +221,44 @@ final class OnboardingChecks {
         }finally{
             SharedPreferences.Editor e=s.prefs.edit();
             for(String k:PREFS){Object v=before.get(k);if(v==null)e.remove(k);else if(v instanceof Boolean)e.putBoolean(k,(Boolean)v);else if(v instanceof Integer)e.putInt(k,(Integer)v);else e.putString(k,String.valueOf(v));}
+            e.commit();
+        }
+    }
+
+    /**
+     * «Listo» sin la comprobación en memoria (Android cerró la app mientras la persona cargaba créditos en el navegador):
+     * manda lo guardado por SettingsActivity.saveVerify, lo mismo que muestra Ajustes, y solo si es de esta clave. Las
+     * preferencias verify* se guardan antes y se reponen después, aunque algo falle.
+     */
+    static void savedVerdict(Context c){
+        Settings s=new Settings(c);String[] keys={"verifyAt","verifyOk","verifyMs","verifyFor","verifyMsg","verifyBalance","verifyFree"};
+        Map<String,?> all=s.prefs.getAll();Map<String,Object> before=new HashMap<>();for(String k:keys)if(all.containsKey(k))before.put(k,all.get(k));
+        String target="openrouter|prueba-bienvenida";
+        try{
+            SharedPreferences.Editor clean=s.prefs.edit();for(String k:keys)clean.remove(k);clean.commit();
+            check(OnboardingActivity.saved(s.prefs,target)==null,"Sin comprobación guardada, «Listo» no debe inventar un resultado");
+            // Rechazada: sin ✓, con el motivo (sin el «Revísala en Ajustes»: se corrige en el paso anterior).
+            SettingsActivity.saveVerify(s,target,false,900,"La clave del proveedor no es válida o fue revocada. Revísala en Ajustes.",Double.NaN,false);
+            OnboardingActivity.Verdict no=OnboardingActivity.saved(s.prefs,target);
+            check(no!=null&&no.state==OnboardingActivity.Check.REJECTED&&"La clave del proveedor no es válida o fue revocada.".equals(no.message),"Tras volver a la app, una clave rechazada debe seguir rechazada");
+            check(OnboardingActivity.saved(s.prefs,"openrouter|otra-clave")==null&&OnboardingActivity.saved(s.prefs,null)==null,"La comprobación de otra clave no cuenta");
+            // Válida sin saldo, o de una cuenta sin créditos: sin ✓ (así todavía no transcribe), con el texto de Ajustes.
+            SettingsActivity.saveVerify(s,target,true,900,null,0,false);
+            OnboardingActivity.Verdict empty=OnboardingActivity.saved(s.prefs,target);
+            check(empty!=null&&empty.state==OnboardingActivity.Check.VALID&&empty.empty()&&empty.message.contains("sin saldo"),"Una clave sin saldo no debe quedar como lista: «"+(empty==null?null:empty.message)+"»");
+            SettingsActivity.saveVerify(s,target,true,900,null,5,true);
+            OnboardingActivity.Verdict unpaid=OnboardingActivity.saved(s.prefs,target);
+            check(unpaid!=null&&unpaid.empty()&&unpaid.message.contains("sin créditos")&&!unpaid.message.contains("5,00"),"Una cuenta sin créditos no debe quedar como lista: «"+(unpaid==null?null:unpaid.message)+"»");
+            // Válida con saldo (o sin saber el saldo): lista, con ✓.
+            SettingsActivity.saveVerify(s,target,true,900,null,4.2,false);
+            OnboardingActivity.Verdict paid=OnboardingActivity.saved(s.prefs,target);
+            check(paid!=null&&paid.state==OnboardingActivity.Check.VALID&&!paid.empty()&&"Clave válida · quedan US$4,20".equals(paid.message),"Una clave con saldo debe quedar lista");
+            SettingsActivity.saveVerify(s,target,true,900,null,Double.NaN,false);
+            OnboardingActivity.Verdict unknown=OnboardingActivity.saved(s.prefs,target);
+            check(unknown!=null&&!unknown.empty()&&"Clave válida".equals(unknown.message),"Sin saldo informado, la clave vale igual");
+        }finally{
+            SharedPreferences.Editor e=s.prefs.edit();
+            for(String k:keys){Object v=before.get(k);if(v==null)e.remove(k);else if(v instanceof Boolean)e.putBoolean(k,(Boolean)v);else if(v instanceof Long)e.putLong(k,(Long)v);else if(v instanceof Integer)e.putInt(k,(Integer)v);else e.putString(k,String.valueOf(v));}
             e.commit();
         }
     }

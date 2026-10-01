@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Canvas;
@@ -162,6 +163,10 @@ public class OnboardingActivity extends Screen {
      */
     static Valid valid(Models.Balance b){
         boolean none=b!=null&&b.noCredits;double left=b==null||none||Double.isInfinite(b.left)?Double.NaN:b.left;
+        return validOf(left,none);
+    }
+    /** Lo mismo desde el saldo y «sin créditos» ya sabidos (lo que guardan las preferencias verify*). */
+    static Valid validOf(double left,boolean none){
         return new Valid(validText(left,none),left,none,none||(!Double.isNaN(left)&&left<=SettingsActivity.NO_BALANCE));
     }
     /** Lo mismo desde GET /key y el saldo de la cuenta (GET /credits; NaN si no se supo). */
@@ -195,6 +200,18 @@ public class OnboardingActivity extends Screen {
         try{Valid v=checker.check(http,key);return new Verdict(Check.VALID,v==null?"Clave válida":v.text,v);}
         catch(HttpApi.UserAction e){return new Verdict(Check.REJECTED,rejected(e.getMessage()),null);}
         catch(Exception e){return new Verdict(Check.UNKNOWN,UNCHECKED,null);}
+    }
+    /**
+     * La última comprobación guardada (preferencias verify*, las de Ajustes) si es de esta clave (target: la huella de
+     * SettingsActivity.verifyTarget); null si no hay. La usa «Listo» cuando no tiene la suya en memoria: Kept sobrevive a
+     * un giro, pero no a que Android cierre la app mientras cargas créditos en el navegador. Sin esto, al volver la fila
+     * decía «lista para transcribir» con ✓ aunque la clave estuviera rechazada o sin saldo (y Ajustes dijera eso).
+     */
+    static Verdict saved(SharedPreferences prefs,String target){
+        if(prefs.getLong("verifyAt",0)<=0||target==null||!target.equals(prefs.getString("verifyFor","")))return null;
+        if(!prefs.getBoolean("verifyOk",false))return new Verdict(Check.REJECTED,rejected(prefs.getString("verifyMsg","")),null);
+        double left;try{left=Double.parseDouble(prefs.getString("verifyBalance",""));}catch(NumberFormatException e){left=Double.NaN;}
+        Valid v=validOf(left,prefs.getBoolean("verifyFree",false));return new Verdict(Check.VALID,v.text,v);
     }
     /** Comprobación de la clave recién guardada. Vive fuera de la pantalla para seguir tras un giro; no guarda la clave. */
     static final class Check{
@@ -771,7 +788,14 @@ public class OnboardingActivity extends Screen {
             else if(c.state==Check.REJECTED)readyRow(R.drawable.ic_alert,"Revisa tu clave de "+who,c.message,ROW_BAD,()->go(AI));
             else readyRow(hub,who,c.message,ROW_PLAIN,null);
         }
-        else if(has)readyRow(hub,who,"Clave guardada: lista para transcribir.",ROW_DONE,null);
+        else if(has){
+            // Sin comprobación en memoria (p. ej. Android cerró la app mientras estabas en el navegador): manda la guardada,
+            // la misma que muestra Ajustes. Rechazada o sin saldo no lleva ✓; sin nada guardado (o válida con saldo), sí.
+            Verdict v=saved(settings.prefs,SettingsActivity.verifyTarget(settings));
+            if(v!=null&&v.state==Check.REJECTED)readyRow(R.drawable.ic_alert,"Revisa tu clave de "+who,v.message,ROW_BAD,()->go(AI));
+            else if(v!=null&&v.empty())readyRow(hub,who,v.message,ROW_PLAIN,null);
+            else readyRow(hub,who,"Clave guardada: lista para transcribir.",ROW_DONE,null);
+        }
         else readyRow(R.drawable.ic_key,"Conectar tu IA","Sin clave solo grabas. Agrégala cuando quieras.",ROW_GO,()->go(AI));
         boolean voice=false;try{voice=Voices.has(this);}catch(RuntimeException ignored){}
         if(voice)readyRow(R.drawable.ic_voice,"Tu voz","Guardada: Verbapp ya te reconoce.",ROW_DONE,()->openSettings("voice"));

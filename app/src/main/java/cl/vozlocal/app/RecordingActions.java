@@ -41,7 +41,8 @@ final class Next {
     static Next of(Context c,Recording r){
         JSONObject st=FilesStore.state(c,r.id);
         // Pedida (también al volver a transcribir, cuando la versión actual pasó a "anterior"): el trabajo va solo.
-        if(st.optBoolean("requested"))return new Next(Step.WORKING,st.has("retranscribe")?"Volviendo a transcribir…":"Transcribiendo…",R.drawable.ic_clock);
+        if(st.optBoolean("requested")){boolean mine=Pipeline.working()&&r.id.equals(Transcriber.currentId);
+            return new Next(Step.WORKING,working(st.has("retranscribe"),mine,mine?null:Pipeline.blocker(c,r.id)),R.drawable.ic_clock);}
         if(!Transcript.exists(c,r.id)){
             if(st.optBoolean("failed"))return new Next(Step.RETRY,"Reintentar",R.drawable.ic_refresh);
             return new Next(Step.TRANSCRIBE,"Transcribir",R.drawable.ic_sparkle);
@@ -52,6 +53,19 @@ final class Next {
         if(at==0)return new Next(Step.SAVE,"Guardar en "+folder,R.drawable.ic_inbox);
         if(Inbox.outdated(c,r.id))return new Next(Step.UPDATE,"Actualizar en "+folder,R.drawable.ic_refresh);
         return new Next(Step.SAVED,"En "+folder+" · "+when(at),R.drawable.ic_check);
+    }
+    /**
+     * El botón de una grabación pedida (0.8.0, tercera ronda): «Transcribiendo…» solo si es ESTA la que se procesa ahora
+     * (mine: Pipeline.working() y Transcriber.currentId); si no, por qué espera (blocker: Pipeline.blocker con su id) o
+     * «En cola…». Antes decía «Transcribiendo…» con la grabación en cola, esperando Wi-Fi o el cargador.
+     */
+    static String working(boolean again,boolean mine,String blocker){
+        if(mine)return again?"Volviendo a transcribir…":"Transcribiendo…";
+        if(blocker==null)return "En cola…";
+        if(blocker.contains("Wi-Fi"))return "Esperando Wi-Fi…";
+        if(blocker.contains("cargador"))return "Esperando el cargador…";
+        if(blocker.contains("internet"))return "Esperando conexión…";
+        return blocker.startsWith("batería baja")?"Batería baja · en espera…":"En cola…";
     }
     /** «16:09» si fue hoy; si no, «28 sept». */
     static String when(long at){
@@ -159,7 +173,7 @@ final class RecordingActions {
         switch(next.step){
             case TRANSCRIBE:case RETRY:transcribe(s,r,changed);break;
             case WORKING:
-                if(s instanceof RecordingActivity){JSONObject st=FilesStore.state(s,r.id);s.toast(st.optString("status","Transcribiendo"));}
+                if(s instanceof RecordingActivity){JSONObject st=FilesStore.state(s,r.id);s.toast(RecordingActivity.inDetail(st.optString("status","Transcribiendo")));}
                 else s.startActivity(new Intent(s,RecordingActivity.class).putExtra("id",r.id));
                 break;
             case REVIEW:
@@ -318,8 +332,19 @@ final class RecordingActions {
     }
     static void start(Screen s,Recording r,Runnable changed,boolean speakers){
         askNotifications(s);
-        try{Pipeline.request(s,r.id,speakers);Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);if(changed!=null)changed.run();String blocker=Pipeline.blocker(s);s.toast(blocker==null?"Transcribiendo · sigue aunque bloquees el teléfono":"En cola · "+blocker);}
+        try{Pipeline.request(s,r.id,speakers);Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);if(changed!=null)changed.run();s.toast(queuedToast(s,r,"Transcribiendo"));}
         catch(Exception e){s.message("No se pudo poner en cola",e instanceof HttpApi.UserAction?e.getMessage():"Vuelve a intentarlo.");}
+    }
+    /**
+     * Aviso breve al pedir una transcripción («Transcribir», «Volver a transcribir»), con lo que espera ESTA grabación
+     * (Pipeline.blocker con su id). El de todas no sirve: con otra grabación autorizada a usar datos móviles no ve el Wi-Fi,
+     * y decía «Transcribiendo» de una que en verdad esperaba Wi-Fi. En el detalle, el Wi-Fi sin el paréntesis que manda al
+     * detalle (RecordingActivity.inDetail). doing: «Transcribiendo» o «Volviendo a transcribir».
+     */
+    static String queuedToast(Screen s,Recording r,String doing){
+        String blocker=Pipeline.blocker(s,r.id);
+        if(blocker==null)return doing+" · sigue aunque bloquees el teléfono";
+        return "En cola · "+(s instanceof RecordingActivity?RecordingActivity.inDetail(blocker):blocker);
     }
     /** Android 13+: el aviso de «lista» necesita permiso de notificaciones; se pide al encolar. */
     static void askNotifications(Screen s){

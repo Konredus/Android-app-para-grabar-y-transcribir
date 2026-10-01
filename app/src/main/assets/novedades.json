@@ -4,7 +4,7 @@
     "date": "2026-10-01",
     "title": "Una sola clave para todo",
     "items": [
-      "Todo con OpenRouter: una sola clave para transcribir y armar tus notas. Nada más que configurar.",
+      "Todo con OpenRouter: una sola clave para transcribir y armar tus notas. Si usabas OpenAI o tu servidor, crea una clave en openrouter.ai y pégala en Ajustes → Tu IA (OpenRouter); la anterior ya no se usa.",
       "Modelos siempre al día: la lista se actualiza sola y te muestra cuáles separan voces y cuánto cuestan por hora. «Automático» elige el recomendado por ti.",
       "Tus voces conocidas con OpenRouter: la app pone tus muestras de voz delante del audio para reconocer quién habla. Si algún nombre sale cambiado, corrígelo como siempre.",
       "Tus métricas: en Ajustes (o tocando «Tu semana») ves cuánto hablas, tus rachas, a qué hora grabas, con quién conversas y cuánto has gastado, con el costo real de cada transcripción.",
