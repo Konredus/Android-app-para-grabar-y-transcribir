@@ -12,6 +12,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Android 14+: transferencia iniciada por el usuario (transcribir lo que pidió), sin las cuotas de las tareas de fondo. -->
+    <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
     <application android:name=".VozApp" android:label="Verbapp" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:theme="@style/AppTheme" android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules" android:usesCleartextTraffic="false" android:supportsRtl="true">
         <activity android:name=".ImportActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".ReceiveAudioActivity" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true">
