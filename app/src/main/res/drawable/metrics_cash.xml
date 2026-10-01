@@ -1,0 +1,6 @@
+<!-- Métricas (0.8.0): costos. Un billete de contorno (rectángulo redondeado, círculo al centro y dos puntos), trazo redondeado a juego con los íconos de contorno. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M4.5,6.5 H19.5 A2,2 0 0,1 21.5,8.5 V15.5 A2,2 0 0,1 19.5,17.5 H4.5 A2,2 0 0,1 2.5,15.5 V8.5 A2,2 0 0,1 4.5,6.5 Z M9.5,12 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z"/>
+    <path android:strokeColor="#FF000000" android:strokeWidth="2.4" android:strokeLineCap="round" android:pathData="M6.2,12 H6.21 M17.79,12 H17.8"/>
+</vector>
