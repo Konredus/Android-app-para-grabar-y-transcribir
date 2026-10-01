@@ -74,18 +74,22 @@ final class OrAudio {
      * Cuánto se ha esperado de verdad a un códec sin que tome ni entregue nada (revisión r3). Antes se medía con el reloj
      * desde la última salida, y una app congelada 30 s o más (el congelador de vivo y las pausas de Android, ver
      * docs/PENDIENTES.md) se leía como un códec trabado: el bloque fallaba y, en el FLAC, se apagaba para los siguientes.
-     * Ahora solo suman las esperas con plazo que vuelven vacías, cada una con lo que duró pero nunca más que su plazo: un
-     * congelamiento en medio de una espera cuenta como el plazo (10 ms), y fuera de las esperas no cuenta nada. Cualquier
-     * entrada entregada o salida recogida vuelve la cuenta a cero. Un códec trabado de verdad sigue fallando tras unos
-     * STALL_MS de espera real. Sin dormir nada: no frena la tubería.
+     * Ahora solo suman las esperas con plazo que vuelven vacías, cada una con lo que duró pero nunca más que su plazo más
+     * SLACK_NS: en segundo plano Android alarga los temporizadores hasta 40 ms y una espera de 10 ms dura de verdad 20–50 ms
+     * (contarla como 10 llevaba un códec trabado a fallar recién tras 60–150 s). Un congelamiento en medio de una espera
+     * cuenta a lo más 60 ms, y fuera de las esperas no cuenta nada. Cualquier entrada entregada o salida recogida vuelve la
+     * cuenta a cero. Un códec trabado de verdad falla tras unos STALL_MS de espera real, con la app abierta o en segundo
+     * plano. Sin dormir nada: no frena la tubería.
      */
     static final class Stall{
+        /** Holgura sobre el plazo de cada espera: cubre los 40 ms que Android alarga los temporizadores en segundo plano. */
+        private static final long SLACK_NS=50_000_000L;
         private final long limitNs;private long idleNs;
         Stall(long limitMs){limitNs=limitMs*1_000_000L;}
         /** El códec tomó o entregó algo. */
         void moved(){idleNs=0;}
-        /** Una espera de hasta «timeoutUs» volvió vacía tras «tookNs» de reloj. Devuelve over(). */
-        boolean waited(long timeoutUs,long tookNs){idleNs+=Math.max(0,Math.min(tookNs,timeoutUs*1000));return over();}
+        /** Una espera de hasta «timeoutUs» volvió vacía tras «tookNs» de reloj (sin plazo no cuenta). Devuelve over(). */
+        boolean waited(long timeoutUs,long tookNs){if(timeoutUs>0)idleNs+=Math.max(0,Math.min(tookNs,timeoutUs*1000+SLACK_NS));return over();}
         boolean over(){return idleNs>limitNs;}
     }
 

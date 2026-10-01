@@ -261,16 +261,24 @@ final class OrAudioChecks {
     // ---------- Revisión r3: «trabado» por espera real, no por reloj ----------
     /**
      * La cuenta de OrAudio.Stall, sin códec: una app congelada (el congelador de vivo de docs/PENDIENTES.md) no la hace
-     * fallar; solo suman las esperas que vuelven vacías, cada una hasta su plazo, y cualquier entrada o salida la vuelve a
-     * cero. Un códec trabado de verdad sigue fallando a los 30 s de espera real.
+     * fallar; solo suman las esperas que vuelven vacías, cada una hasta su plazo más 50 ms de holgura (los temporizadores
+     * alargados en segundo plano), y cualquier entrada o salida la vuelve a cero. Un códec trabado de verdad sigue fallando
+     * a los 30 s de espera real, también en segundo plano.
      */
     private static void stallAccounting(){
         final long ms=1_000_000L;OrAudio.Stall s=new OrAudio.Stall(30_000);
-        // 35 s de app congelada en medio de una espera de 10 ms: cuentan 10 ms, no 35 s.
+        // 35 s de app congelada en medio de una espera de 10 ms: cuentan a lo más 60 ms, no 35 s.
         check(!s.waited(10_000,35_000*ms)&&!s.over(),"A 35 s freeze during one codec wait counted as a stall");
-        // 2999 esperas vacías más (30 s justos en total): todavía no; una más y sí.
-        for(int i=0;i<2999;i++)check(!s.waited(10_000,10*ms),"Stall declared after only "+(i+2)*10+" ms of real waiting");
+        OrAudio.Stall f=new OrAudio.Stall(60);
+        check(!f.waited(10_000,35_000*ms)&&f.waited(10_000,1),"A 35 s freeze during one codec wait counted other than 60 ms");
+        // 3000 esperas vacías de 10 ms (30 s justos): todavía no; una más y sí.
+        s.moved();
+        for(int i=0;i<3000;i++)check(!s.waited(10_000,10*ms),"Stall declared after only "+(i+1)*10+" ms of real waiting");
         check(s.waited(10_000,10*ms)&&s.over(),"30 s of empty codec waits not declared a stall");
+        // En segundo plano una espera de 10 ms dura de verdad hasta 50 ms: cuenta lo que duró (600 de 50 ms = 30 s justos).
+        s.moved();
+        for(int i=0;i<600;i++)check(!s.waited(10_000,50*ms),"Stall declared after only "+(i+1)*50+" ms of stretched waiting");
+        check(s.waited(10_000,50*ms),"30 s of stretched background waits not declared a stall");
         // Cualquier entrada o salida vuelve a cero.
         s.moved();check(!s.over()&&!s.waited(10_000,10*ms),"Codec progress did not reset the stall count");
         // Una espera que vuelve antes de su plazo cuenta lo que duró; una consulta sin plazo no cuenta; un reloj que retrocede no resta.
