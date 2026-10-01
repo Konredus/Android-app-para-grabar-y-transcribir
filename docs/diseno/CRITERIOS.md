@@ -225,6 +225,8 @@ Los números que cambian usan **cifras de ancho fijo** (`Ui.tabular`, «tnum» d
 - **(0.8.0) Ayuda y soporte** suma «Ver la bienvenida».
 
 ### Bienvenida (0.8.0)
+<img src="capturas/0.8-01-bienvenida.png" width="200"> <img src="capturas/0.8-02-nombre-microfono.png" width="200"> <img src="capturas/0.8-03-conecta-tu-ia.png" width="200"> <img src="capturas/0.8-04-todo-listo.png" width="200">
+
 - Solo en la primera instalación (`welcomed=false`); quien actualiza ve «Novedades». Se repite desde Ajustes → Ayuda y soporte, sin tocar claves ni ajustes guardados.
 - Pantalla completa sobre el fondo intenso, sin barra de pestañas. Marco fijo: ← (desde el paso 2), puntos de avance y «Saltar» arriba; un solo botón de tinta abajo, que no cambia de lugar.
 - Cuatro pasos cortos: Bienvenida (tres beneficios en vidrio) → Tú (nombre opcional, permiso de micrófono y «Con la pantalla bloqueada») → Conecta tu IA (solo OpenRouter; campo oculto con «Pegar»; «Ahora no, solo grabar») → Listo (estado de la clave, «Grabar mi voz», «Elegir mi carpeta 0-Inbox»).
@@ -232,6 +234,8 @@ Los números que cambian usan **cifras de ancho fijo** (`Ui.tabular`, «tnum» d
 - Nada bloquea: la clave se comprueba en segundo plano mientras ya se avanza, y el resultado queda también en Ajustes → «Comprobar conexión». La clave nunca se vuelve a mostrar ni se registra.
 
 ### Tus métricas (0.8.0)
+<img src="capturas/0.8-07-metricas.png" width="200"> <img src="capturas/0.8-08-metricas-oscuro.png" width="200"> <img src="capturas/0.8-06-ajustes-openrouter.png" width="200">
+
 - Se abre desde la tarjeta de Ajustes o desde «Tu semana» en Grabar. Desde «Tu semana» abre en «7 días», lo mismo que esa tarjeta resume; desde Ajustes, en el último período elegido.
 - Una sola fila de filtros (7 días · Este mes · Todo) manda sobre todo lo de abajo: tiempo hablado, grabaciones, palabras y notas; 8 semanas en barras (se ajustan con el gesto de TalkBack); racha y mejor racha; mapa de a qué hora grabas; con quién conversas; y gasto por modelo, con lo cobrado y lo estimado («≈») por separado.
 - Todo se calcula en el teléfono (`Metrics.compute`) y se dice: «Nada se envía». Sin grabaciones en el período, una invitación en vez de ceros.
