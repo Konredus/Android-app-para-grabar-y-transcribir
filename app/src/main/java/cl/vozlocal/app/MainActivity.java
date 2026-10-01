@@ -105,7 +105,7 @@ public class MainActivity extends Screen {
     private NamePlayer namePlayer;
     // Biblioteca
     private LinearLayout libraryPanel,list,filters,recPill;private View pillDot;private TextView libraryCount,pillTime;private EditText search;
-    private String query="";private int filter;private String rendered="";private boolean imeShown,inboxOn;private String queueBlocker;
+    private String query="";private int filter;private String rendered="";private boolean imeShown,inboxOn;
 
     /** Lo que la Biblioteca sabe de una transcripción sin volver a leerla. */
     static final class Meta{
@@ -116,6 +116,8 @@ public class MainActivity extends Screen {
     static final class Item{
         final Recording r;final JSONObject state;final RecState status;final boolean transcribed;
         volatile Meta meta;long savedAt;boolean outdated,fresh,inbox;Next next;
+        /** Por qué espera ESTA grabación pedida (Pipeline.blocker con su id; se lee en el hilo de disco), o null. */
+        String blocker;
         Item(Recording r,JSONObject state,boolean transcribed){this.r=r;this.state=state;this.transcribed=transcribed;this.status=RecState.of(state,transcribed);}
         boolean done(){return status.kind==RecState.Kind.DONE;}
         /** Voces separadas que el usuario aún no revisó. */
@@ -131,10 +133,17 @@ public class MainActivity extends Screen {
         int blocksDone(){return Math.min(blocks(),state.optInt("blocksDone"));}
         /** Avance real 0..1 (partes listas o audio procesado); -1 si todavía no se sabe. Nunca un porcentaje inventado. */
         float progress(){int b=blocks();if(b>1)return blocksDone()/(float)b;long a=state.optLong("audioMs"),d=state.optLong("doneAudioMs");return a>0&&d>0?Math.min(1f,d/(float)a):-1f;}
-        String progressText(String blocker){
-            int b=blocks();if(b>1)return "Transcribiendo · "+blocksDone()+" de "+b+" partes";
-            if(blocker!=null&&!Pipeline.working())return "En cola · "+blocker.replaceFirst(" \\(.*$","");
-            return "Transcribiendo…";
+        /**
+         * Con lo que espera ESTA grabación (0.8.0, tercera ronda): el motivo de todas no ve el Wi-Fi si otra pedida puede
+         * usar datos móviles, y «hay un trabajo andando» puede ser con otra. Así una que espera Wi-Fi, o su turno detrás de
+         * la que se está transcribiendo, no dice «Transcribiendo». Sin trabajo andando tampoco (Android negó el servicio y
+         * el trabajo de fondo aún no parte): «En cola», como el botón del detalle (Next.working).
+         */
+        String progressText(){
+            String current=Transcriber.currentId;boolean mine=Pipeline.working()&&r.id.equals(current);
+            String wait=mine?null:blocker!=null?"En cola · "+blocker.replaceFirst(" \\(.*$",""):"En cola";
+            int b=blocks();if(b>1)return (wait!=null?wait:"Transcribiendo")+" · "+blocksDone()+" de "+b+" partes";
+            return wait!=null?wait:"Transcribiendo…";
         }
         String snippet(){Meta m=meta;return m!=null&&!m.snippet.isEmpty()?m.snippet:state.optString("snippet","");}
     }
@@ -751,7 +760,7 @@ public class MainActivity extends Screen {
         String status,label;int actionIcon;Ui.Style style;View.OnClickListener action;float bar=Float.NaN;
         View.OnClickListener transcribe=v->{Ui.haptic(v,Ui.Haptic.CONFIRM);RecordingActions.transcribe(this,r,this::load);};
         switch(i.status.kind){
-            case QUEUED:icon=R.drawable.ic_clock;tone=1;status=i.progressText(queueBlocker);statusColor=p.primary;bar=i.progress();label="Ver avance";actionIcon=R.drawable.ic_clock;style=Ui.Style.TONAL;action=v->open(r.id);break;
+            case QUEUED:icon=R.drawable.ic_clock;tone=1;status=i.progressText();statusColor=p.primary;bar=i.progress();label="Ver avance";actionIcon=R.drawable.ic_clock;style=Ui.Style.TONAL;action=v->open(r.id);break;
             case FAILED:icon=R.drawable.ic_alert;tone=2;status="No se pudo transcribir";statusColor=p.error;label="Reintentar";actionIcon=R.drawable.ic_refresh;style=Ui.Style.PRIMARY;action=transcribe;break;
             case NEW:icon=R.drawable.ic_wave;status=dur+" · Sin transcribir";label="Transcribir";actionIcon=R.drawable.ic_sparkle;style=Ui.Style.PRIMARY;action=transcribe;break;
             default:{
@@ -867,11 +876,11 @@ public class MainActivity extends Screen {
         disk.execute(()->{
             if(version!=loadVersion)return;
             boolean inbox=false;try{inbox=Inbox.configured(app);}catch(RuntimeException ignored){}
-            String blocker=null;try{blocker=Pipeline.blocker(app);}catch(RuntimeException ignored){}
             String name=null;try{name=Voices.name(app);}catch(RuntimeException ignored){}
             long since=newSince(app),weekFrom=System.currentTimeMillis()-7*DateUtils.DAY_IN_MILLIS;ArrayList<Item> loaded=new ArrayList<>(),missing=new ArrayList<>();Week wk=new Week();
             for(Recording r:Recording.list(app)){
                 Item i=new Item(r,FilesStore.state(app,r.id),Transcript.exists(app,r.id));i.inbox=inbox;
+                if(i.status.kind==RecState.Kind.QUEUED)try{i.blocker=Pipeline.blocker(app,r.id);}catch(RuntimeException ignored){}
                 if(i.transcribed){
                     File f=FilesStore.file(app,r.id,".transcript.json");long modified=f.lastModified();
                     Meta m=METAS.get(r.id);if(m!=null&&m.modified==modified&&m.length==f.length())i.meta=m;else missing.add(i);
@@ -885,14 +894,14 @@ public class MainActivity extends Screen {
             }
             if(!loaded.isEmpty())try{loaded.get(0).next=Next.of(app,loaded.get(0).r);}catch(Throwable ignored){}
             // Primero la lista rápida; después, lo que hay que leer de las transcripciones (fragmento, personas y colores).
-            if(!missing.isEmpty())publish(loaded,inbox,blocker,wk,name);
+            if(!missing.isEmpty())publish(loaded,inbox,wk,name);
             // Aunque llegue otra lectura, se termina: lo leído queda en METAS y la siguiente ya no lo relee.
             for(Item i:missing){Meta m=readMeta(app,i.r.id);METAS.put(i.r.id,m);i.meta=m;storeSnippet(app,i,m);}
-            publish(loaded,inbox,blocker,wk,name);
+            publish(loaded,inbox,wk,name);
         });
     }
     /** Un solo hilo de disco (en orden): lo publicado siempre es más nuevo que lo anterior, así que no se descarta. */
-    private void publish(ArrayList<Item> loaded,boolean inbox,String blocker,Week wk,String name){ArrayList<Item> copy=new ArrayList<>(loaded);runOnUiThread(()->{if(!isDestroyed()){items=copy;inboxOn=inbox;queueBlocker=blocker;week=wk;if(name!=null)myName=name;render();}});}
+    private void publish(ArrayList<Item> loaded,boolean inbox,Week wk,String name){ArrayList<Item> copy=new ArrayList<>(loaded);runOnUiThread(()->{if(!isDestroyed()){items=copy;inboxOn=inbox;week=wk;if(name!=null)myName=name;render();}});}
     private static Meta readMeta(Context c,String id){
         File f=FilesStore.file(c,id,".transcript.json");Meta m=new Meta(f.lastModified(),f.length());
         try{Transcript t=Transcript.load(c,id);m.diarized=t.diarized();m.reviewed=t.reviewed();m.snippet=t.snippet(120);
@@ -906,8 +915,8 @@ public class MainActivity extends Screen {
     private static long newSince(Context c){SharedPreferences sp=c.getSharedPreferences("home",Context.MODE_PRIVATE);long v=sp.getLong("newSince",0);if(v==0){v=System.currentTimeMillis();sp.edit().putLong("newSince",v).apply();}return v;}
     private boolean matches(Item i,int f){switch(f){case 1:return inboxOn?i.toSave():i.done();case 2:return i.status.kind==RecState.Kind.QUEUED;case 3:return i.status.kind==RecState.Kind.NEW;case 4:return i.status.kind==RecState.Kind.FAILED;default:return true;}}
     private String signature(){
-        StringBuilder b=new StringBuilder().append(filter).append('|').append(query).append('|').append(inboxOn).append('|').append(queueBlocker).append('|').append(Pipeline.working()).append('|').append(Calendar.getInstance().get(Calendar.DAY_OF_YEAR));
-        for(Item i:items){Meta m=i.meta;b.append('\n').append(i.r.id).append(i.r.title).append(i.r.duration).append(i.status.kind).append(i.blocks()).append(i.blocksDone()).append(i.state.optLong("doneAudioMs")).append(i.savedAt).append(i.outdated).append(i.fresh).append(i.state.optString("snippet"));if(m!=null)b.append(m.snippet).append(m.names).append(m.colors).append(m.reviewed);}
+        StringBuilder b=new StringBuilder().append(filter).append('|').append(query).append('|').append(inboxOn).append('|').append(Pipeline.working()).append('|').append(Transcriber.currentId).append('|').append(Calendar.getInstance().get(Calendar.DAY_OF_YEAR));
+        for(Item i:items){Meta m=i.meta;b.append('\n').append(i.r.id).append(i.r.title).append(i.r.duration).append(i.status.kind).append(i.blocker).append(i.blocks()).append(i.blocksDone()).append(i.state.optLong("doneAudioMs")).append(i.savedAt).append(i.outdated).append(i.fresh).append(i.state.optString("snippet"));if(m!=null)b.append(m.snippet).append(m.names).append(m.colors).append(m.reviewed);}
         return b.toString();
     }
     private void render(){
@@ -965,7 +974,7 @@ public class MainActivity extends Screen {
         texts.addView(line1,Ui.fill());
         String second;int secondColor=p.onSurfaceVariant;
         switch(i.status.kind){
-            case QUEUED:second=i.progressText(queueBlocker);secondColor=p.primary;break;
+            case QUEUED:second=i.progressText();secondColor=p.primary;break;
             case FAILED:second="No se pudo transcribir";secondColor=p.error;break;
             case NEW:second="Sin transcribir";break;
             default:{String s=i.snippet();second=s.isEmpty()?"Transcripción lista":"«"+s+"»";}

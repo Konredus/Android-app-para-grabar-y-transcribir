@@ -326,6 +326,8 @@ public class RecordingActivity extends Screen {
         next=n;
         if(saving){primary.setLabel("Guardando…");primary.setBusy(true);return;}
         if(n==null){primary.setLabel(transcript!=null?"Guardar o compartir":"Transcribir");primary.setTonal(false);primary.setBusy(false);return;}
+        // Se repinta cada 3 s mientras está en cola (renderConditions): solo si cambió algo, para no rehacer el ícono.
+        if(primary.main.busy()&&n.step==Next.Step.WORKING&&n.label.contentEquals(primary.main.label.getText()))return;
         primary.setLabel(n.label);primary.setIcon(n.icon);primary.setTonal(n.step==Next.Step.SAVED);primary.setBusy(n.step==Next.Step.WORKING);
     }
     private void onPrimary(){
@@ -582,7 +584,8 @@ public class RecordingActivity extends Screen {
         boolean uploaded=done>0||(total>0&&sent>=total)||logHas(st,"enviado"),partsDone=blocks>0&&done>=blocks;
         boolean preparing=st.optInt("prepping")>0||st.optString("status").startsWith("Preparando");int prep=prepPercent(st);
         if("openrouter".equals(st.optString("provider")))stage(preparing&&prep>=0?"Preparar audio "+prep+" %":"Preparar audio",preparing?1:(uploaded||st.optInt("prepCount")>0)?2:0);
-        stage("Subido",uploaded?2:Pipeline.working()&&!preparing?1:0);
+        // «Subido» en curso solo si se está enviando ESTA (con otra en curso, esta sigue en cola).
+        stage("Subido",uploaded?2:mine()&&!preparing?1:0);
         stage(blocks>1?"Partes "+done+"/"+blocks:"Texto",partsDone?2:uploaded?1:0);
         if(st.optBoolean("speakers")&&blocks>1)stage("Unir voces",partsDone?1:0);
         if(new Settings(this).noteAuto()&&Notes.canGenerate(this))stage("Nota",0);
@@ -604,14 +607,33 @@ public class RecordingActivity extends Screen {
     private static boolean logHas(JSONObject st,String word){JSONArray log=st.optJSONArray("log");if(log!=null)for(int i=0;i<log.length();i++){JSONObject e=log.optJSONObject(i);if(e!=null&&e.optString("m").contains(word))return true;}return false;}
     /** Qué pasa ahora: tranquilidad si trabaja, o por qué espera; «Empezar ahora» solo si Android la está demorando. */
     private void refreshWaiting(String blocker){
-        if(progNote==null)return;boolean running=Pipeline.working();
-        // Un paso que lleva mucho en lo mismo (0.8.0): se dice, y qué va a pasar, en vez de solo «Puedes cerrar la app».
-        boolean slow=running&&System.currentTimeMillis()-phaseSince>15*60_000L;
-        progNote.setText(slow?"Este paso tarda más de lo normal. Si no avanza, se corta y se reintenta solo; si no resulta, te aviso.":running?"Puedes cerrar la app: te aviso cuando esté lista.":blocker!=null?"Esperando: "+blocker.replaceFirst("^esperando ","").replaceFirst(" \\(.*$","")+". Empieza sola cuando se cumpla; puedes cerrar la app.":"Android aún no la empieza. Se hará sola, o toca «Empezar ahora».");
+        if(progNote==null)return;boolean running=Pipeline.working(),mine=mine();String current=Transcriber.currentId;
+        // Un paso que lleva mucho en lo mismo (0.8.0): se dice, y qué va a pasar. Solo si ESTA grabación está en ese paso.
+        boolean slow=mine&&System.currentTimeMillis()-phaseSince>15*60_000L;
+        progNote.setText(waitingNote(mine,running,running&&current!=null&&!current.equals(id),slow,blocker));
         startNow.setVisibility(!running&&blocker==null?View.VISIBLE:View.GONE);
         refreshEstimate();
     }
-    private void refreshEstimate(){if(progEstimate==null)return;String est=Pipeline.working()&&liveState!=null?estimate(liveState):"";progEstimate.setText(est);progEstimate.setVisibility(est.isEmpty()?View.GONE:View.VISIBLE);lastEstimateAt=System.currentTimeMillis();}
+    /**
+     * ¿ESTA grabación es la que se procesa ahora? (Transcriber.currentId). Pipeline.working() dice que hay un trabajo
+     * andando, pero puede estar con otra grabación mientras esta sigue en cola o esperando Wi-Fi.
+     */
+    private boolean mine(){return Pipeline.working()&&id!=null&&id.equals(Transcriber.currentId);}
+    /**
+     * La nota de la tarjeta según qué pasa con ESTA grabación (0.8.0, tercera ronda). mine: es la que se procesa ahora;
+     * running: hay un trabajo andando; other: ese trabajo está con otra grabación; slow: lleva más de 15 min en el mismo
+     * paso; blocker: por qué espera esta grabación (Pipeline.blocker con su id) o null. Antes bastaba un trabajo andando
+     * con cualquiera: una grabación en cola o esperando Wi-Fi decía «Puedes cerrar la app» y, a los 15 min, «Este paso
+     * tarda más de lo normal… se corta y se reintenta solo», sin estar en ningún paso.
+     */
+    static String waitingNote(boolean mine,boolean running,boolean other,boolean slow,String blocker){
+        if(mine)return slow?"Este paso tarda más de lo normal. Si no avanza, se corta y se reintenta solo; si no resulta, te aviso.":"Puedes cerrar la app: te aviso cuando esté lista.";
+        if(blocker!=null)return "Esperando: "+blocker.replaceFirst("^esperando ","").replaceFirst(" \\(.*$","")+". Empieza sola cuando se cumpla; puedes cerrar la app.";
+        if(other)return "En cola: empieza cuando termine la transcripción en curso. Puedes cerrar la app.";
+        return running?"Puedes cerrar la app: te aviso cuando esté lista.":"Android aún no la empieza. Se hará sola, o toca «Empezar ahora».";
+    }
+    /** La estimación solo para la grabación que se procesa: una en cola no tiene un «≈ 2–4 min» que cumplir. */
+    private void refreshEstimate(){if(progEstimate==null)return;String est=mine()&&liveState!=null?estimate(liveState):"";progEstimate.setText(est);progEstimate.setVisibility(est.isEmpty()?View.GONE:View.VISIBLE);lastEstimateAt=System.currentTimeMillis();}
     /**
      * Estimación honesta y como rango. Con varias partes, por lo que tardaron las ya listas (eso ya incluye preparar el
      * audio); con una sola (≤ 12 min), por tiempo: la separación de voces tarda ~0,15× la duración del audio, y con
@@ -639,11 +661,21 @@ public class RecordingActivity extends Screen {
     /** La última línea de la bitácora en palabras simples («parte» en vez de «bloque», sin tiempos técnicos). */
     static String human(String m){
         if(m==null||m.trim().isEmpty())return "En cola";
-        String s=m.replaceAll("Bloque (\\d+) de (\\d+) listo","Parte $1 de $2 lista").replaceAll("Bloque (\\d+) enviado","Parte $1 enviada")
+        String s=inDetail(m).replaceAll("Bloque (\\d+) de (\\d+) listo","Parte $1 de $2 lista").replaceAll("Bloque (\\d+) enviado","Parte $1 enviada")
             .replace("El bloque","La parte").replace("del bloque","de la parte").replace("el bloque","la parte").replace("los bloques","las partes").replace("bloques","partes").replace("Bloque","Parte").replace("bloque","parte");
         String[] parts=s.split(" · ");StringBuilder b=new StringBuilder(parts[0].trim());
         for(int i=1;i<parts.length;i++){String x=parts[i].trim();if(x.isEmpty()||x.startsWith("tardó")||x.startsWith("se envían")||x.startsWith("tiempo total"))continue;if(b.length()+x.length()>110)break;b.append(" · ").append(x);}
         return b.toString();
+    }
+    /**
+     * Un texto de espera de Wi-Fi tal como se ve en el detalle: sin «(ahora usas datos móviles; puedes usarlos igual desde
+     * el detalle de la grabación)» de Pipeline.WIFI_WAIT ni el «: puedes usarlos … desde su detalle» de la bitácora del
+     * motor. Aquí sobran: el botón «Usar datos móviles ahora» está a la vista. Lo demás queda igual (MainActivity corta el
+     * paréntesis a su manera). Lo usan el titular, la bitácora y los avisos breves del detalle.
+     */
+    static String inDetail(String m){
+        if(m==null)return "";
+        return m.replaceAll("(esperando Wi-Fi) \\([^)]*\\)","$1").replaceAll(": puedes usarlos [^·]*desde su detalle","");
     }
     /** Condiciones reales del teléfono. Si todo está bien, una sola línea tranquila; si algo falta, cada condición con su salida. */
     private void renderConditions(){
@@ -675,6 +707,9 @@ public class RecordingActivity extends Screen {
             if(!free){Ui.Btn allow=ui.button("Permitir en segundo plano",R.drawable.ic_battery,Ui.Style.TONAL,v->RecordingActions.allowBackground(this));conditions.addView(allow,ui.top(S2));}
         }
         refreshWaiting(blocker);
+        // El botón de abajo dice lo mismo (Next.working): «Esperando Wi-Fi…» pasa a «Transcribiendo…» cuando esta empieza,
+        // aunque eso no cambie el estado guardado (llegó el Wi-Fi, terminó la otra).
+        refreshPrimary();
     }
     /**
      * «Usar datos móviles ahora»: permite los datos móviles solo para esta grabación y arranca ya (la app está a la vista,
@@ -772,7 +807,7 @@ public class RecordingActivity extends Screen {
         list.removeAllViews();if(log==null)return;SimpleDateFormat f=new SimpleDateFormat("HH:mm:ss",Locale.ROOT);
         for(int i=0;i<log.length();i++){JSONObject e=log.optJSONObject(i);if(e==null)continue;long t=e.optLong("t");JSONObject n=i+1<log.length()?log.optJSONObject(i+1):null;long next=n==null?0:n.optLong("t");
             LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(0,ui.dp(S1),0,ui.dp(S1));TextView time=ui.text(f.format(new Date(t)),Type.BODY_SMALL,p.onSurfaceVariant);time.setFontFeatureSettings("tnum");r.addView(time,new LinearLayout.LayoutParams(ui.dp(64),-2));
-            TextView m=ui.text(e.optString("m")+(next>0&&next-t>=1000?"  ("+Recording.time(next-t)+")":""),Type.BODY_SMALL,p.onSurface);r.addView(m,new LinearLayout.LayoutParams(0,-2,1));list.addView(r);}
+            TextView m=ui.text(inDetail(e.optString("m"))+(next>0&&next-t>=1000?"  ("+Recording.time(next-t)+")":""),Type.BODY_SMALL,p.onSurface);r.addView(m,new LinearLayout.LayoutParams(0,-2,1));list.addView(r);}
     }
     /** Vidrio como las demás tarjetas; el error se distingue por el círculo rojo con la alerta, sin teñir toda la tarjeta. */
     private void showFailed(JSONObject st){

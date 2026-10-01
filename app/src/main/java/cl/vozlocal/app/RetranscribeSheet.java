@@ -135,8 +135,9 @@ final class RetranscribeSheet {
             s.runOnUiThread(()->{
                 if(s.isFinishing()||s.isDestroyed())return;
                 if(failed==null){
-                    Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);String blocker=Pipeline.blocker(s);
-                    s.toast(blocker==null?"Volviendo a transcribir · sigue aunque bloquees el teléfono":"En cola · "+blocker);
+                    // Lo que espera ESTA grabación (Pipeline.blocker con su id), no el de todas: «Volver a transcribir» le
+                    // quita el permiso de datos móviles, aunque otra pedida lo tenga.
+                    Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);s.toast(RecordingActions.queuedToast(s,r,"Volviendo a transcribir"));
                     if(changed!=null)changed.run();return;
                 }
                 Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.REJECT);

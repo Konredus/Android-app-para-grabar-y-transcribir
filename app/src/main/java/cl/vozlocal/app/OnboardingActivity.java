@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Canvas;
@@ -162,6 +163,10 @@ public class OnboardingActivity extends Screen {
      */
     static Valid valid(Models.Balance b){
         boolean none=b!=null&&b.noCredits;double left=b==null||none||Double.isInfinite(b.left)?Double.NaN:b.left;
+        return validOf(left,none);
+    }
+    /** Lo mismo desde el saldo y «sin créditos» ya sabidos (lo que guardan las preferencias verify*). */
+    static Valid validOf(double left,boolean none){
         return new Valid(validText(left,none),left,none,none||(!Double.isNaN(left)&&left<=SettingsActivity.NO_BALANCE));
     }
     /** Lo mismo desde GET /key y el saldo de la cuenta (GET /credits; NaN si no se supo). */
@@ -195,6 +200,22 @@ public class OnboardingActivity extends Screen {
         try{Valid v=checker.check(http,key);return new Verdict(Check.VALID,v==null?"Clave válida":v.text,v);}
         catch(HttpApi.UserAction e){return new Verdict(Check.REJECTED,rejected(e.getMessage()),null);}
         catch(Exception e){return new Verdict(Check.UNKNOWN,UNCHECKED,null);}
+    }
+    /**
+     * La última comprobación guardada (preferencias verify*, las de Ajustes) si es de esta clave (target: la huella de
+     * SettingsActivity.verifyTarget); null si no hay. La usa «Listo» cuando no tiene la suya en memoria: Kept sobrevive a
+     * un giro, pero no a que Android cierre la app mientras cargas créditos en el navegador. Sin esto, al volver la fila
+     * decía «lista para transcribir» con ✓ aunque la clave estuviera rechazada o sin saldo (y Ajustes dijera eso).
+     * Un fallo guardado solo es rechazo si habla de la clave (la regla con que Ajustes ofrece «Revisar la clave»): «No se
+     * pudo conectar…» o «OpenRouter no está disponible temporalmente (503).» no dicen nada de ella y quedan como UNKNOWN,
+     * igual que verify() sin red.
+     */
+    static Verdict saved(SharedPreferences prefs,String target){
+        if(prefs.getLong("verifyAt",0)<=0||target==null||!target.equals(prefs.getString("verifyFor","")))return null;
+        String why=prefs.getString("verifyMsg","");
+        if(!prefs.getBoolean("verifyOk",false))return why.toLowerCase(java.util.Locale.ROOT).contains("clave")?new Verdict(Check.REJECTED,rejected(why),null):new Verdict(Check.UNKNOWN,UNCHECKED,null);
+        double left;try{left=Double.parseDouble(prefs.getString("verifyBalance",""));}catch(NumberFormatException e){left=Double.NaN;}
+        Valid v=validOf(left,prefs.getBoolean("verifyFree",false));return new Verdict(Check.VALID,v.text,v);
     }
     /** Comprobación de la clave recién guardada. Vive fuera de la pantalla para seguir tras un giro; no guarda la clave. */
     static final class Check{
@@ -649,15 +670,26 @@ public class OnboardingActivity extends Screen {
         return c;
     }
     /** ✓ en la ilustración del paso 3 mientras haya una clave guardada que OpenRouter no rechazó (como el ✓ del micrófono). */
-    private void renderKeyArt(){if(keyArt==null)return;Check c=kept.check;keyArt.setBadge(settings.hasOpenRouterKey()&&(c==null||c.state!=Check.REJECTED),false);}
+    private void renderKeyArt(){if(keyArt==null)return;Verdict v=rejection();keyArt.setBadge(settings.hasOpenRouterKey()&&v==null,false);}
+    /**
+     * El rechazo de la clave guardada, o null: el de la comprobación en memoria o, sin ella, el guardado (saved), el mismo
+     * que usa «Listo». Así el paso 3 no muestra ✓ ni «Ya hay una clave guardada» de la clave a la que «Listo» manda a revisar
+     * (al repasar la bienvenida, o si Android cerró la app tras el rechazo).
+     */
+    private Verdict rejection(){
+        Check c=kept.check;
+        if(c!=null)return c.state==Check.REJECTED?new Verdict(Check.REJECTED,c.message,null):null;
+        Verdict v=settings.hasOpenRouterKey()?saved(settings.prefs,SettingsActivity.verifyTarget(settings)):null;
+        return v!=null&&v.state==Check.REJECTED?v:null;
+    }
     private void note(String text,int tone){
         if(keyStatus==null)return;keyTone=tone;if(!text.contentEquals(keyStatus.getText()))keyStatus.setText(text);
         keyStatus.setTextColor(tone==BAD?p.error:tone==OK?p.primary:p.onSurfaceVariant);
     }
     /** Lo que dice la línea bajo el campo cuando no hay nada que avisar: si la última clave falló, si ya hay una guardada, o cómo se guarda. */
     private void defaultNote(){
-        Check c=kept.check;
-        if(c!=null&&c.state==Check.REJECTED)note(c.message+" Pega otra clave.",BAD);
+        Verdict v=rejection();
+        if(v!=null)note(v.message+" Pega otra clave.",BAD);
         else if(settings.hasOpenRouterKey())note("Ya hay una clave guardada. Pega otra solo si quieres cambiarla.",OK);
         else note("Se guarda cifrada en este teléfono.",INFO);
     }
@@ -771,7 +803,15 @@ public class OnboardingActivity extends Screen {
             else if(c.state==Check.REJECTED)readyRow(R.drawable.ic_alert,"Revisa tu clave de "+who,c.message,ROW_BAD,()->go(AI));
             else readyRow(hub,who,c.message,ROW_PLAIN,null);
         }
-        else if(has)readyRow(hub,who,"Clave guardada: lista para transcribir.",ROW_DONE,null);
+        else if(has){
+            // Sin comprobación en memoria (p. ej. Android cerró la app mientras estabas en el navegador): manda la guardada,
+            // la misma que muestra Ajustes. Rechazada, sin saldo o sin comprobar (falló sin decir nada de la clave) no lleva
+            // ✓, como en la comprobación en memoria; sin nada guardado (o válida con saldo), sí.
+            Verdict v=saved(settings.prefs,SettingsActivity.verifyTarget(settings));
+            if(v!=null&&v.state==Check.REJECTED)readyRow(R.drawable.ic_alert,"Revisa tu clave de "+who,v.message,ROW_BAD,()->go(AI));
+            else if(v!=null&&(v.empty()||v.state==Check.UNKNOWN))readyRow(hub,who,v.message,ROW_PLAIN,null);
+            else readyRow(hub,who,"Clave guardada: lista para transcribir.",ROW_DONE,null);
+        }
         else readyRow(R.drawable.ic_key,"Conectar tu IA","Sin clave solo grabas. Agrégala cuando quieras.",ROW_GO,()->go(AI));
         boolean voice=false;try{voice=Voices.has(this);}catch(RuntimeException ignored){}
         if(voice)readyRow(R.drawable.ic_voice,"Tu voz","Guardada: Verbapp ya te reconoce.",ROW_DONE,()->openSettings("voice"));
