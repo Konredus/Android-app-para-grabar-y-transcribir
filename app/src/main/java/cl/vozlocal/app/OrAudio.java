@@ -23,14 +23,22 @@ import java.util.List;
  *   entero en memoria; solo las anclas (clips de segundos) se guardan un momento para medir su volumen.
  * - Los tiempos (anclas, leadMs, durationMs) salen de CONTAR las muestras escritas, no de la duración que declara el
  *   contenedor: el AAC agrega relleno y esa cifra no es exacta.
- * - El FLAC sale del codificador del teléfono y se comprueba leyéndolo de vuelta: si no es idéntico a lo que se le
- *   entregó, o falla cualquier paso, el bloque se rehace en WAV. El envío nunca queda con un audio dudoso.
+ * - El FLAC sale del codificador del teléfono y se comprueba recorriendo sus cuadros (cabecera, CRC de cada cuadro y
+ *   total de muestras): si no cuadra con lo que se le entregó, o falla cualquier paso, el bloque se rehace en WAV. El
+ *   envío nunca queda con un audio dudoso.
  * - Archivo de salida: [ancla 1][1 s de silencio][ancla 2][1 s]…[audio]. Un WAV pesa 32 kB por segundo (1,92 MB por
  *   minuto); el FLAC, más o menos la mitad con voz.
  *
  * Contrato de la fase 0: build(audio, anchors, outBase, cancel) y Built. Agregados de esta parte: build(…, flac) para
  * forzar WAV, decode(…) (cualquier audio → mono 16 kHz por partes), Sink, ANCHOR_MIN_MS/ANCHOR_MAX_MS y flacIssue.
  * Segunda ronda: TooShort y NoTrack (errores que reintentar no arregla) y diskFull (disco lleno según la causa del error).
+ * Tercera ronda (SPEC-0.8c, decisión 1): la conversión era lenta (un bloque de 4 min tardaba 31–43 s con la app abierta y
+ * 150 s en segundo plano). Lo que más pesaba no era el filtro sino la espera entre el programa y el decodificador: el
+ * lazo esperaba hasta 2 ms por cada cuadro AAC (unos 10 mil en 4 min) y, en segundo plano, Android alarga esas esperas.
+ * Ahora el decodificador trabaja en tubería (se le entregan todos los búferes libres y se recoge todo lo listo, y solo se
+ * espera cuando no hay nada que hacer), el filtro usa menos coeficientes (16 cruces por lado, corte en 7,28 kHz), 48 y
+ * 32 kHz tienen un camino directo (decimación entera ×3 y ×2, con la mitad de las multiplicaciones), el FLAC se comprueba
+ * sin decodificarlo entero y el avance se informa en % (HttpApi.prepared) para la etapa «Preparando audio».
  * Deja en Diagnostics «or_audio» (formato, duración, bytes, anclas usadas, tiempo) y «or_audio_fallback» (por qué no hubo FLAC).
  */
 final class OrAudio {
@@ -46,10 +54,13 @@ final class OrAudio {
     private static volatile boolean flacOff;
 
     // Filtro del remuestreo: sinc con ventana de Kaiser. El corte queda justo bajo la mitad de la frecuencia más baja
-    // (7,28 kHz al bajar a 16 kHz) y desde los 8 kHz atenúa unos 70 dB: lo que quedaría «doblado» dentro de la voz
-    // (aliasing) desaparece. 24 cruces por lado son 134 coeficientes a 44,1 kHz: unos segundos por bloque de 12 min.
-    private static final int HALF_TAPS=24,MAX_PHASES=2048;
+    // (7,28 kHz al bajar a 16 kHz) y la ventana atenúa unos 70 dB: lo que quedaría «doblado» dentro de la voz (aliasing)
+    // desaparece. Para voz bastan 16 cruces por lado (0.8.0, tercera ronda; antes 24): 90 coeficientes a 44,1 kHz en vez
+    // de 134. La transición se ensancha hacia los 8,3 kHz, donde la voz ya no tiene nada que el modelo necesite.
+    private static final int HALF_TAPS=16,MAX_PHASES=2048;
     private static final double CUTOFF=0.455,BETA=6.76;
+    /** Espera máxima por el decodificador cuando no hay nada que hacer (µs). No es un retardo: vuelve apenas haya salida. */
+    private static final long CODEC_WAIT_US=10_000;
     /** Anclas: tramos de 20 ms para medir el volumen, subida máxima (×8 ≈ 18 dB), techo de pico (−1 dBFS) y entrada/salida suave de 5 ms. */
     private static final int FRAME=RATE/50,FADE=RATE/200;
     private static final double MAX_BOOST=8,CEILING=29204;
@@ -141,7 +152,10 @@ final class OrAudio {
                 // Exactos: cada ancla mide un número entero de milisegundos (ver anchor()) y el silencio también.
                 marks[a][0]=lead*1000/RATE;marks[a][1]=(lead+clip.length)*1000/RATE;lead+=clip.length+gap;used++;
             }
-            long body=decode(audio,Long.MAX_VALUE,cancel,out);if(body<RATE/10)throw new TooShort();
+            // El avance de la etapa «Preparando audio» sale de cuánto del bloque ya se leyó (las anclas son segundos, no cuentan).
+            // Llega hasta 99: el 100 se dice solo cuando el archivo quedó listo y comprobado.
+            Advance advance=cancel==null?null:(doneUs,totalUs)->{if(totalUs>0)cancel.prepared((int)Math.min(99,doneUs*100/totalUs));};
+            long body=decode(audio,Long.MAX_VALUE,cancel,out,advance);if(body<RATE/10)throw new TooShort();
             long total=out.finish();alive(cancel);
             String format=flac?"flac":"wav";File target=new File(outBase.getPath()+"."+format);
             target.delete();if(!tmp.renameTo(target))throw new IOException("Could not save converted audio");ok=true;
@@ -149,6 +163,7 @@ final class OrAudio {
             new File(outBase.getPath()+(flac?".wav":".flac")).delete();
             long durationMs=(total*1000+RATE/2)/RATE;
             Diagnostics.event("or_audio",cancel==null?null:cancel.jobId,"format",format,"duration_ms",durationMs,"bytes",target.length(),"anchors",used,"elapsed_ms",SystemClock.elapsedRealtime()-started);
+            if(cancel!=null)cancel.prepared(100);
             return new Built(target,format,lead*1000/RATE,marks,durationMs);
         }finally{if(out!=null)out.release();if(!ok)tmp.delete();}
     }
@@ -206,7 +221,17 @@ final class OrAudio {
      * La frecuencia, los canales y el tipo de PCM se leen de la salida del decodificador, no del contenedor: en un
      * HE-AAC el contenedor declara la mitad de la frecuencia real.
      */
-    static long decode(File source,long limit,HttpApi cancel,Sink sink)throws Exception{
+    static long decode(File source,long limit,HttpApi cancel,Sink sink)throws Exception{return decode(source,limit,cancel,sink,null);}
+    /** Avance de la lectura: microsegundos ya entregados al decodificador y la duración que declara el archivo (0 si no la dice). */
+    interface Advance{void at(long doneUs,long totalUs);}
+    /**
+     * Igual, informando el avance a «advance» (puede ser null).
+     * El decodificador trabaja en tubería: en cada vuelta se le entregan TODOS los búferes de entrada libres y se recoge
+     * TODO lo que tenga listo, sin esperar. Solo si no hubo nada que hacer se espera su próxima salida (y se vuelve apenas
+     * llega). Antes se recogía una salida por vuelta y se esperaban hasta 2 ms por una entrada que no se liberaba porque las
+     * salidas no se recogían: miles de esperas por bloque, más largas aún con la app en segundo plano.
+     */
+    static long decode(File source,long limit,HttpApi cancel,Sink sink,Advance advance)throws Exception{
         MediaExtractor extractor=new MediaExtractor();MediaCodec codec=null;
         try{
             extractor.setDataSource(source.getPath());int track=-1;MediaFormat format=null;
@@ -214,37 +239,53 @@ final class OrAudio {
             if(track<0)throw new NoTrack();extractor.selectTrack(track);
             codec=MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME));codec.configure(format,null,null,0);codec.start();
             int rate=number(format,MediaFormat.KEY_SAMPLE_RATE,0),channels=number(format,MediaFormat.KEY_CHANNEL_COUNT,0),encoding=number(format,MediaFormat.KEY_PCM_ENCODING,AudioFormat.ENCODING_PCM_16BIT);
+            long totalUs=format.containsKey(MediaFormat.KEY_DURATION)?Math.max(0,format.getLong(MediaFormat.KEY_DURATION)):0;
             final long[] done={0};Sink capped=(data,count)->{int n=(int)Math.min(count,limit-done[0]);if(n>0){sink.write(data,n);done[0]+=n;}};
-            Resampler resampler=null;Mixer mixer=new Mixer();MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();boolean inputDone=false;long lastOutput=SystemClock.elapsedRealtime();
-            while(done[0]<limit){
+            Resampler resampler=null;Mixer mixer=new Mixer();MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();
+            boolean inputDone=false,outputDone=false;long lastOutput=SystemClock.elapsedRealtime();
+            while(!outputDone&&done[0]<limit){
                 alive(cancel);
-                if(!inputDone)for(int k=0;k<4;k++){
-                    int in=codec.dequeueInputBuffer(k==0?2000:0);if(in<0)break;
+                // 1. Entrada: todos los búferes libres, sin esperar ninguno.
+                boolean fed=false;
+                while(!inputDone){
+                    int in=codec.dequeueInputBuffer(0);if(in<0)break;
                     ByteBuffer buffer=codec.getInputBuffer(in);int size=buffer==null?-1:extractor.readSampleData(buffer,0);
-                    if(size<0){codec.queueInputBuffer(in,0,0,0,MediaCodec.BUFFER_FLAG_END_OF_STREAM);inputDone=true;break;}
-                    codec.queueInputBuffer(in,0,size,Math.max(0,extractor.getSampleTime()),0);extractor.advance();
+                    if(size<0){codec.queueInputBuffer(in,0,0,0,MediaCodec.BUFFER_FLAG_END_OF_STREAM);inputDone=true;}
+                    else{long at=extractor.getSampleTime();codec.queueInputBuffer(in,0,size,Math.max(0,at),0);extractor.advance();if(advance!=null&&at>=0)advance.at(at,totalUs);}
+                    fed=true;
                 }
-                int out=codec.dequeueOutputBuffer(info,5000);long now=SystemClock.elapsedRealtime();
-                if(out==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED){
-                    MediaFormat f=codec.getOutputFormat();int newRate=number(f,MediaFormat.KEY_SAMPLE_RATE,rate);
-                    channels=number(f,MediaFormat.KEY_CHANNEL_COUNT,channels);encoding=number(f,MediaFormat.KEY_PCM_ENCODING,AudioFormat.ENCODING_PCM_16BIT);
-                    // Cambio de frecuencia a mitad de camino (raro): se cierra el filtro actual y se parte con otro.
-                    if(resampler!=null&&newRate!=rate){resampler.finish(capped);resampler=null;}
-                    rate=newRate;
-                }else if(out>=0){
-                    lastOutput=now;
-                    if(info.size>0&&(info.flags&MediaCodec.BUFFER_FLAG_CODEC_CONFIG)==0){
-                        ByteBuffer data=codec.getOutputBuffer(out);
-                        if(data!=null){
-                            if(rate<=0||channels<=0)throw new IOException("Unknown PCM format");
-                            data.position(info.offset);data.limit(info.offset+info.size);
-                            int frames=mixer.mix(data.slice().order(ByteOrder.nativeOrder()),encoding,channels);
-                            if(resampler==null)resampler=new Resampler(rate);
-                            resampler.push(mixer.mono,frames,capped);
+                // 2. Salida: todo lo que esté listo. Si no se pudo entregar nada, el decodificador está ocupado: se espera su
+                // próxima salida (vuelve apenas existe; el plazo es solo un tope).
+                int out=codec.dequeueOutputBuffer(info,fed?0:CODEC_WAIT_US);
+                while(out!=MediaCodec.INFO_TRY_AGAIN_LATER){
+                    if(out==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED){
+                        MediaFormat f=codec.getOutputFormat();int newRate=number(f,MediaFormat.KEY_SAMPLE_RATE,rate);
+                        channels=number(f,MediaFormat.KEY_CHANNEL_COUNT,channels);encoding=number(f,MediaFormat.KEY_PCM_ENCODING,AudioFormat.ENCODING_PCM_16BIT);
+                        // Cambio de frecuencia a mitad de camino (raro): se cierra el filtro actual y se parte con otro.
+                        if(resampler!=null&&newRate!=rate){resampler.finish(capped);resampler=null;}
+                        rate=newRate;
+                    }else if(out>=0){
+                        lastOutput=SystemClock.elapsedRealtime();
+                        // Se revisa la cancelación en cada búfer: al cancelar, la conversión se detiene en el acto.
+                        try{alive(cancel);}catch(InterruptedIOException e){codec.releaseOutputBuffer(out,false);throw e;}
+                        if(info.size>0&&(info.flags&MediaCodec.BUFFER_FLAG_CODEC_CONFIG)==0){
+                            ByteBuffer data=codec.getOutputBuffer(out);
+                            if(data!=null){
+                                if(rate<=0||channels<=0)throw new IOException("Unknown PCM format");
+                                data.position(info.offset);data.limit(info.offset+info.size);
+                                int frames=mixer.mix(data.slice().order(ByteOrder.nativeOrder()),encoding,channels);
+                                if(resampler==null)resampler=new Resampler(rate);
+                                resampler.push(mixer.mono,frames,capped);
+                            }
                         }
+                        boolean end=(info.flags&MediaCodec.BUFFER_FLAG_END_OF_STREAM)!=0;codec.releaseOutputBuffer(out,false);
+                        if(end){outputDone=true;break;}
+                        if(done[0]>=limit)break;
                     }
-                    boolean end=(info.flags&MediaCodec.BUFFER_FLAG_END_OF_STREAM)!=0;codec.releaseOutputBuffer(out,false);if(end)break;
-                }else if(now-lastOutput>STALL_MS)throw new IOException("Audio decoder stopped advancing");
+                    // (INFO_OUTPUT_BUFFERS_CHANGED no importa: los búferes se piden por índice.)
+                    out=codec.dequeueOutputBuffer(info,0);
+                }
+                if(!outputDone&&SystemClock.elapsedRealtime()-lastOutput>STALL_MS)throw new IOException("Audio decoder stopped advancing");
             }
             if(resampler!=null&&done[0]<limit)resampler.finish(capped);
             return done[0];
@@ -287,15 +328,17 @@ final class OrAudio {
      * Con frecuencias raras (más de 2048 fracciones distintas) se usa la fila más cercana.
      */
     private static final class Resampler{
-        private final int up,half,taps,phases,stepWhole,stepPart;private final boolean same;private final float[] table;
+        private final int up,half,taps,phases,stepWhole,stepPart;private final boolean same,whole;private final float[] table,fold;
         private float[] window;private int fill,offset,part;
         private final short[] block=new short[4096];private int held;
         Resampler(int inRate){
             int g=gcd(inRate,RATE),down=inRate/g;up=RATE/g;same=up==down;stepWhole=down/up;stepPart=down%up;
+            // Decimación entera (48 → 16 kHz es ×3; 32 → 16 kHz, ×2): una sola fila de coeficientes.
+            whole=!same&&up==1;
             half=(int)Math.ceil(HALF_TAPS*Math.max(1d,(double)inRate/RATE));taps=2*half;phases=Math.min(up,MAX_PHASES);
             table=same?null:new float[phases*taps];window=same?null:new float[taps+8192];
             // Antes de la primera muestra hay silencio: «half-1» ceros, para que la salida 0 quede sobre la entrada 0.
-            fill=half-1;if(same)return;
+            fill=half-1;if(same){fold=null;return;}
             double cutoff=CUTOFF*Math.min(inRate,RATE)/inRate,norm=bessel(BETA);double[] row=new double[taps];
             for(int p=0;p<phases;p++){
                 double shift=phases==up?(double)p/up:(p+0.5)/phases,sum=0;
@@ -307,6 +350,9 @@ final class OrAudio {
                 // Cada fila suma 1: el volumen no cambia ni varía de una fracción a otra.
                 for(int k=0;k<taps;k++)table[p*taps+k]=(float)(row[k]/sum);
             }
+            // Camino directo: la fila es simétrica alrededor de su centro (half-1) y el último coeficiente vale 0, así que
+            // fold[j] sirve para las dos muestras a distancia j del centro.
+            if(whole){fold=new float[half];for(int j=0;j<half;j++)fold[j]=table[half-1-j];}else fold=null;
         }
         void push(float[] in,int count,Sink sink)throws Exception{
             if(same){for(int i=0;i<count;i++)emit(in[i],sink);return;}
@@ -315,6 +361,18 @@ final class OrAudio {
                 if(fill+count>window.length)window=Arrays.copyOf(window,fill+count+8192);
             }
             System.arraycopy(in,0,window,fill,count);fill+=count;
+            if(whole){
+                // Se suman primero las dos muestras que comparten coeficiente y se multiplica una sola vez: la mitad de las
+                // multiplicaciones del caso general. Dos sumas en paralelo, por la misma razón que abajo.
+                final int mid=half-1;
+                while(offset+taps<=fill){
+                    int c=offset+mid,j=1;float a=fold[0]*window[c],b=0;
+                    for(;j+1<=mid;j+=2){a+=fold[j]*(window[c-j]+window[c+j]);b+=fold[j+1]*(window[c-j-1]+window[c+j+1]);}
+                    if(j<=mid)a+=fold[j]*(window[c-j]+window[c+j]);
+                    emit(a+b,sink);offset+=stepWhole;
+                }
+                return;
+            }
             while(offset+taps<=fill){
                 int row=(phases==up?part:(int)((long)part*phases/up))*taps,at=offset,k=0;float a=0,b=0,c=0,d=0;
                 // Cuatro sumas en paralelo: es el lazo que más pesa (más de mil millones de productos por bloque de 12 min)
@@ -330,6 +388,16 @@ final class OrAudio {
             int v=Math.round(value);block[held++]=(short)(v>32767?32767:v<-32768?-32768:v);
             if(held==block.length){sink.write(block,held);held=0;}
         }
+    }
+    /**
+     * Pasa a 16 kHz un PCM mono ya en memoria (en trozos de 4096, como llegan del decodificador). Solo para las pruebas:
+     * miden el filtro solo, sin el decodificador del teléfono. Devuelve las muestras entregadas.
+     */
+    static long resample(int inRate,float[] input,Sink sink)throws Exception{
+        Resampler resampler=new Resampler(inRate);long[] count={0};Sink counting=(d,n)->{count[0]+=n;sink.write(d,n);};
+        float[] chunk=new float[4096];
+        for(int at=0;at<input.length;at+=chunk.length){int n=Math.min(chunk.length,input.length-at);System.arraycopy(input,at,chunk,0,n);resampler.push(chunk,n,counting);}
+        resampler.finish(counting);return count[0];
     }
     private static int gcd(int a,int b){while(b!=0){int t=a%b;a=b;b=t;}return a;}
     /** Función de Bessel modificada I0 (serie), para la ventana de Kaiser. */
@@ -364,7 +432,7 @@ final class OrAudio {
      */
     private static final class FlacOut implements Out{
         private final File file;private final HttpApi cancel;private MediaCodec codec;private OutputStream out;private final MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();
-        private long fed,hash;private boolean begun,ended;private byte[] header,csd;
+        private long fed;private boolean begun,ended;private byte[] header,csd;
         FlacOut(File file,HttpApi cancel)throws IOException{
             this.file=file;this.cancel=cancel;
             try{
@@ -378,25 +446,30 @@ final class OrAudio {
         }
         @Override public void write(short[] data,int count)throws IOException{
             try{
-                for(int i=0;i<count;i++)hash=hash*31+data[i];
                 int position=0;long waiting=SystemClock.elapsedRealtime();
                 while(position<count){
-                    alive(cancel);int index=codec.dequeueInputBuffer(10_000);
+                    alive(cancel);int index=codec.dequeueInputBuffer(0);
                     if(index>=0){
                         ByteBuffer buffer=codec.getInputBuffer(index);if(buffer==null)throw new IOException("No encoder input buffer");
                         buffer.clear();int n=Math.min(count-position,buffer.remaining()/2);if(n<=0)throw new IOException("Encoder buffer too small");
                         buffer.order(ByteOrder.nativeOrder()).asShortBuffer().put(data,position,n);
                         codec.queueInputBuffer(index,0,n*2,fed*1_000_000L/RATE,0);fed+=n;position+=n;waiting=SystemClock.elapsedRealtime();
-                    }else if(SystemClock.elapsedRealtime()-waiting>STALL_MS)throw new IOException("Encoder stopped taking audio");
-                    drain(false);
+                        drain(false);
+                    }else{
+                        // Sin entrada libre, el codificador está ocupado o espera que se recojan sus salidas: se espera su
+                        // próxima salida (vuelve apenas existe), en vez de dormir a ciegas esperando una entrada.
+                        if(SystemClock.elapsedRealtime()-waiting>STALL_MS)throw new IOException("Encoder stopped taking audio");
+                        drain(false,CODEC_WAIT_US);
+                    }
                 }
             }catch(InterruptedIOException e){throw e;}catch(Exception e){throw new FlacFailed("flac-encode",e);}
         }
-        /** Guarda lo que el codificador tenga listo; con toEnd espera hasta el final del flujo. */
-        private void drain(boolean toEnd)throws Exception{
-            long waiting=SystemClock.elapsedRealtime();
+        private void drain(boolean toEnd)throws Exception{drain(toEnd,0);}
+        /** Guarda lo que el codificador tenga listo (la primera consulta puede esperar firstWaitUs); con toEnd espera hasta el final del flujo. */
+        private void drain(boolean toEnd,long firstWaitUs)throws Exception{
+            long waiting=SystemClock.elapsedRealtime();boolean first=true;
             while(!ended){
-                int index=codec.dequeueOutputBuffer(info,toEnd?10_000:0);
+                int index=codec.dequeueOutputBuffer(info,toEnd?10_000:first?firstWaitUs:0);first=false;
                 if(index==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED){
                     ByteBuffer c=codec.getOutputFormat().getByteBuffer("csd-0");if(c!=null){c=c.duplicate();c.rewind();csd=new byte[c.remaining()];c.get(csd);}
                 }else if(index>=0){
@@ -422,20 +495,21 @@ final class OrAudio {
                 // El fin va en un búfer vacío y aparte: hay codificadores (Android 8 y 9) que descartan los datos que llegan junto con él.
                 long waiting=SystemClock.elapsedRealtime();
                 while(true){
-                    alive(cancel);int index=codec.dequeueInputBuffer(10_000);
+                    alive(cancel);int index=codec.dequeueInputBuffer(0);
                     if(index>=0){codec.queueInputBuffer(index,0,0,fed*1_000_000L/RATE,MediaCodec.BUFFER_FLAG_END_OF_STREAM);break;}
                     if(SystemClock.elapsedRealtime()-waiting>STALL_MS)throw new IOException("Encoder stopped taking audio");
-                    drain(false);
+                    drain(false,CODEC_WAIT_US);
                 }
                 drain(true);out.close();out=null;release();
                 if(!begun)throw new IOException("Encoder produced no audio");
                 stamp(file,fed);
-                // Autoverificación: se lee el FLAC de vuelta con el decodificador del teléfono. FLAC no pierde nada, así que
-                // debe devolver exactamente las mismas muestras; si falta el final (pasa en codificadores antiguos, que no
-                // vacían el último cuadro) o algo difiere, no se envía: los tiempos de las anclas y del bloque dependen de esto.
-                long[] back={0,0};decode(file,Long.MAX_VALUE,cancel,(d,n)->{for(int i=0;i<n;i++)back[1]=back[1]*31+d[i];back[0]+=n;});
-                if(back[0]!=fed)throw new IOException("FLAC length differs by "+(back[0]-fed)+" samples");
-                if(back[1]!=hash)throw new IOException("FLAC content differs");
+                // Autoverificación barata (0.8.0, tercera ronda): antes se decodificaba el FLAC entero de vuelta, lo que costaba
+                // casi lo mismo que convertirlo. Ahora se recorren sus cuadros sin decodificarlos: cada cabecera y la CRC de
+                // cada cuadro deben estar bien y las muestras deben sumar exactamente lo entregado. Si falta el final (pasa en
+                // codificadores antiguos, que no vacían el último cuadro) o un cuadro llegó dañado, no se envía: los tiempos
+                // de las anclas y del bloque dependen de esto.
+                long counted=flacSamples(file);
+                if(counted!=fed)throw new IOException("FLAC length differs by "+(counted-fed)+" samples");
                 return fed;
             }catch(InterruptedIOException e){throw e;}catch(Exception e){throw new FlacFailed("flac-verify",e);}
         }
@@ -486,6 +560,94 @@ final class OrAudio {
             // El total ocupa 36 bits: los 4 bajos del byte 21 y los bytes 22 a 25.
             raf.seek(21);raf.write((h[21]&0xf0)|(int)((samples>>>32)&0x0f));raf.writeInt((int)samples);
         }
+    }
+
+    // ---------- Comprobación barata del FLAC ----------
+    /** Tablas de las dos sumas de control de FLAC: CRC-8 de cada cabecera (x⁸+x²+x+1) y CRC-16 de cada cuadro (x¹⁶+x¹⁵+x²+1). */
+    private static final int[] CRC8=new int[256],CRC16=new int[256];
+    static{
+        for(int i=0;i<256;i++){
+            int a=i;for(int k=0;k<8;k++)a=(a&0x80)!=0?((a<<1)^0x07)&0xff:(a<<1)&0xff;CRC8[i]=a;
+            int b=i<<8;for(int k=0;k<8;k++)b=(b&0x8000)!=0?((b<<1)^0x8005)&0xffff:(b<<1)&0xffff;CRC16[i]=b;
+        }
+    }
+    /**
+     * Muestras de un FLAC de OrAudio (16 kHz, mono, 16 bits) contadas cuadro por cuadro, SIN decodificarlo: recorre los
+     * metadatos y después cada cuadro, revisando su cabecera (formato, número de orden y CRC-8) y que la CRC-16 del cuadro
+     * entero dé cero justo donde empieza el siguiente. Cuesta una lectura del archivo (milisegundos), no una decodificación.
+     * Lanza IOException con el motivo (técnico, sin datos del usuario) si algo no cuadra.
+     */
+    static long flacSamples(File file)throws IOException{
+        try(RandomAccessFile raf=new RandomAccessFile(file,"r");java.nio.channels.FileChannel channel=raf.getChannel()){
+            long length=channel.size();if(length<42||length>Integer.MAX_VALUE)throw new IOException("FLAC size "+length);
+            // Mapeado y no copiado: un bloque de 12 min pesa ~14 MB y pueden ir tres a la vez.
+            ByteBuffer b=channel.map(java.nio.channels.FileChannel.MapMode.READ_ONLY,0,length);int size=(int)length;
+            if(b.get(0)!='f'||b.get(1)!='L'||b.get(2)!='a'||b.get(3)!='C')throw new IOException("FLAC header missing");
+            int p=4;boolean last=false;long[] head=new long[4];
+            while(!last){
+                if(p+4>size)throw new IOException("FLAC metadata cut");
+                int h=b.get(p)&0xff;
+                // Un codificador que no marcó el último bloque de metadatos: si aquí ya empieza un cuadro (0xFF 0xF8 no puede
+                // ser la cabecera de un bloque de metadatos, sería el tipo 127), los metadatos terminaron.
+                if(p>4&&h==0xff&&frameHeader(b,p,size,head))break;
+                last=(h&0x80)!=0;p+=4+((b.get(p+1)&0xff)<<16|(b.get(p+2)&0xff)<<8|(b.get(p+3)&0xff));
+            }
+            if(p>=size||!frameHeader(b,p,size,head))throw new IOException("FLAC has no valid first frame");
+            boolean variable=head[3]==1;long samples=0,frames=0;int start=p;
+            while(true){
+                // Cuadro que empieza en «start»: mismo modo de numeración que el primero y en orden (no falta ninguno).
+                if((head[3]==1)!=variable||head[2]!=(variable?samples:frames))throw new IOException("FLAC frame "+frames+" out of order");
+                samples+=head[1];frames++;
+                // CRC-16 corrida desde el comienzo del cuadro: con sus dos bytes finales incluidos da cero. El siguiente cuadro
+                // empieza donde la suma da cero Y hay una cabecera válida (una coincidencia dentro de los datos es casi imposible).
+                int i=start,minEnd=start+(int)head[0]+3,crc=0;
+                for(;i<size;i++){
+                    if(crc==0&&i>=minEnd&&(b.get(i)&0xff)==0xff&&i+1<size&&(b.get(i+1)&0xfe)==0xf8&&frameHeader(b,i,size,head))break;
+                    crc=((crc<<8)&0xffff)^CRC16[((crc>>8)^(b.get(i)&0xff))&0xff];
+                }
+                if(i>=size){if(crc!=0)throw new IOException("FLAC last frame damaged or cut");return samples;}
+                start=i;
+            }
+        }
+    }
+    /**
+     * Cabecera de cuadro FLAC válida en «at» (sincronía, campos posibles para 16 kHz mono de 16 bits y CRC-8 correcta).
+     * Deja en out: {largo de la cabecera, muestras del cuadro, número (de cuadro o de muestra), 1 si la numeración es por muestra}.
+     */
+    private static boolean frameHeader(ByteBuffer b,int at,int size,long[] out){
+        if(at+6>size)return false;
+        int b1=b.get(at+1)&0xff,b2=b.get(at+2)&0xff,b3=b.get(at+3)&0xff;
+        if((b.get(at)&0xff)!=0xff||(b1&0xfe)!=0xf8)return false;
+        int sizeCode=b2>>4,rateCode=b2&15,channels=b3>>4,bits=(b3>>1)&7;
+        if(sizeCode==0||rateCode==15||(b3&1)!=0)return false;
+        // Lo que escribe OrAudio: un canal, 16 bits y 16 kHz (o «lo que diga el STREAMINFO»).
+        if(channels!=0||(bits!=0&&bits!=4)||(rateCode!=0&&rateCode!=5&&rateCode<12))return false;
+        int p=at+4,first=b.get(p)&0xff,extra;long number;
+        // Número de cuadro (o de muestra) en el formato de UTF-8, de 1 a 7 bytes.
+        if(first<0x80){extra=0;number=first;}
+        else if(first>=0xc0&&first<0xe0){extra=1;number=first&0x1f;}
+        else if(first>=0xe0&&first<0xf0){extra=2;number=first&0x0f;}
+        else if(first>=0xf0&&first<0xf8){extra=3;number=first&0x07;}
+        else if(first>=0xf8&&first<0xfc){extra=4;number=first&0x03;}
+        else if(first>=0xfc&&first<0xfe){extra=5;number=first&0x01;}
+        else if(first==0xfe){extra=6;number=0;}
+        else return false;
+        if(p+1+extra>size)return false;
+        for(int k=1;k<=extra;k++){int c=b.get(p+k)&0xff;if((c&0xc0)!=0x80)return false;number=(number<<6)|(c&0x3f);}
+        p+=1+extra;
+        int block;
+        if(sizeCode==1)block=192;
+        else if(sizeCode<=5)block=576<<(sizeCode-2);
+        else if(sizeCode==6){if(p>=size)return false;block=(b.get(p++)&0xff)+1;}
+        else if(sizeCode==7){if(p+1>=size)return false;block=((b.get(p)&0xff)<<8|(b.get(p+1)&0xff))+1;p+=2;}
+        else block=256<<(sizeCode-8);
+        if(rateCode==12){if(p>=size||(b.get(p++)&0xff)*1000!=RATE)return false;}
+        else if(rateCode==13||rateCode==14){if(p+1>=size)return false;int v=(b.get(p)&0xff)<<8|(b.get(p+1)&0xff);p+=2;if((rateCode==13?v:v*10)!=RATE)return false;}
+        if(p>=size)return false;
+        int crc=0;for(int k=at;k<p;k++)crc=CRC8[(crc^(b.get(k)&0xff))&0xff];
+        if(crc!=(b.get(p)&0xff))return false;
+        out[0]=p+1-at;out[1]=block;out[2]=number;out[3]=b1&1;
+        return true;
     }
     private OrAudio(){}
 }

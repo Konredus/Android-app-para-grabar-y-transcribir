@@ -17,6 +17,9 @@ import java.util.concurrent.TimeUnit;
  * 0.4.4: algunos teléfonos (vivo) congelan la app con la pantalla bloqueada y cortan la conexión. Se mantiene
  * el Wi-Fi despierto, un corte del teléfono se reintenta pronto y sin gastar intentos, y al encender la pantalla
  * se reintenta de inmediato.
+ *
+ * 0.8.0, tercera ronda: las rondas con reintentos (rounds) las comparte la transferencia iniciada por el usuario de
+ * Android 14+ (PipelineJob). Si lo único que queda espera Wi-Fi, no se retiene el servicio: la tarea de fondo lo retoma.
  */
 public class TranscribeService extends Service {
     static volatile boolean running;
@@ -26,9 +29,10 @@ public class TranscribeService extends Service {
     private static final long[] BACKOFF={20_000,60_000,120_000,300_000};
     /** Tras un corte del propio teléfono se reintenta pronto: no es un problema del proveedor. */
     private static final long LOCAL_CUT_DELAY=15_000;
-    private volatile HttpApi http;private PowerManager.WakeLock wake;private android.net.wifi.WifiManager.WifiLock wifi;private volatile boolean nudged;
+    private volatile HttpApi http;private PowerManager.WakeLock wake;private android.net.wifi.WifiManager.WifiLock wifi;
+    private final java.util.concurrent.atomic.AtomicBoolean nudged=new java.util.concurrent.atomic.AtomicBoolean();
     /** Pantalla encendida o desbloqueada: buen momento para reintentar (Android deja de frenar la app). */
-    private final BroadcastReceiver screen=new BroadcastReceiver(){@Override public void onReceive(Context c,Intent i){nudged=true;}};
+    private final BroadcastReceiver screen=new BroadcastReceiver(){@Override public void onReceive(Context c,Intent i){nudged.set(true);}};
     @Override public IBinder onBind(Intent intent){return null;}
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         if(running)return START_NOT_STICKY;
@@ -48,37 +52,48 @@ public class TranscribeService extends Service {
             getSystemService(android.app.job.JobScheduler.class).cancel(Pipeline.JOB_ID);
             boolean locked=false;try{locked=Transcriber.RUNNING.tryLock(60,TimeUnit.SECONDS);}catch(InterruptedException ignored){}
             if(locked){
-                try{
-                    // Los cortes del propio teléfono no avanzan la escala de esperas; el tope de vueltas evita un bucle eterno.
-                    int round=0;
-                    for(int loop=0;loop<40&&!http.cancelled;loop++){
-                        Transcriber t=new Transcriber(this,http,0);retry=t.runAll();Diagnostics.event("runner_round",null,"runner","fgs","count",round,"result",retry);
-                        if(!retry||http.cancelled||!Pipeline.pending(this)||round==BACKOFF.length)break;
-                        if(!waitBeforeRetry(t.sawLocalCut?LOCAL_CUT_DELAY:BACKOFF[round++]))break;
-                    }
-                }finally{Transcriber.RUNNING.unlock();}
+                try{retry=rounds(this,http,"fgs",nudged);}
+                finally{Transcriber.RUNNING.unlock();}
             }
             boolean again=retry&&!http.cancelled;
             new Handler(Looper.getMainLooper()).post(()->{running=false;current=null;releaseLocks();stopForeground(STOP_FOREGROUND_REMOVE);if(again)Pipeline.schedule(this,true);stopSelf();});
         },"VozLocal-transcribe-fg").start();
         return START_NOT_STICKY;
     }
+    /**
+     * Rondas de trabajo con reintentos dentro del mismo proceso, con esperas crecientes. Las usan este servicio y la
+     * transferencia iniciada por el usuario (PipelineJob, Android 14+). runner: "fgs" o "uij" para Diagnostics.
+     * nudged: se pone en true cuando conviene reintentar ya (pantalla encendida). Devuelve true si queda trabajo pendiente.
+     * Los cortes del propio teléfono no avanzan la escala de esperas; el tope de vueltas evita un bucle eterno.
+     */
+    static boolean rounds(Context c,HttpApi http,String runner,java.util.concurrent.atomic.AtomicBoolean nudged){
+        boolean retry=true;int round=0;
+        for(int loop=0;loop<40&&!http.cancelled;loop++){
+            Transcriber t=new Transcriber(c,http,0);t.runner=runner;retry=t.runAll();Diagnostics.event("runner_round",null,"runner",runner,"count",round,"result",retry);
+            if(!retry||http.cancelled||!Pipeline.pending(c)||round==BACKOFF.length)break;
+            // Lo único que queda espera Wi-Fi (y no tiene permiso para datos móviles): no se retiene el trabajo esperando; la
+            // tarea de fondo lo retoma sola cuando haya Wi-Fi (o al tocar «Usar datos móviles ahora»).
+            if(t.onlyWaitingWifi())break;
+            if(!waitBeforeRetry(c,http,t.sawLocalCut?LOCAL_CUT_DELAY:BACKOFF[round++],nudged))break;
+        }
+        return retry;
+    }
     /** Espera antes de reintentar; si falta red/cargador, espera hasta 15 min a que vuelva. Devuelve false si hay que ceder. */
-    private boolean waitBeforeRetry(long delay){
-        String id=pendingId();String blocker=Pipeline.blocker(this);
-        if(id!=null)Pipeline.log(this,id,blocker==null?"Reintento en "+(delay/1000)+" s · sigue en primer plano":"En pausa: "+blocker+" · se retoma sola al cumplirse");
+    private static boolean waitBeforeRetry(Context c,HttpApi http,long delay,java.util.concurrent.atomic.AtomicBoolean nudged){
+        String id=pendingId(c);String blocker=Pipeline.blocker(c);
+        if(id!=null)Pipeline.log(c,id,blocker==null?"Reintento en "+(delay/1000)+" s · sigue trabajando":"En pausa: "+blocker+" · se retoma sola al cumplirse");
         // elapsedRealtime sigue contando si Android congela la app: así se detecta (y se anota) una espera que se alargó.
-        long start=SystemClock.elapsedRealtime(),until=start+(blocker==null?delay:15*60_000),last=start;nudged=false;
+        long start=SystemClock.elapsedRealtime(),until=start+(blocker==null?delay:15*60_000),last=start;nudged.set(false);
         while(SystemClock.elapsedRealtime()<until&&!http.cancelled){
             SystemClock.sleep(1_000);long now=SystemClock.elapsedRealtime();
-            if(now-last>30_000&&id!=null){Pipeline.log(this,id,"Android tuvo la app congelada "+Recording.time(now-last)+" (ahorro de batería con la pantalla bloqueada)");Diagnostics.event("app_frozen",id,"elapsed_ms",now-last,"display",Battery.screenOn(this)?"on":"off","battery",Battery.unrestricted(this)?"unrestricted":"optimized");}
+            if(now-last>30_000&&id!=null){Pipeline.log(c,id,"Android tuvo la app congelada "+Recording.time(now-last)+" (ahorro de batería con la pantalla bloqueada)");Diagnostics.event("app_frozen",id,"elapsed_ms",now-last,"display",Battery.screenOn(c)?"on":"off","battery",Battery.unrestricted(c)?"unrestricted":"optimized");}
             last=now;
-            if(blocker!=null&&Pipeline.blocker(this)==null)return true;
-            if(nudged&&Pipeline.blocker(this)==null){if(id!=null)Pipeline.log(this,id,"Pantalla encendida · se reintenta ahora");return true;}
+            if(blocker!=null&&Pipeline.blocker(c)==null)return true;
+            if(nudged.get()&&Pipeline.blocker(c)==null){if(id!=null)Pipeline.log(c,id,"Pantalla encendida · se reintenta ahora");return true;}
         }
-        return !http.cancelled&&Pipeline.blocker(this)==null;
+        return !http.cancelled&&Pipeline.blocker(c)==null;
     }
-    private String pendingId(){for(Recording r:Recording.list(this))if(FilesStore.state(this,r.id).optBoolean("requested"))return r.id;return null;}
+    private static String pendingId(Context c){for(Recording r:Recording.list(c))if(FilesStore.state(c,r.id).optBoolean("requested"))return r.id;return null;}
     @Override public void onDestroy(){HttpApi h=http;if(running&&h!=null)h.cancel();running=false;releaseLocks();super.onDestroy();}
     private void releaseLocks(){
         if(wake!=null&&wake.isHeld())wake.release();

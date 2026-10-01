@@ -53,8 +53,20 @@ class HttpApi {
      * deje pasar tal cual (no se confunde con una falla del FLAC ni lo apaga para los bloques siguientes).
      */
     static class PrepareStalled extends InterruptedIOException{PrepareStalled(String m){super(m);}}
+    /** Avance de la preparación en % (0.8.0, tercera ronda): la etapa «Preparando audio» lo muestra en pantalla y en la notificación. */
+    interface PrepareProgress{void percent(int value);}
+    volatile PrepareProgress onPrepareProgress;
+    private volatile int preparedPercent=-1;
+    /**
+     * OrAudio informa cuánto lleva convertido (0–100). Solo avanza (un reintento en WAV no lo devuelve a cero en pantalla) y
+     * solo avisa cuando cambia el número: el decodificador llama miles de veces por bloque.
+     */
+    void prepared(int percent){
+        int p=Math.max(0,Math.min(100,percent));if(p<=preparedPercent)return;preparedPercent=p;
+        PrepareProgress callback=onPrepareProgress;if(callback!=null)try{callback.percent(p);}catch(RuntimeException ignored){}
+    }
     /** El cliente empieza a preparar el audio. Mientras dure, el vigilante no lo toma como una subida detenida. */
-    void startPreparing(){prepareStalled=null;phase(PREPARE);Preparing p=onPreparing;if(p!=null)p.changed(true,false);}
+    void startPreparing(){prepareStalled=null;preparedPercent=-1;phase(PREPARE);Preparing p=onPreparing;if(p!=null)p.changed(true,false);}
     /** Terminó la preparación (ok=false si falló). El tiempo sin avance se mide desde aquí. */
     void endPreparing(boolean ok){prepareStalled=null;if(phase==PREPARE)phase=IDLE;touch();Preparing p=onPreparing;if(p!=null)p.changed(false,ok);}
     /** El vigilante corta una preparación que no termina: el próximo check() lo hace saber. */

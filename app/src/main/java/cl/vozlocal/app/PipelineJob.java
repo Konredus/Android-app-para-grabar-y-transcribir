@@ -10,39 +10,88 @@ import android.os.*;
  * Primero intenta pasar el trabajo a TranscribeService (primer plano). Con la app cerrada, Android 12+ no
  * lo permite: entonces transcribe aquí (Android puede pausarla) y avisa con una notificación para abrir la app,
  * lo que pasa el trabajo a primer plano y lo acelera.
+ *
+ * 0.8.0, tercera ronda: este mismo servicio corre la transferencia iniciada por el usuario de Android 14+ (Pipeline,
+ * USER_JOB_ID). Esa no tiene las cuotas ni el corte de 10 min de las tareas de fondo: trabaja como el servicio en primer
+ * plano (mismas rondas con reintentos, TranscribeService.rounds), con su notificación obligatoria.
  */
 public class PipelineJob extends JobService {
     static final int OPEN_APP_NOTIFICATION=11;
-    private volatile HttpApi active;
+    /** Una transferencia iniciada por el usuario está trabajando (las demás vías le ceden el turno). */
+    static volatile boolean userRunning;
+    /** Conexión de la transferencia iniciada por el usuario, para cancelar un envío al instante (Pipeline.cancel). */
+    static volatile HttpApi current;
+    /** Conexión de cada trabajo en curso, por id: el mismo servicio puede correr la tarea de fondo y la transferencia a la vez. */
+    private final java.util.Map<Integer,HttpApi> actives=new java.util.concurrent.ConcurrentHashMap<>();
     @Override public boolean onStartJob(JobParameters params){
-        if(TranscribeService.running)return false;
+        if(Build.VERSION.SDK_INT>=34&&params.isUserInitiatedJob())return startUser(params);
+        if(TranscribeService.running||userRunning)return false;
         if(Pipeline.startForeground(this))return false;
         suggestOpeningApp();
-        HttpApi http=new HttpApi();active=http;
+        HttpApi http=new HttpApi();actives.put(params.getJobId(),http);
         new Thread(()->{
             boolean retry;String waiting;
             if(!Transcriber.RUNNING.tryLock()){new Handler(getMainLooper()).post(()->jobFinished(params,true));return;}
             try{Diagnostics.event("runner_round",null,"runner","job","net",Pipeline.networkName(this));Transcriber t=new Transcriber(this,http,Transcriber.JOB_BUDGET_MS);retry=t.runAll();waiting=t.waitingForeground();}
             finally{Transcriber.RUNNING.unlock();}
-            boolean again=retry;String needsApp=waiting;
+            boolean again=retry;String needsApp=waiting;actives.remove(params.getJobId(),http);
             // Se programa una tarea nueva (sin espera exponencial) en vez de pedir reintento con backoff.
             // Un envío que solo cabe en primer plano no reprograma nada: el aviso pide abrir la app, que lo retoma.
             if(!http.cancelled)new Handler(getMainLooper()).post(()->{jobFinished(params,false);if(again)Pipeline.schedule(this,true);
                 if(needsApp!=null)openAppToSend(needsApp);else if(!again)getSystemService(NotificationManager.class).cancel(OPEN_APP_NOTIFICATION);});
         },"VozLocal-transcribe").start();return true;
     }
+    /**
+     * Transferencia iniciada por el usuario (Android 14+). La notificación va de inmediato: Android la exige en los primeros
+     * segundos y, si no llega, detiene el trabajo. Si el servicio en primer plano ya está trabajando, este no hace falta.
+     * La tarea de fondo que estuviera trabajando se detiene y esta toma el relevo (sin perder partes ya listas).
+     */
+    private boolean startUser(JobParameters params){
+        if(Build.VERSION.SDK_INT<34)return false;
+        if(TranscribeService.running||userRunning){Diagnostics.event("user_job",null,"result","skipped","runner","uij");return false;}
+        try{setNotification(params,Transcriber.NOTIFICATION,Transcriber.build(this,"Preparando…",true,-1),JobService.JOB_END_NOTIFICATION_POLICY_REMOVE);}
+        catch(RuntimeException e){Diagnostics.event("user_job",null,"result","no_notification","error_class",e.getClass().getSimpleName());}
+        userRunning=true;HttpApi http=new HttpApi();actives.put(params.getJobId(),http);current=http;
+        getSystemService(JobScheduler.class).cancel(Pipeline.JOB_ID);
+        Diagnostics.event("user_job",null,"result","started","runner","uij","net",Pipeline.networkName(this));
+        new Thread(()->{
+            boolean retry=true;
+            // Wi-Fi despierto con la pantalla apagada, como el servicio en primer plano (algunos teléfonos lo duermen y cortan el envío).
+            android.net.wifi.WifiManager.WifiLock wifi=null;
+            try{android.net.wifi.WifiManager wm=getApplicationContext().getSystemService(android.net.wifi.WifiManager.class);if(wm!=null){wifi=wm.createWifiLock(android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY,"VozLocal:TranscribeUser");wifi.setReferenceCounted(false);wifi.acquire();}}catch(RuntimeException ignored){wifi=null;}
+            try{
+                boolean locked=false;try{locked=Transcriber.RUNNING.tryLock(60,java.util.concurrent.TimeUnit.SECONDS);}catch(InterruptedException ignored){}
+                if(locked){try{retry=TranscribeService.rounds(this,http,"uij",new java.util.concurrent.atomic.AtomicBoolean());}finally{Transcriber.RUNNING.unlock();}}
+            }finally{try{if(wifi!=null&&wifi.isHeld())wifi.release();}catch(RuntimeException ignored){}}
+            boolean again=retry&&!http.cancelled;actives.remove(params.getJobId(),http);
+            new Handler(getMainLooper()).post(()->{
+                // Solo si sigue siendo la transferencia en curso: Android pudo detenerla y empezar otra mientras esta terminaba.
+                if(current==http){userRunning=false;current=null;}
+                // Cancelada por Android (onStopJob): ahí ya se decidió si se repite; no se llama jobFinished.
+                if(!http.cancelled)jobFinished(params,false);
+                // Lo que quede (p. ej. una grabación que espera Wi-Fi) lo retoma la tarea de fondo.
+                if(again)Pipeline.schedule(this,true);
+            });
+        },"VozLocal-transcribe-user").start();
+        return true;
+    }
     @Override public boolean onStopJob(JobParameters params){
         int reason=Build.VERSION.SDK_INT>=31?params.getStopReason():-1;boolean byApp=reason==JobParameters.STOP_REASON_CANCELLED_BY_APP;
-        HttpApi h=active;
+        boolean user=Build.VERSION.SDK_INT>=34&&params.isUserInitiatedJob();
+        HttpApi h=actives.remove(params.getJobId());
         if(h!=null){h.cancel();String id=h.jobId;
-            if(id!=null){Pipeline.log(this,id,byApp?"Continúa en primer plano (sigue aunque bloquees el teléfono)":"Android pausó la tarea de fondo: "+stopReason(reason)+" · se reanudará");
+            if(id!=null){Pipeline.log(this,id,byApp?"Continúa en primer plano (sigue aunque bloquees el teléfono)":(user?"Android pausó la transferencia: ":"Android pausó la tarea de fondo: ")+stopReason(reason)+" · se reanudará");
                 if(reason==JobParameters.STOP_REASON_TIMEOUT)timedOut(id);}}
-        getSystemService(NotificationManager.class).cancel(Transcriber.NOTIFICATION);Diagnostics.event("job_interrupted",null,"reason",reason,"runner","job");return true;
+        if(user&&current==h){userRunning=false;current=null;}
+        // La notificación de avance es compartida: si otro trabajador la está usando (el servicio en primer plano o la
+        // transferencia que tomó el relevo), no se quita.
+        if(!Pipeline.working())getSystemService(NotificationManager.class).cancel(Transcriber.NOTIFICATION);Diagnostics.event("job_interrupted",null,"reason",reason,"runner",user?"uij":"job");return true;
     }
     /**
      * Resguardo: Android cortó la tarea por tiempo en medio de un envío (el trabajo no alcanza a registrar el fallo). Cuenta
      * como un intento; al quinto, la grabación queda con error (y un «Volver a transcribir» vuelve a la versión anterior),
-     * en vez de volver a subir el mismo audio en cada tarea nueva.
+     * en vez de volver a subir el mismo audio en cada tarea nueva. Al rendirse avisa con una notificación, igual que el
+     * motor (Transcriber.attention): antes solo quedaba escrito en la bitácora y, con la app cerrada, nadie se enteraba.
      */
     private void timedOut(String id){
         android.content.Context app=getApplicationContext();
@@ -56,7 +105,11 @@ public class PipelineJob extends JobService {
                 if(attempts[0]<5){Pipeline.log(app,id,"Intento "+attempts[0]+" de 5: Android cortó la tarea de fondo por tiempo · abre la app para seguir en primer plano");return;}
                 boolean restoring=Retranscribe.hasPrevious(app,id)&&!Transcript.exists(app,id);
                 Pipeline.log(app,id,"Intento 5 de 5: Android cortó la tarea de fondo por tiempo"+(restoring?"":" · abre la app y pulsa Reintentar"));
-                if(restoring)Retranscribe.restore(app,id,"No se pudo hacer la nueva versión · se mantiene la anterior","retranscribe_failed");
+                Diagnostics.event("job_failed",id,"count",attempts[0],"reason","timeout","runner","job");
+                if(restoring){
+                    Retranscribe.restore(app,id,"No se pudo hacer la nueva versión · se mantiene la anterior","retranscribe_failed");
+                    Transcriber.attention(app,id,"No se pudo hacer la nueva versión","Android cortó la tarea de fondo 5 veces. Se mantiene la versión anterior.");
+                }else Transcriber.attention(app,id,"La transcripción necesita atención","Android cortó la tarea de fondo 5 veces. Abre la grabación y pulsa Reintentar.");
             }catch(Exception e){Diagnostics.event("job_timeout_failed",id,"error_class",e.getClass().getSimpleName());}
         },"VozLocal-timeout").start();
     }

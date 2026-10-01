@@ -695,6 +695,13 @@ final class OpenRouterChecks {
         Models.Recipe maiRecipe=Models.recipe("microsoft/mai-transcribe-2");long anchor=Voices.MAX_MS+OrAudio.GAP_MS;
         check(Pricing.orBilledMs(60_000,2,maiRecipe)==60_000+2*anchor&&Pricing.orBilledMs(30*min,1,maiRecipe)==30*min+3*anchor&&Pricing.orBilledMs(60_000,9,maiRecipe)==60_000+4*anchor
             &&Pricing.orBilledMs(60_000,0,maiRecipe)==60_000&&Pricing.orBilledMs(60_000,2,Models.recipe("openai/gpt-transcribe"))==60_000,"Billed estimate with anchors wrong");
+        // Tercera ronda: UNA regla (Pricing.billedMs). Por proveedor y modelo; «sin cortar» lleva las muestras una vez; un
+        // modelo que no separa voces no las lleva; más de 4 muestras se cuentan como 4 (el tope del motor).
+        String mai="microsoft/mai-transcribe-2";
+        check(Pricing.billedMs("openrouter",mai,60_000,2,false)==Pricing.orBilledMs(60_000,2,maiRecipe)&&Pricing.billedMs("openrouter",mai,30*min,1,false)==30*min+3*anchor
+            &&Pricing.billedMs("openrouter",mai,30*min,1,true)==30*min+anchor&&Pricing.billedMs("openrouter",mai,60_000,9,false)==60_000+4*anchor
+            &&Pricing.billedMs("openrouter","openai/gpt-transcribe",60_000,2,false)==60_000&&Pricing.billedMs("openai","gpt-transcribe",60_000,2,false)==60_000
+            &&Pricing.billedMs("openrouter",mai,0,2,false)==0&&Pricing.billedMs("openrouter",mai,60_000,0,true)==60_000,"Unified billed audio wrong");
     }
 
     // ---------- En el teléfono: cliente por proveedor, costos y el motor completo ----------
@@ -718,7 +725,7 @@ final class OpenRouterChecks {
      * «orcheck-catalog.json») antes de tocar nada: si una corrida murió a mitad (se cerró el emulador, adb la mató), la
      * siguiente lo devuelve primero, en vez de borrar el respaldo con las voces reales (hallazgo de la revisión 0.8).
      */
-    private static final String[] KEYS={"provider","orSpeakersModel","orTextModel","orAutoSpeakers","speakersMode","noteAuto","openrouter_keyEncrypted","openrouter_keyIv"};
+    private static final String[] KEYS={"provider","orSpeakersModel","orTextModel","orAutoSpeakers","orAutoBeforeSpeakers","speakersMode","noteAuto","openrouter_keyEncrypted","openrouter_keyIv"};
     private static final class Aside{
         final SharedPreferences prefs,backup;final File voices,aside,catalog,copy;
         Aside(Context c){prefs=new Settings(c).prefs;backup=c.getSharedPreferences("orcheck-backup",Context.MODE_PRIVATE);
@@ -812,14 +819,22 @@ final class OpenRouterChecks {
             check(retry.calls==1&&Transcript.exists(c,other)&&nova.equals(st.optString("model"))&&!st.optString("profile").contains("|half")&&retry.sent.get(0).getJSONObject("provider").getJSONObject("options").has("deepgram"),"Halving of one model applied to another: "+st.optString("profile"));
 
             // «Automático» cambió de recomendación con una parte ya lista: la transcripción termina con el modelo con que empezó.
+            // Tercera ronda: una sola regla, la de Models.resume, que exige que refresh() haya anotado de qué modelo se movió
+            // «Automático» (orAutoBeforeSpeakers). Si fue la persona quien eligió «Automático», manda su elección (abajo).
             long now=System.currentTimeMillis();
             FilesStore.write(Models.file(c),new JSONObject().put("v",1).put("fetchedAt",now).put("models",new JSONArray().put(new JSONObject().put("id",mai).put("name","Microsoft: MAI Transcribe 2").put("created",1).put("prompt",0.10).put("expires",0))));Models.forget();
-            prefs.edit().putString("orSpeakersModel",Models.AUTO).putString("orAutoSpeakers",nova).commit();
+            prefs.edit().putString("orSpeakersModel",Models.AUTO).putString("orAutoSpeakers",nova).putString("orAutoBeforeSpeakers",mai).commit();
             third=copy(c,r,"Prueba Automático");String auto=third.id;
             FilesStore.update(c,auto,s->s.put("requested",true).put("speakers",true).put("queuedAt",now).put("provider","openrouter").put("model",mai).put("blocksDone",1));
             Fake pinned=new Fake().reply(200,answer.toString());pinned.jobId=auto;
             new Transcriber(c,pinned,0).process(third);st=FilesStore.state(c,auto);
             check(pinned.calls==1&&mai.equals(st.optString("model"))&&pinned.sent.get(0).getString("model").equals(mai)&&pinned.sent.get(0).getJSONObject("provider").getJSONObject("options").has("azure")&&has(log(st),"termina con el que empezó"),"Automatic switched models halfway through a transcription: "+st.optString("model"));
+            // La misma regla que Ajustes: el motor no tiene otra. Sin la anotación de refresh() (la persona pasó a «Automático»
+            // a mano), sigue con el recomendado de hoy.
+            JSONObject half=new JSONObject().put("provider","openrouter").put("model",mai).put("blocksDone",1).put("speakers",true);
+            check(mai.equals(Models.resume(c,new Settings(c),true,half)),"Models.resume and the engine disagree");
+            prefs.edit().remove("orAutoBeforeSpeakers").commit();
+            check(nova.equals(Models.resume(c,new Settings(c),true,half)),"Automatic kept the old model although the person chose Automatic");
         }finally{
             OpenRouterClient.defaultBuilder=real;
             if(first!=null)first.delete(c);if(second!=null)second.delete(c);if(third!=null)third.delete(c);

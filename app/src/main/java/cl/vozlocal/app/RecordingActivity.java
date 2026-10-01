@@ -113,6 +113,8 @@ public class RecordingActivity extends Screen {
         content=ui.column();page.addView(content,Ui.fill());
         buildDock();build();
         if(!demo)loadWave();
+        // La acción «Usar datos móviles» de la notificación «Esperando Wi-Fi» abre esta pantalla con el extra "mobileOk".
+        if(!demo&&state==null&&getIntent().getBooleanExtra("mobileOk",false))handler.post(this::useMobile);
     }
     @Override protected void onResume(){
         super.onResume();handler.post(progress);
@@ -506,13 +508,12 @@ public class RecordingActivity extends Screen {
         TextView h=ui.heading("Transcribe este audio",Type.TITLE_LARGE);h.setPadding(0,ui.dp(S4),0,ui.dp(S1));card.addView(h);
         // Sin clave se nombra a OpenRouter (0.8.0: es el único proveedor que ofrece la app) y se dice que el audio viaja allá.
         card.addView(ui.text(s.hasKey()?"Toca «Transcribir» abajo. Al transcribir eliges si separar voces. Proveedor: "+SettingsActivity.modelSummary(s)+"."
-            :s.openRouter()?"Agrega tu clave de OpenRouter para transcribir: toca «Transcribir» abajo. El audio se envía a OpenRouter y pagas solo lo que usas."
-            :"Agrega tu clave de API para transcribir: toca «Transcribir» abajo. Solo pagas lo que usas en tu cuenta del proveedor.",Type.BODY_MEDIUM,p.onSurfaceVariant));
+            :"Agrega tu clave de OpenRouter para transcribir: toca «Transcribir» abajo. El audio se envía a OpenRouter y pagas solo lo que usas.",Type.BODY_MEDIUM,p.onSurfaceVariant));
         // Costos con el proveedor y los modelos reales (0.8.0: también OpenRouter, con el precio de su catálogo). Un servidor
         // propio no tiene tarifa conocida y no muestra nada; un modelo que no separa voces muestra solo el del texto.
-        // Con voces y OpenRouter, el estimado cuenta las muestras de voz que viajan con cada parte (Pricing.orBilledMs).
+        // Con voces y OpenRouter, el estimado cuenta las muestras de voz que viajan con cada parte (Pricing.billedMs, la regla única).
         if(s.hasKey()){String provider=s.provider();
-            double voices=s.canSeparate()?Pricing.estimate(this,provider,RecordingActions.model(s,true),Pricing.orBilledMs(this,recording.duration,true)):-1,text=Pricing.estimate(this,provider,RecordingActions.model(s,false),recording.duration);
+            double voices=s.canSeparate()?Pricing.estimate(this,provider,RecordingActions.model(s,true),Pricing.billedMs(this,recording.duration,true)):-1,text=Pricing.estimate(this,provider,RecordingActions.model(s,false),recording.duration);
             // Los dos costos como píldoras, una bajo la otra (juntas no caben en un teléfono angosto): se comparan de un vistazo.
             if(voices>=0){TextView both=Ui.tabular(ui.chip("≈ "+Pricing.usd(voices)+" separando voces",p.onPrimaryContainer,p.primaryContainer));LinearLayout.LayoutParams bl=Ui.wrap();bl.topMargin=ui.dp(S3);card.addView(both,bl);}
             if(text>=0){TextView plain=Ui.tabular(ui.chip("≈ "+Pricing.usd(text)+" solo el texto",p.onSurfaceVariant,0));plain.setBackground(outline(this,chipFill(),p.outlineVariant,R_FULL,false));
@@ -555,13 +556,16 @@ public class RecordingActivity extends Screen {
     private void updateProgress(JSONObject st){
         if(progHeadline==null)return;
         liveState=st;phaseSince=st.optLong("since",System.currentTimeMillis());
-        progHeadline.setText(human(st.optString("status","")));
+        // «Preparando el audio» con su avance en % (0.8.0, tercera ronda): la conversión ya no parece detenida.
+        int prep=prepPercent(st);String head=human(st.optString("status",""));
+        progHeadline.setText(prep>=0&&head.startsWith("Preparando")?head+" · "+prep+" %":head);
         int blocks=st.optInt("blocks"),done=st.optInt("blocksDone");boolean parts=blocks>1;
         progParts.setVisibility(parts?View.VISIBLE:View.GONE);progBar.setVisibility(parts?View.VISIBLE:View.GONE);
         if(parts){progParts.setText(done+" de "+blocks+" partes listas");progBar.set(done/(float)blocks);}
-        long sent=st.optLong("upSent"),total=st.optLong("upTotal");boolean uploading=total>0&&sent<total;
-        upText.setVisibility(uploading?View.VISIBLE:View.GONE);upBar.setVisibility(uploading?View.VISIBLE:View.GONE);
+        long sent=st.optLong("upSent"),total=st.optLong("upTotal");boolean uploading=total>0&&sent<total,preparing=!uploading&&prep>=0;
+        upText.setVisibility(uploading||preparing?View.VISIBLE:View.GONE);upBar.setVisibility(uploading||preparing?View.VISIBLE:View.GONE);
         if(uploading){upText.setText(String.format(Locale.ROOT,"Enviando %.1f de %.1f MB",sent/1e6,total/1e6).replace('.',','));upBar.set(sent/(float)total);}
+        else if(preparing){upText.setText("Preparando el audio · "+prep+" %");upBar.set(prep/100f);}
         renderStages(st);refreshWaiting(shownBlocker);
         if(statsHolder!=null){statsHolder.removeAllViews();statsHolder.addView(stats(st,true),Ui.fill());}
         if(logList!=null){JSONArray log=st.optJSONArray("log");int n=log==null?0:log.length();JSONObject last=n==0?null:log.optJSONObject(n-1);long lastT=last==null?0:last.optLong("t");
@@ -576,9 +580,9 @@ public class RecordingActivity extends Screen {
         if(progStages==null)return;progStages.removeAllViews();
         int blocks=st.optInt("blocks"),done=st.optInt("blocksDone");long sent=st.optLong("upSent"),total=st.optLong("upTotal");
         boolean uploaded=done>0||(total>0&&sent>=total)||logHas(st,"enviado"),partsDone=blocks>0&&done>=blocks;
-        boolean preparing=st.optInt("prepping")>0||st.optString("status").startsWith("Preparando");
-        if("openrouter".equals(st.optString("provider")))stage("Preparar audio",preparing?1:(uploaded||st.optInt("prepCount")>0)?2:0);
-        stage("Subido",uploaded?2:TranscribeService.running&&!preparing?1:0);
+        boolean preparing=st.optInt("prepping")>0||st.optString("status").startsWith("Preparando");int prep=prepPercent(st);
+        if("openrouter".equals(st.optString("provider")))stage(preparing&&prep>=0?"Preparar audio "+prep+" %":"Preparar audio",preparing?1:(uploaded||st.optInt("prepCount")>0)?2:0);
+        stage("Subido",uploaded?2:Pipeline.working()&&!preparing?1:0);
         stage(blocks>1?"Partes "+done+"/"+blocks:"Texto",partsDone?2:uploaded?1:0);
         if(st.optBoolean("speakers")&&blocks>1)stage("Unir voces",partsDone?1:0);
         if(new Settings(this).noteAuto()&&Notes.canGenerate(this))stage("Nota",0);
@@ -595,17 +599,19 @@ public class RecordingActivity extends Screen {
         t.setContentDescription(label+(state==2?": listo":state==1?": en curso":": pendiente"));
         LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginEnd(ui.dp(6));progStages.addView(t,lp);
     }
+    /** Avance de «Preparando el audio» (0–100) si alguna parte se está convirtiendo ahora; -1 si no. */
+    private static int prepPercent(JSONObject st){return st.optInt("prepping")>0&&st.has("prepPct")?Math.max(0,Math.min(100,st.optInt("prepPct"))):-1;}
     private static boolean logHas(JSONObject st,String word){JSONArray log=st.optJSONArray("log");if(log!=null)for(int i=0;i<log.length();i++){JSONObject e=log.optJSONObject(i);if(e!=null&&e.optString("m").contains(word))return true;}return false;}
     /** Qué pasa ahora: tranquilidad si trabaja, o por qué espera; «Empezar ahora» solo si Android la está demorando. */
     private void refreshWaiting(String blocker){
-        if(progNote==null)return;boolean running=TranscribeService.running;
+        if(progNote==null)return;boolean running=Pipeline.working();
         // Un paso que lleva mucho en lo mismo (0.8.0): se dice, y qué va a pasar, en vez de solo «Puedes cerrar la app».
         boolean slow=running&&System.currentTimeMillis()-phaseSince>15*60_000L;
-        progNote.setText(slow?"Este paso tarda más de lo normal. Si no avanza, se corta y se reintenta solo; si no resulta, te aviso.":running?"Puedes cerrar la app: te aviso cuando esté lista.":blocker!=null?"Esperando: "+blocker+". Empieza sola cuando se cumpla; puedes cerrar la app.":"Android aún no la empieza. Se hará sola, o toca «Empezar ahora».");
+        progNote.setText(slow?"Este paso tarda más de lo normal. Si no avanza, se corta y se reintenta solo; si no resulta, te aviso.":running?"Puedes cerrar la app: te aviso cuando esté lista.":blocker!=null?"Esperando: "+blocker.replaceFirst("^esperando ","").replaceFirst(" \\(.*$","")+". Empieza sola cuando se cumpla; puedes cerrar la app.":"Android aún no la empieza. Se hará sola, o toca «Empezar ahora».");
         startNow.setVisibility(!running&&blocker==null?View.VISIBLE:View.GONE);
         refreshEstimate();
     }
-    private void refreshEstimate(){if(progEstimate==null)return;String est=TranscribeService.running&&liveState!=null?estimate(liveState):"";progEstimate.setText(est);progEstimate.setVisibility(est.isEmpty()?View.GONE:View.VISIBLE);lastEstimateAt=System.currentTimeMillis();}
+    private void refreshEstimate(){if(progEstimate==null)return;String est=Pipeline.working()&&liveState!=null?estimate(liveState):"";progEstimate.setText(est);progEstimate.setVisibility(est.isEmpty()?View.GONE:View.VISIBLE);lastEstimateAt=System.currentTimeMillis();}
     /**
      * Estimación honesta y como rango. Con varias partes, por lo que tardaron las ya listas (eso ya incluye preparar el
      * audio); con una sola (≤ 12 min), por tiempo: la separación de voces tarda ~0,15× la duración del audio, y con
@@ -642,15 +648,26 @@ public class RecordingActivity extends Screen {
     /** Condiciones reales del teléfono. Si todo está bien, una sola línea tranquila; si algo falta, cada condición con su salida. */
     private void renderConditions(){
         if(conditions==null)return;
-        String blocker=Pipeline.blocker(this);
+        // Las condiciones de ESTA grabación: con «Usar datos móviles ahora» no espera Wi-Fi aunque las demás sí.
+        String blocker=Pipeline.blocker(this,id);
         // Si una condición cambió (p. ej. conectaste el cargador), se intenta empezar ya.
         if(conditionsAt>0&&blocker==null&&!Objects.equals(blocker,shownBlocker))Pipeline.startForeground(this);
         shownBlocker=blocker;conditions.removeAllViews();conditionsAt=System.currentTimeMillis();Settings s=new Settings(this);
         boolean online=Pipeline.network(this)!=null,wifi=Pipeline.unmetered(this);android.os.BatteryManager bm=getSystemService(android.os.BatteryManager.class);boolean charging=bm.isCharging();int level=bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY);
-        boolean netOk=online&&(!s.wifiOnly()||wifi),chargeOk=!s.charging()||charging,batteryOk=charging||level>15,free=Battery.unrestricted(this);
-        if(netOk&&chargeOk&&batteryOk&&free)condition(true,(wifi?"Wi-Fi":"Datos móviles")+" · batería "+level+" % · sigue con la pantalla bloqueada");
+        JSONObject st=FilesStore.state(this,id);boolean mobileOk=st.optBoolean("mobileOk");
+        boolean netOk=online&&(!s.wifiOnly()||wifi||mobileOk),chargeOk=!s.charging()||charging,batteryOk=charging||level>15,free=Battery.unrestricted(this);
+        if(netOk&&chargeOk&&batteryOk&&free)condition(true,(wifi?"Wi-Fi":mobileOk&&s.wifiOnly()?"Datos móviles, solo para esta grabación":"Datos móviles")+" · batería "+level+" % · sigue con la pantalla bloqueada");
         else{
-            condition(netOk,!online?"Sin conexión a internet":s.wifiOnly()?(wifi?"Wi-Fi conectado":"Se requiere Wi-Fi · ahora usas datos móviles"):(wifi?"Conectado por Wi-Fi":"Conectado por datos móviles"));
+            condition(netOk,!online?"Sin conexión a internet":s.wifiOnly()?(wifi?"Wi-Fi conectado":mobileOk?"Datos móviles, solo para esta grabación":"Se requiere Wi-Fi · ahora usas datos móviles"):(wifi?"Conectado por Wi-Fi":"Conectado por datos móviles"));
+            // Espera Wi-Fi teniendo datos móviles: la salida a la vista, grande, con lo que pesaría el envío (0.8.0, tercera
+            // ronda). Vale solo para esta grabación; «Solo con Wi-Fi» sigue igual para las demás.
+            if(Pipeline.waitsForWifi(s.wifiOnly(),online,wifi,st)&&!id.equals(Transcriber.currentId)){
+                String size=Pipeline.megabytes(Pipeline.uploadBytes(this,recording));
+                Ui.Btn mobile=ui.button("Usar datos móviles ahora ("+size+")",R.drawable.ic_upload,Ui.Style.PRIMARY,v->useMobile());
+                mobile.setContentDescription("Usar datos móviles ahora para esta grabación, "+size.replace("≈","aproximadamente "));
+                conditions.addView(mobile,ui.top(S3));
+                TextView why=ui.text("Solo para esta grabación. Las demás siguen esperando Wi-Fi.",Type.BODY_SMALL,p.onSurfaceVariant);why.setPadding(0,ui.dp(S2),0,ui.dp(S1));conditions.addView(why);
+            }
             condition(chargeOk,s.charging()?(charging?"Cargando":"Se requiere conectar el cargador"):"Cargador no requerido");
             condition(batteryOk,"Batería "+level+" %"+(batteryOk?"":" · Android espera a que cargues"));
             // Con la optimización activa, algunos teléfonos congelan la app con la pantalla bloqueada y cortan la conexión.
@@ -658,6 +675,18 @@ public class RecordingActivity extends Screen {
             if(!free){Ui.Btn allow=ui.button("Permitir en segundo plano",R.drawable.ic_battery,Ui.Style.TONAL,v->RecordingActions.allowBackground(this));conditions.addView(allow,ui.top(S2));}
         }
         refreshWaiting(blocker);
+    }
+    /**
+     * «Usar datos móviles ahora»: permite los datos móviles solo para esta grabación y arranca ya (la app está a la vista,
+     * así que en Android 14+ va como transferencia iniciada por el usuario). Lo llaman el botón y la acción de la notificación.
+     */
+    private void useMobile(){
+        if(demo||id==null)return;
+        if(Pipeline.allowMobile(this,id)){
+            Diagnostics.event("ui_action",id,"screen","RecordingActivity","action","mobile_ok");
+            Ui.haptic(content,Ui.Haptic.CONFIRM);Pipeline.start(this,true);toast("Usando datos móviles para esta grabación");
+        }
+        conditionsAt=0;renderConditions();
     }
     private void condition(boolean ok,String text){LinearLayout r=ui.row();r.setPadding(0,ui.dp(3),0,ui.dp(3));r.addView(ui.icon(ok?R.drawable.ic_check_circle:R.drawable.ic_clock,ok?p.primary:p.error,18));r.addView(ui.space(S2));r.addView(ui.text(text,Type.BODY_MEDIUM,ok?p.onSurfaceVariant:p.onSurface),new LinearLayout.LayoutParams(0,-2,1));conditions.addView(r);}
     /** Cada 250 ms: cronómetros; cada segundo la estimación; cada 3 s las condiciones. */
@@ -686,8 +715,11 @@ public class RecordingActivity extends Screen {
         // OpenRouter: cuánto tomó convertir el audio antes de enviarlo (la etapa «Preparar audio»), sumado entre partes.
         long prepMs=st.optLong("prepMsSum");int prepN=st.optInt("prepCount");
         if(prepMs>0)cells.add(new String[]{"Preparar el audio",(prepMs<1000?"< 1 s":Recording.time(prepMs))+(prepN>1?" ("+prepN+" partes)":"")});
-        // Con OpenRouter se cobra también lo que suenan las muestras de voz que van antes de cada parte (ver Pricing.orBilledMs).
-        String provider=st.optString("provider","openai");long billed="openrouter".equals(provider)?Pricing.orBilledMs(this,audio,st.optBoolean("speakers")):audio;
+        // Con OpenRouter se cobra también lo que suenan las muestras de voz que van antes de cada parte (Pricing.billedMs, la
+        // regla única), con el proveedor y el modelo de ESTA transcripción; «sin cortar» las lleva una sola vez.
+        String provider=st.optString("provider","openai");
+        int anchors=st.optBoolean("speakers")&&TranscribeClient.knowsVoices(provider)?Voices.selected(this).size():0;
+        long billed=Pricing.billedMs(provider,model,audio,anchors,Retranscribe.mode(st)==Retranscribe.Mode.SINGLE);
         double spent=Pricing.estimate(this,provider,model,live?doneAudio:billed),total=Pricing.estimate(this,provider,model,billed);
         // Costo real (0.8.0): OpenRouter informa lo que cobró cada envío y el motor lo suma en "costUsd". Si existe, va en
         // vez del estimado (sin «≈»); mientras se transcribe, junto al total estimado si se conoce.
