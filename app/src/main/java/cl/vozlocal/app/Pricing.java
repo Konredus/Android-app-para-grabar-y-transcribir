@@ -59,6 +59,23 @@ final class Pricing {
     static double real(org.json.JSONObject state){
         if(state==null||!state.has("costUsd"))return -1;double v=state.optDouble("costUsd",-1);return Double.isNaN(v)||v<=0?-1:v;
     }
+    /**
+     * OpenRouter cobra el audio que recibe, y con voces conocidas cada envío lleva antes sus muestras («anclas», de hasta
+     * Voices.MAX_MS cada una, más 1 s de silencio). Esto es lo que se estima que se cobrará: la duración más las anclas de
+     * cada bloque. Para los costos con «≈» de las pantallas (sin esto, el estimado salía menor que lo cobrado).
+     * No cuenta las muestras automáticas de la parte 1 (dependen de lo que se diga): sigue siendo un estimado.
+     */
+    static long orBilledMs(long durationMs,int voices,Models.Recipe recipe){
+        if(durationMs<=0||voices<=0||recipe==null||!recipe.diarizes)return durationMs;
+        long block=Transcriber.orBlockMax(recipe,true),blocks=Math.max(1,(durationMs+block-1)/block);
+        return durationMs+blocks*Math.min(voices,Transcriber.MAX_KNOWN)*(Math.min(Voices.MAX_MS,OrAudio.ANCHOR_MAX_MS)+OrAudio.GAP_MS);
+    }
+    /** Lo mismo con lo elegido en Ajustes (OpenRouter, separando voces y con voces conocidas activas); si no, la duración tal cual. */
+    static long orBilledMs(Context c,long durationMs,boolean speakers){
+        if(c==null||!speakers||durationMs<=0)return durationMs;
+        try{Settings s=new Settings(c);if(!s.openRouter())return durationMs;return orBilledMs(durationMs,Voices.selected(c).size(),Models.recipe(Models.chosen(s,true)));}
+        catch(RuntimeException e){return durationMs;}
+    }
     /** Formato chileno: US$0,012 (3 decimales bajo 1 dólar). */
     static String usd(double value){
         if(value<0)return "—";

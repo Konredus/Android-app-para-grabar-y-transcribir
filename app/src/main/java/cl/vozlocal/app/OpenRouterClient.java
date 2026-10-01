@@ -25,6 +25,10 @@ import org.json.*;
  *
  * Nada de esto se probó con audio real ni con una clave (no había): por eso es defensivo. Las anclas nunca hacen fallar
  * una transcripción; a lo más, una voz conocida queda sin reconocer. En la bitácora y en Diagnostics solo van cantidades.
+ *
+ * Segunda ronda (docs/diseno/SPEC-0.8b.md, parte engine): la conversión es la etapa «Preparando audio» (HttpApi la avisa
+ * al motor); si el proveedor no puede con el FLAC se repite una vez en WAV; y lo que un modelo no acepta (formato con
+ * tiempos, tiempos reales, FLAC) se recuerda por modelo durante la sesión, para no subir cada bloque dos veces.
  */
 final class OpenRouterClient implements TranscribeClient {
     /**
@@ -44,11 +48,26 @@ final class OpenRouterClient implements TranscribeClient {
     private static final String AUDIO="@@VERBAPP_AUDIO@@";
     /** Marca de cambio de voz dentro del texto (Fish Audio): «<|speaker:2|>». */
     private static final Pattern MARK=Pattern.compile("<\\|\\s*speaker\\s*:\\s*(\\d+)\\s*\\|>");
-    /** Modelos que en esta sesión respondieron sin tiempos: con ellos no se pueden usar anclas (no se sabría dónde terminan). */
+    /**
+     * Modelos que en esta sesión respondieron sin tiempos (con voces pedidas y algo dicho): con ellos no se pueden usar
+     * anclas (no se sabría dónde terminan) ni sacar muestras de la parte 1. Se anota en la primera respuesta así, lleve o
+     * no anclas: si no, las partes que salen en paralelo se enviaban con anclas y se pagaban dos veces.
+     */
     static final Set<String> NO_TIMES=ConcurrentHashMap.newKeySet();
+    /**
+     * Modelos que en esta sesión rechazaron el formato con tiempos o la separación de voces (400): los bloques que siguen
+     * van directo en modo simple, en vez de subir cada bloque dos veces (el audio entero viaja antes de leer el 400).
+     */
+    static final Set<String> PLAIN=ConcurrentHashMap.newKeySet();
+    /** Modelos cuyo proveedor rechazó el FLAC y aceptó el mismo audio en WAV: en esta sesión van directo en WAV. */
+    static final Set<String> NO_FLAC=ConcurrentHashMap.newKeySet();
 
     /** Costura de prueba: quién arma el audio. Por defecto OrAudio.build; las pruebas ponen uno falso con anclas en tiempos conocidos. */
-    interface Builder{OrAudio.Built build(File audio,List<File> anchors,File outBase,HttpApi cancel)throws Exception;}
+    interface Builder{
+        OrAudio.Built build(File audio,List<File> anchors,File outBase,HttpApi cancel)throws Exception;
+        /** El mismo audio en WAV, para cuando el proveedor rechaza el FLAC. */
+        default OrAudio.Built wav(File audio,List<File> anchors,File outBase,HttpApi cancel)throws Exception{return OrAudio.build(audio,anchors,outBase,cancel,false);}
+    }
     /** El que usan los clientes nuevos (el motor crea el suyo por dentro: las pruebas del motor cambian este). */
     static volatile Builder defaultBuilder=OrAudio::build;
     /** Líneas para la bitácora de la grabación (cantidades y avisos; nunca nombres ni texto). */
@@ -69,21 +88,24 @@ final class OpenRouterClient implements TranscribeClient {
         boolean voices=config.speakers&&recipe.diarizes;
         File dir=new File(c.getCacheDir(),"openrouter");dir.mkdirs();sweep(dir);
         String tag=UUID.randomUUID().toString();List<File> temps=new ArrayList<>();
+        // plain: modo simple (json, sin voces ni tiempos), porque el modelo ya rechazó el formato con tiempos en esta sesión
+        // o lo rechaza en este envío. wav: el proveedor no acepta el FLAC. before: costo de envíos cobrados que se descartaron.
+        boolean plain=PLAIN.contains(config.model),wav=NO_FLAC.contains(config.model),flacRefused=false;double before=0;
         try{
             // 1. Muestras de voz (data URL) → archivos temporales, en el mismo orden. Una que no se pueda leer se omite.
             List<String[]> refs=new ArrayList<>();List<File> anchors=new ArrayList<>();
-            if(voices&&references!=null&&!NO_TIMES.contains(config.model))for(String[] ref:references){
+            if(voices&&!plain&&references!=null&&!NO_TIMES.contains(config.model))for(String[] ref:references){
                 if(ref==null||ref.length<2)continue;File clip=new File(dir,tag+"-voz"+anchors.size()+".m4a");
                 if(decode(ref[1],clip)){refs.add(ref);anchors.add(clip);temps.add(clip);}
             }
-            // plain: modo simple (json, sin voces ni tiempos) tras un 400 por formato. before: costo de un envío descartado.
-            boolean plain=false;double before=0;OrAudio.Built built=null;
-            for(int round=0;round<3;round++){
+            OrAudio.Built built=null;
+            // Cada vuelta cambia algo una sola vez (WAV, modo simple o sin anclas): a lo más cuatro envíos.
+            for(int round=0;round<4;round++){
                 http.check();
-                // 2. Audio: se arma una vez; de nuevo solo si hay que quitarle las anclas.
+                // 2. Audio («Preparando audio»): se arma una vez; de nuevo solo si hay que quitarle las anclas o pasarlo a WAV.
                 if(built==null||(built.leadMs>0&&anchors.isEmpty())){
                     if(built!=null)built.file.delete();
-                    built=build(audio,anchors,new File(dir,tag+"-"+round));temps.add(built.file);
+                    built=prepare(audio,anchors,new File(dir,tag+"-"+round),wav);temps.add(built.file);
                     if(built.leadMs<=0)anchors=Collections.emptyList();
                 }
                 boolean ask=voices&&!plain,verbose=!plain&&(recipe.verbose||ask);
@@ -96,10 +118,19 @@ final class OpenRouterClient implements TranscribeClient {
                     JSONObject error=json.optJSONObject("error");
                     if(error!=null&&!json.has("text")&&!json.has("segments")){int inner=error.optInt("code",502);code=inner>=400&&inner<600?inner:502;}
                 }
-                // 6. El modelo no acepta verbose_json, los tiempos o la separación de voces: una vez más, en modo simple.
+                // 7. El proveedor no pudo con el FLAC (400 por el formato del audio): una vez más en WAV, que acepta cualquiera.
+                // Un 400 no se cobra; el WAV pesa el doble, así que solo se recuerda para el modelo si de verdad resolvió el problema.
+                if(code==400&&"flac".equals(built.format)&&!wav&&audioRejected(response.text)){
+                    wav=true;flacRefused=true;built.file.delete();built=null;
+                    log.line("El proveedor no aceptó el audio en FLAC · se reenvía en WAV (pesa el doble)");
+                    Diagnostics.event("or_fallback",http.jobId,"provider","openrouter","model",config.model,"reason","flac","http",400);
+                    continue;
+                }
+                // 6. El modelo no acepta verbose_json, los tiempos o la separación de voces: una vez más, en modo simple. Se
+                // recuerda en esta sesión: los bloques que siguen van directo así (y el aviso queda una sola vez en la bitácora).
                 if(code==400&&(verbose||ask)&&formatRejected(response.text)){
                     plain=true;anchors=Collections.emptyList();
-                    log.line(ask?"El modelo no aceptó separar voces en este envío · se reenvía para obtener solo el texto":"El modelo no aceptó el formato con tiempos · se reenvía para obtener solo el texto");
+                    if(PLAIN.add(config.model))log.line((ask?"El modelo no aceptó separar voces":"El modelo no aceptó el formato con tiempos")+" · se reenvía para obtener solo el texto (también en los próximos envíos con este modelo)");
                     Diagnostics.event("or_fallback",http.jobId,"provider","openrouter","model",config.model,"reason","format","http",400);
                     continue;
                 }
@@ -115,6 +146,9 @@ final class OpenRouterClient implements TranscribeClient {
                 }
                 // 4. Respuesta → tramos.
                 Parsed parsed=read(json,ask,built.durationMs);
+                // Voces pedidas, algo dicho y ningún tiempo real: el modelo no sirve para anclas ni para muestras. Se anota ya,
+                // aunque este envío no llevara anclas (p. ej. la parte 1), antes de que salgan las demás partes en paralelo.
+                if(ask&&!parsed.timed&&said(parsed))NO_TIMES.add(config.model);
                 if(built.leadMs>0&&!parsed.timed){
                     // Sin tiempos reales no se sabe dónde terminan las anclas: su texto contaminaría el comienzo. Se repite sin ellas.
                     NO_TIMES.add(config.model);anchors=Collections.emptyList();before+=cost(json);
@@ -123,30 +157,66 @@ final class OpenRouterClient implements TranscribeClient {
                     continue;
                 }
                 if(ask&&!parsed.diarized)log.line("El modelo no devolvió voces separadas en este envío · queda solo el texto");
+                if(flacRefused)NO_FLAC.add(config.model);
                 JSONObject out=finish(parsed,built.leadMs,built.anchors,refs);
-                JSONObject usage=usage(json,built.durationMs,before);
-                out.put("usage",usage).put("_bytes",size[0]).put("_format",built.format);
+                JSONObject usage=usage(json,built.durationMs,before);before=0;
+                // _timed: los tiempos son reales (el motor solo saca muestras de voz de una parte con tiempos reales).
+                out.put("usage",usage).put("_bytes",size[0]).put("_format",built.format).put("_timed",parsed.timed);
                 Diagnostics.event("or_transcribed",http.jobId,"provider","openrouter","model",config.model,"format",built.format,"bytes",size[0],"duration_ms",built.durationMs,
                     "anchors",out.optInt("_anchors"),"matched",out.optInt("_matched"),"cost",usage.optDouble("cost",-1),"count",out.getJSONArray("segments").length());
                 return out;
             }
             throw new IOException("OpenRouter no devolvió una transcripción utilizable.");
+        }catch(Exception e){
+            // Un envío cobrado y descartado (p. ej. sin tiempos) cuyo reenvío falló no queda en ninguna respuesta: el motor
+            // lo suma igual al costo real, para no mostrar menos de lo que se cobró.
+            if(before>0){HttpApi.Billed billed=http.onBilled;if(billed!=null)billed.cost(before);}
+            throw e;
         }finally{
             // 5. Temporales: el audio convertido y las muestras no quedan en el teléfono.
             for(File f:temps)f.delete();
         }
     }
-    /** Arma el audio. Si falla por las anclas, se repite sin ellas: una muestra de voz nunca hace fallar la transcripción. */
-    private OrAudio.Built build(File audio,List<File> anchors,File outBase)throws Exception{
-        if(anchors.isEmpty())return builder.build(audio,null,outBase,http);
-        try{return builder.build(audio,anchors,outBase,http);}
-        catch(InterruptedIOException cancelled){throw cancelled;}
+    private static boolean said(Parsed p){for(Piece x:p.pieces)if(x.text!=null&&!x.text.trim().isEmpty())return true;return false;}
+    /**
+     * Etapa «Preparando audio»: convertir el bloque antes de enviarlo. El motor la muestra aparte, y su vigilante no la
+     * toma como una subida detenida (ver HttpApi.startPreparing).
+     */
+    private OrAudio.Built prepare(File audio,List<File> anchors,File outBase,boolean wav)throws Exception{
+        http.startPreparing();boolean ok=false;
+        try{OrAudio.Built built=build(audio,anchors,outBase,wav);ok=true;return built;}
+        finally{http.endPreparing(ok);}
+    }
+    /**
+     * Arma el audio. Si falla por las anclas, se repite sin ellas: una muestra de voz nunca hace fallar la transcripción.
+     * Lo que reintentar no arregla (audio vacío o sin pista de audio, disco lleno) se le dice al usuario de inmediato;
+     * cualquier otro problema al convertir cuenta como un intento, con un motivo claro y su rastro en Diagnostics.
+     */
+    private OrAudio.Built build(File audio,List<File> anchors,File outBase,boolean wav)throws Exception{
+        try{
+            if(!anchors.isEmpty())try{return make(audio,anchors,outBase,wav);}
+                catch(InterruptedIOException|HttpApi.UserAction|OrAudio.TooShort|OrAudio.NoTrack e){throw e;}
+                catch(Exception e){
+                    http.check();
+                    Diagnostics.event("or_fallback",http.jobId,"provider","openrouter","reason","anchors","error_class",e.getClass().getSimpleName());
+                }
+            return make(audio,null,outBase,wav);
+        }
+        catch(InterruptedIOException|HttpApi.UserAction e){throw e;}
+        catch(OrAudio.TooShort e){
+            Diagnostics.event("or_prepare_failed",http.jobId,"provider","openrouter","reason","too_short");
+            throw new HttpApi.UserAction("El audio está vacío o no se pudo leer (dura menos de un segundo). Si la grabación es más larga, prueba importar una copia.");
+        }
+        catch(OrAudio.NoTrack e){
+            Diagnostics.event("or_prepare_failed",http.jobId,"provider","openrouter","reason","no_track");
+            throw new HttpApi.UserAction("No se pudo leer el audio: el archivo no tiene una pista de audio válida. Prueba importar una copia.");
+        }
         catch(Exception e){
-            http.check();
-            Diagnostics.event("or_fallback",http.jobId,"provider","openrouter","reason","anchors","error_class",e.getClass().getSimpleName());
-            return builder.build(audio,null,outBase,http);
+            Diagnostics.event("or_prepare_failed",http.jobId,"provider","openrouter","error_class",e.getClass().getSimpleName(),"reason",HttpApi.safeReason(e));
+            throw new IOException("no se pudo preparar el audio para enviarlo ("+e.getClass().getSimpleName()+")",e);
         }
     }
+    private OrAudio.Built make(File audio,List<File> anchors,File outBase,boolean wav)throws Exception{return wav?builder.wav(audio,anchors,outBase,http):builder.build(audio,anchors,outBase,http);}
     /** Carpeta de trabajo: lo que quedó de un envío que Android cortó a la mitad se borra en la siguiente pasada. */
     private static void sweep(File dir){File[] old=dir.listFiles();long limit=System.currentTimeMillis()-3*3600_000L;if(old!=null)for(File f:old)if(f.lastModified()<limit)f.delete();}
     /** «data:audio/mp4;base64,…» → archivo. false si no es una data URL o no se pudo escribir. */
@@ -196,6 +266,17 @@ final class OpenRouterClient implements TranscribeClient {
         String t=text==null?"":text.toLowerCase(Locale.ROOT);
         return t.contains("response_format")||t.contains("verbose_json")||t.contains("timestamp_granularit")||t.contains("diariz")
             ||t.contains("unrecognized")||t.contains("unknown param")||t.contains("unsupported param");
+    }
+    /**
+     * ¿El 400 es porque el proveedor no pudo con el audio (formato, códec, «dañado»)? El FLAC sale del codificador del
+     * teléfono y se comprueba leyéndolo de vuelta, así que un audio que el proveedor no entiende apunta al FLAC: se repite
+     * una vez en WAV. Un 400 por el formato de la RESPUESTA (response_format, tiempos) no cuenta aquí, salvo que nombre al FLAC.
+     */
+    static boolean audioRejected(String text){
+        String t=text==null?"":text.toLowerCase(Locale.ROOT);
+        if(t.contains("flac"))return true;
+        if(t.contains("response_format")||t.contains("verbose_json")||t.contains("timestamp_granularit"))return false;
+        return (t.contains("audio")||t.contains("file"))&&(t.contains("format")||t.contains("codec")||t.contains("decod")||t.contains("unsupported")||t.contains("not supported")||t.contains("corrupt")||t.contains("invalid"));
     }
 
     // ---------- Respuesta → tramos ----------
@@ -358,7 +439,7 @@ final class OpenRouterClient implements TranscribeClient {
                 // Entero dentro de la zona de anclas: es la muestra hablando, no la grabación.
                 if(end<=cut)continue;
                 // A caballo entre la última ancla y el audio: queda solo lo dicho después del corte.
-                if(start<cut){text=tail(p.words,piece,cut);start=cut;}
+                if(start<cut){text=tail(p.words,piece,cut,lastEnd>0?lastEnd/1000d:-1,lead);start=cut;}
                 start=Math.max(0,start-lead);end=Math.max(start,end-lead);
             }
             text=text==null?"":text.trim();if(text.isEmpty())continue;
@@ -370,8 +451,13 @@ final class OpenRouterClient implements TranscribeClient {
         return out;
     }
     private static double round(double seconds){return Math.round(seconds*1000)/1000d;}
-    /** Lo que un tramo dice después del corte: con las palabras si tienen tiempo; si no, en proporción al tiempo. */
-    private static String tail(List<Piece> words,Piece piece,double cut){
+    /**
+     * Lo que un tramo dice después del corte: con las palabras si tienen tiempo; si no, en proporción al tiempo.
+     * anchorEnd: fin real de la última ancla (s; -1 si no se conoce) y lead: comienzo del audio (s). Entre los dos hay
+     * silencio puesto por OrAudio, así que la proporción se reparte solo entre lo que sonó del ancla (antes de anchorEnd)
+     * y lo que sonó del audio (después de lead): un tramo que empieza en ese silencio no pierde palabras reales.
+     */
+    private static String tail(List<Piece> words,Piece piece,double cut,double anchorEnd,double lead){
         StringBuilder b=new StringBuilder();boolean any=false;
         for(Piece w:words){
             double mid=(w.start+w.end)/2;if(mid<piece.start-0.01||mid>piece.end+0.01)continue;
@@ -379,8 +465,10 @@ final class OpenRouterClient implements TranscribeClient {
             any=true;String token=strip(w.text);if(mid>=cut&&!token.isEmpty())join(b,token);
         }
         if(any)return b.toString();
-        String[] tokens=piece.text.trim().split("\\s+");double span=piece.end-piece.start;
-        int skip=span<=0?0:(int)Math.round(tokens.length*(cut-piece.start)/span);skip=Math.max(0,Math.min(skip,tokens.length));
+        String[] tokens=piece.text.trim().split("\\s+");double span=piece.end-piece.start;int skip;
+        if(anchorEnd>0){double anchor=Math.max(0,anchorEnd-piece.start),real=Math.max(0,piece.end-lead);skip=anchor<=0?0:(int)Math.round(tokens.length*anchor/(anchor+real));}
+        else skip=span<=0?0:(int)Math.round(tokens.length*(cut-piece.start)/span);
+        skip=Math.max(0,Math.min(skip,tokens.length));
         return String.join(" ",Arrays.copyOfRange(tokens,skip,tokens.length));
     }
 

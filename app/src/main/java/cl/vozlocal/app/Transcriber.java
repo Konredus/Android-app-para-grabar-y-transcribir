@@ -25,6 +25,11 @@ import java.util.concurrent.*;
  * OpenAI (y servidor compatible) u OpenRouter. Con OpenRouter cambian cuatro cosas, todas aquí a la vista: el tamaño de
  * los bloques sale de la receta del modelo, las muestras de voz viajan como «anclas» (mismo flujo de voces conocidas),
  * el costo real de cada envío se suma en el estado ("costUsd") y un 413 baja los bloques a la mitad una vez ("orHalf").
+ *
+ * 0.8.0, segunda ronda: la conversión del audio es una etapa propia («Preparando el audio…», estado "prepping") que el
+ * vigilante mide aparte; y ninguna transcripción queda dando vueltas sin avisar: que el proveedor no responda gasta un
+ * intento, los cortes del teléfono dejan de ser gratis si se repiten 15 min, la notificación dice cada reintento y, al
+ * rendirse, avisa. Diagnostics guarda en qué paso quedó cada envío fallido ("part_failed", "job_retry", "job_failed").
  */
 final class Transcriber {
     static final java.util.concurrent.locks.ReentrantLock RUNNING=new java.util.concurrent.locks.ReentrantLock();
@@ -57,6 +62,12 @@ final class Transcriber {
         if(totalMs<=0)return half?Math.max(1,maxMs/2):maxMs;
         int n=(int)Math.ceil(totalMs/(double)Math.max(1,maxMs));long block=n<=1?totalMs:totalMs/n;return half?Math.max(1,block/2):block;
     }
+    /**
+     * OpenRouter: duración objetivo de los bloques. single: «sin cortar» cabía en un envío. Tras un 413 en «sin cortar»,
+     * la mitad es la del audio completo que se rechazó (18 min → 2 partes de 9), no la de un bloque normal, que dejaba el
+     * doble de partes (y de uniones donde las voces se cruzan) que una pasada normal.
+     */
+    static long orTarget(long audioMs,long blockMax,boolean half,boolean single){return half&&single&&audioMs>0?Math.max(1,Math.min(blockMax,audioMs/2)):orBlockMs(audioMs,blockMax,half);}
     /** Máximo de voces conocidas por envío (límite de la API). */
     static final int MAX_KNOWN=4;
     /** La tarea diferida cede el turno antes de este tiempo para que Android no la corte a mitad de un envío. */
@@ -65,6 +76,25 @@ final class Transcriber {
     static final long JOB_SEND_LIMIT_MS=9*60_000;
     /** Cuánto puede tardar el envío de una parte (subida + respuesta), para decidir si cabe en la tarea de fondo. */
     static long sendEstimate(long partMs){return 90_000+(long)(0.6*partMs);}
+    /**
+     * Lo mismo según el proveedor. OpenRouter suma la etapa «Preparando audio» y una subida más pesada (FLAC en base64,
+     * ~25 KB por segundo de audio, a ~2 Mbps); la respuesta no pasa de OR_RESPONSE_MAX_MS (el vigilante corta antes).
+     * Un bloque de 12 min sigue cabiendo en la tarea de fondo; «sin cortar» de 20 min, no.
+     */
+    static long sendEstimate(String provider,long partMs){
+        if(!"openrouter".equals(provider))return sendEstimate(partMs);
+        long ms=Math.max(0,partMs);return prepEstimate(ms)+90_000+ms/10+Math.min((long)(0.6*ms),OR_RESPONSE_MAX_MS);
+    }
+    /**
+     * OpenRouter: lo que se estima que tarda preparar un bloque (decodificar, filtrar a 16 kHz, codificar en FLAC y
+     * comprobarlo). No se midió en teléfonos reales: va con holgura, 5 s más 3 s por minuto de audio (12 min → 41 s).
+     */
+    static long prepEstimate(long partMs){return 5_000+Math.max(0,partMs)/20;}
+    /**
+     * Tope de esa preparación, sin contar lo que Android tuvo congelada la app: pasado esto algo se trabó, y el vigilante la
+     * corta (cuenta como intento) en vez de dejar la transcripción «Preparando…» para siempre.
+     */
+    static long prepareLimit(long partMs){return Math.max(3*60_000L,Math.max(0,partMs)/2);}
     static final class Yield extends Exception{Yield(){super("Pausa corta");}}
     /**
      * Un envío que ni solo cabe en la tarea de fondo (p. ej. «sin cortar» de 20 min): no se manda desde ahí, porque
@@ -78,17 +108,41 @@ final class Transcriber {
     String waitingForeground(){for(String id:waitingForeground)return id;return null;}
     /** Cortes del propio teléfono que se reintentan sin gastar intentos; pasado este número sí cuentan. */
     static final int MAX_LOCAL_CUTS=12;
+    /**
+     * Y tampoco son gratis si se repiten durante más de esto sin que termine ninguna parte (0.8.0): doce cortes de varios
+     * minutos dejaban una transcripción corta «en cola» más de una hora sin avisar. Cada parte lista vuelve a cero la cuenta.
+     */
+    static final long LOCAL_CUT_WINDOW_MS=15*60_000L;
+    /** Qué hacer con un intento fallido: si fue un corte del teléfono, si es gratis, cuántos intentos van y si se reintenta. */
+    static final class Outcome{
+        final boolean cut,local,again;final int attempts,cuts;final long cutSince;
+        Outcome(boolean cut,boolean local,int attempts,int cuts,long cutSince){this.cut=cut;this.local=local;this.attempts=attempts;this.again=attempts<5;this.cuts=cuts;this.cutSince=cutSince;}
+    }
+    /** La regla de reintentos, separada del teléfono para poder probarla. st: el estado antes de este fallo; now: ahora (ms). */
+    static Outcome outcome(JSONObject st,Throwable e,long now){
+        boolean cut=localCut(e);int before=st.optInt("localCuts",0),cuts=before+(cut?1:0);
+        long since=before>0?st.optLong("cutSince",now):now;
+        // Un corte hecho por el propio teléfono (pantalla bloqueada, ahorro de batería) no es culpa del proveedor: no gasta
+        // uno de los 5 intentos, salvo que se repita demasiado (más de 12 veces, o durante más de 15 min seguidos).
+        boolean local=cut&&cuts<=MAX_LOCAL_CUTS&&now-since<LOCAL_CUT_WINDOW_MS;
+        return new Outcome(cut,local,st.optInt("attempts",0)+(local?0:1),cuts,since);
+    }
+    /** Dónde quedó el último envío que falló (Diagnostics, clave "stage"): preparar, subir, esperar o leer la respuesta. */
+    private volatile String failedStage="";
     /** Vigilante de conexiones: mide con elapsedRealtime, que avanza aunque Android congele la app. */
     private static final ScheduledExecutorService WATCHDOG=Executors.newSingleThreadScheduledExecutor(r->{Thread t=new Thread(r,"VozLocal-watchdog");t.setDaemon(true);return t;});
     /** Sin avance del envío durante este tiempo, se corta y se reintenta. */
     static final long UPLOAD_STALL_MS=90_000;
     /** Espera máxima de la respuesta tras el envío: lo que dura el audio más 1 min (mín. 3, máx. 20). OpenAI suele tardar la mitad. */
     static long responseLimit(long partMs){return Math.min(20*60_000L,Math.max(3*60_000L,partMs+60_000L));}
+    /** Tope de la espera de respuesta con OpenRouter. */
+    static final long OR_RESPONSE_MAX_MS=5*60_000L;
     /**
      * Con OpenRouter la espera no pasa de 5 min: sus proveedores cortan a los ~60 s de proceso, así que una respuesta que
      * no llegó en ese tiempo ya no va a llegar (esperar 13 min por un bloque de 12 solo demoraría el reintento).
+     * Desde la 0.8.0, que el proveedor no responda a tiempo gasta un intento (salvo que Android haya congelado la app).
      */
-    static long responseLimit(String provider,long partMs){long limit=responseLimit(partMs);return "openrouter".equals(provider)?Math.min(limit,5*60_000L):limit;}
+    static long responseLimit(String provider,long partMs){long limit=responseLimit(partMs);return "openrouter".equals(provider)?Math.min(limit,OR_RESPONSE_MAX_MS):limit;}
     /** Grabación que se está transcribiendo: la notificación de avance abre su detalle. */
     static volatile String currentId;
     /** En la última ronda hubo un corte del propio teléfono (el servicio reintenta pronto, sin esperas largas). */
@@ -110,7 +164,7 @@ final class Transcriber {
                 JSONObject state=FilesStore.state(c,r.id);if(!state.optBoolean("requested"))continue;
                 if(RecorderService.activeId!=null){retry=true;Pipeline.log(c,r.id,"En espera: hay una grabación en curso");break;}
                 if(budgetMs>0&&System.currentTimeMillis()-started>budgetMs){retry=true;break;}
-                http.jobId=r.id;currentId=r.id;
+                http.jobId=r.id;currentId=r.id;failedStage="";
                 try{process(r);}
                 catch(Yield y){retry=true;Pipeline.log(c,r.id,"Pausa corta para no exceder el límite de Android · continúa enseguida");break;}
                 catch(NeedsForeground f){
@@ -127,21 +181,30 @@ final class Transcriber {
                 catch(Exception e){
                     if(http.cancelled)break;
                     if(!r.audio(c).exists()||!FilesStore.state(c,r.id).optBoolean("requested"))continue;
-                    JSONObject st=FilesStore.state(c,r.id);int cuts=st.optInt("localCuts",0)+(localCut(e)?1:0);
-                    // Un corte hecho por el propio teléfono (pantalla bloqueada, ahorro de batería) no es culpa del proveedor:
-                    // no gasta uno de los 5 intentos, salvo que se repita demasiado.
-                    boolean local=localCut(e)&&cuts<=MAX_LOCAL_CUTS;sawLocalCut|=local;
-                    int attempts=st.optInt("attempts",0)+(local?0:1);boolean again=attempts<5;retry|=again;
+                    JSONObject st=FilesStore.state(c,r.id);long now=System.currentTimeMillis();Outcome o=outcome(st,e,now);
+                    sawLocalCut|=o.local;retry|=o.again;
                     String reason=describe(e);
                     // «Volver a transcribir» que se rinde: vuelve la versión anterior en vez de pedir Reintentar.
-                    boolean restoring=!again&&Retranscribe.hasPrevious(c,r.id)&&!Transcript.exists(c,r.id);
-                    FilesStore.update(c,r.id,s->s.put("attempts",attempts).put("retries",s.optInt("retries")+1).put("localCuts",cuts).put("requested",again).put("failed",!again).put("lastError",reason));
-                    String hint=local&&!Battery.unrestricted(c)?" · para evitarlo, permite a Verbapp usar batería en segundo plano":"";
-                    Pipeline.log(c,r.id,local?"El teléfono cortó la conexión ("+reason+") · se reintenta sin gastar un intento"+hint
-                        :"Intento "+attempts+" de 5 falló: "+reason+(again?" · se reintentará (las partes ya listas no se vuelven a enviar)":restoring?"":" · pulsa Reintentar"));
+                    boolean restoring=!o.again&&Retranscribe.hasPrevious(c,r.id)&&!Transcript.exists(c,r.id);
+                    FilesStore.update(c,r.id,s->{s.put("attempts",o.attempts).put("retries",s.optInt("retries")+1).put("localCuts",o.cuts).put("requested",o.again).put("failed",!o.again).put("lastError",reason);if(o.cut)s.put("cutSince",o.cutSince);});
+                    String hint=o.local&&!Battery.unrestricted(c)?" · para evitarlo, permite a Verbapp usar batería en segundo plano":"";
+                    // Un corte del teléfono que ya se repitió demasiado pasa a contar como intento: se dice, para que se entienda el cambio.
+                    String why=o.cut&&!o.local?reason+" (se repitió demasiado: ahora cuenta como intento)":reason;
+                    Pipeline.log(c,r.id,o.local?"El teléfono cortó la conexión ("+reason+") · se reintenta sin gastar un intento"+hint
+                        :"Intento "+o.attempts+" de 5 falló: "+why+(o.again?" · se reintentará (las partes ya listas no se vuelven a enviar)":restoring?"":" · pulsa Reintentar"));
+                    // Cuánto lleva pedida y en qué paso quedó el envío: con eso se diagnostica un caso «bloqueado» desde el informe.
+                    long waited=Math.max(0,now-st.optLong("queuedAt",now));
+                    Diagnostics.event("job_retry",r.id,"count",o.attempts,"error_class",e.getClass().getSimpleName(),"reason",HttpApi.safeReason(e),"net",Pipeline.networkName(c),
+                        "local",o.local,"display",Battery.screenOn(c)?"on":"off","idle",Battery.idle(c),"battery",Battery.unrestricted(c)?"unrestricted":"optimized","stage",failedStage,"elapsed_ms",waited);
                     if(restoring)keepPrevious(r);
-                    Diagnostics.event("job_retry",r.id,"count",attempts,"error_class",e.getClass().getSimpleName(),"reason",HttpApi.safeReason(e),"net",Pipeline.networkName(c),
-                        "local",local,"display",Battery.screenOn(c)?"on":"off","idle",Battery.idle(c),"battery",Battery.unrestricted(c)?"unrestricted":"optimized");
+                    else if(!o.again){
+                        // Se rindió: además de la bitácora, un aviso. Antes solo quedaba escrito, y con la app cerrada la grabación
+                        // parecía seguir «en cola» sin que nadie supiera que esperaba un Reintentar.
+                        attention(r,"La transcripción necesita atención","No se pudo transcribir después de 5 intentos: "+reason+". Abre la grabación y pulsa Reintentar.");
+                        Diagnostics.event("job_failed",r.id,"count",o.attempts,"error_class",e.getClass().getSimpleName(),"reason",HttpApi.safeReason(e),"stage",failedStage,"elapsed_ms",waited);
+                    }
+                    // Mientras reintenta, la notificación lo dice (antes seguía en «Enviando…» durante las esperas).
+                    else notice(o.local?"Se cortó la conexión · se reintenta solo":"Intento "+o.attempts+" de 5 no resultó · se reintenta solo",true,-1);
                 }
                 finally{currentId=null;}
             }
@@ -152,7 +215,7 @@ final class Transcriber {
     }
     /** Traduce fallos técnicos a una causa comprensible. */
     private String describe(Exception e){
-        if(e instanceof HttpApi.Stalled)return e.getMessage();
+        if(e instanceof HttpApi.Stalled||e instanceof HttpApi.PrepareStalled)return e.getMessage();
         if(localCut(e))return "pantalla bloqueada o ahorro de batería";
         if(e instanceof java.net.SocketTimeoutException)return "el proveedor no respondió a tiempo (el intento pudo cobrarse)";
         if(e instanceof java.net.UnknownHostException||e instanceof java.net.ConnectException)return "sin conexión con el servidor";
@@ -160,10 +223,13 @@ final class Transcriber {
         if(e instanceof java.io.InterruptedIOException)return "Android pausó el trabajo";
         String m=e.getMessage();return m!=null&&m.length()<160?m:"error de red ("+e.getClass().getSimpleName()+")";
     }
-    /** Conexión cortada por el propio teléfono ("Software caused connection abort") o por el vigilante tras una congelación. */
+    /**
+     * Conexión cortada por el propio teléfono ("Software caused connection abort") o por el vigilante porque el envío dejó
+     * de avanzar o Android congeló la app. Que el proveedor no responda a tiempo NO es un corte del teléfono (0.8.0).
+     */
     static boolean localCut(Throwable e){
         for(Throwable t=e;t!=null;t=t.getCause()){
-            if(t instanceof HttpApi.Stalled)return true;
+            if(t instanceof HttpApi.Stalled)return ((HttpApi.Stalled)t).local;
             String m=t.getMessage();if(t instanceof java.net.SocketException&&m!=null&&m.toLowerCase(Locale.ROOT).contains("abort"))return true;
         }
         return false;
@@ -182,36 +248,63 @@ final class Transcriber {
 
     /**
      * OpenRouter: si el proveedor responde 413 (el envío pesa más de lo que acepta; su tope para el JSON no está
-     * documentado), los bloques bajan a la mitad y se repite de inmediato, sin gastar un intento. Una sola vez por
-     * transcripción (clave de estado "orHalf"): si con la mitad tampoco cabe, el error llega al usuario.
+     * documentado), los bloques bajan a la mitad y se repite de inmediato, sin gastar un intento. Una sola vez por modelo
+     * (clave de estado "orHalf" = el modelo que lo rechazó: los topes son de cada modelo, así que con otro modelo se parte
+     * de nuevo con bloques normales). Si con la mitad tampoco cabe, el error llega al usuario.
+     * Lo ya cobrado (partes que sí cupieron) se arrastra en "costCarry": al achicar cambia el perfil, esas partes se vuelven
+     * a enviar, y "costUsd" no debe olvidar lo que ya se pagó.
      * (Visible en el paquete para probar el motor con un proveedor simulado, sin pasar por la cola.)
      */
     void process(Recording r)throws Exception{
         try{transcribe(r);}
         catch(HttpApi.TooLarge e){
-            JSONObject st=FilesStore.state(c,r.id);
-            if(!"openrouter".equals(st.optString("provider"))||st.optBoolean("orHalf"))throw e;
-            check(r);FilesStore.update(c,r.id,s->s.put("orHalf",true));
+            JSONObject st=FilesStore.state(c,r.id);String model=st.optString("model");
+            if(!"openrouter".equals(st.optString("provider"))||model.isEmpty()||model.equals(st.optString("orHalf")))throw e;
+            double paid=Math.max(0,st.optDouble("costUsd",0));
+            check(r);FilesStore.update(c,r.id,s->s.put("orHalf",model).put("costCarry",paid));
             Pipeline.log(c,r.id,"El proveedor no aceptó un envío tan grande · se repite con partes de la mitad (no gasta un intento)");
-            Diagnostics.event("job_halved",r.id,"provider","openrouter","model",st.optString("model"));
+            Diagnostics.event("job_halved",r.id,"provider","openrouter","model",model);
             transcribe(r);
         }
+    }
+    /** Al reiniciar las métricas por cambio de perfil, el costo vuelve a lo ya cobrado antes de achicar los bloques (o se borra). */
+    static void restartCost(JSONObject s)throws JSONException{
+        double carry=s.optDouble("costCarry",0);s.remove("costCarry");
+        if(carry>0)s.put("costUsd",carry);else s.remove("costUsd");
+    }
+    /**
+     * «Automático» no cambia de modelo a mitad de una transcripción: si ya hay partes listas con un modelo que sigue en el
+     * catálogo, se termina con ese. Si no, el perfil cambiaba, se descartaban partes ya pagadas y se cobraban de nuevo.
+     */
+    private ProviderConfig keepAutoModel(Recording r,Settings settings,ProviderConfig config,JSONObject st,boolean wantSpeakers){
+        try{
+            if(!"openrouter".equals(config.provider)||!"openrouter".equals(st.optString("provider"))||st.optInt("blocksDone")<=0)return config;
+            String pref=wantSpeakers?settings.orSpeakersModel():settings.orTextModel(),saved=st.optString("model");
+            if(!(pref.isEmpty()||Models.AUTO.equals(pref))||saved.isEmpty()||saved.equals(config.model)||Models.find(Models.cached(c),saved)==null)return config;
+            ProviderConfig kept=new ProviderConfig("openrouter",Models.BASE,saved,config.key,wantSpeakers&&Models.recipe(saved).diarizes);
+            // Sin « »: el informe de soporte tapa lo que va entre comillas angulares.
+            Pipeline.log(c,r.id,"El modelo automático cambió de recomendación · esta transcripción termina con el que empezó (las partes listas no se vuelven a pagar)");
+            return kept;
+        }catch(Exception e){return config;}
     }
     private void transcribe(Recording r)throws Exception{
         check(r);long start=System.currentTimeMillis();Settings settings=new Settings(c);
         JSONObject initial=FilesStore.state(c,r.id);boolean wantSpeakers=initial.has("speakers")?initial.optBoolean("speakers"):settings.defaultSpeakers();
         Retranscribe.Mode mode=Retranscribe.mode(initial);
         if(!Transcript.exists(c,r.id)){
-            ProviderConfig config=settings.config(wantSpeakers);if(config.key.isEmpty())throw new HttpApi.UserAction("Agrega una clave de API en Ajustes y pulsa Reintentar.");
-            // OpenRouter (0.8.0): el tamaño de los bloques sale de la receta del modelo y no del peso del m4a.
-            boolean router=config.provider.equals("openrouter"),half=router&&initial.optBoolean("orHalf");Models.Recipe recipe=router?Models.recipe(config.model):null;
+            ProviderConfig resolved=settings.config(wantSpeakers);
+            if(resolved.key.isEmpty())throw new HttpApi.UserAction("openrouter".equals(resolved.provider)?"Agrega tu clave de OpenRouter en Ajustes y pulsa Reintentar.":"Agrega una clave de API en Ajustes y pulsa Reintentar.");
+            ProviderConfig config=keepAutoModel(r,settings,resolved,initial,wantSpeakers);
+            // OpenRouter (0.8.0): el tamaño de los bloques sale de la receta del modelo y no del peso del m4a. La mitad tras
+            // un 413 vale solo para el modelo que lo respondió.
+            boolean router=config.provider.equals("openrouter"),half=router&&config.model.equals(initial.optString("orHalf"));Models.Recipe recipe=router?Models.recipe(config.model):null;
             long bytes=r.audio(c).length(),audioMs=r.duration>0||!(config.speakers||router)?r.duration:AudioConvert.duration(r.audio(c));
-            // «Separar voces sin cortar el audio»: un solo envío, sin uniones donde las voces se crucen.
-            boolean single=mode==Retranscribe.Mode.SINGLE&&config.speakers&&!half&&(router?Retranscribe.fitsSingle(recipe,audioMs):Retranscribe.fitsSingle(audioMs,bytes));
+            // «Separar voces sin cortar el audio»: un solo envío, sin uniones donde las voces se crucen (fits: cabría en uno).
+            boolean fits=mode==Retranscribe.Mode.SINGLE&&config.speakers&&(router?Retranscribe.fitsSingle(recipe,audioMs):Retranscribe.fitsSingle(audioMs,bytes)),single=fits&&!half;
             // Tarea de fondo: un envío único que no alcanza a volver antes del corte de Android se deja al primer plano.
-            if(single&&budgetMs>0&&sendEstimate(audioMs)>JOB_SEND_LIMIT_MS)throw new NeedsForeground("Sin cortar: el envío del audio completo");
+            if(single&&budgetMs>0&&sendEstimate(config.provider,audioMs)>JOB_SEND_LIMIT_MS)throw new NeedsForeground("Sin cortar: el envío del audio completo");
             long blockMax=router?orBlockMax(recipe,config.speakers):0;
-            long target=single?audioMs:router?orBlockMs(audioMs,blockMax,half):config.speakers?speakerBlockMs(audioMs,bytes):BLOCK_TEXT_MS;
+            long target=single?audioMs:router?orTarget(audioMs,blockMax,half,fits):config.speakers?speakerBlockMs(audioMs,bytes):BLOCK_TEXT_MS;
             // Hasta qué duración el audio va entero. Con OpenRouter partido a la mitad, el propio bloque es el tope.
             long wholeMax=router?Math.min(AudioParts.SINGLE_MAX_MS,half?target:blockMax):AudioParts.SINGLE_MAX_MS;
             // Voces conocidas («Mi voz» y las demás guardadas) van en todos los bloques (también el primero), la tuya primero y
@@ -232,9 +325,11 @@ final class Transcriber {
                 Retranscribe.clearCheckpoints(c,r.id);
                 AudioParts.clearBlocks(c,r.id);
                 FilesStore.update(c,r.id,s->s.put("profile",profile).remove("cuts"));
-                FilesStore.update(c,r.id,s->s.put("blocksDone",0).put("doneAudioMs",0).put("bytesSent",0).put("inTokens",0).put("outTokens",0).put("usageSec",0).put("blockMsSum",0).put("blockCount",0).remove("costUsd"));
+                FilesStore.update(c,r.id,s->{s.put("blocksDone",0).put("doneAudioMs",0).put("bytesSent",0).put("inTokens",0).put("outTokens",0).put("usageSec",0).put("blockMsSum",0).put("blockCount",0).put("prepMsSum",0).put("prepCount",0);restartCost(s);});
             }
-            FilesStore.update(c,r.id,s->s.put("model",config.model).put("speakers",config.speakers).put("audioMs",r.duration).put("provider",config.provider));
+            // "prepping": partes preparando su audio ahora mismo (la etapa «Preparar audio» en pantalla). Aquí no hay ninguna:
+            // si Android mató un intento a mitad de una preparación, la cuenta no queda pegada.
+            FilesStore.update(c,r.id,s->s.put("model",config.model).put("speakers",config.speakers).put("audioMs",r.duration).put("provider",config.provider).put("prepping",0));
             Diagnostics.event("job_start",r.id,"provider",config.provider,"model",config.model,"bytes",bytes,"duration_ms",r.duration,"net",Pipeline.networkName(c),"runner",budgetMs>0?"job":"fgs","mode",mode==null?"":mode.name());
             stage(r,"Preparando audio",-1);long prepStart=System.currentTimeMillis();
             List<Long> cuts=new ArrayList<>();List<AudioParts.Part> parts;
@@ -269,12 +364,14 @@ final class Transcriber {
                         // Las voces conocidas que la parte 1 ya reconoció (con su nombre enviado) no necesitan muestra automática;
                         // las automáticas usan los lugares que quedan.
                         Set<String> exclude=new HashSet<>();for(String[] ref:saved)exclude.add(ref[0]);
-                        // Si la parte 1 volvió sin voces (OpenRouter: el modelo no las entregó), no hay de quién sacar muestras.
-                        List<String[]> auto=responses[0].optBoolean("_diarized",true)?AudioParts.references(c,r,responses[0],http,MAX_KNOWN-saved.size(),exclude):new ArrayList<>();
+                        // Si la parte 1 volvió sin voces (OpenRouter: el modelo no las entregó), no hay de quién sacar muestras; si
+                        // volvió sin tiempos reales ("_timed" false: repartidos por cantidad de texto), las muestras saldrían de
+                        // cualquier parte del audio. OpenAI no trae "_timed": sus tiempos son reales.
+                        List<String[]> auto=responses[0].optBoolean("_diarized",true)&&responses[0].optBoolean("_timed",true)?AudioParts.references(c,r,responses[0],http,MAX_KNOWN-saved.size(),exclude):new ArrayList<>();
                         references=new ArrayList<>(saved);references.addAll(auto);
                         if(!auto.isEmpty()){StringBuilder which=new StringBuilder();for(String[] ref:auto)which.append(which.length()==0?"":", ").append(ref[3]);
                             Pipeline.log(c,r.id,"Muestras de voz de la parte 1: "+which+" · se usan para reconocer a las mismas personas en las demás partes");}
-                        else if(saved.isEmpty())Pipeline.log(c,r.id,"La parte 1 no tiene tramos limpios para muestras de voz · cada parte separa voces por su cuenta");
+                        else if(saved.isEmpty())Pipeline.log(c,r.id,(responses[0].optBoolean("_timed",true)?"La parte 1 no tiene tramos limpios para muestras de voz":"El modelo no devolvió tiempos en la parte 1")+" · cada parte separa voces por su cuenta");
                     }
                 }
                 if(budgetMs>0&&from<n&&System.currentTimeMillis()-started>budgetMs&&!allDone(r,from,n))throw new Yield();
@@ -292,7 +389,7 @@ final class Transcriber {
                 boolean note=settings.noteAuto()&&transcript.hasText()&&canNote();
                 // Se guarda solo si nadie canceló entretanto: cancelar una repetición devuelve la versión anterior.
                 synchronized(FilesStore.LOCK){check(r);transcript.save(c,r.id);if(note)FilesStore.update(c,r.id,s->s.put("notePending",true));}
-            }finally{http.onUploaded=null;http.onProgress=null;}
+            }finally{http.onUploaded=null;http.onProgress=null;http.onPreparing=null;http.onBilled=null;}
             // Los bloques se conservan entre intentos; se borran solo con la transcripción ya guardada.
             AudioParts.clearBlocks(c,r.id);
         }
@@ -392,34 +489,71 @@ final class Transcriber {
         int n=parts.size();java.io.File checkpoint=FilesStore.file(c,r.id,".part"+i+".json");
         if(checkpoint.exists())return FilesStore.read(checkpoint);
         check(r);AudioParts.Part part=parts.get(i);String label=n>1?"parte "+(i+1)+" de "+n:"audio";
+        boolean router=config.provider.equals("openrouter");long partMs=part.durationMs>0?part.durationMs:r.duration;
         // Tarea de fondo: Android la corta a los ~10 min. Si este bloque no alcanza a volver, se cede el turno antes de enviarlo.
         // Nunca antes del primer envío de la ronda: así cada ronda avanza al menos un bloque. Un bloque que ni solo cabe
         // no se envía desde aquí (se cortaría siempre a mitad y se volvería a subir entero): lo hace el primer plano.
-        if(budgetMs>0){long partEstimate=sendEstimate(part.durationMs>0?part.durationMs:r.duration);
+        // Con OpenRouter la cuenta incluye preparar el audio (ver sendEstimate).
+        if(budgetMs>0){long partEstimate=sendEstimate(config.provider,partMs);
             if(partEstimate>JOB_SEND_LIMIT_MS)throw new NeedsForeground(n>1?"El envío de la parte "+(i+1)+" de "+n:"El envío del audio");
             if(sentThisRun.get()&&System.currentTimeMillis()-started+partEstimate>JOB_SEND_LIMIT_MS)throw new Yield();}
         sentThisRun.set(true);
-        HttpApi h=http.child();h.jobId=r.id;long partMs=part.durationMs>0?part.durationMs:r.duration;
+        HttpApi h=http.child();h.jobId=r.id;
         // La espera escala con la duración: un bloque con separación de voces puede tardar varios minutos.
         // (Con OpenRouter no pasa de 6 min: ver responseLimit.)
-        boolean router=config.provider.equals("openrouter");
         h.readTimeoutMs=(int)Math.min(router?6*60_000L:20*60_000L,Math.max(240_000L,120_000L+partMs));
         long blockStart=System.currentTimeMillis();
-        stage(r,"Enviando "+label,0);
+        // OpenRouter convierte el bloque antes de enviarlo: la etapa «Preparando el audio…» la anuncia el propio cliente
+        // (onPreparing), así la pantalla no queda en «Enviando… 0 %» mientras se convierte.
+        if(!router)stage(r,"Enviando "+label,0);
         h.onProgress=(sent,total)->progress(r,i,sent,total,label);
-        java.util.concurrent.atomic.AtomicBoolean uploaded=new java.util.concurrent.atomic.AtomicBoolean();long limit=responseLimit(config.provider,partMs);
-        h.onUploaded=()->{uploaded.set(true);uploads.remove(i);publishUploads(r);Pipeline.log(c,r.id,(n>1?"Parte "+(i+1)+" enviada":"Audio enviado")+(config.provider.equals("openai")?" · OpenAI está transcribiendo":router?" · OpenRouter está transcribiendo":" · el servidor está transcribiendo"));};
-        OpenAiClient.Delta delta=chars->liveText(r,i,chars);
+        h.onUploaded=()->{uploads.remove(i);publishUploads(r);Pipeline.log(c,r.id,(n>1?"Parte "+(i+1)+" enviada":"Audio enviado")+(config.provider.equals("openai")?" · OpenAI está transcribiendo":router?" · OpenRouter está transcribiendo":" · el servidor está transcribiendo"));};
+        // Etapa «Preparando audio»: en la bitácora, en la notificación y en el estado ("prepping" ahora; "prepMsSum" y
+        // "prepCount" para las estimaciones y las métricas de la pantalla). Nunca hace fallar el envío.
+        java.util.concurrent.atomic.AtomicLong prepStart=new java.util.concurrent.atomic.AtomicLong(),prepActive=new java.util.concurrent.atomic.AtomicLong();
+        java.util.concurrent.atomic.AtomicBoolean prepCut=new java.util.concurrent.atomic.AtomicBoolean(),frozenWait=new java.util.concurrent.atomic.AtomicBoolean();
+        h.onPreparing=(begin,ok)->{
+            try{
+                long now=android.os.SystemClock.elapsedRealtime();
+                if(begin){
+                    prepStart.set(now);prepActive.set(0);prepCut.set(false);
+                    stage(r,"Preparando el audio "+(n>1?"de la "+label:"para enviarlo"),-1);
+                    FilesStore.update(c,r.id,s->s.put("prepping",s.optInt("prepping")+1));
+                }else{
+                    long took=Math.max(0,now-prepStart.get());
+                    FilesStore.update(c,r.id,s->{s.put("prepping",Math.max(0,s.optInt("prepping")-1));if(ok)s.put("prepMsSum",s.optLong("prepMsSum")+took).put("prepCount",s.optInt("prepCount")+1);});
+                    if(ok)stage(r,"Enviando "+label+" · preparado en "+Recording.time(took),0);
+                }
+            }catch(Exception ignored){}
+        };
+        // Un envío cobrado y descartado dentro del cliente (y cuyo reenvío falló) se suma igual al costo real.
+        h.onBilled=usd->{try{if(usd>0)FilesStore.update(c,r.id,s->s.put("costUsd",s.optDouble("costUsd",0)+usd));}catch(Exception ignored){}};
+        OpenAiClient.Delta delta=chars->liveText(r,i,chars);long limit=responseLimit(config.provider,partMs);
         JSONObject response;
         // Vigilante: si el envío deja de avanzar o la respuesta tarda mucho más de lo normal (p. ej. el teléfono congeló
-        // la app con la pantalla bloqueada), corta y reintenta en vez de quedar colgado media hora.
+        // la app con la pantalla bloqueada), corta y reintenta en vez de quedar colgado media hora. Mira en qué paso va
+        // el envío (HttpApi.phase): preparar el audio se mide aparte y nunca cuenta como una subida detenida.
         long[] lastTick={android.os.SystemClock.elapsedRealtime()};
         ScheduledFuture<?> guard=WATCHDOG.scheduleWithFixedDelay(()->{
-            long now=android.os.SystemClock.elapsedRealtime(),gap=now-lastTick[0];lastTick[0]=now;
-            if(gap>30_000&&now-frozenLoggedAt>30_000){frozenLoggedAt=now;Pipeline.log(c,r.id,"Android tuvo la app congelada "+Recording.time(gap)+" (ahorro de batería con la pantalla bloqueada)");Diagnostics.event("app_frozen",r.id,"elapsed_ms",gap,"display",Battery.screenOn(c)?"on":"off","battery",Battery.unrestricted(c)?"unrestricted":"optimized");}
-            if(h.lastActivity==0)return;long idle=now-h.lastActivity;
-            if(!uploaded.get()&&idle>UPLOAD_STALL_MS)h.abortStalled("el envío dejó de avanzar");
-            else if(uploaded.get()&&idle>limit)h.abortStalled("sin respuesta en "+Recording.time(idle)+", lo normal es menos de "+Recording.time(limit));
+            long now=android.os.SystemClock.elapsedRealtime(),gap=now-lastTick[0];lastTick[0]=now;int phase=h.phase;
+            if(gap>30_000&&now-frozenLoggedAt>30_000){frozenLoggedAt=now;Pipeline.log(c,r.id,"Android tuvo la app congelada "+Recording.time(gap)+" (ahorro de batería con la pantalla bloqueada)");Diagnostics.event("app_frozen",r.id,"elapsed_ms",gap,"display",Battery.screenOn(c)?"on":"off","battery",Battery.unrestricted(c)?"unrestricted":"optimized","stage",HttpApi.PHASES[phase]);}
+            // Congelada mientras esperaba la respuesta: si después se corta por tiempo, fue el teléfono y no el proveedor.
+            if(gap>30_000&&phase>=HttpApi.WAIT)frozenWait.set(true);
+            if(phase==HttpApi.PREPARE){
+                // Solo el tiempo en que la app de verdad corrió (sin las congelaciones); pasado el tope, la conversión se corta.
+                if(gap<=30_000)prepActive.addAndGet(gap);long cap=prepareLimit(partMs);
+                if(prepActive.get()>cap&&prepCut.compareAndSet(false,true)){h.abortPreparing("preparar el audio tardó más de "+Recording.time(cap));Diagnostics.event("watchdog_cut",r.id,"reason","prepare","part",i+1,"elapsed_ms",prepActive.get());}
+                return;
+            }
+            if(h.lastActivity==0||phase==HttpApi.IDLE)return;long idle=now-h.lastActivity;
+            if(phase==HttpApi.UPLOAD&&idle>UPLOAD_STALL_MS){
+                if(h.stalled==null)Diagnostics.event("watchdog_cut",r.id,"reason","upload","part",i+1,"idle",idle,"local",true);
+                h.abortStalled("el envío dejó de avanzar",true);
+            }else if(phase>=HttpApi.WAIT&&idle>limit){
+                boolean local=frozenWait.get();
+                if(h.stalled==null)Diagnostics.event("watchdog_cut",r.id,"reason","response","part",i+1,"idle",idle,"local",local,"provider",config.provider);
+                h.abortStalled((router?"OpenRouter no respondió en ":"sin respuesta en ")+Recording.time(idle)+", lo normal es menos de "+Recording.time(limit),local);
+            }
         },5,5,TimeUnit.SECONDS);
         try{
             // El cliente sale del proveedor: OpenAI (y servidor compatible) u OpenRouter. El motor no distingue la respuesta.
@@ -427,8 +561,14 @@ final class Transcriber {
             catch(HttpApi.UserAction e){
                 if(refs==null||refs.isEmpty()||!String.valueOf(e.getMessage()).contains("known_speaker"))throw e;
                 Pipeline.log(c,r.id,"El proveedor rechazó las muestras de voz · se reenvía "+(n>1?"la "+label:"el audio")+" sin ellas");
-                uploaded.set(false);response=TranscribeClient.of(c,h,config).transcribe(part.file,config,settings.language(),null,delta);refs=null;
+                response=TranscribeClient.of(c,h,config).transcribe(part.file,config,settings.language(),null,delta);refs=null;
             }
+        }catch(Exception e){
+            // Dónde quedó el envío que falló (preparar, subir, esperar o leer) y cuánto tardó: con eso se diagnostica un caso
+            // «bloqueado» desde el informe de soporte. Solo nombres de clases y números, nada del usuario.
+            failedStage=HttpApi.PHASES[h.lastPhase];
+            Diagnostics.event("part_failed",r.id,"part",i+1,"parts",n,"stage",failedStage,"error_class",e.getClass().getSimpleName(),"elapsed_ms",System.currentTimeMillis()-blockStart,"local",localCut(e),"provider",config.provider);
+            throw e;
         }finally{guard.cancel(false);}
         check(r);
         // "_known": qué nombre enviado corresponde a qué voz (se usa al unir bloques; ver Transcript.fromParts).
@@ -517,11 +657,16 @@ final class Transcriber {
         manager.cancel(NOTIFICATION);
     }
     /** Algo falló y necesita al usuario: abre esa grabación. */
-    private void attention(Recording r,String title,String text){
+    private void attention(Recording r,String title,String text){attention(c,r.id,title,text);}
+    /**
+     * Lo mismo desde fuera del motor (p. ej. PipelineJob cuando Android corta la tarea de fondo por quinta vez): toda
+     * transcripción que se rinde debe avisar, no solo quedar escrita en la bitácora.
+     */
+    static void attention(Context c,String id,String title,String text){
         NotificationManager manager=c.getSystemService(NotificationManager.class);manager.createNotificationChannel(new NotificationChannel("processing","Transcripciones",NotificationManager.IMPORTANCE_LOW));
         Notification n=new Notification.Builder(c,"processing").setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle(title).setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text))
-            .setContentIntent(activity(c,r.id,3,openIntent(c,r.id))).setAutoCancel(true).build();
-        try{manager.notify(doneId(r.id),n);}catch(RuntimeException ignored){}
+            .setContentIntent(activity(c,id,3,openIntent(c,id))).setAutoCancel(true).build();
+        try{manager.notify(doneId(id),n);}catch(RuntimeException ignored){}
         manager.cancel(NOTIFICATION);
     }
     /** Id de la notificación «lista» de una grabación (una por grabación: dos que terminan seguidas no se pisan). */

@@ -24,7 +24,7 @@ final class Retranscribe {
     static final long SINGLE_MAX_BYTES=24_000_000;
     /** Datos del estado que describen la versión anterior; vuelven con ella al restaurarla. */
     private static final String[] BEFORE={"model","speakers","provider","audioMs","blocks","blocksDone","cuts","doneIn","doneAt","doneAudioMs","bytesSent",
-        "inTokens","outTokens","usageSec","costUsd","blockMsSum","blockCount","retries","localCuts","noteState","noteError","suggestedTitle"};
+        "inTokens","outTokens","usageSec","costUsd","blockMsSum","blockCount","prepMsSum","prepCount","retries","localCuts","noteState","noteError","suggestedTitle"};
     /**
      * OpenRouter: el audio viaja como FLAC mono de 16 kHz (WAV si el teléfono no codifica FLAC). Para saber si cabe en un
      * solo envío se estima su peso por duración: ~20 KB por segundo (el WAV son 32; el FLAC de voz ronda el 60 %).
@@ -233,8 +233,9 @@ final class Retranscribe {
                 s.put("attempt",attempt).put("retranscribe",new JSONObject().put("mode",mode.name()).put("at",now).put("before",before));
                 if(fixed!=null&&fixed.length()>0)s.put("fixedRefs",fixed);else s.remove("fixedRefs");
                 // Nada del intento anterior se reutiliza: ni cortes ni perfil; la nota y el comienzo son de la nueva versión.
-                // (Tampoco «orHalf»: que un envío fuera muy grande para el proveedor es cosa de ese intento y de ese modelo.)
-                s.remove("cuts");s.remove("profile");s.remove("orHalf");s.remove("noteState");s.remove("noteError");s.remove("noteStartedAt");s.remove("suggestedTitle");s.remove("snippet");s.remove("notePending");s.remove("opened");
+                // (Tampoco «orHalf»: que un envío fuera muy grande para el proveedor es cosa de ese intento y de ese modelo; ni
+                // «costCarry», lo ya cobrado de la pasada anterior antes de achicar los bloques.)
+                s.remove("cuts");s.remove("profile");s.remove("orHalf");s.remove("costCarry");s.remove("noteState");s.remove("noteError");s.remove("noteStartedAt");s.remove("suggestedTitle");s.remove("snippet");s.remove("notePending");s.remove("opened");
             });
         }
         clearCheckpoints(c,id);AudioParts.clearBlocks(c,id);Transcriber.clearDone(c,id);

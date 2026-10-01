@@ -30,6 +30,7 @@ import java.util.List;
  *
  * Contrato de la fase 0: build(audio, anchors, outBase, cancel) y Built. Agregados de esta parte: build(…, flac) para
  * forzar WAV, decode(…) (cualquier audio → mono 16 kHz por partes), Sink, ANCHOR_MIN_MS/ANCHOR_MAX_MS y flacIssue.
+ * Segunda ronda: TooShort y NoTrack (errores que reintentar no arregla) y diskFull (disco lleno según la causa del error).
  * Deja en Diagnostics «or_audio» (formato, duración, bytes, anclas usadas, tiempo) y «or_audio_fallback» (por qué no hubo FLAC).
  */
 final class OrAudio {
@@ -54,7 +55,7 @@ final class OrAudio {
     private static final double MAX_BOOST=8,CEILING=29204;
     /** El volumen del audio se mide en sus primeros 20 s: basta para comparar y cuesta una fracción de segundo. */
     private static final long LEVEL_MS=20_000;
-    private static final long STALL_MS=30_000,MIN_FREE=4_000_000;
+    private static final long STALL_MS=30_000;
 
     /** Resultado de build(). */
     static final class Built{
@@ -76,6 +77,19 @@ final class OrAudio {
     private interface Out extends Sink{long finish()throws Exception;void release();}
     /** El FLAC no se pudo hacer o no pasó la comprobación: el bloque se rehace en WAV. */
     private static final class FlacFailed extends IOException{FlacFailed(String message,Throwable cause){super(message,cause);}}
+    /** 0.8.0: el audio dura menos de una décima de segundo (no hay nada que transcribir). El cliente lo trata como silencio. */
+    static final class TooShort extends IOException{TooShort(){super("Audio too short");}}
+    /** 0.8.0: el archivo no tiene una pista de audio. Reintentar no lo arregla: el cliente se lo dice al usuario. */
+    static final class NoTrack extends IOException{NoTrack(){super("No audio track");}}
+    /** Disco lleno de verdad (ENOSPC en la cadena de causas), no «poco espacio libre medido después de limpiar». */
+    static final String NO_SPACE="No queda espacio en el teléfono para preparar el audio. Libera espacio y pulsa Reintentar.";
+    static boolean diskFull(Throwable e){
+        for(Throwable t=e;t!=null;t=t.getCause()){
+            if(t instanceof android.system.ErrnoException&&((android.system.ErrnoException)t).errno==android.system.OsConstants.ENOSPC)return true;
+            String m=t.getMessage();if(m!=null&&(m.contains("ENOSPC")||m.contains("No space left")))return true;
+        }
+        return false;
+    }
 
     /**
      * Arma el archivo para enviar.
@@ -100,16 +114,18 @@ final class OrAudio {
         try{
             if(flac)try{return write(audio,anchors,outBase,tmp,cancel,true,started);}
                 catch(FlacFailed e){
+                    // Disco lleno no es culpa del codificador: no se apaga el FLAC ni se intenta el WAV (pesa el doble). Se decide
+                    // por la causa del error: medir el espacio libre aquí no sirve, porque write() ya borró el .tmp a medias.
+                    if(diskFull(e)){Diagnostics.event("or_audio_fallback",cancel==null?null:cancel.jobId,"reason","disk_full");throw new HttpApi.UserAction(NO_SPACE);}
                     Throwable cause=e.getCause();flacIssue=e.getMessage()+(cause==null?"":" · "+cause.getClass().getSimpleName()+": "+cause.getMessage());
-                    // Disco lleno no es culpa del codificador: no se descarta el FLAC para los bloques que vienen.
-                    if(dir==null||dir.getUsableSpace()>=MIN_FREE)flacOff=true;
+                    flacOff=true;
                     Diagnostics.event("or_audio_fallback",cancel==null?null:cancel.jobId,"format","wav","reason",HttpApi.safeReason(e),"error_class",cause==null?"":cause.getClass().getSimpleName());
                 }
             return write(audio,anchors,outBase,tmp,cancel,false,started);
         }catch(InterruptedIOException e){throw e;}
-        catch(IOException e){if(dir==null||dir.getUsableSpace()>=MIN_FREE)throw e;}
+        catch(IOException e){if(!diskFull(e))throw e;}
         // Reintentar solo no arregla la falta de espacio: se le pide al usuario, en vez de gastar los cinco intentos.
-        throw new HttpApi.UserAction("No queda espacio en el teléfono para preparar el audio. Libera espacio y pulsa Reintentar.");
+        throw new HttpApi.UserAction(NO_SPACE);
     }
 
     private static Built write(File audio,List<File> anchors,File outBase,File tmp,HttpApi cancel,boolean flac,long started)throws Exception{
@@ -125,7 +141,7 @@ final class OrAudio {
                 // Exactos: cada ancla mide un número entero de milisegundos (ver anchor()) y el silencio también.
                 marks[a][0]=lead*1000/RATE;marks[a][1]=(lead+clip.length)*1000/RATE;lead+=clip.length+gap;used++;
             }
-            long body=decode(audio,Long.MAX_VALUE,cancel,out);if(body<RATE/10)throw new IOException("Audio too short");
+            long body=decode(audio,Long.MAX_VALUE,cancel,out);if(body<RATE/10)throw new TooShort();
             long total=out.finish();alive(cancel);
             String format=flac?"flac":"wav";File target=new File(outBase.getPath()+"."+format);
             target.delete();if(!tmp.renameTo(target))throw new IOException("Could not save converted audio");ok=true;
@@ -195,7 +211,7 @@ final class OrAudio {
         try{
             extractor.setDataSource(source.getPath());int track=-1;MediaFormat format=null;
             for(int i=0;i<extractor.getTrackCount();i++){MediaFormat f=extractor.getTrackFormat(i);String mime=f.getString(MediaFormat.KEY_MIME);if(mime!=null&&mime.startsWith("audio/")){track=i;format=f;break;}}
-            if(track<0)throw new IOException("No audio track");extractor.selectTrack(track);
+            if(track<0)throw new NoTrack();extractor.selectTrack(track);
             codec=MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME));codec.configure(format,null,null,0);codec.start();
             int rate=number(format,MediaFormat.KEY_SAMPLE_RATE,0),channels=number(format,MediaFormat.KEY_CHANNEL_COUNT,0),encoding=number(format,MediaFormat.KEY_PCM_ENCODING,AudioFormat.ENCODING_PCM_16BIT);
             final long[] done={0};Sink capped=(data,count)->{int n=(int)Math.min(count,limit-done[0]);if(n>0){sink.write(data,n);done[0]+=n;}};
