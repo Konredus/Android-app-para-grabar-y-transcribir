@@ -899,7 +899,7 @@ public class SettingsActivity extends Screen {
             String authority=uri.getAuthority()==null?"":uri.getAuthority();String label=(authority.contains("google.android.apps.docs")?"Drive · ":"")+name;
             runOnUiThread(()->{if(!isDestroyed())row.setValue(label);});});
     }
-    private void report(){toast("Preparando informe…");io.execute(()->{try{Diagnostics.export(this);runOnUiThread(()->shareFile("support.txt","Informe de soporte"));}catch(Exception e){runOnUiThread(()->message("Informe","No se pudo generar el informe."));}});}
+    private void report(){toast("Preparando informe…");io.execute(()->{try{java.io.File f=Diagnostics.export(this);runOnUiThread(()->shareFile(f.getName(),"Informe de soporte"));}catch(Exception e){runOnUiThread(()->message("Informe","No se pudo generar el informe."));}});}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==PICK_SAVE&&result==RESULT_OK&&data!=null&&data.getData()!=null){

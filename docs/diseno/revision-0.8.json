@@ -1,0 +1,242 @@
+[
+ {
+  "area": "audio",
+  "title": "Disco lleno mal detectado: getUsableSpace() se mide después de que el finally de write() borró el .tmp a medias, así que se apaga el FLAC y nunca sale el aviso de «Libera espacio»",
+  "file": "app/src/main/java/cl/vozlocal/app/OrAudio.java",
+  "line": 105,
+  "real": true,
+  "severity": "media",
+  "reason": "Confirmado leyendo el código. Cuando falta espacio, FileOutputStream lanza IOException(\"write failed: ENOSPC…\"). FlacOut.write la recibe a través de drain→store→out.write y la envuelve en FlacFailed(\"flac-encode\") (línea 377); si el error sale en el close de finish(), queda como FlacFailed(\"flac-verify\") (línea 424). Antes de que esa excepción llegue a build(), el finally de write() (línea 137) ejecuta tmp.delete() porque ok=false. Por eso getUsableSpace() en la línea 105 vuelve a marcar el espacio libre que había antes de empezar. Si eran ≥4 MB (ej.: 9 MB libres y un bloque de 12 min, que en FLAC pesa ~11 MB), se fija flacOff=true, justo lo que el comentario de la línea 104 dice que se quiere evitar. El respaldo WAV (~23 MB) también falla por ENOSPC, su finally vuelve a borrar el .tmp y en la línea 110 el espacio medido otra vez es ≥4 MB, así que se relanza el IOException crudo en vez de HttpApi.UserAction. OpenRouterClient.build (líneas 140-148) lo repite sin anclas: con flacOff ya en true va directo a WAV y vuelve a fallar. Transcriber.runAll lo trata como un error genérico (líneas 127-145): gasta los 5 intentos, reconvierte el bloque en cada uno y termina con «Intento 5 de 5 falló: write failed: ENOSPC (No space left on device) · pulsa Reintentar». No cobra nada porque no llega a enviar. Después flacOff sigue en true durante toda la vida del proceso: todo se envía en WAV (32 KB/s en vez de los ~20 KB/s que estima Retranscribe.OR_BYTES_PER_MS) y aumenta el riesgo de 413, que a su vez hace que los bloques bajen a la mitad. El aviso amable solo sale si quedaban menos de 4 MB libres antes de empezar. El caso inverso también es real pero menor: con menos de 4 MB libres, un IOException ajeno al espacio («No audio track», «Audio too short», el decodificador que se detiene) se muestra como «No queda espacio…».",
+  "fix": "Decidir por la causa del error y no por el espacio medido después de limpiar. Agregar a OrAudio:\n\nprivate static boolean diskFull(Throwable e){for(Throwable t=e;t!=null;t=t.getCause()){if(t instanceof android.system.ErrnoException&&((android.system.ErrnoException)t).errno==android.system.OsConstants.ENOSPC)return true;String m=t.getMessage();if(m!=null&&(m.contains(\"ENOSPC\")||m.contains(\"No space left\")))return true;}return false;}\n\nDentro de catch(FlacFailed e), reemplazar la línea 105 por: if(diskFull(e))throw new HttpApi.UserAction(\"No queda espacio en el teléfono para preparar el audio. Libera espacio y pulsa Reintentar.\"); flacOff=true; (no se intenta WAV, que pesa el doble). Reemplazar la línea 110 por: catch(IOException e){if(!diskFull(e))throw e;}. Así se quita también la dependencia de MIN_FREE/getUsableSpace, que causaba el falso positivo inverso. minSdk 26, así que ErrnoException/OsConstants están disponibles."
+ },
+ {
+  "area": "client",
+  "title": "«Sin tiempos» se aprende tarde y solo en memoria: envíos cobrados dos veces",
+  "file": "app/src/main/java/cl/vozlocal/app/OpenRouterClient.java",
+  "line": 118,
+  "real": true,
+  "severity": "media",
+  "reason": "Es real, pero ocurre en menos casos de los que dice el hallazgo. NO_TIMES solo se registra si `built.leadMs>0&&!parsed.timed` (línea 118). La parte 1 sin voces guardadas va sin anclas (leadMs=0), así que un modelo INLINE que pone las marcas solo en el «text» de arriba (read() líneas 276-281: timed=false, diarized=true, tiempos repartidos por cantidad de caracteres) no deja nada registrado, y finish() devuelve _diarized:true. Transcriber:273 llama a AudioParts.references con esos tiempos. Una aclaración: en pickReferences (AudioParts:149) los tramos repartidos quedan pegados unos a otros, así que con voces que se alternan todos se marcan «crowded» y auto queda vacío. En ese caso no hay anclas ni cobro doble. El caso se da cuando la parte 1 deja algún tramo que no está «crowded», por ejemplo una grabación de una sola voz (un solo tramo de 0 a 720 s, muestra entre 0,4 y 9,9 s) o varias marcas seguidas de la misma voz. Ejemplo: 60 min con fish-audio/transcribe-1-pro elegido a mano y voces activadas. Salen 5 partes de 12 min. Las partes 2, 3 y 4 arrancan juntas (PARALLEL=3), las tres revisan NO_TIMES en la línea 75 antes de que llegue alguna respuesta, envían con anclas, vuelven sin tiempos, suman before+=cost y se reenvían. Son tres envíos cobrados dos veces. Además la bitácora dice «Muestras de voz de la parte 1… se usan para reconocer», y eso no pasa. También es cierto que NO_TIMES es estático en memoria: con voces guardadas, el primer bloque de cada proceso nuevo se paga doble. Y si el reenvío lanza una excepción, `before` se pierde y costUsd queda por debajo de lo cobrado.",
+  "fix": "En OpenRouterClient, justo después de `Parsed parsed=read(json,ask,built.durationMs);`, agregar `if(ask&&!parsed.timed)NO_TIMES.add(config.model);` y sacar el NO_TIMES.add de dentro del if de la línea 118, que sigue igual para el reenvío sin anclas. En la línea 128 agregar `.put(\"_timed\",parsed.timed)`. En Transcriber:273 exigir también `responses[0].optBoolean(\"_timed\",true)` antes de llamar a AudioParts.references. Las respuestas de OpenAI no traen ese campo, así que para ellas no cambia nada. Opcional: guardar NO_TIMES por modelo en preferencias."
+ },
+ {
+  "area": "client",
+  "title": "El modo simple tras un 400 no se recuerda: cada bloque sube el audio dos veces",
+  "file": "app/src/main/java/cl/vozlocal/app/OpenRouterClient.java",
+  "line": 100,
+  "real": true,
+  "severity": "baja",
+  "reason": "Es real. `plain` es una variable local de transcribe() (línea 80) y no hay ningún conjunto estático para ese caso, como sí lo hay para NO_TIMES. Cada bloque parte con plain=false, envía verbose_json, timestamp_granularities y lo que pida la receta para las voces, recibe el 400, formatRejected da true, y recién ahí se reenvía en modo simple. Como el cuerpo va con setFixedLengthStreamingMode, el audio en base64 se sube entero antes de leer el 400. Ejemplo: un modelo fuera de la tabla, que recibe la receta por defecto con verbose=true, y que rechaza verbose_json. Una grabación de 12 bloques hace 12 subidas que no sirven y deja 12 avisos en la bitácora. Si el envío llevaba anclas, la línea 84 además vuelve a convertir el audio sin ellas en cada bloque. No se cobra de más (el 400 no se factura), pero se gastan datos y tiempo.",
+  "fix": "Agregar `static final Set<String> PLAIN=ConcurrentHashMap.newKeySet();`. En la línea 80 iniciar `boolean plain=PLAIN.contains(config.model);` y, si plain es true, vaciar anchors antes del bucle. En la rama de la línea 100 hacer `PLAIN.add(config.model)` y escribir la línea en la bitácora solo si el modelo no estaba en el conjunto (`if(PLAIN.add(config.model))log.line(...)`)."
+ },
+ {
+  "area": "client",
+  "title": "El recorte proporcional quita palabras reales cuando el tramo empieza en el silencio que sigue a la última ancla",
+  "file": "app/src/main/java/cl/vozlocal/app/OpenRouterClient.java",
+  "line": 383,
+  "real": true,
+  "severity": "baja",
+  "reason": "La cuenta se confirma. Con anclas {0,8000} y {9000,17000} y leadMs=18000, finish() da lastEnd=17000 y cut=17,5 s. El tramo {start:17.2,end:19.0,\"Hola partamos ya mismo\"} sin palabras con tiempo cumple end>cut y start<cut, así que pasa a tail() con any=false. Ahí skip=round(4·0,3/1,8)=round(0,667)=1 y devuelve «partamos ya mismo». Pero entre 17,0 y 18,0 OrAudio pone silencio (GAP_MS=1000), así que un tramo que empieza en 17,2 o después no puede traer nada del ancla. Con un tramo pegado al fin del ancla (17,0 a 22,0, 12 palabras) se pierde 1 palabra real. La fórmula reparte el texto en todo el tramo sin descontar el silencio que se sabe que está ahí. Solo afecta respuestas sin palabras con tiempo y con anclas. La prueba «blind» (16,0 a 20,0, 8 palabras) da 3 tanto con la fórmula actual como con la propuesta.",
+  "fix": "Pasar a tail() lastEnd/1000 (si es mayor que 0) y lead. Cuando no hay palabras: `double anchor=Math.max(0,lastEndS-piece.start),real=Math.max(0,piece.end-lead);int skip=anchor<=0?0:(int)Math.round(tokens.length*anchor/(anchor+real));` acotado a [0,tokens.length]. Si lastEnd no se conoce, mantener la fórmula actual."
+ },
+ {
+  "area": "client",
+  "title": "La prueba engine() puede borrar para siempre las voces guardadas y la clave real del teléfono de pruebas",
+  "file": "app/src/androidTest/java/cl/vozlocal/app/OpenRouterChecks.java",
+  "line": 530,
+  "real": true,
+  "severity": "baja",
+  "reason": "Es real. Las pruebas se corren con `adb shell am instrument -w ...` (README y VERIFICACION), así que los datos de la app quedan entre corridas. engine() mueve files/voices a voices-backup-orcheck (línea 531), guarda las 5 preferencias solo en el mapa `before` en memoria y reemplaza openrouter_keyEncrypted y openrouter_keyIv con una clave falsa (línea 535). Si el proceso muere antes del finally (se cierra el emulador, adb lo mata, se cae otro hilo), no se restaura nada. En la corrida siguiente, la línea 530 ejecuta `deleteTree(aside)` antes que todo lo demás y borra el respaldo con las voces reales. La clave original de OpenRouter y el proveedor anterior quedan perdidos (queda provider=openrouter con la clave falsa). Es código de prueba, pero destruye datos reales del dispositivo donde el usuario prueba la 0.8.",
+  "fix": "Reemplazar la línea 530 por `if(aside.exists()){deleteTree(voices);if(!aside.renameTo(voices))throw new AssertionError(\"Could not recover voices from a previous run\");}`. Guardar los valores originales de las 5 preferencias en un archivo de preferencias aparte (por ejemplo c.getSharedPreferences(\"orcheck-backup\",0)) antes de cambiarlas. Al empezar, si ese respaldo existe, restaurarlo primero. Borrarlo en el finally después de restaurar."
+ },
+ {
+  "area": "engine",
+  "title": "«Sin cortar» con OpenRouter: tras un 413 el audio queda en el doble de partes que una pasada normal",
+  "file": "app/src/main/java/cl/vozlocal/app/Transcriber.java",
+  "line": 210,
+  "real": true,
+  "severity": "media",
+  "reason": "Confirmado en el código. El primer transcribe() de SINGLE manda el audio entero (target=audioMs). Si llega un 413, process() pone orHalf=true y vuelve a llamar. Ahora single=false por `!half`, y target=orBlockMs(audioMs,blockMax,true) parte a la mitad el bloque NORMAL, no el que se rechazó. Con 18 min y blockMax=12: n=2, 9 min, mitad 4,5 min, y wholeMax=min(12,4,5)=4,5 min. AudioParts.plan da unas 4 partes, contra las 2 de una pasada normal. Pasa con todo audio que llega a SINGLE (en la práctica entre 12 y 20 min, porque con 1 parte previa SINGLE se bloquea): siempre sale el doble de partes que lo normal. La versión se guarda con pass=SINGLE y se avisa «Nueva versión lista». La SPEC (decisión 7) dice «se reduce el bloque a la mitad», y el bloque enviado era el audio completo: la mitad serían 2 partes, no 4. Se puede volver a la versión anterior, pero la pasada se paga y queda peor que la que el usuario ya tenía. OpenAI y el servidor compatible no cambian (half solo vale con router).",
+  "fix": "En transcribe(), partir a la mitad lo que de verdad se envió:\n```java\nboolean fits=mode==Retranscribe.Mode.SINGLE&&config.speakers&&(router?Retranscribe.fitsSingle(recipe,audioMs):Retranscribe.fitsSingle(audioMs,bytes));\nboolean single=fits&&!half;\n...\nlong target=single?audioMs:router?(half&&fits?Math.max(1,Math.min(blockMax,audioMs/2)):orBlockMs(audioMs,blockMax,half)):config.speakers?speakerBlockMs(audioMs,bytes):BLOCK_TEXT_MS;\n```\nCon 18 min quedan 2 partes de ~9 min (wholeMax=half?target:blockMax sigue igual). Para OpenAI half siempre es false, así que nada cambia. Otra opción: en process(), si el 413 llegó en SINGLE, lanzar un UserAction para que keepPrevious() devuelva la versión anterior sin cobrar otra pasada."
+ },
+ {
+  "area": "engine",
+  "title": "La reducción por 413 descarta partes ya cobradas y borra su costo de «costUsd»",
+  "file": "app/src/main/java/cl/vozlocal/app/Transcriber.java",
+  "line": 235,
+  "real": true,
+  "severity": "baja",
+  "reason": "Confirmado. La parte 1 va sola y, si vuelve bien, block() suma su costo a costUsd y guarda su punto de control. Las partes 2 a n van en paralelo con las anclas (unos 0,9 MB más de FLAC), y el bucle de futures espera a todas antes de `throw first`: si una recibe 413 (TooLarge, que block() relanza), las que sí cupieron igual se cobran y se guardan. process() marca orHalf y llama a transcribe(). Como el perfil ahora lleva otro target y «|half», corren clearCheckpoints, clearBlocks y `.remove(\"costUsd\")`. Todo se vuelve a enviar y pagar, y el «Costo» sin «≈» (el pie de RecordingActivity dice «es lo que se cobró») muestra solo la segunda pasada. Requiere que el tope caiga entre el tamaño de una parte y el de otra (las anclas o los cortes en pausas cambian el tamaño): es angosto, pero posible. El reenvío completo sigue al diseño de perfiles; lo que es un error concreto es el costo informado de menos.",
+  "fix": "Arrastrar lo ya cobrado al reiniciar. En process():\n```java\ndouble paid=Math.max(0,st.optDouble(\"costUsd\",0));\nFilesStore.update(c,r.id,s->s.put(\"orHalf\",true).put(\"costCarry\",paid));\n```\nEn el reinicio de perfil (línea 235), cambiar `.remove(\"costUsd\")` por:\n```java\ndouble carry=s.optDouble(\"costCarry\",0);s.remove(\"costCarry\");if(carry>0)s.put(\"costUsd\",carry);else s.remove(\"costUsd\");\n```\nY agregar `s.remove(\"costCarry\")` en Retranscribe.prepare."
+ },
+ {
+  "area": "engine",
+  "title": "Si la parte 1 vuelve sin voces, toda la transcripción queda marcada como «sin voces»",
+  "file": "app/src/main/java/cl/vozlocal/app/Transcript.java",
+  "line": 247,
+  "real": true,
+  "severity": "baja",
+  "reason": "Confirmado. fromParts usa solo parts.get(0)._diarized. Ese código es igual al de 0.7, pero allí OpenAiClient ponía siempre _diarized=config.speakers, igual en todas las partes. En 0.8 OpenRouterClient.finish pone p.diarized por respuesta. Caso: parte 1 en silencio, sin voces guardadas (con voces guardadas las anclas son habla y la respuesta trae hablantes). Responde {\"text\":\"\"} o segments:[]: read() cae en la rama sin voces, diarized=false y no deja tramos. En Transcriber:273 no se sacan muestras, y las partes 2 y 3 vuelven con hablantes («block1:0», «block1:1»…). El Transcript se guarda con diarized=false: speakers() rotula todo «Texto», buildDone no ofrece «Revisar voces» y Retranscribe.reason(CORRECTIONS) dice «Esta versión no tiene voces separadas». Al revés (una parte k sin hablantes con la parte 1 con voces) aparece una «Persona N» con id «blockk:text».",
+  "fix": "En Transcript.fromParts, calcular diarized como «alguna parte vino con voces»:\n```java\nboolean diarized=parts.isEmpty();for(JSONObject part:parts)if(part.optBoolean(\"_diarized\",true)){diarized=true;break;}\n... .put(\"diarized\",diarized) ...\n```\nCon OpenAI o el servidor compatible todas las partes traen el mismo valor (config.speakers), así que el resultado no cambia."
+ },
+ {
+  "area": "engine",
+  "title": "«orHalf» queda pegado a la grabación aunque se cambie de modelo y se pulse Reintentar",
+  "file": "app/src/main/java/cl/vozlocal/app/Transcriber.java",
+  "line": 207,
+  "real": true,
+  "severity": "baja",
+  "reason": "Confirmado. Solo Retranscribe.prepare borra orHalf; Pipeline.request (Reintentar) no lo toca. Tras 413, mitad y otro 413, process() relanza TooLarge, que como UserAction deja failed=true y pide atención. Si el usuario cambia de modelo de OpenRouter y reintenta, transcribe() lee half=true y corta a la mitad para el modelo nuevo: más uniones donde las voces se pueden cruzar. Los topes sí dependen del modelo (PLAN: Fish 20 MB, MAI 250 MB), así que la marca de un modelo no vale para otro, y el propio comentario de Retranscribe.prepare dice que el 413 «es cosa de ese intento y de ese modelo». El daño es menor: más partes, sin fallo ni cobro extra.",
+  "fix": "Atar la marca al modelo que recibió el 413. En process():\n```java\nif(!\"openrouter\".equals(st.optString(\"provider\"))||st.optString(\"model\").equals(st.optString(\"orHalf\")))throw e;\n... FilesStore.update(c,r.id,s->s.put(\"orHalf\",st.optString(\"model\")));\n```\nEn transcribe(): `half=router&&config.model.equals(initial.optString(\"orHalf\"))`."
+ },
+ {
+  "area": "catalog-settings",
+  "title": "«Comprobar conexión» puede enviar la clave de OpenAI (o la del servidor propio) a openrouter.ai si se cambia de proveedor mientras la comprobación espera en cola",
+  "file": "C:/Users/Konra/Desktop/Digital Home/Casa Digital 2026/Proyectos 2026/14-App grabar y transcribir/app/src/main/java/cl/vozlocal/app/SettingsActivity.java",
+  "line": 581,
+  "real": true,
+  "severity": "media",
+  "reason": "Confirmado en el código. verify() fija `router=settings.openRouter()` en el hilo principal (línea 573), pero la clave se lee dentro de la tarea de `io` con `settings.apiKey()` (línea 581). Settings.apiKey() usa `prefix()`, que depende del proveedor vigente EN ESE MOMENTO (Settings.java:114). `io` es un ejecutor de un solo hilo que comparten loadCatalog() (línea 667: conexión de hasta 30 s más lectura de hasta 30 s, y no se corta al cerrar la hoja), refreshFolder() (consulta al proveedor de Drive en cada render), offerDatesForExisting() y report(). Mientras la tarea espera en la cola, la fila Proveedor sigue activa. Elegir OpenAI ejecuta switchProvider → changed → render, que no cancela la comprobación ni cambia `verifying`. Cuando la tarea corre, `router` sigue en true y apiKey() devuelve la clave con prefijo \"\" (OpenAI) o \"custom_\". HttpApi.request la pone como `Authorization: Bearer` (HttpApi.java:52) y Models.checkKey y Models.credits la mandan a https://openrouter.ai/api/v1/key y /credits. En la otra dirección no se filtra nada, porque settings.config() lee la base y la clave juntas. La ventana es angosta, pero real.",
+  "fix": "En la rama de OpenRouter, línea 581: `String key=settings.openRouterKey();` en vez de `settings.apiKey()`, así siempre se usa la clave con prefijo \"openrouter_\". Además, al empezar la tarea en `io`: `if(!verifyTarget().equals(target)){runOnUiThread(()->{verifying=false;paintVerify();});return;}`. Así se descarta una comprobación que ya no corresponde al proveedor vigente."
+ },
+ {
+  "area": "catalog-settings",
+  "title": "Ajustes queda desactualizado al volver de «Ver la bienvenida», y la fila vieja «Servidor y modelo» puede borrar la clave nueva de OpenRouter",
+  "file": "C:/Users/Konra/Desktop/Digital Home/Casa Digital 2026/Proyectos 2026/14-App grabar y transcribir/app/src/main/java/cl/vozlocal/app/SettingsActivity.java",
+  "line": 56,
+  "real": true,
+  "severity": "media",
+  "reason": "Confirmado. OnboardingActivity.open(this,true) (línea 171) abre la bienvenida encima de Ajustes, con launchMode estándar. En el modo repaso, submitKey → applyKey (OnboardingActivity.java:121-129) guarda la clave, escribe `provider` y puede cambiar `noteProvider` y borrar `noteModel`. Desde «Listo», openSettings abre OTRA instancia de SettingsActivity para grabar la voz o elegir 0-Inbox. Al cerrar la bienvenida vuelve la instancia original, cuyo onResume() (línea 56) solo actualiza batteryRow. Screen.onResume solo recrea la pantalla si cambió el tema. Por eso quedan viejos el proveedor, las filas de modelo y de clave, la tarjeta de estado, «IA de la nota», «Voces conocidas» y «Guardado rápido». El caso peor también ocurre: con proveedor «Servidor compatible», la bienvenida parte en la tarjeta OpenRouter (línea 207), porque el proveedor no es openai. Si se pega una clave de OpenRouter, applyKey deja provider=openrouter. De vuelta en Ajustes sigue a la vista la fila «Servidor y modelo». Al tocarla y cambiar la URL, custom() ejecuta `settings.saveKey(\"\")` (línea 625), que usa prefix()=\"openrouter_\" y borra la clave de OpenRouter recién guardada, no la del servidor.",
+  "fix": "1) Rehacer la pantalla al volver de la bienvenida: un campo `private boolean replayed;`, poner `replayed=true` en el onClick de la línea 171 antes de OnboardingActivity.open, y en onResume() `if(replayed){replayed=false;render();}`. 2) En custom(), línea 625, borrar con un prefijo fijo: `if(moved)settings.saveKeyFor(\"custom\",\"\");`. Así nunca toca la clave de otro proveedor."
+ },
+ {
+  "area": "catalog-settings",
+  "title": "Los textos dicen «ya probado» y «Probados por Verbapp», pero ningún modelo se probó y la lista muestra modelos «Sin confirmar»",
+  "file": "C:/Users/Konra/Desktop/Digital Home/Casa Digital 2026/Proyectos 2026/14-App grabar y transcribir/app/src/main/java/cl/vozlocal/app/SettingsActivity.java",
+  "line": 768,
+  "real": true,
+  "severity": "baja",
+  "reason": "Confirmado como texto que promete algo que el código no garantiza. En el código, «probado» solo significa estar en TABLE (Models.known), y la cabecera de Models.java (línea 30) dice que nada se probó contra la red. En la hoja «Modelo solo texto», la sección «Probados por Verbapp» (línea 741) siempre lista Gemini 3.5, Grok STT, Fish y Voxtral con la píldora «Sin confirmar» (verified=false, línea 793), así que la misma hoja se contradice. Además, Models.auto() tiene un segundo lazo (Models.java:315) que elige el primer modelo de TABLE que sirva. Si el catálogo no trae MAI-2 ni Nova-3, o ambos se retiran en menos de 30 días, Automático con voces cae en google/gemini-3.5-transcribe, con verified=false. La tarjeta dice entonces «El mejor modelo ya probado … Hoy usa Gemini 3.5 Transcribe». Un detalle del escenario original no calza: en la hoja «con voces» el título de la sección es «Modelos que separan voces», no «Probados por Verbapp». Lo de fondo se mantiene.",
+  "fix": "Cambiar los textos por lo que el código garantiza. Línea 768: «El modelo recomendado por Verbapp. Si OpenRouter lo retira, pasa solo al siguiente.». Línea 741: «Conocidos por Verbapp». Línea 139: «usa el modelo que Verbapp recomienda». En autoCard, si `!Models.recipe(id).verified`, agregar «· sin confirmar» a `today`."
+ },
+ {
+  "area": "catalog-settings",
+  "title": "La tarjeta de estado dice «Listo para transcribir» aunque la comprobación guardó que la clave de OpenRouter no tiene saldo",
+  "file": "C:/Users/Konra/Desktop/Digital Home/Casa Digital 2026/Proyectos 2026/14-App grabar y transcribir/app/src/main/java/cl/vozlocal/app/SettingsActivity.java",
+  "line": 189,
+  "real": true,
+  "severity": "baja",
+  "reason": "Confirmado. statusCard() calcula `ready=hasKey&&!server&&!failed` y nunca mira noBalance() (línea 566). Con OpenRouter, verifyOk=true y verifyBalance ≤ 0,005 (sea `limit_remaining`=0 o créditos totales menos usados ≈ 0), verifyText() pinta en rojo «✓ Clave válida · sin saldo: carga créditos en openrouter.ai». Al mismo tiempo, la tarjeta de arriba muestra el panel blanco con ✓ «Listo para transcribir · OpenRouter · …», sin toque ni salida. Las transcripciones fallarán por falta de saldo. La misma pantalla dice dos cosas opuestas.",
+  "fix": "En statusCard(): `boolean empty=hasKey&&!server&&!failed&&noBalance(),ready=hasKey&&!server&&!failed&&!empty;`. Si `empty`, título «Sin saldo en OpenRouter», detalle «Carga créditos en openrouter.ai y vuelve a comprobar», panel menta con flecha, y al tocarlo `verify()` (o un message con la explicación). Mismo trato que el paso faltante."
+ },
+ {
+  "area": "catalog-settings",
+  "title": "Si «Automático» cambia de modelo durante una transcripción por partes interrumpida, se descartan los bloques ya pagados y se cobran de nuevo",
+  "file": "C:/Users/Konra/Desktop/Digital Home/Casa Digital 2026/Proyectos 2026/14-App grabar y transcribir/app/src/main/java/cl/vozlocal/app/Models.java",
+  "line": 202,
+  "real": true,
+  "severity": "baja",
+  "reason": "La ruta existe tal como se describe. Transcriber.transcribe arma `config=settings.config(wantSpeakers)` en cada intento (Transcriber.java:205), y Models.chosen resuelve Automático leyendo orAutoSpeakers/orAutoText en ese momento. El perfil incluye config.fingerprint(), que contiene el modelo (ProviderConfig.java:13). Si VozApp.onCreate → refreshIfStale → refresh() reescribe orAutoSpeakers entre dos intentos (Models.java:202), porque MAI-2 salió del catálogo o se retira en menos de 30 días, el perfil ya no coincide. Entonces Transcriber.java:230-235 borra los puntos de control, los bloques y `costUsd`, y vuelve a enviar todo con el otro modelo. Nada en el estado fija el modelo resuelto. Es raro: necesita que el cambio de Automático (pocas veces al año) coincida con un trabajo cortado. En el caso «se retira en menos de 30 días», el modelo anterior sigue funcionando, así que el cobro repetido no era necesario.",
+  "fix": "En Transcriber.transcribe, antes del cálculo del perfil: si el proveedor es OpenRouter, la preferencia del modo vale Models.AUTO, el estado tiene `provider`=\"openrouter\", `blocksDone`>0 y su `model` sigue en `Models.find(Models.cached(c),model)` (no retirado), usar ese modelo en vez del recién resuelto (`config=new ProviderConfig(\"openrouter\",Models.BASE,savedModel,config.key,config.speakers&&Models.recipe(savedModel).diarizes)`). Si el modelo guardado ya no está en el catálogo, se mantiene el comportamiento actual."
+ },
+ {
+  "area": "catalog-settings",
+  "title": "Cambiar de proveedor de transcripción borra el modelo de la nota escrito a mano, y no vuelve al regresar",
+  "file": "C:/Users/Konra/Desktop/Digital Home/Casa Digital 2026/Proyectos 2026/14-App grabar y transcribir/app/src/main/java/cl/vozlocal/app/SettingsActivity.java",
+  "line": 488,
+  "real": true,
+  "severity": "baja",
+  "reason": "Confirmado. Si no existe la preferencia `noteProvider` y el cambio cruza OpenRouter ↔ otro proveedor, switchProvider ejecuta `e.remove(\"noteModel\")`. Ejemplo: alguien que viene de 0.7 con OpenAI y escribió `gpt-5.5-mini` como modelo de la nota, sin haber elegido nunca la IA. En 0.7 no existía este borrado: la línea 386 de b0cbd94 solo hacía set(\"provider\"). Al elegir OpenRouter y volver a OpenAI pierde su modelo sin aviso. Al revés pasa lo mismo: con OpenRouter y GPT Luna elegida (`~openai/gpt-luna-latest`), ir a OpenAI y volver la deja en Claude Sonnet. Además, Sheet.choice ignora el toque en la opción ya marcada (`if(!selected)run.run()`, Sheet.java:146), así que no hay forma de fijar la IA implícita. El borrado es intencional según el comentario, pero innecesario para la corrección: Notes.model() ya descarta un modelo que no corresponde a la IA (routerModel exige «/», y OpenAI y Claude rechazan «/» y «~»). Solo sirve para que la fila no muestre un modelo ajeno.",
+  "fix": "Quitar `if(!settings.prefs.contains(\"noteProvider\")&&...)e.remove(\"noteModel\");` de switchProvider. Para que la pantalla no muestre un modelo que no se usará, en noteAiValue() y en la acción «Modelo:» de noteAiSheet usar el efectivo: `String m=Notes.model(settings,noteAi());if(m.equals(Notes.defaultModel(noteAi())))m=\"\";`. Lo ideal a futuro es guardar un modelo por IA (noteModel_openai / _openrouter / _anthropic)."
+ },
+ {
+  "area": "notes-onboarding",
+  "title": "La comprobación de la bienvenida no mira el saldo de la cuenta y deja en Ajustes un saldo falso",
+  "file": "app/src/main/java/cl/vozlocal/app/OnboardingActivity.java",
+  "line": 617,
+  "real": true,
+  "severity": "media",
+  "reason": "Confirmado, pero con otro escenario. La rama OpenRouter de startCheck (617) solo llama a Models.checkKey. validText(info) muestra info.remaining, que es limit_remaining: el tope que le queda a la clave, no el saldo de la cuenta. Además, ignora info.freeTier. saveVerify(…,k.remaining,…) guarda ese número en verifyBalance, y Ajustes lo muestra tal cual. SettingsActivity.verify (581-583) sí calcula min(remaining, Models.credits). Esto sí produce una diferencia. Ejemplo: cuenta que ya gastó sus créditos (total_credits=10, total_usage=10) y clave con tope de US$5. La bienvenida dice «Clave válida · quedan US$5,00» y lo deja guardado en Ajustes. «Comprobar conexión» diría «sin saldo». Lo mismo con US$0,40 en la cuenta: la bienvenida dice US$5,00 y Ajustes, US$0,40. El comentario de las líneas 135-136 promete lo contrario. El escenario exacto del hallazgo no se sostiene en un punto. En una cuenta nueva con total_credits=0, Models.credits devuelve NaN (línea 417: total<=0 → NaN). Por eso Ajustes TAMBIÉN diría «quedan US$5,00», no «sin saldo». En ese caso el error es de los dos lugares, y solo se corrige si se mira freeTier.",
+  "fix": "Mínima: (1) En startCheck, rama router: Checker checker=(h,k)->{Models.KeyInfo i=Models.checkKey(h,k);info[0]=i;double acc=Models.credits(h,k);bal[0]=Double.isNaN(acc)?i.remaining:Double.isNaN(i.remaining)?acc:Math.min(i.remaining,acc);return validText(bal[0],i.freeTier&&Double.isNaN(acc));}. Luego pasar bal[0] a saveVerify en lugar de k.remaining. (2) validText(double balance,boolean noCredits): si noCredits → «Clave válida, pero aún sin créditos: carga créditos en openrouter.ai.»; si balance es NaN → «Clave válida»; si no, la regla de NO_BALANCE y money. (3) En SettingsActivity.verifyText, dar prioridad a verifyFree cuando no se supo el saldo de la cuenta. Lo ideal es sacar a un helper estático compartido el cálculo de balance que hoy está en las líneas 581-583."
+ },
+ {
+  "area": "notes-onboarding",
+  "title": "Al volver a ver la bienvenida desde Ajustes, Ajustes queda mostrando el proveedor anterior",
+  "file": "app/src/main/java/cl/vozlocal/app/OnboardingActivity.java",
+  "line": 365,
+  "real": true,
+  "severity": "media",
+  "reason": "Confirmado. La fila «Ver la bienvenida» (SettingsActivity:171) abre OnboardingActivity.open(this,true) con startActivity, y Ajustes queda debajo. En el repaso se puede pegar una clave sk-or-: keyChanged elige la tarjeta OpenRouter y submitKey→applyKey escribe provider=openrouter. Si noteProvider no era openrouter (ni anthropic con su clave), applyKey también escribe noteProvider=openrouter y borra noteModel (línea 127). finishFlow hace finish() y Ajustes vuelve a onResume. Ese onResume (SettingsActivity:56) solo actualiza batteryRow, y Screen.onResume (Screen:28) solo recrea la pantalla si cambia el tema. No hay listener de preferencias. Resultado: siguen las filas de antes («Proveedor: OpenAI», «Modelo de texto», «Clave de API», la IA de la nota y el texto de verificación). Pero keySheet() (496) y verify() leen settings en vivo y ya actúan sobre OpenRouter.",
+  "fix": "En SettingsActivity: guardar en render() una huella, lastShown=shown(), con shown()=settings.provider()+\"|\"+settings.hasKey()+\"|\"+Notes.provider(settings)+\"|\"+settings.noteModel()+\"|\"+settings.orSpeakersModel()+\"|\"+settings.orTextModel()+\"|\"+settings.prefs.getString(\"myVoiceName\",\"\")+\"|\"+settings.prefs.getLong(\"verifyAt\",0). En onResume: if(lastShown!=null&&!shown().equals(lastShown))render(); (render ya se llama varias veces, por ejemplo al terminar verify)."
+ },
+ {
+  "area": "notes-onboarding",
+  "title": "El reintento simple de la nota quita max_tokens y puede provocar un 402 falso de «sin saldo»",
+  "file": "app/src/main/java/cl/vozlocal/app/Notes.java",
+  "line": 342,
+  "real": true,
+  "severity": "baja",
+  "reason": "Confirmado en el código. Con simple=true, openrouterBody devuelve solo model y messages (línea 342), sin max_tokens. optionRejected da true para cualquier 400 que no hable de contexto, saldo o modelo, incluido el genérico «Provider returned error». Por eso el modo simple no es tan raro. Sin max_tokens, OpenRouter calcula lo que puede costar el pedido con el máximo de salida del modelo. Si la cuenta tiene poco saldo, responde 402 («requires more credits, or fewer max_tokens»). Notes.require (427) lo traduce a «No queda saldo en OpenRouter…» aunque la nota con 8000 tokens sí alcanzaba. Hacen falta dos condiciones (un 400 primero y poco saldo), así que el impacto es bajo.",
+  "fix": "En openrouterBody, poner .put(\"max_tokens\",8000) antes de `if(simple)return body;`, para que el modo simple quite solo response_format y reasoning."
+ },
+ {
+  "area": "notes-onboarding",
+  "title": "Un 404 de OpenRouter por la política de privacidad de la cuenta se explica como «modelo retirado»",
+  "file": "app/src/main/java/cl/vozlocal/app/Notes.java",
+  "line": 434,
+  "real": true,
+  "severity": "baja",
+  "reason": "Confirmado. En Notes.require, toda respuesta con router==true y code==404 cae en la línea 434: «El modelo de la nota (…) ya no está disponible en OpenRouter. Elige otro en Ajustes.». No se revisa si el mensaje habla de la política de datos. OpenRouter responde 404 «No endpoints found matching your data policy…» cuando la privacidad de la cuenta descarta a todos los proveedores. Ese texto viene en error.message, que require ya pasa a minúsculas en la variable message. HttpApi.require (línea 136), en el mismo diff, sí distingue «data policy»/«privacy». La persona cambiaría de modelo sin resolver nada.",
+  "fix": "En Notes.require, antes de la línea 434: else if(router&&res.code==404&&(message.contains(\"data policy\")||message.contains(\"privacy\")))why=\"OpenRouter no tiene un proveedor para ese modelo con la privacidad que elegiste en tu cuenta. Revísala en openrouter.ai (Ajustes → Privacidad) o elige otro modelo en Ajustes.\";"
+ },
+ {
+  "area": "notes-onboarding",
+  "title": "optionRejected y Notes.require no leen error.metadata.raw de OpenRouter",
+  "file": "app/src/main/java/cl/vozlocal/app/Notes.java",
+  "line": 374,
+  "real": true,
+  "severity": "baja",
+  "reason": "Confirmado en el código. optionRejected (374) y Notes.require (422) solo leen error.message. Si OpenRouter pasa el error del proveedor final como {\"message\":\"Provider returned error\",\"metadata\":{\"raw\":\"prompt is too long…\"}}, pasa esto: optionRejected no ve «too long» y da true, así que se hace un segundo pedido (un 400 no se cobra, pero hace perder tiempo). Después require cae en el texto genérico de la línea 437 en vez del de «demasiado larga». HttpApi.require (125), en el mismo diff, sí une message y metadata.raw. El caso más común (OpenRouter mide el contexto antes de enviar y lo dice en message) sí se detecta. Por eso el impacto es bajo.",
+  "fix": "En las dos funciones: JSONObject meta=e.optJSONObject(\"metadata\");String m=(e.optString(\"message\")+\" \"+(meta==null?\"\":meta.optString(\"raw\"))).toLowerCase(Locale.ROOT); y buscar «context», «too long», «credit», etc. en ese texto."
+ },
+ {
+  "area": "notes-onboarding",
+  "title": "Un usage.cost de 0 se muestra como «costó US$0,000»",
+  "file": "app/src/main/java/cl/vozlocal/app/Notes.java",
+  "line": 194,
+  "real": true,
+  "severity": "baja",
+  "reason": "Confirmado. Con usage.cost=0, chatAnswer devuelve cost=0 (línea 325: cost>=0?cost:-1). generate guarda costUsd=0 y costReal=true (194). credit() muestra «costó » + Pricing.usd(0), y usd(0) da «US$0,000» porque el caso «< US$0,001» exige value>0. Con BYOK (sin comisión, según PLAN-openrouter), OpenRouter informa cost=0 aunque el proveedor sí cobró en la cuenta propia. Pricing.real, que es la regla de la transcripción, trata un 0 justamente como «dato que no vino». Las dos reglas no coinciden. Con un modelo :free, el 0 sería cierto, pero ese no es el caso por defecto.",
+  "fix": "En Notes.chatAnswer, línea 325: devolver cost>0?cost:-1 (la misma regla de Pricing.real). Así un 0 cae en el estimado o en no mostrar costo."
+ },
+ {
+  "area": "notes-onboarding",
+  "title": "Los estimados de OpenRouter no cuentan las anclas que se cobran en cada bloque",
+  "file": "app/src/main/java/cl/vozlocal/app/RecordingActions.java",
+  "line": 280,
+  "real": true,
+  "severity": "baja",
+  "reason": "Confirmado. OpenRouterClient.transcribe antepone las anclas en CADA envío: OrAudio deja cada clip y 1 s de silencio (GAP_MS), con clips de hasta 15 s; las muestras de voz son de unos 10 s. Con 4 voces son unos 44 s más por bloque, y OpenRouter cobra por segundo u hora de audio enviado. askSpeakers (280), showNew (RecordingActivity:510) y la grilla stats (RecordingActivity:669-673) estiman con r.duration o audioMs, sin las anclas. Con 1 min de audio a US$0,10/h se cobran unos 104 s: Pricing.real da «US$0,003» y el total estimado da «≈US$0,002». La grilla muestra entonces más gasto que el total estimado. Es un estimado con «≈», así que el impacto es bajo.",
+  "fix": "Agregar un helper, por ejemplo Pricing.orBilledMs(Context,Settings,long durationMs,boolean speakers). Con OpenRouter, voces y Voices.selected no vacío, devuelve durationMs + bloques×Σ(min(ms de la muestra,OrAudio.ANCHOR_MAX_MS)+OrAudio.GAP_MS), con bloques=ceil(durationMs/Transcriber.orBlockMax(recipe,true)). Usarlo en el costo con voces de askSpeakers, showNew, RetranscribeSheet y el «total ≈» de stats."
+ },
+ {
+  "area": "notes-onboarding",
+  "title": "Terminar la bienvenida corta la comprobación de la clave: no se guarda el resultado ni se avisa de una clave mala",
+  "file": "app/src/main/java/cl/vozlocal/app/OnboardingActivity.java",
+  "line": 222,
+  "real": true,
+  "severity": "baja",
+  "reason": "Confirmado. Al tocar «Hacer mi primera grabación» unos 0,5 s después de Continuar (lo que permiten la animación y el bloqueo de 350 ms), finishFlow llama a finish(). En onDestroy, isFinishing() es true y se ejecuta c.http.cancel(). Desconectar hace fallar el pedido: verify devuelve UNKNOWN, y la condición `v.state!=UNKNOWN&&!c.http.cancelled` (621) impide saveVerify. Ajustes queda en «Confirma que tu clave funciona», y una clave rechazada no se informa (statusCard la muestra como lista). Esto va contra el comentario de 611-614. Además, el HttpApi de Check usa readTimeoutMs=240000 por defecto, mientras Ajustes pone 30000 para OpenRouter. Con una red trabada, «Comprobando tu clave…» puede quedar girando varios minutos. Dejar la comprobación viva no retiene la Activity: Settings solo guarda las SharedPreferences y c.screen pasa a null.",
+  "fix": "En onDestroy, dejar solo `if(c!=null&&c.screen==this)c.screen=null;` (sin cancel). La comprobación termina y guarda su resultado con saveVerify, y RESULTS.post no encuentra pantalla. Cancelar solo en startCheck, cuando se reemplaza. En startCheck, poner c.http.readTimeoutMs=30000 después de crear el Check."
+ },
+ {
+  "area": "notes-onboarding",
+  "title": "El nombre escrito en «Tú» se pierde si se toca «Saltar»",
+  "file": "app/src/main/java/cl/vozlocal/app/OnboardingActivity.java",
+  "line": 362,
+  "real": true,
+  "severity": "baja",
+  "reason": "Confirmado. saveName() solo se llama en advance() al pasar de YOU a AI (307). «Saltar» siempre está visible (skip, línea 241) y llama a finishFlow, que no guarda el nombre. Si se escribe «Konrad» en «Tú» y se toca «Saltar», el nombre queda solo en el campo name de la Activity y se pierde. Pasa lo mismo si se vuelve de AI a YOU con Atrás (go() no guarda), se corrige el nombre y se salta, o si se vuelve a WELCOME. saveName ignora un nombre vacío o igual al guardado, así que llamarlo de más no pisa nada.",
+  "fix": "En finishFlow, antes de complete(...): `saveName();`. Opcional: en go(), si step==YOU, llamar a saveName() antes de cambiar de paso."
+ }
+]

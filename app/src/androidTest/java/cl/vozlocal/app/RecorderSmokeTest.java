@@ -93,6 +93,7 @@ public class RecorderSmokeTest extends Instrumentation {
             OpenRouterChecks.run(c,r);
             ModelsChecks.run(c,r);
             OnboardingChecks.run(c,r);
+            MetricsChecks.run(c,r);
             long longStarted = SystemClock.elapsedRealtime();
             if (longChecks) LongImportChecks.run(c,r);
             String longResult = longChecks ? "one-hour AAC import/crop/cancel, WAV import, interrupted-import recovery (" + (SystemClock.elapsedRealtime() - longStarted) / 1000 + " s)" : "one-hour import checks SKIPPED (-e long false)";
