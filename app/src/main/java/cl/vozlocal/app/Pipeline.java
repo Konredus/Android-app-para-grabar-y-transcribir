@@ -162,13 +162,19 @@ final class Pipeline {
      * Intenta transcribir en primer plano (sigue con el teléfono bloqueado). Android 12+ solo lo permite
      * mientras la app está visible o desde ciertas acciones del usuario; si no se puede, devuelve false.
      */
-    static boolean startForeground(Context c){
+    static boolean startForeground(Context c){return startForeground(c,false);}
+    /**
+     * now: «Empezar ahora», un toque explícito. No le cede el turno a una transferencia que Android tiene retenida (por
+     * ejemplo, por el cargador): la cancela y empieza en primer plano; si Android no lo permite, vuelve a programar la tarea.
+     */
+    static boolean startForeground(Context c,boolean now){
         if(working())return true;
         if(!pending(c)||blocker(c)!=null)return false;
         // La transferencia iniciada por el usuario recién programada lo hará: dos trabajadores se pisarían.
-        if(userJobFresh(c))return true;
+        if(!now&&userJobFresh(c))return true;
+        if(now&&Build.VERSION.SDK_INT>=34){try{c.getSystemService(JobScheduler.class).cancel(USER_JOB_ID);}catch(RuntimeException ignored){}}
         try{c.startForegroundService(new Intent(c,TranscribeService.class));return true;}
-        catch(RuntimeException e){Diagnostics.event("transcribe_fgs_denied",null,"error_class",e.getClass().getSimpleName());return false;}
+        catch(RuntimeException e){Diagnostics.event("transcribe_fgs_denied",null,"error_class",e.getClass().getSimpleName());if(now)schedule(c,true);return false;}
     }
     /** Mensaje de espera de Wi-Fi (MainActivity corta lo que va entre paréntesis). */
     static final String WIFI_WAIT="esperando Wi-Fi (ahora usas datos móviles; puedes usarlos igual desde el detalle de la grabación)";

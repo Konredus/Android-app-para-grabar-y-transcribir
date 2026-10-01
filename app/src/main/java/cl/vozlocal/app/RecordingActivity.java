@@ -544,7 +544,7 @@ public class RecordingActivity extends Screen {
         upBar=new Meter(this,p.primary,p.primaryContainer);card.addView(upBar,new LinearLayout.LayoutParams(-1,ui.dp(8)));
         HorizontalScrollView hs=new HorizontalScrollView(this);hs.setHorizontalScrollBarEnabled(false);progStages=ui.row();hs.addView(progStages);card.addView(hs,ui.top(S4));
         conditions=ui.column();conditions.setPadding(0,ui.dp(S3),0,0);card.addView(conditions,Ui.fill());
-        startNow=ui.button("Empezar ahora",R.drawable.ic_play,Ui.Style.TONAL,v->{if(Pipeline.startForeground(this))toast("Transcribiendo en primer plano");else message("Empezar ahora","Android no permitió empezar todavía. Se hará automáticamente.");});
+        startNow=ui.button("Empezar ahora",R.drawable.ic_play,Ui.Style.TONAL,v->{if(Pipeline.startForeground(this,true))toast("Transcribiendo en primer plano");else message("Empezar ahora","Android no permitió empezar todavía. Se hará automáticamente.");});
         card.addView(startNow,ui.top(S3));
         View div=new View(this);div.setBackgroundColor(p.outlineVariant);LinearLayout.LayoutParams dl=new LinearLayout.LayoutParams(-1,Math.max(1,ui.dp(1)));dl.topMargin=ui.dp(S4);card.addView(div,dl);
         progNote=ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant);progNote.setPadding(0,ui.dp(S3),0,0);card.addView(progNote);

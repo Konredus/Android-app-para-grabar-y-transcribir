@@ -879,7 +879,8 @@ public class MainActivity extends Screen {
                     i.fresh=!i.state.has("opened")&&modified>since;
                     try{i.savedAt=Inbox.savedAt(app,r.id);i.outdated=i.savedAt>0&&Inbox.outdated(app,r.id);}catch(Exception ignored){}
                 }
-                if(r.created>=weekFrom){wk.count++;wk.ms+=Math.max(0,r.duration);if(FilesStore.file(app,r.id,".note.json").isFile())wk.notes++;}
+                // Las demostraciones no cuentan, igual que en «Tus métricas» (Metrics.compute): la tarjeta abre esa pantalla.
+                if(r.created>=weekFrom&&!i.state.optBoolean("demo")){wk.count++;wk.ms+=Math.max(0,r.duration);if(FilesStore.file(app,r.id,".note.json").isFile())wk.notes++;}
                 loaded.add(i);
             }
             if(!loaded.isEmpty())try{loaded.get(0).next=Next.of(app,loaded.get(0).r);}catch(Throwable ignored){}
