@@ -27,6 +27,9 @@ TÚ CONTROLAS TUS DATOS
 • El audio sale de tu teléfono solo cuando pides transcribir (o activas la transcripción automática) y va a OpenRouter con tu propia clave.
 • Envía «Solo con Wi-Fi», o usa datos móviles solo para una grabación cuando lo necesites.
 
+EN TU IDIOMA
+• Español, inglés y portugués de Brasil. Verbapp parte en el idioma de tu teléfono y lo cambias cuando quieras.
+
 CÓMO EMPEZAR
 Grabar es gratis y no necesita configuración. Para transcribir necesitas una clave de OpenRouter (openrouter.ai): con una sola clave transcribes y armas tus notas, y le pagas a OpenRouter solo lo que usas, sin suscripción. Según el modelo que elijas, una hora de audio cuesta desde unos US$0,10.
 

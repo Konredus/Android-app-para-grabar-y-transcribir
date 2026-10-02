@@ -12,6 +12,11 @@ Lo que se cargó en Play Console el 2026-10-02 (app «Verbapp: graba y transcrib
 - **Capturas de tablet 7" y 10" (1920×1080):** `capturas-tablet/tablet-01.png` a `04.png`
 - Los gráficos se generan con `store_assets.py` y `store_tablet.py` a partir de capturas del emulador.
 
+## Traducciones de la ficha (0.9.0)
+- **Inglés (en-US):** nombre «Verbapp: record & transcribe»; breve «Record offline, transcribe with AI, separate speakers and get ready-made notes.»; completa en `ficha-en.txt`.
+- **Portugués (pt-BR):** nombre «Verbapp: grave e transcreva»; breve «Grave sem internet e transcreva com IA, separando vozes e montando suas notas.»; completa en `ficha-pt.txt`.
+- La ficha en español suma la sección «EN TU IDIOMA».
+
 ## Configuración de la tienda
 - Categoría: Productividad.
 - Correo público: latribumaker@gmail.com.
@@ -20,6 +25,7 @@ Lo que se cargó en Play Console el 2026-10-02 (app «Verbapp: graba y transcrib
 ## Política de privacidad
 - Español: https://konredus.github.io/Android-app-para-grabar-y-transcribir/privacidad.html
 - Inglés: https://konredus.github.io/Android-app-para-grabar-y-transcribir/privacy.html
+- Portugués: https://konredus.github.io/Android-app-para-grabar-y-transcribir/privacidade.html
 - Se publica desde la rama `gh-pages` (copia en `web/`).
 
 ## Contenido de la app (10 declaraciones)

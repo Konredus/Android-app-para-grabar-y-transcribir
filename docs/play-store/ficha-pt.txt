@@ -1,0 +1,36 @@
+O Verbapp transforma o que você fala em texto que dá para guardar. Grave reuniões, ideias e conversas sem internet e, quando quiser, transcreva com inteligência artificial: cada pessoa com seu nome e uma nota pronta para o seu segundo cérebro.
+
+GRAVE COM UM TOQUE
+• Funciona sem internet: suas gravações ficam no seu celular.
+• Continua gravando com a tela bloqueada.
+• Marque os momentos-chave com ★ enquanto grava, até pela notificação.
+• Importe áudios do WhatsApp, de gravadores e de outros apps (M4A, MP3, WAV e mais).
+
+TRANSCREVA E SEPARE VOZES
+• Transcreva com os modelos de voz para texto mais recentes, pelo OpenRouter. A lista se atualiza sozinha e o “Automático” escolhe o recomendado.
+• Separa cada pessoa que fala e reconhece as vozes que você já conhece: a sua e as de quem mais conversa com você.
+• Corrija quem disse o quê com um toque, sempre com Desfazer.
+• Áudios longos são divididos em partes enviadas em paralelo.
+
+SEU SEGUNDO CÉREBRO
+• Uma nota com IA: resumo, decisões, tarefas e frases-chave.
+• Salve a nota (.md) ou o texto (.txt) com um toque na pasta que você escolher, como o seu 0-Inbox do Obsidian ou o Google Drive.
+• Copie, compartilhe ou exporte o que precisar.
+
+SUAS MÉTRICAS
+• Quanto você fala, suas sequências, a que horas grava e com quem conversa.
+• Quanto você já gastou com transcrições, com o custo real informado pelo OpenRouter.
+• Tudo é calculado no seu celular.
+
+VOCÊ CONTROLA SEUS DADOS
+• Sem conta, sem anúncios e sem rastreamento.
+• O áudio só sai do seu celular quando você pede uma transcrição (ou ativa a transcrição automática) e vai para o OpenRouter com a sua própria chave.
+• Envie só com Wi-Fi, ou use dados móveis para uma gravação quando precisar.
+
+NO SEU IDIOMA
+• Português do Brasil, inglês e espanhol. O Verbapp começa no idioma do seu celular, e você pode mudar quando quiser.
+
+COMO COMEÇAR
+Gravar é grátis e não precisa de configuração. Para transcrever, você precisa de uma chave do OpenRouter (openrouter.ai): com uma única chave você transcreve e cria suas notas, e paga ao OpenRouter só o que usar, sem assinatura. Dependendo do modelo escolhido, uma hora de áudio custa a partir de cerca de US$ 0,10.
+
+Feito para quem fala muito e quer guardar suas ideias: reuniões, aulas, entrevistas, notas de voz e conversas.
