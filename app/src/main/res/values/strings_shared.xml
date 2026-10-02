@@ -28,6 +28,10 @@
     <string name="retranscribe_choose_first">First choose which version to keep.</string>
     <string name="settings_no_server">Set your server\'s address in Settings.</string>
 
+    <!-- Errores de la clave (motor y nota): StatusText.aboutKey reconoce key_word; la bienvenida quita key_fix_in_settings. -->
+    <string name="key_word">key</string>
+    <string name="key_fix_in_settings">Check it in Settings.</string>
+
     <!-- Aviso y consentimiento antes del primer envío a OpenRouter (Google Play: divulgación destacada). -->
     <string name="consent_title">Your audio is sent to be transcribed</string>
     <string name="consent_body">To transcribe, Verbapp sends the audio of each recording you transcribe to OpenRouter and to the AI model you choose. To write the note, it sends the transcript text. Recordings you don\'t transcribe are never sent, and your key pays only for what you use.</string>

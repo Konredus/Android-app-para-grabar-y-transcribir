@@ -1,6 +1,5 @@
 package cl.vozlocal.app;
 
-import java.util.Locale;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -97,7 +96,9 @@ final class StatusText {
 
     // ---------- Errores de la clave (HttpApi, Models, Notes) ----------
     /** ¿El error habla de la clave? Así un fallo guardado de «Comprobar conexión» se trata como rechazo de la clave. */
-    static boolean aboutKey(String message){return message!=null&&message.toLowerCase(Locale.ROOT).contains("clave");}
+    static boolean aboutKey(String message){return Lang.containsAny(message,R.string.key_word);}
     /** El error sin el «Revísala en Ajustes.» del final (la bienvenida corrige la clave en el paso anterior, no en Ajustes). */
-    static String withoutSettingsHint(String message){return message==null?"":message.replace(" Revísala en Ajustes.","").trim();}
+    static String withoutSettingsHint(String message){
+        String m=message==null?"":message;for(String hint:Lang.all(R.string.key_fix_in_settings))m=m.replace(" "+hint,"");return m.trim();
+    }
 }

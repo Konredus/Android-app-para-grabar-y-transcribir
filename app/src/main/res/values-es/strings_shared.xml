@@ -17,6 +17,9 @@
     <string name="retranscribe_choose_first">Primero elige con qué versión te quedas.</string>
     <string name="settings_no_server">Configura la dirección de tu servidor en Ajustes.</string>
 
+    <string name="key_word">clave</string>
+    <string name="key_fix_in_settings">Revísala en Ajustes.</string>
+
     <string name="consent_title">Tu audio se envía para transcribirlo</string>
     <string name="consent_body">Para transcribir, Verbapp envía el audio de cada grabación que transcribes a OpenRouter y al modelo de IA que elijas. Para escribir la nota, envía el texto de la transcripción. Las grabaciones que no transcribes nunca se envían, y tu clave paga solo lo que usas.</string>
     <string name="consent_accept">Acepto</string>

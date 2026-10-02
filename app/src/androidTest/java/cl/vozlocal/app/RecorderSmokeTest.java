@@ -37,6 +37,8 @@ public class RecorderSmokeTest extends Instrumentation {
         try {
             // La bienvenida (0.8.0) solo aparece en la primera instalación: aquí se da por vista para probar Grabar.
             new Settings(c).prefs.edit().putBoolean("welcomed", true).commit();
+            // 0.9.0: el aviso de envío a OpenRouter (Consent) se da por aceptado; OnboardingChecks prueba el aviso en sí.
+            Consent.accept(c);
             Activity activity = startActivitySync(new Intent(c, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             waitForIdleSync(); Thread.sleep(700);
             command(c, "START"); Thread.sleep(3000);
