@@ -52,6 +52,13 @@ public class RecorderService extends Service {
     private MediaRecorder recorder;
     private Recording recording;
     private PowerManager.WakeLock wakeLock;
+    /**
+     * Wake lock con plazo (0.9.0, Google Play no acepta uno tomado sin tope): cada toma vence sola a los 10 min y, mientras
+     * se graba, se renueva cada 5. Al detener se suelta como siempre. Sin contar referencias: cada toma renueva el plazo.
+     */
+    static final long WAKE_MS = 10 * 60_000L, WAKE_RENEW_MS = 5 * 60_000L;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable keepAwake = new Runnable() { @Override public void run() { PowerManager.WakeLock w = wakeLock; if (recorder != null && w != null) { w.acquire(WAKE_MS); handler.postDelayed(this, WAKE_RENEW_MS); } } };
     private static RecorderService instance;
     static int amplitude() { try { return instance != null && instance.recorder != null && !paused ? instance.recorder.getMaxAmplitude() : 0; } catch (RuntimeException e) { return 0; } }
     static long elapsed() { return accumulated + (activeId != null && !paused ? SystemClock.elapsedRealtime() - started : 0); }
@@ -59,7 +66,7 @@ public class RecorderService extends Service {
     @Override public void onCreate() {
         super.onCreate();
         instance = this;
-        NotificationChannel channel = new NotificationChannel("recording", "Grabación en curso", NotificationManager.IMPORTANCE_LOW);
+        NotificationChannel channel = new NotificationChannel("recording", Lang.str(this, R.string.eng_channel_recording), NotificationManager.IMPORTANCE_LOW);
         channel.setSound(null, null); channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
         getSystemService(NotificationManager.class).createNotificationChannel(channel);
     }
@@ -88,19 +95,19 @@ public class RecorderService extends Service {
         PendingIntent toggle = isPaused ? command(c, 3, new Intent(c, RecorderService.class).setAction("RESUME"))
             : command(c, 2, new Intent(c, RecorderService.class).setAction("PAUSE").putExtra("toggle", false));
         PendingIntent mark = command(c, 4, new Intent(c, RecorderService.class).setAction("MARK"));
-        String marked = marks > 0 ? "★ " + Marks.describe(marks) : null;
+        String marked = marks > 0 ? Lang.plural(c, R.plurals.eng_rec_marks, marks) : null;
         Notification.Builder b = new Notification.Builder(c, "recording").setSmallIcon(cl.vozlocal.app.R.drawable.ic_notification).setColor(0xFF2F6B58)
             .setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true)
             .setVisibility(Notification.VISIBILITY_PUBLIC);
-        if (isPaused) b.setContentTitle("En pausa · " + Recording.time(elapsedMs))
-            .setContentText(marked != null ? marked : "Toca Reanudar para seguir grabando")
+        if (isPaused) b.setContentTitle(Lang.str(c, R.string.eng_rec_paused_title, Recording.time(elapsedMs)))
+            .setContentText(marked != null ? marked : Lang.str(c, R.string.eng_rec_paused_text))
             .setUsesChronometer(false).setShowWhen(false);
-        else b.setContentTitle("Grabando")
-            .setContentText(marked != null ? marked : "Audio guardado en este teléfono")
+        else b.setContentTitle(Lang.str(c, R.string.eng_rec_title))
+            .setContentText(marked != null ? marked : Lang.str(c, R.string.eng_rec_text))
             .setUsesChronometer(true).setShowWhen(true).setWhen(System.currentTimeMillis() - Math.max(0, elapsedMs));
-        b.addAction(action(c, isPaused ? cl.vozlocal.app.R.drawable.ic_play : cl.vozlocal.app.R.drawable.ic_pause, isPaused ? "Reanudar" : "Pausar", toggle))
-            .addAction(action(c, drawable(c, "ic_star"), "★ Marcar", mark))
-            .addAction(action(c, drawable(c, "ic_stop"), "Detener y guardar", stop));
+        b.addAction(action(c, isPaused ? cl.vozlocal.app.R.drawable.ic_play : cl.vozlocal.app.R.drawable.ic_pause, Lang.str(c, isPaused ? R.string.eng_rec_resume : R.string.eng_rec_pause), toggle))
+            .addAction(action(c, drawable(c, "ic_star"), Lang.str(c, R.string.eng_rec_mark), mark))
+            .addAction(action(c, drawable(c, "ic_stop"), Lang.str(c, R.string.eng_rec_stop), stop));
         if (Build.VERSION.SDK_INT >= 31) b.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
         return b.build();
     }
@@ -138,14 +145,14 @@ public class RecorderService extends Service {
             recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
             recorder.setAudioEncodingBitRate(96000); recorder.setAudioSamplingRate(44100); recorder.setAudioChannels(1);
             recorder.setOutputFile(recording.audio(this).getAbsolutePath());
-            recorder.setOnErrorListener((r,w,e) -> { error = "El micrófono se interrumpió. Revisa el audio guardado."; finishRecording(); stopSelf(); });
+            recorder.setOnErrorListener((r,w,e) -> { error = Lang.str(this, R.string.eng_rec_err_mic); finishRecording(); stopSelf(); });
             recorder.prepare(); recorder.start(); started = SystemClock.elapsedRealtime(); startedAtMs = started;Diagnostics.event("recording_started",activeId);
             refresh(); // el cronómetro de la notificación parte ahora, no al preparar el micrófono
             getSystemService(android.app.job.JobScheduler.class).cancel(Pipeline.JOB_ID);
             wakeLock = getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "VozLocal:Recording");
-            wakeLock.acquire();
+            wakeLock.setReferenceCounted(false); wakeLock.acquire(WAKE_MS); handler.postDelayed(keepAwake, WAKE_RENEW_MS);
         } catch (Exception e) {
-            Diagnostics.event("recorder_failure",activeId,"error_class",e.getClass().getSimpleName());error = "No se pudo iniciar la grabación. Revisa el permiso del micrófono y el espacio disponible.";
+            Diagnostics.event("recorder_failure",activeId,"error_class",e.getClass().getSimpleName());error = Lang.str(this, R.string.eng_rec_err_start);
             if (recorder != null) { recorder.release(); recorder = null; }
             if (recording != null) discard(recording.id);
             activeId = null; recording = null; clearMarks(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf();
@@ -154,12 +161,12 @@ public class RecorderService extends Service {
     private void pause() {
         if (paused) return;
         try { long duration = elapsed(); recorder.pause(); accumulated = duration; paused = true; refresh(); }
-        catch (RuntimeException e) { error = "No se pudo cambiar la pausa. Detén y guarda la grabación."; }
+        catch (RuntimeException e) { error = Lang.str(this, R.string.eng_rec_err_pause); }
     }
     private void resume() {
         if (!paused) return;
         try { recorder.resume(); started = SystemClock.elapsedRealtime(); paused = false; refresh(); }
-        catch (RuntimeException e) { error = "No se pudo cambiar la pausa. Detén y guarda la grabación."; }
+        catch (RuntimeException e) { error = Lang.str(this, R.string.eng_rec_err_pause); }
     }
 
     /**
@@ -220,16 +227,16 @@ public class RecorderService extends Service {
         if (recorder == null) return;
         long duration = elapsed(); boolean valid = false;
         try { recorder.stop(); valid = true; }
-        catch (RuntimeException e) { error = "La grabación fue demasiado corta o se interrumpió. No se pudo guardar."; }
-        finally { recorder.release(); recorder = null; if (wakeLock != null && wakeLock.isHeld()) wakeLock.release(); }
+        catch (RuntimeException e) { error = Lang.str(this, R.string.eng_rec_err_short); }
+        finally { recorder.release(); recorder = null; handler.removeCallbacks(keepAwake); if (wakeLock != null && wakeLock.isHeld()) wakeLock.release(); }
         // Un toque accidental (menos de 3 s) no se guarda ni se envía a transcribir: es un error, no una grabación. Sus ★ se van con ella.
         if (valid && recording != null && duration < MIN_MS) {
-            valid = false; discard(recording.id); notice = "Grabación muy corta (menos de 3 s) · no se guardó";
+            valid = false; discard(recording.id); notice = Lang.str(this, R.string.eng_rec_too_short);
             Diagnostics.event("recording_discarded", recording.id, "duration_ms", duration);
         }
         else if (recording != null) {
             if (valid) {
-                recording.duration = duration; try { recording.save(this); } catch (Exception e) { error = "El audio se guardó, pero no su título. Aparecerá como audio recuperado."; }
+                recording.duration = duration; try { recording.save(this); } catch (Exception e) { error = Lang.str(this, R.string.eng_rec_err_title); }
                 JSONArray marks = marksJson();
                 if (marks.length() > 0) { try { Marks.setAll(this, recording.id, marks); } catch (Exception ignored) { } Diagnostics.event("recording_marks", recording.id, "count", marks.length()); }
             }

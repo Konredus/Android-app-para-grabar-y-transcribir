@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Motor de transcripción (0.9.0): esperas, estados, bitácora de cada grabación, notificaciones y errores de la API.
+  Inglés aquí (el respaldo); español en values-es (el texto de siempre, letra por letra); portugués de Brasil en values-pt.
+
+  Muchos de estos textos se guardan (la bitácora, el estado, el último error) y se vuelven a leer más tarde, quizá en otro
+  idioma: StatusText los reconoce en los tres comparando con estos mismos recursos. Por eso, en cada idioma:
+  - las partes de una línea van separadas por « · » (StatusText.human las corta ahí);
+  - «tardó …», «se envían …» y «tiempo total …» son recursos aparte (eng_frag_*), que el titular salta;
+  - el motivo de una espera empieza con eng_waiting_word («esperando», «waiting for», «aguardando»), que la nota del
+    detalle quita, y lo que va entre paréntesis al final se puede cortar sin perder el sentido;
+  - se dice «parte», nunca «bloque».
+-->
+<resources>
+    <!-- Esperas (Pipeline.blocker) -->
+    <string name="eng_wait_internet">waiting for an internet connection</string>
+    <string name="eng_wait_charger">waiting for you to plug in the charger</string>
+    <string name="eng_wait_battery">waiting for you to charge (low battery)</string>
+    <string name="eng_waiting_word">waiting for</string>
+
+    <!-- Botón de una grabación pedida (StatusText.working) -->
+    <string name="eng_btn_working">Transcribing…</string>
+    <string name="eng_btn_working_again">Transcribing again…</string>
+    <string name="eng_btn_queued">Queued…</string>
+    <string name="eng_btn_wait_wifi">Waiting for Wi-Fi…</string>
+    <string name="eng_btn_wait_charger">Waiting for the charger…</string>
+    <string name="eng_btn_wait_connection">Waiting for a connection…</string>
+    <string name="eng_btn_battery_low">Low battery · on hold…</string>
+
+    <!-- En cola (bitácora, avisos breves y Biblioteca) -->
+    <string name="eng_queued">Queued</string>
+    <string name="eng_queued_wait">Queued · %1$s</string>
+    <string name="eng_queued_behind">Queued · starts when the current transcription finishes</string>
+    <string name="eng_queued_starting">Queued · starting</string>
+    <string name="eng_toast_doing">%1$s · keeps going even if you lock your phone</string>
+
+    <!-- Nota del detalle (StatusText.waitingNote) -->
+    <string name="eng_note_slow">This step is taking longer than usual. If it doesn\'t move, it stops and retries on its own; if that doesn\'t work, I\'ll let you know.</string>
+    <string name="eng_note_close_app">You can close the app: I\'ll let you know when it\'s ready.</string>
+    <string name="eng_note_waiting">Waiting for %1$s. It\'ll start on its own when that\'s ready; you can close the app.</string>
+    <string name="eng_note_behind">Queued: it starts when the current transcription finishes. You can close the app.</string>
+    <string name="eng_note_not_started">Android hasn\'t started it yet. It\'ll happen on its own, or tap “Start now”.</string>
+
+    <!-- Pedir, cancelar, detener -->
+    <string name="eng_err_demo">The sample recording isn\'t sent to the API.</string>
+    <string name="eng_log_again">Transcribe again: “%1$s” · the previous version is kept</string>
+    <plurals name="eng_log_again_people">
+        <item quantity="one">Transcribe again: “%1$s” · samples from %2$d person · the previous version is kept</item>
+        <item quantity="other">Transcribe again: “%1$s” · samples from %2$d people · the previous version is kept</item>
+    </plurals>
+    <string name="eng_log_mobile_ok">You\'ll use mobile data for this recording (%1$s) · the others stay on Wi-Fi only</string>
+    <string name="eng_log_cancelled">Transcription canceled</string>
+    <string name="eng_log_keep_previous">The previous version is kept</string>
+    <string name="eng_log_stopped">Stopped from the notification</string>
+    <string name="eng_action_stop">Stop</string>
+
+    <!-- Aviso «Esperando Wi-Fi» -->
+    <string name="eng_channel_processing">Transcriptions</string>
+    <string name="eng_notif_wifi_title">Waiting for Wi-Fi to transcribe</string>
+    <string name="eng_notif_wifi_text">“%1$s” is waiting for Wi-Fi because you chose “Wi-Fi only”. You can use mobile data just for this recording (%2$s).</string>
+    <string name="eng_notif_wifi_action">Use mobile data (%1$s)</string>
+
+    <!-- Ronda de trabajo (Transcriber.runAll) -->
+    <string name="eng_log_hold_recording">On hold: a recording is in progress</string>
+    <string name="eng_log_yield">Short pause to stay within Android\'s limit · continues right away</string>
+    <string name="eng_log_needs_foreground">%1$s takes longer than Android allows a background task · open the app to send it (it keeps going even if you lock your phone)</string>
+    <string name="eng_what_single">Without splitting: sending the whole audio</string>
+    <string name="eng_what_part">Sending part %1$d of %2$d</string>
+    <string name="eng_what_audio">Sending the audio</string>
+    <string name="eng_notif_attention_title">Transcription needs attention</string>
+    <string name="eng_log_phone_cut">The phone cut the connection (%1$s) · retrying without using up an attempt</string>
+    <string name="eng_log_phone_cut_hint">The phone cut the connection (%1$s) · retrying without using up an attempt · to avoid this, let Verbapp use the battery in the background</string>
+    <string name="eng_reason_repeated">%1$s (it happened too often: it now counts as an attempt)</string>
+    <string name="eng_log_attempt_failed_retry">Attempt %1$d of %2$d failed: %3$s · will retry (parts already done aren\'t sent again)</string>
+    <string name="eng_log_attempt_failed">Attempt %1$d of %2$d failed: %3$s</string>
+    <string name="eng_log_attempt_failed_button">Attempt %1$d of %2$d failed: %3$s · tap Retry</string>
+    <string name="eng_notif_failed_text">Couldn\'t transcribe after %1$d attempts: %2$s. Open the recording and tap Retry.</string>
+    <string name="eng_notif_cut_retry">Connection lost · retrying automatically</string>
+    <string name="eng_notif_attempt_retry">Attempt %1$d of %2$d didn\'t work · retrying automatically</string>
+    <string name="eng_log_wifi_lost">Wi-Fi dropped mid-upload · mobile data isn\'t used and the parts already done are kept%1$s</string>
+    <string name="eng_log_wifi_wait">Waiting for Wi-Fi · you\'re on mobile data now%1$s</string>
+    <string name="eng_log_mobile_hint">: you can use it for this recording from its details</string>
+    <string name="eng_notif_wifi_wait">Waiting for Wi-Fi · resumes on its own when it\'s back</string>
+
+    <!-- Causas de un intento fallido (Transcriber.describe y el vigilante) -->
+    <string name="eng_reason_phone_cut">screen locked or battery saver</string>
+    <string name="eng_reason_timeout">the provider didn\'t answer in time (the attempt may have been charged)</string>
+    <string name="eng_reason_no_server">couldn\'t reach the server</string>
+    <string name="eng_reason_ssl">the secure connection was interrupted</string>
+    <string name="eng_reason_paused">Android paused the work</string>
+    <string name="eng_reason_network">network error (%1$s)</string>
+    <string name="eng_reason_prepare_slow">preparing the audio took longer than %1$s</string>
+    <string name="eng_reason_upload_stalled">the upload stopped moving</string>
+    <string name="eng_reason_no_answer_router">OpenRouter didn\'t answer in %1$s; it usually takes under %2$s</string>
+    <string name="eng_reason_no_answer">no answer in %1$s; it usually takes under %2$s</string>
+    <string name="eng_log_frozen">Android froze the app for %1$s (battery saver with the screen locked)</string>
+
+    <!-- Versión anterior («Volver a transcribir») -->
+    <string name="eng_log_new_version_failed">Couldn\'t make the new version · the previous one is kept</string>
+    <string name="eng_notif_new_version_failed">Couldn\'t make the new version</string>
+    <string name="eng_notif_keep_previous_text">The previous one is kept · “%1$s”</string>
+
+    <!-- Transcribir una grabación (Transcriber.transcribe) -->
+    <string name="eng_log_halved">The provider didn\'t accept such a large upload · retrying with parts half the size (doesn\'t use up an attempt)</string>
+    <string name="eng_log_auto_kept">The automatic model changed its pick · this transcription finishes with the one it started with (parts already done aren\'t paid for again)</string>
+    <string name="eng_err_add_key">Add your OpenRouter key in Settings and tap Retry.</string>
+    <string name="eng_st_preparing_audio">Preparing audio</string>
+    <string name="eng_log_single">Without splitting: the whole audio goes in one upload · it takes longer, but there are no joins where voices can get mixed up</string>
+    <string name="eng_log_split">%1$s of audio split into %2$d parts of ~%3$d min, cut at pauses · %4$s</string>
+    <string name="eng_log_known">Known voices: %1$d · recognized from the start</string>
+    <string name="eng_log_known_mine">Known voices: %1$d (including yours) · recognized from the start</string>
+    <string name="eng_log_known_capped">Known voices: %1$d · recognized from the start (using %1$d of your %2$d: the maximum per audio)</string>
+    <string name="eng_log_known_mine_capped">Known voices: %1$d (including yours) · recognized from the start (using %1$d of your %2$d: the maximum per audio)</string>
+    <plurals name="eng_log_second_pass_parts">
+        <item quantity="one">Second pass: samples from %1$d person (from your corrections) go in every part from the start</item>
+        <item quantity="other">Second pass: samples from %1$d people (from your corrections) go in every part from the start</item>
+    </plurals>
+    <plurals name="eng_log_second_pass_single">
+        <item quantity="one">Second pass: samples from %1$d person (from your corrections) go in the upload from the start</item>
+        <item quantity="other">Second pass: samples from %1$d people (from your corrections) go in the upload from the start</item>
+    </plurals>
+    <string name="eng_log_second_pass_failed">Couldn\'t prepare the samples from your corrections · voices are separated again without them</string>
+    <string name="eng_log_samples_part1">Voice samples from part 1: %1$s · used to recognize the same people in the other parts</string>
+    <string name="eng_log_no_clean_samples">Part 1 has no clean stretches for voice samples · each part separates voices on its own</string>
+    <string name="eng_log_no_times_part1">The model didn\'t return timings for part 1 · each part separates voices on its own</string>
+    <string name="eng_done_title">Transcript ready</string>
+    <string name="eng_log_done">Transcript ready · %1$s</string>
+    <string name="eng_log_new_version_ready">New version ready · choose whether to keep it</string>
+    <!-- Detalles que el titular del detalle no muestra (StatusText.human los salta) -->
+    <string name="eng_frag_took">took %1$s</string>
+    <string name="eng_frag_parallel">sending %1$d at a time</string>
+    <string name="eng_frag_total">total time %1$s</string>
+
+    <!-- Nota para tu segundo cerebro -->
+    <string name="eng_st_note">Writing the note for your second brain</string>
+    <string name="eng_log_note_ready">Note ready · %1$s</string>
+    <string name="eng_log_note_unavailable">The note for your second brain isn\'t available right now · the transcript is ready</string>
+    <string name="eng_log_note_failed">Couldn\'t write the note: %1$s · the transcript is ready and you can write the note later</string>
+    <string name="eng_note_unavailable">Not available right now</string>
+
+    <!-- Cada parte (Transcriber.block) -->
+    <string name="eng_st_sending_part">Sending part %1$d of %2$d</string>
+    <string name="eng_st_sending_audio">Sending audio</string>
+    <string name="eng_st_sending_part_prepared">Sending part %1$d of %2$d · prepared in %3$s</string>
+    <string name="eng_st_sending_audio_prepared">Sending audio · prepared in %1$s</string>
+    <string name="eng_st_preparing_part">Preparing the audio for part %1$d of %2$d</string>
+    <string name="eng_st_preparing_send">Preparing the audio to send it</string>
+    <string name="eng_notif_preparing_parts">Preparing the audio for %1$d parts · %2$d%%</string>
+    <string name="eng_notif_preparing_part">Preparing the audio for part %1$d of %2$d · %3$d%%</string>
+    <string name="eng_notif_preparing_send">Preparing the audio to send it · %1$d%%</string>
+    <string name="eng_log_part_sent">Part %1$d sent · %2$s is transcribing</string>
+    <string name="eng_log_audio_sent">Audio sent · %1$s is transcribing</string>
+    <string name="eng_log_part_sent_server">Part %1$d sent · the server is transcribing</string>
+    <string name="eng_log_audio_sent_server">Audio sent · the server is transcribing</string>
+    <string name="eng_log_samples_rejected_part">The provider rejected the voice samples · resending part %1$d of %2$d without them</string>
+    <string name="eng_log_samples_rejected_audio">The provider rejected the voice samples · resending the audio without them</string>
+    <string name="eng_log_part_ready">Part %1$d of %2$d ready · %3$s%4$s</string>
+    <string name="eng_log_answer">Response received · %1$s%2$s</string>
+    <string name="eng_notif_parts_ready">Transcribing · %1$d of %2$d parts ready</string>
+    <string name="eng_notif_answer">Transcribing · response received</string>
+    <plurals name="eng_voices">
+        <item quantity="one">%1$d voice</item>
+        <item quantity="other">%1$d voices</item>
+    </plurals>
+    <plurals name="eng_voices_recognized">
+        <item quantity="one">recognized %1$d voice</item>
+        <item quantity="other">recognized %1$d voices</item>
+    </plurals>
+    <plurals name="eng_voices_matched">
+        <item quantity="one">recognized %1$d of %2$d known voice</item>
+        <item quantity="other">recognized %1$d of %2$d known voices</item>
+    </plurals>
+    <plurals name="eng_voices_new">
+        <item quantity="one">%1$d new</item>
+        <item quantity="other">%1$d new</item>
+    </plurals>
+
+    <!-- Notificaciones de avance y «lista» -->
+    <string name="eng_notif_title_paused">Paused</string>
+    <string name="eng_notif_title_working">Transcribing</string>
+    <string name="eng_notif_preparing">Getting ready…</string>
+    <string name="eng_channel_done">Finished transcriptions</string>
+    <string name="eng_notif_new_version_ready">New version ready</string>
+    <string name="eng_notif_done_text">“%1$s”</string>
+    <string name="eng_notif_done_review">“%1$s” · %2$d voices to review</string>
+    <string name="eng_notif_done_again">“%1$s” · choose whether to keep it</string>
+    <string name="eng_action_review_voices">Review voices</string>
+    <string name="eng_action_save_in">Save to %1$s</string>
+
+    <!-- Esperas dentro del trabajo (TranscribeService) -->
+    <string name="eng_log_paused">Paused: %1$s · resumes on its own when that\'s ready</string>
+    <string name="eng_notif_hold">%1$s · resumes on its own when that\'s ready</string>
+    <string name="eng_log_retry_in">Retrying in %1$d s · still working</string>
+    <string name="eng_log_screen_on_retry">Screen on · retrying now</string>
+    <string name="eng_log_screen_on_resume">Screen on · resuming now</string>
+
+    <!-- Tarea de fondo y transferencia iniciada por el usuario (PipelineJob) -->
+    <string name="eng_log_continues_foreground">Continuing in the foreground (keeps going even if you lock your phone)</string>
+    <string name="eng_log_paused_transfer">Android paused the transfer: %1$s · it will resume</string>
+    <string name="eng_log_paused_transfer_stale">Android paused the transfer: %1$s · the background task continues with your current settings</string>
+    <string name="eng_log_paused_job">Android paused the background task: %1$s · it will resume</string>
+    <string name="eng_reason_job_timeout">Android stopped the background task for running too long</string>
+    <string name="eng_log_job_timeout">Attempt %1$d of %2$d: Android stopped the background task for running too long · open the app to continue in the foreground</string>
+    <string name="eng_log_job_timeout_last">Attempt %1$d of %2$d: Android stopped the background task for running too long · open the app and tap Retry</string>
+    <string name="eng_log_job_timeout_restoring">Attempt %1$d of %2$d: Android stopped the background task for running too long</string>
+    <string name="eng_notif_job_cut_keep">Android stopped the background task %1$d times. The previous version is kept.</string>
+    <string name="eng_notif_job_cut_retry">Android stopped the background task %1$d times. Open the recording and tap Retry.</string>
+    <string name="eng_notif_open_app_title">Open Verbapp to finish</string>
+    <string name="eng_notif_open_app_text">This upload is long and needs the app open. Tap to continue: it keeps going even if you lock your phone.</string>
+    <string name="eng_log_background_only">With the app closed, Android only allows a background task (it may pause it) · open the app to speed it up</string>
+    <string name="eng_notif_background_title">Transcribing in the background</string>
+    <string name="eng_notif_background_text">Tap to open Verbapp and speed it up</string>
+    <string name="eng_stop_timeout">time limit for background tasks</string>
+    <string name="eng_stop_device_state">the phone\'s power saving (screen off)</string>
+    <string name="eng_stop_connectivity">the connection changed or dropped</string>
+    <string name="eng_stop_charging">the charger was unplugged</string>
+    <string name="eng_stop_battery">low battery</string>
+    <string name="eng_stop_quota">Android used up the time it gives the app in the background</string>
+    <string name="eng_stop_standby">the app hasn\'t been used in a while (standby)</string>
+    <string name="eng_stop_restricted">the app is restricted from running in the background</string>
+    <string name="eng_stop_preempt">Android gave priority to another task</string>
+    <string name="eng_stop_system">Android needed resources</string>
+    <string name="eng_stop_user">stopped from Android Settings</string>
+    <string name="eng_stop_unknown">reason not given by Android</string>
+
+    <!-- Errores de la API (HttpApi). Los que empiezan con el nombre del servicio siguen empezando con él en los tres
+         idiomas: Notes y Ajustes lo usan para saber que respondió el servicio. -->
+    <string name="eng_err_https_only">HTTPS only</string>
+    <string name="eng_err_stream_cut">The streamed response ended without its final event</string>
+    <string name="eng_err_response_too_big">Response too large</string>
+    <string name="eng_err_audio_changed">The audio changed while it was being sent</string>
+    <string name="eng_reason_too_large">A part of the audio is larger than the provider accepts.</string>
+    <string name="eng_reason_check_format">Check the audio format and the model\'s parameters.</string>
+    <string name="eng_reason_duration">The model rejected the length of the audio. Try a shorter stretch.</string>
+    <string name="eng_reason_decode">The provider couldn\'t decode this audio. Try importing a copy to convert it.</string>
+    <string name="eng_reason_short">The audio is empty or too short. Try a recording of at least a few seconds.</string>
+    <string name="eng_reason_model">The model isn\'t available or doesn\'t support these parameters. Check the model and what it can do.</string>
+    <string name="eng_reason_size">A part of the audio is over one of the provider\'s limits. Try trimming the audio.</string>
+    <string name="eng_err_key_rejected">The provider key isn\'t valid or was revoked. %1$s</string>
+    <string name="eng_err_or_no_credits">No credits left on OpenRouter. Add credits at openrouter.ai and tap Retry.</string>
+    <string name="eng_err_or_privacy">OpenRouter has no provider for that model with the privacy you chose in your account. Check it at openrouter.ai (Settings → Privacy) or pick another model in Settings.</string>
+    <string name="eng_err_or_model_gone">That model is no longer available on OpenRouter. Pick another one in Settings.</string>
+    <string name="eng_err_forbidden">No permission on %1$s. Check the account and the service settings.</string>
+    <string name="eng_err_no_quota">The provider has no balance or quota left. Check your API billing.</string>
+    <string name="eng_err_or_rate_limited">OpenRouter asked to wait: too many requests in a row (429).</string>
+    <string name="eng_err_unavailable">%1$s is temporarily unavailable (%2$d).</string>
+    <string name="eng_err_http">%1$s · HTTP %2$d. %3$s</string>
+    <string name="eng_err_code">Code: %1$s</string>
+    <string name="eng_err_param">Parameter: %1$s</string>
+    <string name="eng_err_ref">Ref: %1$s</string>
+
+    <!-- Clave y catálogo de OpenRouter (Models). eng_err_key_invalid y eng_err_key_rejected dicen la palabra de
+         key_word y terminan con key_fix_in_settings: así StatusText.aboutKey y withoutSettingsHint los reconocen. -->
+    <string name="eng_err_key_missing">Your %1$s key is missing. Add it in Settings.</string>
+    <string name="eng_err_key_invalid">Your %1$s key isn\'t valid or was revoked. %2$s</string>
+    <string name="eng_err_unexpected">%1$s returned something unexpected (HTTP %2$d). Try again in a moment.</string>
+    <string name="eng_err_catalog_http">OpenRouter didn\'t return the list of models (%1$d).</string>
+    <string name="eng_err_catalog_empty">OpenRouter\'s list of models came back empty.</string>
+    <string name="eng_note_model_latest">%1$s (latest)</string>
+
+    <!-- Clientes de transcripción (OpenRouterClient, OpenAiClient), audio y partes -->
+    <string name="eng_provider">Provider</string>
+    <string name="eng_err_or_unreadable">OpenRouter returned a response that couldn\'t be read.</string>
+    <string name="eng_log_or_wav">The provider didn\'t accept the FLAC audio · resending as WAV (twice the size)</string>
+    <string name="eng_log_or_plain_voices">The model didn\'t accept separating voices · resending to get just the text (also for the next uploads with this model)</string>
+    <string name="eng_log_or_plain_times">The model didn\'t accept the timed format · resending to get just the text (also for the next uploads with this model)</string>
+    <string name="eng_err_or_shape">OpenRouter answered in a format Verbapp doesn\'t recognize. Try another model in Settings.</string>
+    <string name="eng_log_or_no_times">The model didn\'t return timings · resending without the voice samples</string>
+    <string name="eng_log_or_no_voices">The model didn\'t return separate voices for this upload · only the text is kept</string>
+    <string name="eng_err_or_unusable">OpenRouter didn\'t return a usable transcript.</string>
+    <string name="eng_err_audio_empty">The audio is empty or couldn\'t be read (it\'s shorter than a second). If the recording is longer, try importing a copy.</string>
+    <string name="eng_err_audio_no_track">Couldn\'t read the audio: the file has no valid audio track. Try importing a copy.</string>
+    <string name="eng_err_prepare_failed">couldn\'t prepare the audio for sending (%1$s)</string>
+    <string name="eng_err_part_too_big">This part of the audio is over the size the provider accepts (25 MB). Try trimming the audio.</string>
+    <string name="eng_err_no_text">The provider didn\'t return text in the expected format.</string>
+    <string name="eng_err_no_space">There\'s no space left on the phone to prepare the audio. Free up some space and tap Retry.</string>
+    <plurals name="eng_log_cuts_reused">
+        <item quantity="one">Cuts reused from the previous attempt (%1$d part)</item>
+        <item quantity="other">Cuts reused from the previous attempt (%1$d parts)</item>
+    </plurals>
+    <string name="eng_log_finding_pauses">Looking for pauses to cut without splitting sentences</string>
+    <string name="eng_err_save_block">Couldn\'t save the audio part</string>
+    <string name="eng_err_no_track">The file has no valid audio track.</string>
+
+    <!-- Grabadora (RecorderService) -->
+    <string name="eng_channel_recording">Recording in progress</string>
+    <string name="eng_rec_title">Recording</string>
+    <string name="eng_rec_text">Audio saved on this phone</string>
+    <string name="eng_rec_paused_title">Paused · %1$s</string>
+    <string name="eng_rec_paused_text">Tap Resume to keep recording</string>
+    <string name="eng_rec_resume">Resume</string>
+    <string name="eng_rec_pause">Pause</string>
+    <string name="eng_rec_mark">★ Mark</string>
+    <string name="eng_rec_stop">Stop and save</string>
+    <plurals name="eng_rec_marks">
+        <item quantity="one">★ %1$d marked moment</item>
+        <item quantity="other">★ %1$d marked moments</item>
+    </plurals>
+    <string name="eng_rec_err_mic">The microphone was interrupted. Check the saved audio.</string>
+    <string name="eng_rec_err_start">Couldn\'t start recording. Check the microphone permission and the free space.</string>
+    <string name="eng_rec_err_pause">Couldn\'t pause or resume. Stop and save the recording.</string>
+    <string name="eng_rec_err_short">The recording was too short or got interrupted. It couldn\'t be saved.</string>
+    <string name="eng_rec_too_short">Recording too short (under 3 s) · not saved</string>
+    <string name="eng_rec_err_title">The audio was saved, but not its title. It\'ll show up as recovered audio.</string>
+
+    <!-- Estado guardado (FilesStore) -->
+    <string name="eng_err_bad_recording">Invalid recording</string>
+    <string name="eng_label_demo">Sample · demo text</string>
+    <string name="eng_label_transcribed">Transcript available</string>
+    <string name="eng_label_local">Only on this phone</string>
+</resources>

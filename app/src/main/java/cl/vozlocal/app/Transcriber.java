@@ -35,6 +35,9 @@ import java.util.concurrent.*;
  * grabación que espera Wi-Fi no usa datos móviles salvo que se le permita a ella ("mobileOk", ver Pipeline; se revisa antes
  * de cada parte, ver WaitWifi); y «Automático»
  * sigue la regla única de Models.resume para no cambiar de modelo a mitad de una transcripción.
+ *
+ * 0.9.0: la bitácora, los estados y las notificaciones salen en el idioma de la app (strings_engine.xml) y StatusText
+ * los vuelve a leer en cualquiera de los tres; la notificación de avance trae «Detener» (TranscribeService.Stop).
  */
 final class Transcriber {
     static final java.util.concurrent.locks.ReentrantLock RUNNING=new java.util.concurrent.locks.ReentrantLock();
@@ -170,10 +173,12 @@ final class Transcriber {
      * minutos dejaban una transcripción corta «en cola» más de una hora sin avisar. Cada parte lista vuelve a cero la cuenta.
      */
     static final long LOCAL_CUT_WINDOW_MS=15*60_000L;
+    /** Intentos que tiene cada transcripción antes de rendirse y pedir «Reintentar». */
+    static final int ATTEMPTS=5;
     /** Qué hacer con un intento fallido: si fue un corte del teléfono, si es gratis, cuántos intentos van y si se reintenta. */
     static final class Outcome{
         final boolean cut,local,again;final int attempts,cuts;final long cutSince;
-        Outcome(boolean cut,boolean local,int attempts,int cuts,long cutSince){this.cut=cut;this.local=local;this.attempts=attempts;this.again=attempts<5;this.cuts=cuts;this.cutSince=cutSince;}
+        Outcome(boolean cut,boolean local,int attempts,int cuts,long cutSince){this.cut=cut;this.local=local;this.attempts=attempts;this.again=attempts<ATTEMPTS;this.cuts=cuts;this.cutSince=cutSince;}
     }
     /** La regla de reintentos, separada del teléfono para poder probarla. st: el estado antes de este fallo; now: ahora (ms). */
     static Outcome outcome(JSONObject st,Throwable e,long now){
@@ -228,12 +233,12 @@ final class Transcriber {
             for(Recording r:Recording.list(c)){
                 if(http.cancelled)break;
                 JSONObject state=FilesStore.state(c,r.id);if(!state.optBoolean("requested"))continue;
-                if(RecorderService.activeId!=null){retry=true;Pipeline.log(c,r.id,"En espera: hay una grabación en curso");break;}
+                if(RecorderService.activeId!=null){retry=true;Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_hold_recording));break;}
                 if(budgetMs>0&&System.currentTimeMillis()-started>budgetMs){retry=true;break;}
                 // Falta el cargador, la batería o internet: la ronda se detiene sin gastar un intento y el trabajo espera a que
                 // se cumpla (TranscribeService.waitBeforeRetry), como dicen las pantallas.
                 String wait=Pipeline.blocker(c,r.id);
-                if(holds(wait,budgetMs)){retry=true;held=true;Pipeline.log(c,r.id,"En cola · "+wait);break;}
+                if(holds(wait,budgetMs)){retry=true;held=true;Pipeline.log(c,r.id,Lang.str(c,R.string.eng_queued_wait,wait));break;}
                 // «Solo con Wi-Fi» y ahora hay datos móviles (0.8.0, tercera ronda): esta grabación espera, salvo que se hayan
                 // permitido los datos móviles para ella («Usar datos móviles ahora»). Las demás siguen; la que espera la
                 // retoma la tarea de fondo al haber Wi-Fi. Antes, un trabajo que empezó con Wi-Fi seguía con datos móviles.
@@ -241,18 +246,18 @@ final class Transcriber {
                 Pipeline.clearWaitingWifi(c,r.id);
                 http.jobId=r.id;currentId=r.id;failedStage="";
                 try{process(r);}
-                catch(Yield y){retry=true;Pipeline.log(c,r.id,"Pausa corta para no exceder el límite de Android · continúa enseguida");break;}
+                catch(Yield y){retry=true;Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_yield));break;}
                 // Se fue el Wi-Fi antes de enviar una parte: espera como las demás (ver WaitWifi).
                 catch(WaitWifi w){waitWifi(r,true);retry=true;}
                 catch(NeedsForeground f){
                     // Sigue pedida; no se reintenta desde aquí (daría vueltas sin avanzar): la retoma el primer plano.
                     waitingForeground.add(r.id);
-                    Pipeline.log(c,r.id,f.getMessage()+" tarda más de lo que Android da a una tarea de fondo · abre la app para enviarlo (sigue aunque bloquees el teléfono)");
+                    Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_needs_foreground,f.getMessage()));
                     Diagnostics.event("job_needs_foreground",r.id,"runner","job");
                 }
                 catch(HttpApi.UserAction e){
                     FilesStore.update(c,r.id,s->s.put("requested",false).put("failed",true));Pipeline.log(c,r.id,e.getMessage());
-                    if(!keepPrevious(r))attention(r,"La transcripción necesita atención",e.getMessage());
+                    if(!keepPrevious(r))attention(r,Lang.str(c,R.string.eng_notif_attention_title),e.getMessage());
                     Diagnostics.event("job_rejected",r.id,"error_class",e.getClass().getSimpleName());
                 }
                 catch(Exception e){
@@ -267,11 +272,11 @@ final class Transcriber {
                     // «Volver a transcribir» que se rinde: vuelve la versión anterior en vez de pedir Reintentar.
                     boolean restoring=!o.again&&Retranscribe.hasPrevious(c,r.id)&&!Transcript.exists(c,r.id);
                     FilesStore.update(c,r.id,s->{s.put("attempts",o.attempts).put("retries",s.optInt("retries")+1).put("localCuts",o.cuts).put("requested",o.again).put("failed",!o.again).put("lastError",reason);if(o.cut)s.put("cutSince",o.cutSince);});
-                    String hint=o.local&&!Battery.unrestricted(c)?" · para evitarlo, permite a Verbapp usar batería en segundo plano":"";
+                    boolean hint=o.local&&!Battery.unrestricted(c);
                     // Un corte del teléfono que ya se repitió demasiado pasa a contar como intento: se dice, para que se entienda el cambio.
-                    String why=o.cut&&!o.local?reason+" (se repitió demasiado: ahora cuenta como intento)":reason;
-                    Pipeline.log(c,r.id,o.local?"El teléfono cortó la conexión ("+reason+") · se reintenta sin gastar un intento"+hint
-                        :"Intento "+o.attempts+" de 5 falló: "+why+(o.again?" · se reintentará (las partes ya listas no se vuelven a enviar)":restoring?"":" · pulsa Reintentar"));
+                    String why=o.cut&&!o.local?Lang.str(c,R.string.eng_reason_repeated,reason):reason;
+                    Pipeline.log(c,r.id,o.local?Lang.str(c,hint?R.string.eng_log_phone_cut_hint:R.string.eng_log_phone_cut,reason)
+                        :Lang.str(c,o.again?R.string.eng_log_attempt_failed_retry:restoring?R.string.eng_log_attempt_failed:R.string.eng_log_attempt_failed_button,o.attempts,ATTEMPTS,why));
                     // Cuánto lleva pedida y en qué paso quedó el envío: con eso se diagnostica un caso «bloqueado» desde el informe.
                     long waited=Math.max(0,now-st.optLong("queuedAt",now));
                     Diagnostics.event("job_retry",r.id,"count",o.attempts,"error_class",e.getClass().getSimpleName(),"reason",HttpApi.safeReason(e),"net",Pipeline.networkName(c),
@@ -280,11 +285,11 @@ final class Transcriber {
                     else if(!o.again){
                         // Se rindió: además de la bitácora, un aviso. Antes solo quedaba escrito, y con la app cerrada la grabación
                         // parecía seguir «en cola» sin que nadie supiera que esperaba un Reintentar.
-                        attention(r,"La transcripción necesita atención","No se pudo transcribir después de 5 intentos: "+reason+". Abre la grabación y pulsa Reintentar.");
+                        attention(r,Lang.str(c,R.string.eng_notif_attention_title),Lang.str(c,R.string.eng_notif_failed_text,ATTEMPTS,reason));
                         Diagnostics.event("job_failed",r.id,"count",o.attempts,"error_class",e.getClass().getSimpleName(),"reason",HttpApi.safeReason(e),"stage",failedStage,"elapsed_ms",waited);
                     }
                     // Mientras reintenta, la notificación lo dice (antes seguía en «Enviando…» durante las esperas).
-                    else notice(o.local?"Se cortó la conexión · se reintenta solo":"Intento "+o.attempts+" de 5 no resultó · se reintenta solo",true,-1);
+                    else notice(o.local?Lang.str(c,R.string.eng_notif_cut_retry):Lang.str(c,R.string.eng_notif_attempt_retry,o.attempts,ATTEMPTS),true,-1);
                 }
                 finally{currentId=null;}
             }
@@ -301,23 +306,23 @@ final class Transcriber {
      */
     void waitWifi(Recording r,boolean midway){
         if(midway){lostWifi=true;retrying.add(r.id);}else waitingWifi.add(r.id);
-        Pipeline.log(c,r.id,midway?"Se fue el Wi-Fi a mitad del envío · no se usan datos móviles y las partes ya listas se conservan: puedes usarlos para esta grabación desde su detalle"
-            :"En espera de Wi-Fi · ahora hay datos móviles: puedes usarlos para esta grabación desde su detalle");
+        // El final («: puedes usarlos … desde su detalle») es un recurso aparte: el detalle lo quita (StatusText.inDetail).
+        Pipeline.log(c,r.id,Lang.str(c,midway?R.string.eng_log_wifi_lost:R.string.eng_log_wifi_wait,Lang.str(c,R.string.eng_log_mobile_hint)));
         if(midway)Diagnostics.event("wifi_lost",r.id,"stage",failedStage,"net",Pipeline.networkName(c));
         Pipeline.waitingWifi(c,r.id);
-        if(midway)notice(WIFI_WAIT_TEXT,true,-1);
+        if(midway)notice(wifiWaitText(),true,-1);
     }
-    /** Lo que dice la notificación de avance mientras se espera el Wi-Fi (aquí y en TranscribeService.wifiWait). */
-    static final String WIFI_WAIT_TEXT="Esperando Wi-Fi · se retoma sola cuando vuelva";
+    /** Lo que dice la notificación de avance mientras se espera el Wi-Fi (aquí y en TranscribeService.wifiWait), en el idioma de la app. */
+    static String wifiWaitText(){return Lang.str(R.string.eng_notif_wifi_wait);}
     /** Traduce fallos técnicos a una causa comprensible. */
     private String describe(Exception e){
         if(e instanceof HttpApi.Stalled||e instanceof HttpApi.PrepareStalled)return e.getMessage();
-        if(localCut(e))return "pantalla bloqueada o ahorro de batería";
-        if(e instanceof java.net.SocketTimeoutException)return "el proveedor no respondió a tiempo (el intento pudo cobrarse)";
-        if(e instanceof java.net.UnknownHostException||e instanceof java.net.ConnectException)return "sin conexión con el servidor";
-        if(e instanceof javax.net.ssl.SSLException)return "la conexión segura se interrumpió";
-        if(e instanceof java.io.InterruptedIOException)return "Android pausó el trabajo";
-        String m=e.getMessage();return m!=null&&m.length()<160?m:"error de red ("+e.getClass().getSimpleName()+")";
+        if(localCut(e))return Lang.str(c,R.string.eng_reason_phone_cut);
+        if(e instanceof java.net.SocketTimeoutException)return Lang.str(c,R.string.eng_reason_timeout);
+        if(e instanceof java.net.UnknownHostException||e instanceof java.net.ConnectException)return Lang.str(c,R.string.eng_reason_no_server);
+        if(e instanceof javax.net.ssl.SSLException)return Lang.str(c,R.string.eng_reason_ssl);
+        if(e instanceof java.io.InterruptedIOException)return Lang.str(c,R.string.eng_reason_paused);
+        String m=e.getMessage();return m!=null&&m.length()<160?m:Lang.str(c,R.string.eng_reason_network,e.getClass().getSimpleName());
     }
     /**
      * Conexión cortada por el propio teléfono ("Software caused connection abort") o por el vigilante porque el envío dejó
@@ -333,8 +338,8 @@ final class Transcriber {
     /** «Volver a transcribir» que no se pudo terminar: vuelve la versión anterior (la grabación nunca queda sin transcripción). */
     private boolean keepPrevious(Recording r){
         if(!Retranscribe.hasPrevious(c,r.id)||Transcript.exists(c,r.id))return false;
-        try{Retranscribe.restore(c,r.id,"No se pudo hacer la nueva versión · se mantiene la anterior","retranscribe_failed");}catch(Exception e){return false;}
-        attention(r,"No se pudo hacer la nueva versión","Se mantiene la anterior · «"+r.title+"»");
+        try{Retranscribe.restore(c,r.id,Lang.str(c,R.string.eng_log_new_version_failed),"retranscribe_failed");}catch(Exception e){return false;}
+        attention(r,Lang.str(c,R.string.eng_notif_new_version_failed),Lang.str(c,R.string.eng_notif_keep_previous_text,r.title));
         return true;
     }
     private void check(Recording r)throws Exception{http.check();if(!r.audio(c).exists()||!FilesStore.state(c,r.id).optBoolean("requested"))throw new java.io.InterruptedIOException("Cancelado");}
@@ -358,7 +363,7 @@ final class Transcriber {
             if(!"openrouter".equals(st.optString("provider"))||model.isEmpty()||model.equals(st.optString("orHalf")))throw e;
             double paid=Math.max(0,st.optDouble("costUsd",0));
             check(r);FilesStore.update(c,r.id,s->s.put("orHalf",model).put("costCarry",paid));
-            Pipeline.log(c,r.id,"El proveedor no aceptó un envío tan grande · se repite con partes de la mitad (no gasta un intento)");
+            Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_halved));
             Diagnostics.event("job_halved",r.id,"provider","openrouter","model",model);
             transcribe(r);
         }
@@ -382,7 +387,7 @@ final class Transcriber {
             if(saved==null||saved.isEmpty()||saved.equals(config.model)||saved.equals(Models.chosen(settings,wantSpeakers)))return config;
             ProviderConfig kept=new ProviderConfig("openrouter",Models.BASE,saved,config.key,wantSpeakers&&Models.recipe(saved).diarizes);
             // Sin « »: el informe de soporte tapa lo que va entre comillas angulares.
-            Pipeline.log(c,r.id,"El modelo automático cambió de recomendación · esta transcripción termina con el que empezó (las partes listas no se vuelven a pagar)");
+            Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_auto_kept));
             return kept;
         }catch(Exception e){return config;}
     }
@@ -392,7 +397,7 @@ final class Transcriber {
         Retranscribe.Mode mode=Retranscribe.mode(initial);
         if(!Transcript.exists(c,r.id)){
             ProviderConfig resolved=settings.config(wantSpeakers);
-            if(resolved.key.isEmpty())throw new HttpApi.UserAction("Agrega tu clave de OpenRouter en Ajustes y pulsa Reintentar.");
+            if(resolved.key.isEmpty())throw new HttpApi.UserAction(Lang.str(c,R.string.eng_err_add_key));
             ProviderConfig config=keepAutoModel(r,settings,resolved,initial,wantSpeakers);
             // OpenRouter (0.8.0): el tamaño de los bloques sale de la receta del modelo y no del peso del m4a. La mitad tras
             // un 413 vale solo para el modelo que lo respondió.
@@ -401,7 +406,7 @@ final class Transcriber {
             // «Separar voces sin cortar el audio»: un solo envío, sin uniones donde las voces se crucen (fits: cabría en uno).
             boolean fits=mode==Retranscribe.Mode.SINGLE&&config.speakers&&(router?Retranscribe.fitsSingle(recipe,audioMs):Retranscribe.fitsSingle(audioMs,bytes)),single=fits&&!half;
             // Tarea de fondo: un envío único que no alcanza a volver antes del corte de Android se deja al primer plano.
-            if(single&&budgetMs>0&&sendEstimate(config.provider,audioMs)>JOB_SEND_LIMIT_MS)throw new NeedsForeground("Sin cortar: el envío del audio completo");
+            if(single&&budgetMs>0&&sendEstimate(config.provider,audioMs)>JOB_SEND_LIMIT_MS)throw new NeedsForeground(Lang.str(c,R.string.eng_what_single));
             long blockMax=router?orBlockMax(recipe,config.speakers):0;
             long target=single?audioMs:router?orTarget(audioMs,blockMax,half,fits):config.speakers?speakerBlockMs(audioMs,bytes):BLOCK_TEXT_MS;
             // Hasta qué duración el audio va entero. Con OpenRouter partido a la mitad, el propio bloque es el tope.
@@ -430,21 +435,21 @@ final class Transcriber {
             // si Android mató un intento a mitad de una preparación, la cuenta no queda pegada.
             FilesStore.update(c,r.id,s->{s.put("model",config.model).put("speakers",config.speakers).put("audioMs",r.duration).put("provider",config.provider).put("prepping",0);s.remove("prepPct");});
             Diagnostics.event("job_start",r.id,"provider",config.provider,"model",config.model,"bytes",bytes,"duration_ms",r.duration,"net",Pipeline.networkName(c),"runner",runner!=null?runner:budgetMs>0?"job":"fgs","mode",mode==null?"":mode.name());
-            stage(r,"Preparando audio",-1);long prepStart=System.currentTimeMillis();
+            stage(r,Lang.str(c,R.string.eng_st_preparing_audio),-1);long prepStart=System.currentTimeMillis();
             List<Long> cuts=new ArrayList<>();List<AudioParts.Part> parts;
-            if(single){parts=Collections.singletonList(new AudioParts.Part(r.audio(c),0,audioMs));cuts.add(0L);cuts.add(audioMs);Pipeline.log(c,r.id,"Sin cortar: el audio completo va en un solo envío · tarda más, pero no hay uniones donde las voces se crucen");}
+            if(single){parts=Collections.singletonList(new AudioParts.Part(r.audio(c),0,audioMs));cuts.add(0L);cuts.add(audioMs);Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_single));}
             else parts=AudioParts.plan(c,r,http,target,FilesStore.state(c,r.id).optJSONArray("cuts"),cuts,line->Pipeline.log(c,r.id,line),wholeMax);
             JSONArray savedCuts=new JSONArray();for(Long cut:cuts)savedCuts.put(cut);FilesStore.update(c,r.id,s->s.put("cuts",savedCuts));
             Diagnostics.event("prepare_done",r.id,"parts",parts.size(),"elapsed_ms",System.currentTimeMillis()-prepStart);
             int n=parts.size();FilesStore.update(c,r.id,s->s.put("blocks",n));
-            if(n>1)Pipeline.log(c,r.id,"Audio de "+Recording.time(r.duration)+" dividido en "+n+" partes de ~"+(target/60000)+" min, cortadas en pausas · se envían de a "+PARALLEL+" en paralelo");
+            if(n>1)Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_split,Recording.time(r.duration),n,(int)(target/60000),Lang.str(c,R.string.eng_frag_parallel,PARALLEL)));
             JSONObject[] responses=new JSONObject[n];
             try{
                 List<String[]> own=saved.isEmpty()?null:saved;
                 if(!saved.isEmpty()){
                     // Cantidades, no nombres: la bitácora viaja (sin títulos ni nombres) en el informe de soporte.
-                    boolean mine=false;for(String[] ref:saved)if(Voices.ME.equals(ref[2]))mine=true;int active=Voices.used(c).size();
-                    Pipeline.log(c,r.id,"Voces conocidas: "+saved.size()+(mine?" (incluida la tuya)":"")+" · se reconocen desde el inicio"+(active>saved.size()?" (van "+saved.size()+" de tus "+active+": el máximo por audio)":""));
+                    boolean mine=false;for(String[] ref:saved)if(Voices.ME.equals(ref[2]))mine=true;int active=Voices.used(c).size();boolean capped=active>saved.size();
+                    Pipeline.log(c,r.id,Lang.str(c,mine?(capped?R.string.eng_log_known_mine_capped:R.string.eng_log_known_mine):capped?R.string.eng_log_known_capped:R.string.eng_log_known,saved.size(),active));
                 }
                 List<String[]> references=own;int from=0;String fresh=null;
                 List<String[]> corrections=fixed==null?Collections.emptyList():fixedReferences(r,fixed,savedNames);
@@ -453,9 +458,9 @@ final class Transcriber {
                     fresh="pass"+attempt+":";
                     references=new ArrayList<>(saved);references.addAll(corrections);
                     LinkedHashSet<String> people=new LinkedHashSet<>();for(String[] ref:corrections)people.add(ref[2]);
-                    Pipeline.log(c,r.id,"Segunda pasada: muestras de "+people.size()+(people.size()==1?" persona":" personas")+" (de tus correcciones) van en "+(n>1?"todas las partes":"el envío")+" desde el inicio");
+                    Pipeline.log(c,r.id,Lang.plural(c,n>1?R.plurals.eng_log_second_pass_parts:R.plurals.eng_log_second_pass_single,people.size()));
                 }else{
-                    if(fixed!=null)Pipeline.log(c,r.id,"No se pudieron preparar las muestras de tus correcciones · se separan voces de nuevo sin ellas");
+                    if(fixed!=null)Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_second_pass_failed));
                     if(config.speakers&&n>1){
                         // La parte 1 va sola: de ella salen las muestras de voz para las demás.
                         responses[0]=block(r,config,settings,parts,0,own,null);from=1;
@@ -469,8 +474,8 @@ final class Transcriber {
                         List<String[]> auto=responses[0].optBoolean("_diarized",true)&&responses[0].optBoolean("_timed",true)?AudioParts.references(c,r,responses[0],http,MAX_KNOWN-saved.size(),exclude):new ArrayList<>();
                         references=new ArrayList<>(saved);references.addAll(auto);
                         if(!auto.isEmpty()){StringBuilder which=new StringBuilder();for(String[] ref:auto)which.append(which.length()==0?"":", ").append(ref[3]);
-                            Pipeline.log(c,r.id,"Muestras de voz de la parte 1: "+which+" · se usan para reconocer a las mismas personas en las demás partes");}
-                        else if(saved.isEmpty())Pipeline.log(c,r.id,(responses[0].optBoolean("_timed",true)?"La parte 1 no tiene tramos limpios para muestras de voz":"El modelo no devolvió tiempos en la parte 1")+" · cada parte separa voces por su cuenta");
+                            Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_samples_part1,which.toString()));}
+                        else if(saved.isEmpty())Pipeline.log(c,r.id,Lang.str(c,responses[0].optBoolean("_timed",true)?R.string.eng_log_no_clean_samples:R.string.eng_log_no_times_part1));
                     }
                 }
                 if(budgetMs>0&&from<n&&System.currentTimeMillis()-started>budgetMs&&!allDone(r,from,n))throw new Yield();
@@ -497,8 +502,8 @@ final class Transcriber {
         check(r);long queued=FilesStore.state(c,r.id).optLong("queuedAt",start);long total=System.currentTimeMillis()-queued;
         boolean again=FilesStore.state(c,r.id).has("retranscribe");
         FilesStore.update(c,r.id,s->{s.put("requested",false).put("failed",false).put("attempts",0).put("doneIn",total).put("upSent",0).put("upTotal",0).put("doneAudioMs",r.duration).put("doneAt",System.currentTimeMillis());s.remove("prepPct");});
-        Pipeline.log(c,r.id,"Transcripción lista · tiempo total "+Recording.time(total));
-        if(again)Pipeline.log(c,r.id,"Nueva versión lista · elige si te quedas con ella");
+        Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_done,Lang.str(c,R.string.eng_frag_total,Recording.time(total))));
+        if(again)Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_new_version_ready));
         LocalStorage.enqueue(c,r.id);done(r,again);Diagnostics.event("job_complete",r.id,"elapsed_ms",System.currentTimeMillis()-start,"mode",mode==null?"":mode.name());
     }
     private boolean allDone(Recording r,int from,int n){for(int i=from;i<n;i++)if(!FilesStore.file(c,r.id,".part"+i+".json").exists())return false;return true;}
@@ -507,19 +512,19 @@ final class Transcriber {
 
     /** «Nota para tu segundo cerebro»: nunca hace fallar la transcripción, que ya está guardada. */
     private void note(Recording r)throws Exception{
-        stage(r,"Armando la nota para tu segundo cerebro",-1);long noteStart=System.currentTimeMillis();
+        stage(r,Lang.str(c,R.string.eng_st_note),-1);long noteStart=System.currentTimeMillis();
         try{
             Notes.generate(c,r,http);
-            Pipeline.log(c,r.id,"Nota lista · tardó "+Recording.time(System.currentTimeMillis()-noteStart));
+            Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_note_ready,Lang.str(c,R.string.eng_frag_took,Recording.time(System.currentTimeMillis()-noteStart))));
             Diagnostics.event("note_auto",r.id,"result","ok","elapsed_ms",System.currentTimeMillis()-noteStart);
         }catch(Throwable e){
             if(e instanceof VirtualMachineError)throw (VirtualMachineError)e;
             // Pausa de Android o cancelación: la nota queda pendiente para la próxima vuelta.
             if(http.cancelled&&e instanceof Exception)throw (Exception)e;
             String why=e instanceof UnsupportedOperationException||!(e instanceof Exception)?null:describe((Exception)e);
-            Pipeline.log(c,r.id,why==null?"La nota para tu segundo cerebro no está disponible por ahora · la transcripción está lista"
-                :"No se pudo armar la nota: "+why+" · la transcripción está lista y puedes armar la nota después");
-            try{FilesStore.update(c,r.id,s->{if("working".equals(s.optString("noteState"))){s.put("noteState","failed");s.put("noteError",why==null?"No disponible por ahora":why);}});}catch(Exception ignored){}
+            Pipeline.log(c,r.id,why==null?Lang.str(c,R.string.eng_log_note_unavailable):Lang.str(c,R.string.eng_log_note_failed,why));
+            String unavailable=Lang.str(c,R.string.eng_note_unavailable);
+            try{FilesStore.update(c,r.id,s->{if("working".equals(s.optString("noteState"))){s.put("noteState","failed");s.put("noteError",why==null?unavailable:why);}});}catch(Exception ignored){}
             Diagnostics.event("note_auto",r.id,"result","failed","error_class",e.getClass().getSimpleName());
         }
         FilesStore.update(c,r.id,s->s.remove("notePending"));
@@ -542,7 +547,7 @@ final class Transcriber {
             Integer p=person.get(id);if(p==null){p=person.size()+1;person.put(id,p);}
             int k=taken.merge(id,1,Integer::sum);String name=f.optString("name").trim();
             // Nombres únicos ("voz_1", "voz_1b"): no chocan con las letras que el modelo da a las voces que no reconoce.
-            out.add(new String[]{"voz_"+p+(k>1?String.valueOf((char)('a'+k-1)):""),id,name.isEmpty()?f.optString("label","Persona "+p):name,String.valueOf(i)});
+            out.add(new String[]{"voz_"+p+(k>1?String.valueOf((char)('a'+k-1)):""),id,name.isEmpty()?f.optString("label",Lang.str(R.string.speaker_n,p)):name,String.valueOf(i)});
         }
         return out;
     }
@@ -587,14 +592,16 @@ final class Transcriber {
     private JSONObject block(Recording r,ProviderConfig config,Settings settings,List<AudioParts.Part> parts,int i,List<String[]> refs,String fresh)throws Exception{
         int n=parts.size();java.io.File checkpoint=FilesStore.file(c,r.id,".part"+i+".json");
         if(checkpoint.exists())return FilesStore.read(checkpoint);
-        check(r);AudioParts.Part part=parts.get(i);String label=n>1?"parte "+(i+1)+" de "+n:"audio";
+        check(r);AudioParts.Part part=parts.get(i);int number=i+1;
+        // «Enviando parte 2 de 3» o, con una sola parte, «Enviando audio» (cada idioma con su propia frase, sin armarla a trozos).
+        String sending=n>1?Lang.str(c,R.string.eng_st_sending_part,number,n):Lang.str(c,R.string.eng_st_sending_audio);
         boolean router=config.provider.equals("openrouter");long partMs=part.durationMs>0?part.durationMs:r.duration;
         // Tarea de fondo: Android la corta a los ~10 min. Si este bloque no alcanza a volver, se cede el turno antes de enviarlo.
         // Nunca antes del primer envío de la ronda: así cada ronda avanza al menos un bloque. Un bloque que ni solo cabe
         // no se envía desde aquí (se cortaría siempre a mitad y se volvería a subir entero): lo hace el primer plano.
         // Con OpenRouter la cuenta incluye preparar el audio (ver sendEstimate).
         if(budgetMs>0){long partEstimate=sendEstimate(config.provider,partMs);
-            if(partEstimate>JOB_SEND_LIMIT_MS)throw new NeedsForeground(n>1?"El envío de la parte "+(i+1)+" de "+n:"El envío del audio");
+            if(partEstimate>JOB_SEND_LIMIT_MS)throw new NeedsForeground(n>1?Lang.str(c,R.string.eng_what_part,number,n):Lang.str(c,R.string.eng_what_audio));
             if(sentThisRun.get()&&System.currentTimeMillis()-started+partEstimate>JOB_SEND_LIMIT_MS)throw new Yield();}
         // «Solo con Wi-Fi» se revisa antes de cada parte, no solo al empezar la grabación: si se fue el Wi-Fi (p. ej. mientras
         // se enviaba otra parte), no se prepara ni se sube nada por datos móviles. La conexión lo revisa otra vez justo antes
@@ -609,9 +616,13 @@ final class Transcriber {
         long blockStart=System.currentTimeMillis();
         // OpenRouter convierte el bloque antes de enviarlo: la etapa «Preparando el audio…» la anuncia el propio cliente
         // (onPreparing), así la pantalla no queda en «Enviando… 0 %» mientras se convierte.
-        if(!router)stage(r,"Enviando "+label,0);
-        h.onProgress=(sent,total)->progress(r,i,sent,total,label);
-        h.onUploaded=()->{uploads.remove(i);publishUploads(r);Pipeline.log(c,r.id,(n>1?"Parte "+(i+1)+" enviada":"Audio enviado")+(config.provider.equals("openai")?" · OpenAI está transcribiendo":router?" · OpenRouter está transcribiendo":" · el servidor está transcribiendo"));};
+        if(!router)stage(r,sending,0);
+        h.onProgress=(sent,total)->progress(r,i,sent,total,sending);
+        // Quién transcribe ahora: OpenAI u OpenRouter por su nombre; un servidor propio, «el servidor».
+        String service=config.provider.equals("openai")?"OpenAI":router?HttpApi.OPENROUTER:null;
+        h.onUploaded=()->{uploads.remove(i);publishUploads(r);
+            Pipeline.log(c,r.id,service!=null?(n>1?Lang.str(c,R.string.eng_log_part_sent,number,service):Lang.str(c,R.string.eng_log_audio_sent,service))
+                :n>1?Lang.str(c,R.string.eng_log_part_sent_server,number):Lang.str(c,R.string.eng_log_audio_sent_server));};
         // Etapa «Preparando audio»: en la bitácora, en la notificación y en el estado ("prepping" ahora; "prepMsSum" y
         // "prepCount" para las estimaciones y las métricas de la pantalla). Nunca hace fallar el envío.
         java.util.concurrent.atomic.AtomicLong prepStart=new java.util.concurrent.atomic.AtomicLong(),prepActive=new java.util.concurrent.atomic.AtomicLong();
@@ -621,18 +632,18 @@ final class Transcriber {
                 long now=android.os.SystemClock.elapsedRealtime();
                 if(begin){
                     prepStart.set(now);prepActive.set(0);prepCut.set(false);preparing.put(i,0);
-                    stage(r,"Preparando el audio "+(n>1?"de la "+label:"para enviarlo"),-1);
+                    stage(r,n>1?Lang.str(c,R.string.eng_st_preparing_part,number,n):Lang.str(c,R.string.eng_st_preparing_send),-1);
                     FilesStore.update(c,r.id,s->s.put("prepping",s.optInt("prepping")+1).put("prepPct",prepPercent()));
                 }else{
                     long took=Math.max(0,now-prepStart.get());preparing.remove(i);int left=preparing.size(),shown=prepPercent();
                     // "prepPct": el % de lo que se está preparando ahora; sin nada en preparación, desaparece.
                     FilesStore.update(c,r.id,s->{s.put("prepping",Math.max(0,s.optInt("prepping")-1));if(left>0)s.put("prepPct",shown);else s.remove("prepPct");if(ok)s.put("prepMsSum",s.optLong("prepMsSum")+took).put("prepCount",s.optInt("prepCount")+1);});
-                    if(ok)stage(r,"Enviando "+label+" · preparado en "+Recording.time(took),0);
+                    if(ok)stage(r,n>1?Lang.str(c,R.string.eng_st_sending_part_prepared,number,n,Recording.time(took)):Lang.str(c,R.string.eng_st_sending_audio_prepared,Recording.time(took)),0);
                 }
             }catch(Exception ignored){}
         };
         // Avance de la conversión en % (0.8.0, tercera ronda): la etapa «Preparando audio» ya no se ve detenida.
-        h.onPrepareProgress=percent->prepProgress(r,i,percent,label,n);
+        h.onPrepareProgress=percent->prepProgress(r,i,percent,n);
         // Un envío cobrado y descartado dentro del cliente (y cuyo reenvío falló) se suma igual al costo real.
         h.onBilled=usd->{try{if(usd>0)FilesStore.update(c,r.id,s->s.put("costUsd",s.optDouble("costUsd",0)+usd));}catch(Exception ignored){}};
         OpenAiClient.Delta delta=chars->liveText(r,i,chars);long limit=responseLimit(config.provider,partMs);
@@ -643,31 +654,33 @@ final class Transcriber {
         long[] lastTick={android.os.SystemClock.elapsedRealtime()};
         ScheduledFuture<?> guard=WATCHDOG.scheduleWithFixedDelay(()->{
             long now=android.os.SystemClock.elapsedRealtime(),gap=now-lastTick[0];lastTick[0]=now;int phase=h.phase;
-            if(gap>30_000&&now-frozenLoggedAt>30_000){frozenLoggedAt=now;Pipeline.log(c,r.id,"Android tuvo la app congelada "+Recording.time(gap)+" (ahorro de batería con la pantalla bloqueada)");Diagnostics.event("app_frozen",r.id,"elapsed_ms",gap,"display",Battery.screenOn(c)?"on":"off","battery",Battery.unrestricted(c)?"unrestricted":"optimized","stage",HttpApi.PHASES[phase]);}
+            if(gap>30_000&&now-frozenLoggedAt>30_000){frozenLoggedAt=now;Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_frozen,Recording.time(gap)));Diagnostics.event("app_frozen",r.id,"elapsed_ms",gap,"display",Battery.screenOn(c)?"on":"off","battery",Battery.unrestricted(c)?"unrestricted":"optimized","stage",HttpApi.PHASES[phase]);}
             // Congelada mientras esperaba la respuesta: si después se corta por tiempo, fue el teléfono y no el proveedor.
             if(gap>30_000&&phase>=HttpApi.WAIT)frozenWait.set(true);
             if(phase==HttpApi.PREPARE){
                 // Solo el tiempo en que la app de verdad corrió (sin las congelaciones); pasado el tope, la conversión se corta.
                 if(gap<=30_000)prepActive.addAndGet(gap);long cap=prepareLimit(partMs);
-                if(prepActive.get()>cap&&prepCut.compareAndSet(false,true)){h.abortPreparing("preparar el audio tardó más de "+Recording.time(cap));Diagnostics.event("watchdog_cut",r.id,"reason","prepare","part",i+1,"elapsed_ms",prepActive.get());}
+                if(prepActive.get()>cap&&prepCut.compareAndSet(false,true)){h.abortPreparing(Lang.str(c,R.string.eng_reason_prepare_slow,Recording.time(cap)));Diagnostics.event("watchdog_cut",r.id,"reason","prepare","part",i+1,"elapsed_ms",prepActive.get());}
                 return;
             }
             if(h.lastActivity==0||phase==HttpApi.IDLE)return;long idle=now-h.lastActivity;
             if(phase==HttpApi.UPLOAD&&idle>UPLOAD_STALL_MS){
                 if(h.stalled==null)Diagnostics.event("watchdog_cut",r.id,"reason","upload","part",i+1,"idle",idle,"local",true);
-                h.abortStalled("el envío dejó de avanzar",true);
+                h.abortStalled(Lang.str(c,R.string.eng_reason_upload_stalled),true);
             }else if(phase>=HttpApi.WAIT&&idle>limit){
                 boolean local=frozenWait.get();
                 if(h.stalled==null)Diagnostics.event("watchdog_cut",r.id,"reason","response","part",i+1,"idle",idle,"local",local,"provider",config.provider);
-                h.abortStalled((router?"OpenRouter no respondió en ":"sin respuesta en ")+Recording.time(idle)+", lo normal es menos de "+Recording.time(limit),local);
+                h.abortStalled(Lang.str(c,router?R.string.eng_reason_no_answer_router:R.string.eng_reason_no_answer,Recording.time(idle),Recording.time(limit)),local);
             }
         },5,5,TimeUnit.SECONDS);
+        // A la vista de Pipeline.cancel mientras se prepara y se sube (también desde la tarea de fondo, ver SENDING).
+        SENDING.add(h);
         try{
             // El cliente sale del proveedor: OpenAI (y servidor compatible) u OpenRouter. El motor no distingue la respuesta.
             try{response=TranscribeClient.of(c,h,config).transcribe(part.file,config,settings.language(),refs,delta);}
             catch(HttpApi.UserAction e){
                 if(refs==null||refs.isEmpty()||!String.valueOf(e.getMessage()).contains("known_speaker"))throw e;
-                Pipeline.log(c,r.id,"El proveedor rechazó las muestras de voz · se reenvía "+(n>1?"la "+label:"el audio")+" sin ellas");
+                Pipeline.log(c,r.id,n>1?Lang.str(c,R.string.eng_log_samples_rejected_part,number,n):Lang.str(c,R.string.eng_log_samples_rejected_audio));
                 response=TranscribeClient.of(c,h,config).transcribe(part.file,config,settings.language(),null,delta);refs=null;
             }
         }catch(Exception e){
@@ -678,7 +691,7 @@ final class Transcriber {
             failedStage=HttpApi.PHASES[h.lastPhase];
             Diagnostics.event("part_failed",r.id,"part",i+1,"parts",n,"stage",failedStage,"error_class",e.getClass().getSimpleName(),"elapsed_ms",System.currentTimeMillis()-blockStart,"local",localCut(e),"provider",config.provider);
             throw e;
-        }finally{guard.cancel(false);}
+        }finally{guard.cancel(false);SENDING.remove(h);}
         check(r);
         // "_known": qué nombre enviado corresponde a qué voz (se usa al unir bloques; ver Transcript.fromParts).
         JSONObject known=new JSONObject();if(refs!=null)for(String[] ref:refs)known.put(ref[0],ref.length>2?ref[2]:"block0:"+ref[0]);if(known.length()>0)response.put("_known",known);
@@ -699,28 +712,30 @@ final class Transcriber {
             // "costUsd" solo existe si el proveedor informó el costo: las pantallas muestran ese y no el estimado.
             if(cost>=0)s.put("costUsd",s.optDouble("costUsd",0)+cost);
         });
-        Pipeline.log(c,r.id,(n>1?"Parte "+(i+1)+" de "+n+" lista":"Respuesta recibida")+" · tardó "+Recording.time(took)+voices);
+        String tookText=Lang.str(c,R.string.eng_frag_took,Recording.time(took));
+        Pipeline.log(c,r.id,n>1?Lang.str(c,R.string.eng_log_part_ready,number,n,tookText,voices):Lang.str(c,R.string.eng_log_answer,tookText,voices));
         if(cost>=0)Diagnostics.event("part_complete",r.id,"part",i+1,"parts",n,"elapsed_ms",took,"cost",cost);
         else Diagnostics.event("part_complete",r.id,"part",i+1,"parts",n,"elapsed_ms",took);
-        JSONObject st=FilesStore.state(c,r.id);notice(n>1?"Transcribiendo · "+st.optInt("blocksDone")+" de "+n+" partes listas":"Transcribiendo · respuesta recibida",true,(int)(st.optLong("doneAudioMs")*100/Math.max(1,r.duration)));
+        JSONObject st=FilesStore.state(c,r.id);notice(n>1?Lang.str(c,R.string.eng_notif_parts_ready,st.optInt("blocksDone"),n):Lang.str(c,R.string.eng_notif_answer),true,(int)(st.optLong("doneAudioMs")*100/Math.max(1,r.duration)));
         return response;
     }
-    /** Resumen de voces de un bloque para la bitácora: cuántas reconoció por muestra y cuántas son nuevas. */
+    /** Resumen de voces de un bloque para la bitácora: cuántas reconoció por muestra y cuántas son nuevas (« · 2 voces», o ""). */
     private static String describeVoices(JSONObject response,JSONObject known){
         JSONArray s=response.optJSONArray("segments");if(s==null||!response.optBoolean("_diarized",true))return "";
         Set<String> recognized=new HashSet<>(),fresh=new HashSet<>();
         for(int k=0;k<s.length();k++){JSONObject seg=s.optJSONObject(k);if(seg==null||seg.optString("text").trim().isEmpty())continue;String sp=seg.optString("speaker");if(known.has(sp))recognized.add(known.optString(sp));else fresh.add(sp);}
-        if(known.length()==0)return fresh.isEmpty()?"":" · "+fresh.size()+(fresh.size()==1?" voz":" voces");
+        if(known.length()==0)return fresh.isEmpty()?"":" · "+Lang.plural(R.plurals.eng_voices,fresh.size());
+        String added=fresh.isEmpty()?"":", "+Lang.plural(R.plurals.eng_voices_new,fresh.size());
         // OpenRouter: las muestras van como anclas antes del audio y el cliente cuenta cuántas personas emparejó (cantidades,
         // nunca nombres). Sirve para medir cuánto acierta la técnica, que todavía no se probó con audio real.
         if(response.has("_anchors")){int sent=response.optInt("_anchors"),matched=response.optInt("_matched");
-            return " · reconoció "+matched+" de "+sent+(sent==1?" voz conocida":" voces conocidas")+(fresh.isEmpty()?"":", "+fresh.size()+(fresh.size()==1?" nueva":" nuevas"));}
-        return " · reconoció "+recognized.size()+(recognized.size()==1?" voz":" voces")+(fresh.isEmpty()?"":", "+fresh.size()+(fresh.size()==1?" nueva":" nuevas"));
+            return " · "+Lang.plural(R.plurals.eng_voices_matched,sent,matched,sent)+added;}
+        return " · "+Lang.plural(R.plurals.eng_voices_recognized,recognized.size())+added;
     }
-    /** Progreso de subida sumado entre bloques en paralelo; se guarda cada ~0,7 s. */
-    private void progress(Recording r,int block,long sent,long total,String label){
+    /** Progreso de subida sumado entre bloques en paralelo; se guarda cada ~0,7 s. sending: «Enviando parte 2 de 3». */
+    private void progress(Recording r,int block,long sent,long total,String sending){
         uploads.put(block,new long[]{sent,total});long now=System.currentTimeMillis();if(now-lastProgress<700&&sent<total)return;lastProgress=now;
-        publishUploads(r);long[] sum=sum();notice("Enviando "+label,true,(int)(sum[0]*100/Math.max(1,sum[1])));
+        publishUploads(r);long[] sum=sum();notice(sending,true,(int)(sum[0]*100/Math.max(1,sum[1])));
     }
     private long[] sum(){long s=0,t=0;for(long[] u:uploads.values()){s+=u[0];t+=u[1];}return new long[]{s,t};}
     /** Avance de la etapa «Preparando audio» de cada parte que se está convirtiendo ahora (0–100). */
@@ -731,12 +746,12 @@ final class Transcriber {
      * Avance de la conversión: en el estado ("prepPct", que lee el detalle) y en la notificación, cada ~0,7 s como la
      * subida. Nunca hace fallar el envío.
      */
-    private void prepProgress(Recording r,int part,int percent,String label,int n){
+    private void prepProgress(Recording r,int part,int percent,int n){
         if(!preparing.containsKey(part))return;
         preparing.put(part,percent);long now=System.currentTimeMillis();if(now-lastPrep<700&&percent<100)return;lastPrep=now;
         int shown=prepPercent(),together=preparing.size();
         try{FilesStore.update(c,r.id,s->s.put("prepPct",shown));}catch(Exception ignored){}
-        notice("Preparando el audio "+(together>1?"de "+together+" partes":n>1?"de la "+label:"para enviarlo")+" · "+shown+" %",true,shown);
+        notice(together>1?Lang.str(c,R.string.eng_notif_preparing_parts,together,shown):n>1?Lang.str(c,R.string.eng_notif_preparing_part,part+1,n,shown):Lang.str(c,R.string.eng_notif_preparing_send,shown),true,shown);
     }
     private void publishUploads(Recording r){long[] sum=sum();try{FilesStore.update(c,r.id,s->s.put("upSent",sum[0]).put("upTotal",sum[1]));}catch(Exception ignored){}}
     private volatile long lastLive;
@@ -745,22 +760,40 @@ final class Transcriber {
 
     // ---------- Notificaciones ----------
     /**
-     * ¿El texto de la notificación de avance dice una espera? («Esperando Wi-Fi…», «En pausa…», «… se retoma sola…»,
-     * «… se reintenta solo»): mientras tanto no se envía nada.
+     * Conexiones de las partes que se están preparando o subiendo ahora, de cualquier trabajo (servicio en primer plano,
+     * transferencia iniciada por el usuario o tarea de fondo). Pipeline.cancel corta las de su grabación (por jobId): así
+     * «Cancelar» y «Detener» no esperan a que termine la subida en curso de la tarea de fondo, cuya conexión no está a mano.
      */
-    static boolean waiting(String text){return text!=null&&(text.startsWith("Esperando")||text.startsWith("En pausa")||text.contains("se retoma sola")||text.endsWith("se reintenta solo"));}
+    static final Set<HttpApi> SENDING=ConcurrentHashMap.newKeySet();
+    /**
+     * ¿El texto de la notificación de avance dice una espera? («Esperando Wi-Fi…», «… se retoma sola…», «… se reintenta
+     * solo»): mientras tanto no se envía nada. En cualquiera de los tres idiomas (StatusText.paused).
+     */
+    static boolean waiting(String text){return StatusText.paused(text);}
     /**
      * Notificación de avance (también la del servicio en primer plano). Mientras transcribe, abre esa grabación. Una espera
      * (ver waiting) se titula «En pausa» y no lleva la barra ocupada: antes decía «Transcribiendo — Esperando Wi-Fi…» con
-     * la barra girando hasta 15 min, sin enviar nada.
+     * la barra girando hasta 15 min, sin enviar nada. «Detener» corta la grabación que se procesa (o la que se espera
+     * reintentar), si hay una.
      */
-    static Notification build(Context c,String text,boolean ongoing,int percent){
-        NotificationManager manager=c.getSystemService(NotificationManager.class);manager.createNotificationChannel(new NotificationChannel("processing","Transcripciones",NotificationManager.IMPORTANCE_LOW));
+    static Notification build(Context c,String text,boolean ongoing,int percent){String id=currentId;return build(c,text,ongoing,percent,id!=null?id:retryingId);}
+    /**
+     * stop: la grabación que corta «Detener» (0.9.0), o null para no ofrecerlo (p. ej. «Preparando…», antes de tomar una).
+     * Las esperas de TranscribeService (cargador, batería, Wi-Fi) pasan la grabación que esperan: ahí currentId es null.
+     */
+    static Notification build(Context c,String text,boolean ongoing,int percent,String stop){
+        NotificationManager manager=c.getSystemService(NotificationManager.class);manager.createNotificationChannel(new NotificationChannel("processing",Lang.str(c,R.string.eng_channel_processing),NotificationManager.IMPORTANCE_LOW));
         String id=currentId;boolean paused=ongoing&&waiting(text);
         PendingIntent open=id!=null?PendingIntent.getActivity(c,NOTIFICATION,openIntent(c,id),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE)
             :PendingIntent.getActivity(c,NOTIFICATION,new Intent(c,MainActivity.class).putExtra("library",true),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        Notification.Builder b=new Notification.Builder(c,"processing").setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle(paused?"En pausa":ongoing?"Transcribiendo":"Verbapp").setContentText(text).setContentIntent(open).setOngoing(ongoing).setAutoCancel(!ongoing).setOnlyAlertOnce(true);
+        Notification.Builder b=new Notification.Builder(c,"processing").setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle(paused?Lang.str(c,R.string.eng_notif_title_paused):ongoing?Lang.str(c,R.string.eng_notif_title_working):"Verbapp").setContentText(text).setContentIntent(open).setOngoing(ongoing).setAutoCancel(!ongoing).setOnlyAlertOnce(true);
         if(ongoing&&!paused){if(percent>=0)b.setProgress(100,percent,false);else b.setProgress(0,0,true);}
+        // «Detener» llega a un receptor del manifiesto (TranscribeService.Stop): funciona con la app cerrada y en la pantalla
+        // de bloqueo, lo esté enviando el servicio, la transferencia o la tarea de fondo.
+        if(ongoing&&stop!=null){
+            PendingIntent halt=PendingIntent.getBroadcast(c,NOTIFICATION,new Intent(c,TranscribeService.Stop.class).setAction(TranscribeService.STOP).putExtra("id",stop),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+            b.addAction(action(c,R.drawable.ic_stop,Lang.str(c,R.string.eng_action_stop),halt));
+        }
         return b.build();
     }
     private void notice(String text,boolean ongoing,int percent){
@@ -773,15 +806,15 @@ final class Transcriber {
      * rápida está configurada. Extras para RecordingActivity: id, names, save, retranscribed.
      */
     static Notification buildDone(Context c,Recording r,boolean again){
-        c.getSystemService(NotificationManager.class).createNotificationChannel(new NotificationChannel(DONE_CHANNEL,"Transcripciones listas",NotificationManager.IMPORTANCE_DEFAULT));
+        c.getSystemService(NotificationManager.class).createNotificationChannel(new NotificationChannel(DONE_CHANNEL,Lang.str(c,R.string.eng_channel_done),NotificationManager.IMPORTANCE_DEFAULT));
         int voices=0;boolean review=false;
         try{Transcript t=Transcript.load(c,r.id);voices=t.speakers().size();review=t.diarized()&&voices>1&&!t.reviewed();}catch(Exception ignored){}
         Intent open=openIntent(c,r.id);if(again)open.putExtra("retranscribed",true);
-        String text="«"+r.title+"»"+(review?" · "+voices+" voces por revisar":again?" · elige si te quedas con ella":"");
-        Notification.Builder b=new Notification.Builder(c,DONE_CHANNEL).setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle(again?"Nueva versión lista":"Transcripción lista").setContentText(text)
+        String text=review?Lang.str(c,R.string.eng_notif_done_review,r.title,voices):Lang.str(c,again?R.string.eng_notif_done_again:R.string.eng_notif_done_text,r.title);
+        Notification.Builder b=new Notification.Builder(c,DONE_CHANNEL).setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle(Lang.str(c,again?R.string.eng_notif_new_version_ready:R.string.eng_done_title)).setContentText(text)
             .setContentIntent(activity(c,r.id,0,open)).setAutoCancel(true).setCategory(Notification.CATEGORY_STATUS).setShowWhen(true);
-        if(review)b.addAction(action(c,R.drawable.ic_people,"Revisar voces",activity(c,r.id,1,openIntent(c,r.id).putExtra("names",true))));
-        else if(Inbox.configured(c))b.addAction(action(c,R.drawable.ic_save,"Guardar en "+Inbox.folderName(c),activity(c,r.id,2,openIntent(c,r.id).putExtra("save",true))));
+        if(review)b.addAction(action(c,R.drawable.ic_people,Lang.str(c,R.string.eng_action_review_voices),activity(c,r.id,1,openIntent(c,r.id).putExtra("names",true))));
+        else if(Inbox.configured(c))b.addAction(action(c,R.drawable.ic_save,Lang.str(c,R.string.eng_action_save_in,Inbox.folderName(c)),activity(c,r.id,2,openIntent(c,r.id).putExtra("save",true))));
         return b.build();
     }
     private void done(Recording r,boolean again){
@@ -798,7 +831,7 @@ final class Transcriber {
      * transcripción que se rinde debe avisar, no solo quedar escrita en la bitácora.
      */
     static void attention(Context c,String id,String title,String text){
-        NotificationManager manager=c.getSystemService(NotificationManager.class);manager.createNotificationChannel(new NotificationChannel("processing","Transcripciones",NotificationManager.IMPORTANCE_LOW));
+        NotificationManager manager=c.getSystemService(NotificationManager.class);manager.createNotificationChannel(new NotificationChannel("processing",Lang.str(c,R.string.eng_channel_processing),NotificationManager.IMPORTANCE_LOW));
         Notification n=new Notification.Builder(c,"processing").setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle(title).setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text))
             .setContentIntent(activity(c,id,3,openIntent(c,id))).setAutoCancel(true).build();
         try{manager.notify(doneId(id),n);}catch(RuntimeException ignored){}

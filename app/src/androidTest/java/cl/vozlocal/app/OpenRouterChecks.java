@@ -590,7 +590,7 @@ final class OpenRouterChecks {
             check(e instanceof HttpApi.UserAction&&has(e.getMessage(),"pista de audio"),"Audio without a track should ask the user: "+e);
             // Disco lleno con anclas: no se intenta otra vez sin ellas (el problema no son las muestras).
             List<String[]> refs=Collections.singletonList(new String[]{"voz_1",url(bytes(900)),"block0:0","Persona 1"});
-            FailingAudio full=new FailingAudio(new HttpApi.UserAction(OrAudio.NO_SPACE));e=null;
+            FailingAudio full=new FailingAudio(new HttpApi.UserAction(OrAudio.noSpace()));e=null;
             try{client(c,new Fake(),full,new ArrayList<>()).transcribe(audio,config(mai,true),"es",refs,null);}catch(Exception x){e=x;}
             check(e instanceof HttpApi.UserAction&&has(e.getMessage(),"espacio")&&full.asked.equals(Collections.singletonList(1)),"Disk full retried without the anchors: "+full.asked);
             // 4. El vigilante cortó una preparación trabada: llega tal cual (no como falla del FLAC ni como «pausa de Android»).

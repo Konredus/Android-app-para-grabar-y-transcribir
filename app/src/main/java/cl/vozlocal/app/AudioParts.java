@@ -40,11 +40,11 @@ final class AudioParts {
     static List<Part> plan(Context c,Recording r,HttpApi http,long targetMs,JSONArray cached,List<Long> cutsOut,Log log,long singleMaxMs)throws Exception{
         File source=r.audio(c);long total=r.duration>0?r.duration:AudioConvert.duration(source);targetMs=Math.max(targetMs,60_000);
         List<Long> cuts=new ArrayList<>();
-        if(cached!=null&&cached.length()>=2){for(int i=0;i<cached.length();i++)cuts.add(cached.getLong(i));if(log!=null)log.line("Cortes reutilizados del intento anterior ("+(cuts.size()-1)+(cuts.size()==2?" parte)":" partes)"));}
+        if(cached!=null&&cached.length()>=2){for(int i=0;i<cached.length();i++)cuts.add(cached.getLong(i));if(log!=null)log.line(Lang.plural(c,R.plurals.eng_log_cuts_reused,cuts.size()-1));}
         else{
             cuts.add(0L);
             if(total>singleMaxMs||source.length()>20_000_000){
-                if(log!=null)log.line("Buscando pausas para cortar sin partir frases");
+                if(log!=null)log.line(Lang.str(c,R.string.eng_log_finding_pauses));
                 for(long t=targetMs;t<total-targetMs*0.4;t+=targetMs){
                     long q=quietest(source,t,10_000,http);long last=cuts.get(cuts.size()-1);
                     if(q>last+30_000&&q<total-20_000)cuts.add(q);
@@ -61,7 +61,7 @@ final class AudioParts {
         for(int i=0;i+1<cuts.size();i++){
             http.check();long a=cuts.get(i),b=cuts.get(i+1);File file=new File(dir,"block-"+i+".m4a");
             // Se escribe a un temporal y se renombra: si Android corta a la mitad, no queda un bloque dañado.
-            if(!file.exists()||file.length()==0){File tmp=new File(dir,"block-"+i+".tmp");remuxRange(source,tmp,a,b,http);if(!tmp.renameTo(file))throw new IOException("No se pudo guardar el bloque");}
+            if(!file.exists()||file.length()==0){File tmp=new File(dir,"block-"+i+".tmp");remuxRange(source,tmp,a,b,http);if(!tmp.renameTo(file))throw new IOException(Lang.str(c,R.string.eng_err_save_block));}
             parts.add(new Part(file,a/1000d,b-a));
         }
         return parts;
@@ -73,7 +73,7 @@ final class AudioParts {
         try{
             extractor.setDataSource(source.getPath());int track=-1;MediaFormat format=null;
             for(int i=0;i<extractor.getTrackCount();i++){MediaFormat f=extractor.getTrackFormat(i);String mime=f.getString(MediaFormat.KEY_MIME);if(mime!=null&&mime.startsWith("audio/")){track=i;format=f;break;}}
-            if(track<0)throw new HttpApi.UserAction("El archivo no tiene una pista de audio válida.");
+            if(track<0)throw new HttpApi.UserAction(Lang.str(R.string.eng_err_no_track));
             if(!"audio/mp4a-latm".equals(format.getString(MediaFormat.KEY_MIME))){extractor.release();extractor=null;AudioConvert.convert(source,target,fromMs,toMs,http);ok=true;return;}
             extractor.selectTrack(track);extractor.seekTo(fromMs*1000,MediaExtractor.SEEK_TO_CLOSEST_SYNC);
             muxer=new MediaMuxer(target.getPath(),MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);int out=muxer.addTrack(format);muxer.start();started=true;
@@ -177,7 +177,7 @@ final class AudioParts {
             try{AudioConvert.convert(r.audio(c),file,(long)(clip.start*1000),(long)(clip.end*1000),http);byte[] data=java.nio.file.Files.readAllBytes(file.toPath());
                 int person=appearance.indexOf(clip.label)+1;int n=taken.merge(clip.label,1,Integer::sum);
                 refs.add(new String[]{"voz_"+person+(n>1?"b":""),"data:audio/mp4;base64,"+android.util.Base64.encodeToString(data,android.util.Base64.NO_WRAP),"block0:"+clip.label,
-                    "Persona "+person+" ("+Recording.time((long)(clip.start*1000))+"–"+Recording.time((long)(clip.end*1000))+")"});}
+                    Lang.str(c,R.string.speaker_n,person)+" ("+Recording.time((long)(clip.start*1000))+"–"+Recording.time((long)(clip.end*1000))+")"});}
             catch(Exception ignored){}finally{file.delete();}
         }
         return refs;
@@ -193,7 +193,7 @@ final class AudioParts {
         try{
             extractor.setDataSource(r.audio(c).getPath());int track=-1;
             for(int i=0;i<extractor.getTrackCount();i++)if(extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME).startsWith("audio/")){track=i;break;}
-            if(track<0)throw new HttpApi.UserAction("El archivo no tiene una pista de audio válida.");
+            if(track<0)throw new HttpApi.UserAction(Lang.str(c,R.string.eng_err_no_track));
             MediaFormat format=extractor.getTrackFormat(track);extractor.selectTrack(track);
             ByteBuffer bytes=ByteBuffer.allocate(1024*1024);MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();
             long base=0,partBytes=0;int target=-1;

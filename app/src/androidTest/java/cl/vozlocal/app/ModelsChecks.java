@@ -110,7 +110,9 @@ final class ModelsChecks {
         check(Models.known(MAI)&&!Models.known(NEW)&&!Models.known(null),"known() no distingue la tabla local");
         check(Models.rank(MAI)<Models.rank(NOVA)&&Models.rank(NEW)==Integer.MAX_VALUE,"El orden de la tabla cambió");
         check(Models.DEFAULT_SPEAKERS.equals(MAI)&&Models.recipe(Models.DEFAULT_SPEAKERS).diarizes,"El recomendado con voces debe saber separar voces");
-        check(Models.NOTE_MODELS.length==Models.NOTE_NAMES.length&&Models.NOTE_DEFAULT.equals(Models.NOTE_MODELS[0])&&Models.NOTE_DEFAULT.startsWith("~"),"Alias de la nota inconsistentes");
+        check(Models.NOTE_MODELS.length==Models.noteNames().length&&Models.NOTE_DEFAULT.equals(Models.NOTE_MODELS[0])&&Models.NOTE_DEFAULT.startsWith("~"),"Alias de la nota inconsistentes");
+        // 0.9.0: el nombre sale en el idioma de la app; en español, igual que antes.
+        check(Models.noteName(0).equals("Claude Sonnet (el más nuevo)")&&Models.noteNames()[2].equals("Gemini Flash (el más nuevo)"),"Nombres de los alias de la nota en español: "+java.util.Arrays.toString(Models.noteNames()));
         List<Models.Model> builtin=Models.builtin();
         check(builtin.size()>=2&&builtin.get(0).id.equals(MAI)&&builtin.get(0).known&&builtin.get(0).approx&&near(builtin.get(0).perHour,0.10),"La lista local (sin red) debe partir por el recomendado, con precio de referencia");
     }

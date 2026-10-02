@@ -117,8 +117,9 @@ final class OrAudio {
     static final class TooShort extends IOException{TooShort(){super("Audio too short");}}
     /** 0.8.0: el archivo no tiene una pista de audio. Reintentar no lo arregla: el cliente se lo dice al usuario. */
     static final class NoTrack extends IOException{NoTrack(){super("No audio track");}}
+    /** Lo que se le dice a la persona con el disco lleno, en el idioma de la app. */
+    static String noSpace(){return Lang.str(R.string.eng_err_no_space);}
     /** Disco lleno de verdad (ENOSPC en la cadena de causas), no «poco espacio libre medido después de limpiar». */
-    static final String NO_SPACE="No queda espacio en el teléfono para preparar el audio. Libera espacio y pulsa Reintentar.";
     static boolean diskFull(Throwable e){
         for(Throwable t=e;t!=null;t=t.getCause()){
             if(t instanceof android.system.ErrnoException&&((android.system.ErrnoException)t).errno==android.system.OsConstants.ENOSPC)return true;
@@ -152,7 +153,7 @@ final class OrAudio {
                 catch(FlacFailed e){
                     // Disco lleno no es culpa del codificador: no se apaga el FLAC ni se intenta el WAV (pesa el doble). Se decide
                     // por la causa del error: medir el espacio libre aquí no sirve, porque write() ya borró el .tmp a medias.
-                    if(diskFull(e)){Diagnostics.event("or_audio_fallback",cancel==null?null:cancel.jobId,"reason","disk_full");throw new HttpApi.UserAction(NO_SPACE);}
+                    if(diskFull(e)){Diagnostics.event("or_audio_fallback",cancel==null?null:cancel.jobId,"reason","disk_full");throw new HttpApi.UserAction(noSpace());}
                     Throwable cause=e.getCause();flacIssue=e.getMessage()+(cause==null?"":" · "+cause.getClass().getSimpleName()+": "+cause.getMessage());
                     flacOff=true;
                     Diagnostics.event("or_audio_fallback",cancel==null?null:cancel.jobId,"format","wav","reason",HttpApi.safeReason(e),"error_class",cause==null?"":cause.getClass().getSimpleName());
@@ -161,7 +162,7 @@ final class OrAudio {
         }catch(InterruptedIOException e){throw e;}
         catch(IOException e){if(!diskFull(e))throw e;}
         // Reintentar solo no arregla la falta de espacio: se le pide al usuario, en vez de gastar los cinco intentos.
-        throw new HttpApi.UserAction(NO_SPACE);
+        throw new HttpApi.UserAction(noSpace());
     }
 
     private static Built write(File audio,List<File> anchors,File outBase,File tmp,HttpApi cancel,boolean flac,long started)throws Exception{
