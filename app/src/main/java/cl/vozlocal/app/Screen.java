@@ -32,7 +32,7 @@ abstract class Screen extends Activity {
      * Si cambió el tema o «Colores de tu fondo de pantalla» mientras la pantalla estaba detrás, se rehace con la paleta nueva.
      * Lo mismo con el idioma: en Android 8–12, Lang.set solo rehace la pantalla de adelante (Android 13+ las rehace todas).
      */
-    @Override protected void onResume(){super.onResume();if(p.dark!=AppTheme.isDark(this)||p.dynamic!=AppTheme.dynamicColor(this)||!Lang.current(this).equals(lang))recreate();}
+    @Override protected void onResume(){super.onResume();Lang.refresh();if(p.dark!=AppTheme.isDark(this)||p.dynamic!=AppTheme.dynamicColor(this)||!Lang.current(this).equals(lang))recreate();}
     @Override protected void onSaveInstanceState(Bundle state){state.putInt("screen_scroll",scroll==null?0:scroll.getScrollY());super.onSaveInstanceState(state);}
 
     /**

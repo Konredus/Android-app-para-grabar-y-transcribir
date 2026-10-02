@@ -37,9 +37,23 @@ final class Lang {
     /** Nombre de cada idioma en su propio idioma, para el selector. */
     static String nativeName(String lang){return EN.equals(lang)?"English":ES.equals(lang)?"Español":"Português (Brasil)";}
 
+    /**
+     * Caché del idioma vigente. En Android 13+ leerlo es una llamada al sistema (LocaleManager), y las listas lo piden por cada
+     * fila (Ui.humanDuration, RecState…). Se renueva al elegir idioma, al cambiar la configuración (VozApp) y al volver a
+     * una pantalla (Screen.onResume); por si acaso, dura poco.
+     */
+    private static volatile String cachedCurrent;private static volatile long cachedAt;
+    private static final long CACHE_MS=2000;
+    /** Olvida el idioma guardado en caché: la próxima lectura vuelve a preguntarlo. */
+    static void refresh(){cachedCurrent=null;}
     /** El idioma vigente: el forzado por pruebas, el elegido (o el del sistema en Android 13+), o el del teléfono la primera vez. */
     static String current(Context c){
         String o=override;if(o!=null)return o;
+        String k=cachedCurrent;long now=android.os.SystemClock.elapsedRealtime();
+        if(k!=null&&now-cachedAt<CACHE_MS)return k;
+        k=read(c);cachedCurrent=k;cachedAt=now;return k;
+    }
+    private static String read(Context c){
         String saved=prefs(c).getString(KEY,null);
         if(Build.VERSION.SDK_INT>=33){
             // Si la persona lo cambió en Ajustes del teléfono → Idiomas de las apps, manda eso.
@@ -86,14 +100,14 @@ final class Lang {
      */
     static void set(Activity a,String lang){
         String n=normalize(lang);if(n==null)return;
-        prefs(a).edit().putString(KEY,n).apply();cachedTag=null;cachedRes=null;
+        prefs(a).edit().putString(KEY,n).apply();cachedTag=null;cachedRes=null;refresh();
         if(Build.VERSION.SDK_INT>=33){
             try{a.getSystemService(LocaleManager.class).setApplicationLocales(new LocaleList(locale(n)));return;}catch(RuntimeException ignored){}
         }
         a.recreate();
     }
     /** Solo para pruebas instrumentadas: fuerza (o con null, libera) el idioma de toda la app en este proceso. */
-    static void override(String lang){override=lang==null?null:normalize(lang);cachedTag=null;cachedRes=null;}
+    static void override(String lang){override=lang==null?null:normalize(lang);cachedTag=null;cachedRes=null;refresh();}
 
     /** Contexto con el idioma vigente: lo usan Screen, la app y los servicios en attachBaseContext. */
     static Context wrap(Context base){
