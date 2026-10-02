@@ -9,12 +9,19 @@ import javax.crypto.spec.GCMParameterSpec;
 
 final class Settings {
     final SharedPreferences prefs;
-    Settings(Context c) { prefs = c.getSharedPreferences("settings", Context.MODE_PRIVATE); }
+    /** Contexto de la app (no de una pantalla: no la retiene), para el idioma y los textos (Lang). */
+    private final Context app;
+    Settings(Context c) { prefs = c.getSharedPreferences("settings", Context.MODE_PRIVATE); Context a = c.getApplicationContext(); app = a != null ? a : c; }
     boolean automatic() { return prefs.getBoolean("automatic", false); }
     boolean wifiOnly() { return prefs.getBoolean("wifi", true); }
     boolean charging() { return prefs.getBoolean("charging", false); }
     boolean askTitle() { return prefs.getBoolean("askTitle", true); }
-    String language() { return prefs.getString("language", "es"); }
+    /**
+     * Idioma del audio al transcribir: "en", "es", "pt" o "" (que el modelo lo detecte). Sin elegir (0.9.0), el idioma de
+     * la app: quien la usa en inglés habla, lo más probable, en inglés. Antes partía siempre en "es" (la app era solo en
+     * español); en español sigue igual.
+     */
+    String language() { String saved = prefs.getString("language", null); return saved != null ? saved : Lang.current(app); }
     /**
      * Servicio de transcripción. Desde la segunda ronda de la 0.8.0 la app usa solo OpenRouter (SPEC-0.8b, decisión 1):
      * es el valor por defecto y la migración del esquema 5 (VozApp) se lo pone a quien venía de OpenAI o de su servidor.
@@ -27,8 +34,8 @@ final class Settings {
     boolean openRouter(){return provider().equals("openrouter");}
     /** «Servidor compatible»: todo lo que no es OpenAI ni OpenRouter (su clave va con el prefijo "custom_"). */
     boolean custom(){return !provider().equals("openai")&&!openRouter();}
-    /** Nombre del proveedor para los textos: «OpenRouter», «OpenAI» o «Tu servidor». */
-    String providerName(){return openRouter()?"OpenRouter":custom()?"Tu servidor":"OpenAI";}
+    /** Nombre del proveedor para los textos: «OpenRouter», «OpenAI» o «Tu servidor» (en el idioma de la app). */
+    String providerName(){return openRouter()?"OpenRouter":custom()?Lang.str(app,R.string.set_provider_server):"OpenAI";}
     boolean hasKey() { return prefs.contains(prefix()+"keyEncrypted"); }
     /** Agregar la fecha (2026-09-27) delante de cada nombre. Activado por defecto (pedido del usuario, 0.4.3). */
     boolean datePrefix(){return prefs.getBoolean("datePrefix",true);}
@@ -69,9 +76,10 @@ final class Settings {
     /**
      * Servicio de una clave de antes que ya no se usa («OpenAI» o «tu servidor»), o null. Con «solo OpenRouter» esas
      * claves quedan cifradas y sin uso (SPEC-0.8b, decisión 2): sirve para explicarle a quien actualiza por qué se le pide
-     * otra clave, sin mostrar ni borrar la vieja.
+     * otra clave, sin mostrar ni borrar la vieja. Va dentro de una frase («La clave de tu servidor que tenías…»): por eso
+     * «tu servidor» en minúscula, en el idioma de la app.
      */
-    String oldService(){return hasOpenAiKey()?"OpenAI":prefs.contains("custom_keyEncrypted")?"tu servidor":null;}
+    String oldService(){return hasOpenAiKey()?"OpenAI":prefs.contains("custom_keyEncrypted")?Lang.str(app,R.string.set_old_server):null;}
     // ---------- 0.6.0 ----------
     /** Armar la «Nota para tu segundo cerebro» al terminar cada transcripción. */
     boolean noteAuto(){return prefs.getBoolean("noteAuto",true);}
