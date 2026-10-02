@@ -1,0 +1,395 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Generales -->
+    <string name="set_close">Cerrar</string>
+    <string name="set_save">Guardar</string>
+    <string name="set_delete">Borrar</string>
+    <string name="set_remove">Eliminar</string>
+    <string name="set_retry">Reintentar</string>
+    <string name="set_selected">seleccionado</string>
+    <string name="set_automatic">Automático</string>
+    <string name="set_more_info">Más información</string>
+    <string name="set_more_info_about">Más información: %1$s</string>
+
+    <!-- Tarjeta de estado -->
+    <string name="set_motto">Tus palabras, para siempre</string>
+    <string name="set_status_ready">Listo para transcribir</string>
+    <string name="set_status_check_key">Revisa tu clave de OpenRouter</string>
+    <string name="set_status_failed">No se pudo conectar</string>
+    <string name="set_status_no_balance">Sin saldo en OpenRouter</string>
+    <string name="set_status_now_openrouter">Verbapp ahora usa OpenRouter</string>
+    <string name="set_status_one_step">Falta un paso para transcribir</string>
+    <string name="set_status_rejected_detail">OpenRouter no la aceptó. Toca para ver qué pasó y cambiarla</string>
+    <string name="set_status_failed_detail">Toca para ver qué pasó y reintentar</string>
+    <string name="set_status_no_credits_detail">Tu cuenta aún no tiene créditos. Cárgalos en openrouter.ai y vuelve a comprobar.</string>
+    <string name="set_status_no_balance_detail">Carga créditos en openrouter.ai y vuelve a comprobar.</string>
+    <string name="set_status_old_detail">Pega tu clave de OpenRouter para seguir transcribiendo. La de %1$s ya no se usa.</string>
+    <string name="set_status_add_key_detail">Agrega tu clave de OpenRouter. Grabar funciona igual sin ella.</string>
+    <string name="set_credits_none_body">Tu cuenta de OpenRouter todavía no tiene créditos. Sin saldo no se puede transcribir ni armar notas. Carga créditos en openrouter.ai (se descuenta solo lo que usas) y vuelve a comprobar.</string>
+    <string name="set_credits_empty_body">Se acabó el saldo de tu cuenta de OpenRouter. Sin saldo no se puede transcribir ni armar notas. Carga créditos en openrouter.ai (se descuenta solo lo que usas) y vuelve a comprobar.</string>
+    <string name="set_add_credits">Cargar créditos</string>
+    <string name="set_check_again">Comprobar de nuevo</string>
+    <string name="set_no_browser">No se pudo abrir el navegador</string>
+    <string name="set_no_browser_body">Entra a openrouter.ai desde un navegador.</string>
+
+    <!-- ¿Cómo consigo una clave? -->
+    <string name="set_how_key">¿Cómo consigo una clave?</string>
+    <string name="set_how_key_title">Cómo conseguir tu clave</string>
+    <string name="set_how_key_body">OpenRouter te da acceso a muchas IA con una sola clave. Pagas solo lo que usas, sin suscripción.</string>
+    <string name="set_how_key_step1">Crea tu cuenta en openrouter.ai.</string>
+    <string name="set_how_key_step2">Carga un poco de crédito: se descuenta solo lo que usas.</string>
+    <string name="set_how_key_step3">En «Keys», crea una clave y cópiala.</string>
+    <string name="set_how_key_step4">Vuelve a Verbapp y pégala en «Clave de OpenRouter».</string>
+    <string name="set_open_openrouter">Abrir openrouter.ai</string>
+
+    <!-- Tarjeta «Tus métricas» y pie -->
+    <string name="set_metrics_loading">Calculando…</string>
+    <string name="set_metrics_empty">Horas grabadas, palabras, costos y más, calculados en tu teléfono.</string>
+    <string name="set_metrics_desc_loading">Tus métricas, calculando. Toca para ver el detalle</string>
+    <string name="set_metrics_desc_empty">Tus métricas. Toca para ver el detalle</string>
+    <string name="set_metrics_desc_line">Tus métricas: %1$s. Toca para ver el detalle</string>
+    <string name="set_footer_app">%1$s · Software libre · Licencia MIT</string>
+    <string name="set_footer_font">Tipografía Outfit · SIL Open Font License</string>
+
+    <!-- Idioma de la app -->
+    <string name="set_app_lang_body">El idioma en que te habla Verbapp. El que hablas en tus grabaciones se elige en «Idioma del audio».</string>
+
+    <!-- Tu flujo -->
+    <string name="set_section_flow">Tu flujo</string>
+    <string name="set_quick_save">Guardado rápido</string>
+    <string name="set_quick_save_sub">Donde guarda el botón de cada grabación</string>
+    <string name="set_note_title">Nota para tu segundo cerebro</string>
+    <string name="set_note_auto_on">Se arma sola al terminar cada transcripción</string>
+    <string name="set_note_auto_off">Con un toque, desde cada grabación</string>
+    <string name="set_auto_title">Transcribir automáticamente</string>
+    <string name="set_auto_sub">Al guardar una grabación o importar un audio</string>
+    <string name="set_ask_title">Nombrar al terminar de grabar</string>
+    <string name="set_ask_title_sub">Una hoja para poner el título y seguir</string>
+    <string name="set_dates_existing">Agregar fecha a las existentes</string>
+    <string name="set_dates_existing_sub">Para las grabaciones anteriores a esta opción</string>
+    <string name="set_date_prefix">Fecha delante del nombre</string>
+    <string name="set_date_prefix_example">Ej.: %1$s Reunión</string>
+    <string name="set_voices_title">Voces conocidas</string>
+    <string name="set_voices_sub">Para reconocer a cada persona al separar voces</string>
+    <string name="set_voices_unavailable">El modelo con voces que elegiste en OpenRouter no separa voces, así que no usaría tu muestra. En «Modelo con voces» elige «Automático» u otro que separe voces.</string>
+    <string name="set_flow_foot">Guarda la nota o el texto con un toque desde cada grabación.</string>
+    <string name="set_flow_more">Guardado rápido: la carpeta donde el botón de cada grabación deja la nota (.md) o el texto (.txt), por ejemplo tu 0-Inbox de Google Drive. Si después corriges voces o nombres, «Actualizar» reemplaza el mismo archivo, sin crear copias.\n\nNota para tu segundo cerebro: una IA de OpenRouter arma un resumen con decisiones, tareas y frases clave a partir del texto de la transcripción (no se vuelve a enviar el audio). Automática, se arma al terminar cada transcripción; si la apagas, la pides con un toque desde la grabación. Revísala antes de guardarla: puede tener errores. El modelo se elige en «IA de la nota».\n\nVoces conocidas: muestras de 10 s de tu voz y de las personas con que más hablas, para que la app reconozca a cada una con su nombre al separar voces. Se usan hasta %1$d por audio. También puedes guardar la voz de alguien desde una grabación: toca su nombre y «Guardar la voz de…».</string>
+
+    <!-- Tu IA (OpenRouter) -->
+    <string name="set_section_ai">Tu IA (OpenRouter)</string>
+    <string name="set_key_title">Clave de OpenRouter</string>
+    <string name="set_key_sub">Una sola para transcribir y para tus notas</string>
+    <string name="set_key_set">Configurada</string>
+    <string name="set_key_missing">Falta</string>
+    <string name="set_verify_title">Comprobar conexión</string>
+    <string name="set_speakers_title">Separar voces</string>
+    <string name="set_note_ai_title">IA de la nota</string>
+    <string name="set_audio_lang_title">Idioma del audio</string>
+    <string name="set_audio_lang_auto">Automático</string>
+    <string name="set_audio_lang_en">Inglés</string>
+    <string name="set_audio_lang_es">Español</string>
+    <string name="set_audio_lang_pt">Portugués</string>
+    <string name="set_audio_lang_hint">Indicar el idioma mejora la precisión.</string>
+    <string name="set_audio_lang_detect">Detección automática</string>
+    <string name="set_audio_lang_detect_sub">Para audios en otros idiomas o mezclados</string>
+    <string name="set_ai_foot">Para transcribir, tu audio se envía a OpenRouter y al modelo que elijas; tu clave paga solo lo que usas.</string>
+    <string name="set_ai_more">OpenRouter reúne modelos de varias empresas con una sola clave y un solo saldo: pagas solo lo que usas, sin suscripción.\n\nQué se envía: grabar no usa internet y el audio queda en tu teléfono hasta que lo transcribes. Al transcribir, el audio (y tus voces conocidas, si separas voces) va a OpenRouter y al modelo que elijas. Para la nota se envía solo el texto de la transcripción.\n\n«Automático» usa el modelo que Verbapp recomienda. La lista de modelos se actualiza sola desde OpenRouter una vez al día: los que van saliendo aparecen como «Nuevo · sin probar» y, si OpenRouter retira el que usas, Automático pasa solo al siguiente.\n\nEl modelo con voces se usa cuando separas voces (Persona 1, Persona 2…); el de solo texto, cuando no.\n\nIA de la nota: eliges una familia (Claude, GPT o Gemini) y OpenRouter usa siempre su versión más nueva. Cada nota muestra cuál la escribió.\n\nLos precios por hora salen de la lista de OpenRouter y son una referencia: el cobro real de cada transcripción lo informa OpenRouter.\n\nLa clave se guarda cifrada en este teléfono y nunca aparece en los informes de soporte.\n\n«Comprobar conexión» confirma que la clave funciona y muestra tu saldo cuando OpenRouter lo informa. No prueba todavía la carga de audio ni la separación de voces.</string>
+
+    <!-- Separar voces y resumen del modelo -->
+    <string name="set_speakers_ask">Preguntar cada vez</string>
+    <string name="set_speakers_always">Siempre</string>
+    <string name="set_speakers_never">Nunca</string>
+    <string name="set_speakers_body">Separar voces identifica a cada persona (Persona 1, Persona 2…), pero es más lento.</string>
+    <string name="set_speakers_ask_sub">Te preguntamos al transcribir cada audio (la transcripción automática separa voces)</string>
+    <string name="set_speakers_always_sub">Para reuniones y conversaciones</string>
+    <string name="set_speakers_never_sub">Solo texto: más rápido y económico</string>
+    <string name="set_summary_plus_voices">%1$s + separación de voces</string>
+    <string name="set_summary_voices_with">%1$s · voces con %2$s</string>
+    <string name="set_model_custom">personalizado</string>
+
+    <!-- Energía y red -->
+    <string name="set_section_energy">Energía y red</string>
+    <string name="set_network_title">Red para enviar audio</string>
+    <string name="set_network_sub">Cada transcripción en espera ofrece «Usar datos móviles ahora»</string>
+    <string name="set_network_wifi">Solo Wi-Fi</string>
+    <string name="set_network_any">Wi-Fi y datos</string>
+    <string name="set_network_sheet">Los audios pueden pesar varios MB. Con «Solo Wi-Fi», cada transcripción que espera Wi-Fi ofrece «Usar datos móviles ahora» en su detalle y en la notificación: vale solo para esa grabación y no cambia este ajuste.</string>
+    <string name="set_network_wifi_sub">O cualquier red no medida. Con datos móviles, la transcripción espera</string>
+    <string name="set_network_any_long">Wi-Fi y datos móviles</string>
+    <string name="set_network_any_sub">Empieza antes, usa tu plan de datos</string>
+    <string name="set_charging">Solo mientras carga</string>
+    <string name="set_locked">Con la pantalla bloqueada</string>
+    <string name="set_battery_unrestricted">Puede transcribir</string>
+    <string name="set_battery_optimized">Batería optimizada</string>
+    <string name="set_energy_foot">Aplica también cuando transcribes a mano.</string>
+    <string name="set_energy_more">Con batería baja, el trabajo espera. Android puede retrasarlo unos minutos.\n\nSolo Wi-Fi: si estás con datos móviles, la transcripción queda esperando Wi-Fi. Su detalle muestra «Usar datos móviles ahora», con el tamaño aproximado del envío, y la notificación «Esperando Wi-Fi» trae la misma acción. Vale solo para esa grabación: las siguientes vuelven a esperar Wi-Fi mientras este ajuste siga así.\n\nPara que transcriba con el teléfono bloqueado, permite a Verbapp usar batería en segundo plano («Con la pantalla bloqueada»). Solo la usa mientras transcribe.</string>
+
+    <!-- Copias -->
+    <string name="set_section_copies">Copias</string>
+    <string name="set_copies_title">Carpeta de copias</string>
+    <string name="set_copies_off">Desactivada</string>
+    <string name="set_copies_foot">Cada grabación se copia con su audio y su texto.</string>
+    <string name="set_copies_more">Cada grabación se copia a esa carpeta con su audio, su información y su transcripción, y la copia se actualiza sola.\n\nPuedes elegir una carpeta del teléfono o de Google Drive (si tienes su app): en el selector, abre el menú ☰.\n\nBorrar una grabación en Verbapp no borra sus copias.</string>
+    <string name="set_copies_has">Las grabaciones se copian automáticamente a esta carpeta.</string>
+    <string name="set_copies_none">Elige o crea una carpeta. En el selector, abre el menú ☰ para ver Google Drive u otras ubicaciones.</string>
+    <string name="set_copies_update_all">Actualizar todas las copias</string>
+    <string name="set_copies_updating">Actualizando copias…</string>
+    <string name="set_copies_stop">Dejar de copiar</string>
+    <string name="set_copies_saved">Carpeta guardada · copiando grabaciones</string>
+    <string name="set_copies_no_perm">No se obtuvo permiso de escritura. Elige otra carpeta.</string>
+    <string name="set_folder">Carpeta</string>
+    <string name="set_folder_change">Cambiar carpeta</string>
+    <string name="set_folder_choose">Elegir carpeta</string>
+    <string name="set_folder_unsupported">Este teléfono no permite elegir carpetas.</string>
+    <string name="set_folder_chosen">Carpeta elegida</string>
+    <string name="set_not_chosen">Sin elegir</string>
+
+    <!-- Guardado rápido y fecha en los nombres -->
+    <string name="set_quick_save_has">El botón de cada grabación guarda la nota (.md) o el texto (.txt) en «%1$s». Si corriges algo después, reemplaza el mismo archivo.</string>
+    <string name="set_quick_save_none">Elige la carpeta donde quieres dejar siempre tus notas y transcripciones, por ejemplo tu 0-Inbox. En el selector abre el menú ☰ y elige Drive para usar una carpeta de Google Drive.</string>
+    <string name="set_quick_save_remove">Quitar guardado rápido</string>
+    <string name="set_quick_save_in">Guardado rápido en %1$s</string>
+    <string name="set_quick_save_no_perm">No se obtuvo permiso de escritura en esa carpeta. Elige otra.</string>
+    <string name="set_dates_q">¿Agregar la fecha a tus grabaciones actuales?</string>
+    <string name="set_dates_body">Las nuevas la llevarán siempre. Esto la agrega también a las que ya tienes (las que ya empiezan con fecha no cambian).</string>
+    <string name="set_dates_all">Agregar a todas</string>
+    <plurals name="set_names_updated">
+        <item quantity="one">%1$d nombre actualizado</item>
+        <item quantity="many">%1$d nombres actualizados</item>
+        <item quantity="other">%1$d nombres actualizados</item>
+    </plurals>
+
+    <!-- Apariencia -->
+    <string name="set_section_appearance">Apariencia</string>
+    <string name="set_theme_foot">Automático usa el mismo tema que tu teléfono.</string>
+    <string name="set_theme_auto">Automático</string>
+    <string name="set_theme_light">Claro</string>
+    <string name="set_theme_dark">Oscuro</string>
+    <string name="set_theme_auto_detail">igual que el teléfono</string>
+    <string name="set_theme_light_detail">siempre claro</string>
+    <string name="set_theme_dark_detail">siempre oscuro</string>
+    <string name="set_theme_desc">Tema %1$s, %2$s</string>
+
+    <!-- Ayuda y soporte -->
+    <string name="set_section_help">Ayuda y soporte</string>
+    <string name="set_news">Novedades y versiones</string>
+    <string name="set_welcome">Ver la bienvenida</string>
+    <string name="set_welcome_sub">El recorrido de la primera vez</string>
+    <string name="set_demo">Probar edición de voces</string>
+    <string name="set_demo_sub">Un ejemplo que no usa tu clave</string>
+    <string name="set_report">Compartir informe de soporte</string>
+    <string name="set_report_sub">Sin claves, títulos, audio ni texto</string>
+    <string name="set_report_preparing">Preparando informe…</string>
+    <string name="set_report_share_title">Informe de soporte</string>
+    <string name="set_report_title">Informe</string>
+    <string name="set_report_failed">No se pudo generar el informe.</string>
+    <string name="set_clear_logs">Borrar registros de diagnóstico</string>
+    <string name="set_clear_logs_q">¿Borrar los registros locales?</string>
+    <string name="set_clear_logs_body">Las grabaciones y transcripciones se conservan.</string>
+    <string name="set_clear_logs_done">Registros borrados</string>
+    <string name="set_logs_foot">El registro técnico queda solo en este teléfono (máx. ~4 MB, 30 días) y se comparte únicamente si tú lo envías.</string>
+
+    <!-- IA de la nota -->
+    <string name="set_note_ai_typed">El modelo que escribiste</string>
+    <string name="set_note_ai_latest">Siempre la versión más nueva</string>
+    <!-- Familia del modelo de la nota: «Claude Sonnet (el más nuevo)». -->
+    <string name="set_note_model_latest">%1$s (el más nuevo)</string>
+    <string name="set_note_ai_best">Recomendado · la mejor redacción en español</string>
+    <string name="set_note_ai_fast">Rápido y económico</string>
+    <string name="set_note_ai_google">La alternativa de Google, rápida y económica</string>
+    <string name="set_note_ai_body">Arma el resumen, las decisiones y las tareas con el texto de la transcripción, por OpenRouter y con tu misma clave. No se vuelve a enviar el audio, así que cuesta poco. OpenRouter usa siempre la versión más nueva de la familia que elijas, y cada nota muestra cuál la escribió.</string>
+    <string name="set_note_ai_now_typed">Ahora usa el modelo que escribiste: %1$s.</string>
+    <string name="set_note_other_model">Otro modelo de OpenRouter…</string>
+    <string name="set_note_other_title">Otro modelo de OpenRouter</string>
+    <string name="set_note_other_body">Escribe el identificador tal como aparece en openrouter.ai, por ejemplo anthropic/claude-sonnet-5.5. Con «~» delante y «-latest» al final, OpenRouter usa siempre la versión más nueva. Déjalo vacío para volver al recomendado.</string>
+    <string name="set_note_model_hint">autor/modelo</string>
+    <string name="set_note_model_desc">Modelo de la nota</string>
+    <string name="set_note_model_error">Escríbelo como autor/modelo, sin espacios</string>
+    <string name="set_note_use_recommended">Usar el recomendado</string>
+
+    <!-- Clave de OpenRouter -->
+    <string name="set_key_add">Agregar clave de OpenRouter</string>
+    <string name="set_key_sheet_body">Configurada y cifrada en este teléfono. Sirve para transcribir y para armar tus notas, y nunca aparece en informes.</string>
+    <string name="set_key_replace">Reemplazar clave</string>
+    <string name="set_key_delete">Eliminar clave</string>
+    <string name="set_key_delete_q">¿Eliminar la clave de OpenRouter?</string>
+    <string name="set_key_delete_body">Sin clave no se puede transcribir ni armar notas. Las transcripciones pendientes quedarán en espera hasta que agregues otra.</string>
+    <string name="set_key_word_title">Clave</string>
+    <string name="set_key_delete_failed">No se pudo eliminar.</string>
+    <!-- %1$s: «OpenAI» o «tu servidor» (set_old_server). -->
+    <string name="set_key_input_old">Verbapp ahora transcribe y arma tus notas con OpenRouter: una sola clave para elegir entre varios modelos. La clave de %1$s que tenías queda guardada, pero ya no se usa.</string>
+    <string name="set_key_input_body">Créala en openrouter.ai → Keys y pégala aquí. Sirve para transcribir y para armar tus notas. Se guarda cifrada y deja de mostrarse.</string>
+    <string name="set_paste">Pegar</string>
+    <string name="set_paste_empty">No hay nada copiado</string>
+    <string name="set_key_save">Guardar clave</string>
+    <string name="set_key_paste_prompt">Pega tu clave</string>
+    <string name="set_key_saved">Clave guardada</string>
+    <string name="set_key_save_failed">No se pudo guardar la clave en este teléfono. Inténtalo de nuevo.</string>
+
+    <!-- Comprobar conexión. Los fallos que no son de la clave no deben nombrar «clave» (StatusText.aboutKey). -->
+    <string name="set_verify_rejected_ago">Clave rechazada · revísala · %1$s</string>
+    <string name="set_verify_failed_ago">No se pudo conectar · %1$s</string>
+    <string name="set_verify_checking">Comprobando…</string>
+    <string name="set_verify_add_key_first">Primero agrega tu clave</string>
+    <string name="set_verify_prompt">Confirma que tu clave funciona</string>
+    <string name="set_verify_ok">✓ Clave válida · %1$s · %2$s</string>
+    <string name="set_balance_no_credits">aún sin créditos: cárgalos en openrouter.ai</string>
+    <string name="set_balance_empty">sin saldo: carga créditos en openrouter.ai</string>
+    <string name="set_balance_left">quedan %1$s</string>
+    <string name="set_verify_no_internet">No se pudo conectar. Revisa tu conexión a internet.</string>
+    <string name="set_verify_retry_hint">Revisa tu conexión y vuelve a intentarlo.</string>
+    <string name="set_valid_key">Clave válida</string>
+    <string name="set_key_rejected">Clave rechazada</string>
+    <string name="set_check_key">Revisar la clave</string>
+
+    <!-- Tiempo relativo: «recién», «hace 5 min», «ayer», «hace 3 días». -->
+    <string name="set_ago_now">recién</string>
+    <string name="set_ago_min">hace %1$d min</string>
+    <string name="set_ago_hours">hace %1$d h</string>
+    <string name="set_ago_yesterday">ayer</string>
+    <plurals name="set_ago_days">
+        <item quantity="one">hace %1$d día</item>
+        <item quantity="many">hace %1$d días</item>
+        <item quantity="other">hace %1$d días</item>
+    </plurals>
+
+    <!-- Patrones de fecha (SimpleDateFormat): «15 de octubre», «29 de septiembre de 2025», «15 ene 2027». -->
+    <string name="set_date_day_month">d \'de\' MMMM</string>
+    <string name="set_date_day_month_year">d \'de\' MMMM \'de\' yyyy</string>
+    <string name="set_date_short_year">d MMM yyyy</string>
+
+    <!-- Modelos de OpenRouter -->
+    <string name="set_model_voices">Modelo con voces</string>
+    <string name="set_model_text">Modelo solo texto</string>
+    <string name="set_model_voices_body">El que transcribe cuando separas voces (Persona 1, Persona 2…).</string>
+    <string name="set_model_text_body">El que transcribe cuando no separas voces: más rápido y económico.</string>
+    <string name="set_model_gone_pick">Ya no aparece en OpenRouter · elige otro</string>
+    <string name="set_model_today">Hoy usa %1$s</string>
+    <string name="set_unconfirmed">sin confirmar</string>
+    <string name="set_per_hour_price">%1$s por hora</string>
+    <string name="set_per_hour">por hora</string>
+    <string name="set_list_refresh">Actualizar lista</string>
+    <string name="set_refresh">Actualizar</string>
+    <string name="set_list_downloading">Descargando la lista de OpenRouter…</string>
+    <string name="set_list_searching">Buscando modelos nuevos…</string>
+    <string name="set_list_download_failed">No se pudo descargar la lista. Revisa tu conexión a internet. Mientras tanto puedes elegir entre los modelos que Verbapp conoce.</string>
+    <string name="set_list_update_failed">No se pudo actualizar la lista. Revisa tu conexión a internet.</string>
+    <string name="set_list_never">Aún no se descarga la lista de OpenRouter.</string>
+    <!-- %2$s: cuándo («hace 5 min»); %1$d: cuántos modelos. -->
+    <plurals name="set_list_updated">
+        <item quantity="one">Lista actualizada %2$s · %1$d modelo</item>
+        <item quantity="many">Lista actualizada %2$s · %1$d modelos</item>
+        <item quantity="other">Lista actualizada %2$s · %1$d modelos</item>
+    </plurals>
+    <string name="set_models_separate">Modelos que separan voces</string>
+    <string name="set_models_known">Conocidos por Verbapp</string>
+    <string name="set_models_new">Nuevos en OpenRouter</string>
+    <string name="set_models_foot_voices">Precios por hora de audio según OpenRouter; con «≈», aproximados. Los modelos nuevos llegan primero a «Modelo solo texto» y pasan a esta lista cuando Verbapp aprende a pedirles que separen voces.</string>
+    <string name="set_models_foot_text">Precios por hora de audio según OpenRouter; con «≈», aproximados. Los modelos nuevos aparecen aquí solos. Verbapp todavía no los prueba: pueden fallar o costar distinto.</string>
+    <string name="set_recommended">Recomendado</string>
+    <string name="set_auto_what">El modelo recomendado por Verbapp. Si OpenRouter lo retira, pasa solo al siguiente.</string>
+    <string name="set_auto_desc">Automático, recomendado. %1$s</string>
+    <string name="set_model_by">%1$s, de %2$s</string>
+    <string name="set_pill_text_only">Solo texto</string>
+    <string name="set_pill_separates">Separa voces</string>
+    <string name="set_unconfirmed_pill">Sin confirmar</string>
+    <string name="set_model_gone">Ya no aparece en OpenRouter</string>
+    <string name="set_pill_new">Nuevo · sin probar</string>
+    <string name="set_said_new">Nuevo, sin probar</string>
+    <string name="set_model_retires">Se retira el %1$s</string>
+    <string name="set_said_price_approx">Cerca de %1$s por hora</string>
+    <string name="set_said_no_price">Precio no disponible</string>
+
+    <!-- Voces conocidas -->
+    <string name="set_voice_interrupted">Grabación de la voz interrumpida · vuelve a intentarlo</string>
+    <string name="set_voices_none">Ninguna</string>
+    <string name="set_voices_empty_body">Graba 10 segundos de tu voz y de las personas con que más hablas. Al separar voces, estas muestras van en todo el audio para reconocer a cada una desde el inicio y ponerle su nombre.</string>
+    <string name="set_voices_body">Al separar voces, estas muestras van en todo el audio para reconocer a cada persona desde el inicio y ponerle su nombre.</string>
+    <!-- Cuántas voces se usan por audio (Transcriber.MAX_KNOWN); en _over, %2$d: cuántas tienes activas. -->
+    <plurals name="set_voices_limit">
+        <item quantity="one">Se usa hasta %1$d voz por audio.</item>
+        <item quantity="many">Se usan hasta %1$d voces por audio.</item>
+        <item quantity="other">Se usan hasta %1$d voces por audio.</item>
+    </plurals>
+    <plurals name="set_voices_limit_over">
+        <item quantity="one">Se usa hasta %1$d voz por audio: tienes %2$d activas, así que va tu voz o la primera por nombre.</item>
+        <item quantity="many">Se usan hasta %1$d voces por audio: tienes %2$d activas, así que van tu voz y las primeras por nombre.</item>
+        <item quantity="other">Se usan hasta %1$d voces por audio: tienes %2$d activas, así que van tu voz y las primeras por nombre.</item>
+    </plurals>
+    <string name="set_voices_privacy">Quedan en este teléfono y se envían a OpenRouter solo junto con los audios que transcribes.</string>
+    <string name="set_voices_or_new">Con OpenRouter este reconocimiento es nuevo: revisa los nombres al terminar.</string>
+    <string name="set_voice_record_mine">Grabar mi voz</string>
+    <string name="set_voice_add">Agregar otra voz</string>
+    <string name="set_voice_you">tú</string>
+    <string name="set_voice_used">Se usa al transcribir</string>
+    <string name="set_voice_unused">No se usa</string>
+    <string name="set_voice_item_desc">%1$s. %2$s. Ver opciones</string>
+    <string name="set_voice_item_desc_me">%1$s, tu voz. %2$s. Ver opciones</string>
+    <string name="set_voice_mine_when">Tu voz · %1$s</string>
+    <string name="set_voice_listen_sample">Escuchar la muestra</string>
+    <string name="set_voice_listen">Escuchar</string>
+    <string name="set_voice_stop">Detener</string>
+    <string name="set_voice_use">Usar al transcribir</string>
+    <string name="set_voice_use_on">Va como muestra al separar voces</string>
+    <string name="set_voice_use_off">Queda guardada, pero no se envía</string>
+    <string name="set_voice_saved_on">guardada el %1$s</string>
+    <string name="set_voice_saved_here">guardada en este teléfono</string>
+    <string name="set_change_failed">No se pudo guardar el cambio</string>
+    <string name="set_rename">Cambiar nombre</string>
+    <string name="set_record_again">Grabar de nuevo</string>
+    <string name="set_voice_delete_mine_q">¿Eliminar tu voz?</string>
+    <string name="set_voice_delete_q">¿Eliminar la voz de «%1$s»?</string>
+    <string name="set_voice_delete_mine_body">Al separar voces ya no se usará tu muestra. Las transcripciones que ya tienes no cambian.</string>
+    <string name="set_voice_delete_body">Ya no se reconocerá en tus próximos audios. Las transcripciones que ya tienes no cambian.</string>
+    <string name="set_voice_deleted_mine">Tu voz se eliminó</string>
+    <string name="set_voice_deleted">Voz eliminada</string>
+    <string name="set_your_name">Tu nombre</string>
+    <string name="set_their_name">Su nombre</string>
+    <string name="set_person_name">Nombre de la persona</string>
+    <string name="set_rename_mine_body">Así aparecerás al separar voces.</string>
+    <string name="set_rename_body">Así aparecerá al separar voces.</string>
+    <string name="set_name_empty">Escribe un nombre</string>
+    <string name="set_name_taken">Ya tienes una voz con ese nombre</string>
+    <string name="set_save_failed_retry">No se pudo guardar. Vuelve a intentarlo.</string>
+    <string name="set_name_saved">Nombre guardado</string>
+    <string name="set_my_voice_body">Graba 10 segundos leyendo en voz alta. Al separar voces, tu voz va como muestra en todo el audio para que la app te reconozca desde el inicio y ponga tu nombre. Queda en este teléfono y se envía a OpenRouter solo junto con los audios que transcribes.</string>
+    <string name="set_your_name_hint">Tu nombre (p. ej. Konrad)</string>
+    <string name="set_your_name_empty">Escribe tu nombre</string>
+    <string name="set_name_taken_other">Ya tienes guardada otra voz con ese nombre</string>
+    <string name="set_add_voice_body">Para reconocer a alguien con quien hablas seguido. Pásale el teléfono para que lea 10 segundos en voz alta. También puedes guardarla desde una grabación: toca su nombre y elige «Guardar la voz de…».</string>
+    <string name="set_their_name_hint">Su nombre (p. ej. Fran)</string>
+    <string name="set_record_their_voice">Grabar su voz</string>
+    <string name="set_their_name_empty">Escribe su nombre</string>
+    <string name="set_replace_voice_q">¿Reemplazar la voz guardada de %1$s?</string>
+    <string name="set_replace_voice_body">Grabarás una muestra nueva en lugar de la anterior.</string>
+    <string name="set_replace">Reemplazar</string>
+    <string name="set_voice_busy">Termina la grabación en curso antes de grabar una voz.</string>
+    <string name="set_that_person">esa persona</string>
+    <string name="set_voice_script_mine">«Hola, soy %1$s. Estoy grabando mi voz para que Verbapp me reconozca en mis conversaciones y reuniones. Hoy es un buen día para ordenar ideas.»</string>
+    <string name="set_voice_script">«Hola, soy %1$s. Estoy grabando mi voz para que Verbapp me reconozca en las conversaciones y reuniones. Hoy es un buen día para ordenar ideas.»</string>
+    <string name="set_voice_status_mine">Toca Grabar y lee el texto con tu voz normal.</string>
+    <string name="set_voice_status">Toca Grabar y pásale el teléfono a %1$s para que lea con su voz normal.</string>
+    <string name="set_read_aloud">Lee en voz alta</string>
+    <string name="set_they_read_aloud">Que %1$s lea en voz alta</string>
+    <string name="set_record">Grabar</string>
+    <string name="set_stop_save">Detener y guardar</string>
+    <string name="set_voice_recording_progress">Grabando · %1$d s de %2$d</string>
+    <string name="set_mic_failed">No se pudo usar el micrófono. Revisa el permiso y vuelve a intentarlo.</string>
+    <string name="set_sample_short">La muestra quedó muy corta. Graba al menos 3 segundos.</string>
+    <string name="set_voice_saved_mine">Tu voz quedó guardada</string>
+    <string name="set_voice_saved_of">Voz de %1$s guardada</string>
+    <string name="set_tap_transcribe">toca Transcribir</string>
+    <string name="set_sample_save_failed">No se pudo guardar la muestra. Vuelve a intentarlo.</string>
+    <string name="set_sample_play_failed">No se pudo reproducir la muestra.</string>
+    <string name="set_mic_denied">Sin permiso de micrófono no se puede grabar la muestra.</string>
+
+    <!-- Settings y ProviderConfig -->
+    <string name="set_provider_server">Tu servidor</string>
+    <!-- Dentro de una frase: «La clave de tu servidor que tenías…». -->
+    <string name="set_old_server">tu servidor</string>
+    <string name="set_server_https">Usa una dirección HTTPS sin usuario, parámetros ni fragmentos.</string>
+    <string name="set_model_invalid">Nombre de modelo inválido.</string>
+
+    <!-- Pricing: un monto en dólares; %1$s ya trae la coma o el punto del idioma. -->
+    <string name="price_usd">US$%1$s</string>
+</resources>

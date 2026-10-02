@@ -1,7 +1,6 @@
 package cl.vozlocal.app;
 
 import android.content.Context;
-import java.util.Locale;
 
 /**
  * Tarifas públicas por minuto de audio (USD) para estimar costos en pantalla.
@@ -93,12 +92,17 @@ final class Pricing {
     static long orBilledMs(long durationMs,int voices,Models.Recipe recipe){return billed(recipe,durationMs,voices,false);}
     /** Lo de antes, por compatibilidad: delega en billedMs(Context, …). */
     static long orBilledMs(Context c,long durationMs,boolean speakers){return billedMs(c,durationMs,speakers);}
-    /** Formato chileno: US$0,012 (3 decimales bajo 1 dólar). */
+    /**
+     * «US$0,012»: 3 decimales bajo 1 dólar, 2 desde ahí; «< US$0,001» si no llega a una décima de centavo (Notes mira ese
+     * «<» del comienzo). 0.9.0: con la coma o el punto del idioma de la app (Lang.locale): en español de Chile queda igual
+     * que antes; en inglés «US$0.012»; en portugués de Brasil «US$ 0,012».
+     */
     static String usd(double value){
         if(value<0)return "—";
-        if(value>0&&value<0.001)return "< US$0,001";
-        String s=String.format(Locale.ROOT,value<1?"%.3f":"%.2f",value).replace('.',',');
-        return "US$"+s;
+        if(value>0&&value<0.001)return "< "+usd(0.001,3);
+        return usd(value,value<1?3:2);
     }
+    /** Un monto en US$ con estos decimales, en el formato del idioma de la app («US$4,20», «US$4.20», «US$ 4,20»). Sin separador de miles, como antes. */
+    static String usd(double value,int decimals){return Lang.str(R.string.price_usd,String.format(Lang.locale(),"%."+decimals+"f",value));}
     private Pricing(){}
 }
