@@ -22,12 +22,17 @@ abstract class Screen extends Activity {
 
     /** Idioma de la app (Lang): cada pantalla se crea con el idioma elegido, aunque el teléfono esté en otro. */
     @Override protected void attachBaseContext(android.content.Context base){super.attachBaseContext(Lang.wrap(base));}
+    /** El idioma con que se armó esta pantalla. */
+    private String lang;
     @Override public void onCreate(Bundle state){
-        p=AppTheme.apply(this);ui=new Ui(this,p);
+        p=AppTheme.apply(this);ui=new Ui(this,p);lang=Lang.current(this);
         super.onCreate(state);if(state!=null)savedScroll=state.getInt("screen_scroll",0);
     }
-    /** Si cambió el tema o «Colores de tu fondo de pantalla» mientras la pantalla estaba detrás, se rehace con la paleta nueva. */
-    @Override protected void onResume(){super.onResume();if(p.dark!=AppTheme.isDark(this)||p.dynamic!=AppTheme.dynamicColor(this))recreate();}
+    /**
+     * Si cambió el tema o «Colores de tu fondo de pantalla» mientras la pantalla estaba detrás, se rehace con la paleta nueva.
+     * Lo mismo con el idioma: en Android 8–12, Lang.set solo rehace la pantalla de adelante (Android 13+ las rehace todas).
+     */
+    @Override protected void onResume(){super.onResume();if(p.dark!=AppTheme.isDark(this)||p.dynamic!=AppTheme.dynamicColor(this)||!Lang.current(this).equals(lang))recreate();}
     @Override protected void onSaveInstanceState(Bundle state){state.putInt("screen_scroll",scroll==null?0:scroll.getScrollY());super.onSaveInstanceState(state);}
 
     /**

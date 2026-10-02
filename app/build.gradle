@@ -36,4 +36,7 @@ android {
         }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    // El idioma se elige dentro de la app (Lang): el AAB debe llevar los tres a todos los teléfonos. Con la división por
+    // idioma de Google Play, quien tiene el teléfono en español y elige inglés (o portugués) no tendría esos textos.
+    bundle { language { enableSplit = false } }
 }
