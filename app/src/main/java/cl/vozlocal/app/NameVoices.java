@@ -56,10 +56,10 @@ final class NameVoices {
         // Marca de la versión que se lee: si la transcripción cambia mientras la hoja está abierta, no se le aplican estos
         // nombres (null = sin comprobar: el ejemplo, o si solo se pudo usar la transcripción que ya tenía la pantalla).
         String stamp=null;
-        if(!demo)synchronized(FilesStore.LOCK){try{stamp=stamp(s,id);tr=Transcript.load(s,id);}catch(Exception e){stamp=null;if(tr==null){s.message("Nombrar voces","No se pudo abrir la transcripción.");return null;}}}
-        if(tr==null){s.message("Nombrar voces","No se pudo abrir la transcripción.");return null;}
+        if(!demo)synchronized(FilesStore.LOCK){try{stamp=stamp(s,id);tr=Transcript.load(s,id);}catch(Exception e){stamp=null;if(tr==null){s.message(s.getString(R.string.voices_title),s.getString(R.string.voices_open_failed));return null;}}}
+        if(tr==null){s.message(s.getString(R.string.voices_title),s.getString(R.string.voices_open_failed));return null;}
         try{return build(s,id,demo,tr,stamp,changed);}
-        catch(Exception e){Diagnostics.event("name_voices_failed",demo?null:id,"error_class",e.getClass().getSimpleName());s.message("Nombrar voces","No se pudieron cargar las voces.");return null;}
+        catch(Exception e){Diagnostics.event("name_voices_failed",demo?null:id,"error_class",e.getClass().getSimpleName());s.message(s.getString(R.string.voices_title),s.getString(R.string.voices_load_failed));return null;}
     }
     /** «fecha:tamaño» de la transcripción guardada; cambia con cada escritura (corrección, versión nueva o anterior). */
     static String stamp(Context c,String id){File f=FilesStore.file(c,id,".transcript.json");return f.isFile()?f.lastModified()+":"+f.length():"";}
@@ -67,8 +67,8 @@ final class NameVoices {
     private static Sheet build(Screen s,String id,boolean demo,Transcript tr,String stamp,Runnable changed)throws Exception{
         Ui ui=s.ui;Palette p=s.p;
         LinkedHashMap<String,String> names=tr.speakers();
-        if(names.isEmpty()){s.message("Nombrar voces","Esta transcripción no tiene intervenciones para nombrar.");return null;}
-        if(!tr.diarized()){s.message("Nombrar voces","Esta transcripción se hizo sin separar voces. Para tener Persona 1, Persona 2…, vuelve a transcribir separando voces.");return null;}
+        if(names.isEmpty()){s.message(s.getString(R.string.voices_title),s.getString(R.string.voices_none));return null;}
+        if(!tr.diarized()){s.message(s.getString(R.string.voices_title),s.getString(R.string.voices_not_diarized,s.getString(R.string.speaker_n,1),s.getString(R.string.speaker_n,2)));return null;}
         Map<String,Double> share=tr.talkShare();JSONArray segs=tr.segments();
         boolean mine=Voices.has(s);String myName=Voices.name(s);List<String> recent=recentNames(s);
         Recording recording=demo?null:FilesStore.recording(s,id);File audio=recording==null?null:recording.audio(s);
@@ -82,7 +82,7 @@ final class NameVoices {
             String current=names.get(key);v.initial=current.equals(v.label)?"":current;voices.add(v);
         }
         Sampler sampler=new Sampler(s,audio);
-        Sheet sheet=s.sheet("Nombrar voces",(canListen?"Escucha cada voz y ponle su nombre. ":"Ponle nombre a cada voz. ")+"Si dos voces son la misma persona, dales el mismo nombre y se unen.");
+        Sheet sheet=s.sheet(s.getString(R.string.voices_title),s.getString(canListen?R.string.voices_body_listen:R.string.voices_body));
         Runnable[] refresh={null};
         refresh[0]=()->{for(Voice v:voices)renderRow(s,v,voices,mine,myName,recent,refresh[0]);};
         // Una tarjeta por voz, separadas por 8 dp (en vez de divisores): cada persona se lee como un bloque.
@@ -96,12 +96,12 @@ final class NameVoices {
         boolean[] closed={false};
         java.util.function.Consumer<Boolean> save=explicit->{if(closed[0])return;closed[0]=true;sampler.release();commit(s,id,demo,tr,stamp,voices,explicit,changed);};
         if(tr.edited()){
-            Ui.Btn restore=ui.button("Restaurar voces originales",R.drawable.ic_refresh,Ui.Style.PLAIN,null);
+            Ui.Btn restore=ui.button(s.getString(R.string.voices_restore),R.drawable.ic_refresh,Ui.Style.PLAIN,null);
             restore.setOnClickListener(v->{save.accept(false);sheet.dismiss();
-                s.confirm("¿Restaurar voces originales?","Se deshacen todas las correcciones de quién habla. Los nombres se mantienen.","Restaurar",false,()->restore(s,id,demo,tr,changed));});
+                s.confirm(s.getString(R.string.voices_restore_q),s.getString(R.string.voices_restore_body),s.getString(R.string.voices_restore_action),false,()->restore(s,id,demo,tr,changed));});
             LinearLayout.LayoutParams lp=Ui.wrap();lp.topMargin=ui.dp(S3);sheet.body.addView(restore,lp);
         }
-        sheet.primary("Listo",Ui.Style.PRIMARY,()->{save.accept(true);return true;});
+        sheet.primary(s.getString(R.string.voices_done),Ui.Style.PRIMARY,()->{save.accept(true);return true;});
         // Tocar fuera o «atrás» también guarda lo escrito (con Deshacer): nunca se pierde. Si la pantalla se destruye
         // (giro, tema), ella cierra la hoja y esto mismo guarda lo escrito y libera el reproductor de muestras.
         sheet.onDismiss(()->save.accept(false));
@@ -135,25 +135,25 @@ final class NameVoices {
         float part=v.share<=0?0f:(float)Math.max(0.03,Math.min(1.0,v.share));
         View fill=new View(s);fill.setBackground(shape(s,v.color,R_FULL));track.addView(fill,new LinearLayout.LayoutParams(0,-1,part));track.addView(new View(s),new LinearLayout.LayoutParams(0,-1,1f-part));
         share.addView(track,new LinearLayout.LayoutParams(0,ui.dp(6),1));share.addView(ui.space(S2));
-        share.addView(Ui.tabular(ui.oneLine(ui.text(percent(v.share)+" del tiempo",Type.LABEL_MEDIUM,p.onSurfaceVariant))));
+        share.addView(Ui.tabular(ui.oneLine(ui.text(s.getString(R.string.voices_share,percent(v.share)),Type.LABEL_MEDIUM,p.onSurfaceVariant))));
         LinearLayout.LayoutParams slp=Ui.fill();slp.topMargin=ui.dp(S1);who.addView(share,slp);
         head.addView(who,new LinearLayout.LayoutParams(0,-2,1));
         if(canListen){
             // ▶ redondo menta de 40 dp (se toca en 48 dp); mientras suena pasa a tinta con ❚❚ (Sampler.paint).
-            ImageButton play=ui.iconButton(R.drawable.ic_play,"Escuchar a "+v.label,p.onPrimaryContainer,0,48);v.play=play;
+            ImageButton play=ui.iconButton(R.drawable.ic_play,s.getString(R.string.voices_listen_to,v.label),p.onPrimaryContainer,0,48);v.play=play;
             int in=ui.dp(S1);v.playFill=oval(p.primaryContainer);
             play.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.stateLayer(p.onPrimaryContainer)),new InsetDrawable(v.playFill,in),new InsetDrawable(oval(0xFF000000),in)));
-            if(v.sample==null){play.setEnabled(false);play.setAlpha(0.38f);play.setContentDescription("Muestra no disponible para "+v.label);}
+            if(v.sample==null){play.setEnabled(false);play.setAlpha(0.38f);play.setContentDescription(s.getString(R.string.voices_no_sample_for,v.label));}
             else play.setOnClickListener(x->sampler.toggle(v));
             LinearLayout.LayoutParams plp=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));plp.setMarginStart(ui.dp(S2));plp.setMarginEnd(-ui.dp(S1));head.addView(play,plp);
         }
         card.addView(head,Ui.fill());
         // Qué dijo primero y si hay muestra: para saber quién es sin salir de la hoja.
         StringBuilder meta=new StringBuilder();
-        if(!v.firstWords.isEmpty())meta.append("«").append(v.firstWords).append("»");
-        if(canListen&&v.sample==null)meta.append(meta.length()>0?" · muestra no disponible":"Muestra no disponible");
+        if(!v.firstWords.isEmpty())meta.append(s.getString(R.string.detail_quoted,v.firstWords));
+        if(canListen&&v.sample==null)meta.append(meta.length()>0?" · "+s.getString(R.string.voices_no_sample_after):s.getString(R.string.voices_no_sample));
         if(meta.length()>0){TextView m=ui.text(meta.toString(),Type.BODY_MEDIUM,p.onSurfaceVariant);m.setMaxLines(2);m.setEllipsize(android.text.TextUtils.TruncateAt.END);m.setPaddingRelative(ui.dp(S1),0,0,0);card.addView(m,ui.top(S3));}
-        EditText f=ui.field(v.label,"Nombre para "+v.label);f.setText(v.initial);f.setFilters(new InputFilter[]{new InputFilter.LengthFilter(80)});
+        EditText f=ui.field(v.label,s.getString(R.string.voices_name_for,v.label));f.setText(v.initial);f.setFilters(new InputFilter[]{new InputFilter.LengthFilter(80)});
         f.setImeOptions(last?EditorInfo.IME_ACTION_DONE:EditorInfo.IME_ACTION_NEXT);f.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         f.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence a,int b,int c,int d){}public void onTextChanged(CharSequence a,int b,int c,int d){}
             public void afterTextChanged(Editable e){if(v.mergeInto!=null&&e.length()>0)v.mergeInto=null;if(refresh[0]!=null)refresh[0].run();}});
@@ -172,8 +172,8 @@ final class NameVoices {
         v.avatar.setText(initial(shown));
         // Al unirla («Es Persona 1»), su círculo toma el color y la inicial de esa persona: se ve cómo quedará.
         if(v.avatarFill!=null)v.avatarFill.setColor(target!=null?target.color:v.color);
-        v.field.setAlpha(target!=null?0.38f:1f);v.field.setHint(target!=null?"Se une con "+display(target):v.label);
-        if(v.play!=null&&v.sample!=null)v.play.setContentDescription((v.play.getTag()!=null?"Detener muestra de ":"Escuchar a ")+(typed.isEmpty()?v.label:typed));
+        v.field.setAlpha(target!=null?0.38f:1f);v.field.setHint(target!=null?s.getString(R.string.voices_joins,display(target)):v.label);
+        if(v.play!=null&&v.sample!=null)v.play.setContentDescription(s.getString(v.play.getTag()!=null?R.string.voices_stop_sample:R.string.voices_listen_to,typed.isEmpty()?v.label:typed));
         v.chips.removeAllViews();
         // Nombres sugeridos: «Yo» (tu voz, si la grabaste) y los que usaste hace poco. Tocar uno activo lo quita.
         LinkedHashSet<String> suggestions=new LinkedHashSet<>();
@@ -182,16 +182,16 @@ final class NameVoices {
         for(String name:suggestions){
             boolean on=target==null&&typed.equalsIgnoreCase(name);
             TextView chip=ui.filter(name,on,x->{Ui.haptic(x,Ui.Haptic.TICK);v.mergeInto=null;if(on)v.field.setText("");else{v.field.setText(name);v.field.setSelection(v.field.length());}refresh.run();});
-            chip.setContentDescription(on?name+", seleccionado. Toca para quitar el nombre":"Ponerle «"+name+"» a "+v.label);
+            chip.setContentDescription(on?s.getString(R.string.voices_chip_on,name):s.getString(R.string.voices_chip_off,name,v.label));
             addChip(s,v.chips,chip);
         }
         // Una voz que casi no habla suele ser otra que la separación partió en dos: «Es Persona 1» la une al guardar.
         if(v.share<SMALL_SHARE&&all.size()>1){
             List<Voice> big=new ArrayList<>();for(Voice o:all)if(o!=v&&o.share>=SMALL_SHARE)big.add(o);
             big.sort((a,b)->Double.compare(b.share,a.share));
-            for(int i=0;i<Math.min(3,big.size());i++){Voice o=big.get(i);boolean on=o.key.equals(v.mergeInto);String label="Es "+display(o);
+            for(int i=0;i<Math.min(3,big.size());i++){Voice o=big.get(i);boolean on=o.key.equals(v.mergeInto);String label=s.getString(R.string.voices_is,display(o));
                 TextView chip=ui.filter(label,on,x->{Ui.haptic(x,Ui.Haptic.TICK);if(on)v.mergeInto=null;else{v.mergeInto=o.key;if(v.field.length()>0)v.field.setText("");}refresh.run();});
-                chip.setContentDescription(on?"Se une con "+display(o)+", seleccionado. Toca para no unir":"Es la misma persona que "+display(o));
+                chip.setContentDescription(on?s.getString(R.string.voices_merge_on,display(o)):s.getString(R.string.voices_merge_off,display(o)));
                 addChip(s,v.chips,chip);}
         }
         ((View)v.chips.getParent()).setVisibility(v.chips.getChildCount()==0?View.GONE:View.VISIBLE);
@@ -211,14 +211,14 @@ final class NameVoices {
     }
     private static Voice find(List<Voice> all,String key){for(Voice v:all)if(v.key.equals(key))return v;return null;}
     private static String display(Voice v){String t=v.typed();return t.isEmpty()?v.label:t;}
-    /** «F» para Fran; «3» para Persona 3. */
+    /** «F» para Fran; «3» para Persona 3 (también «Person 3» y «Pessoa 3»: la etiqueta puede venir de otro idioma). */
     static String initial(String name){
         String n=name==null?"":name.trim();if(n.isEmpty())return "";
-        java.util.regex.Matcher m=java.util.regex.Pattern.compile("^Persona (\\d+)$").matcher(n);if(m.matches())return m.group(1);
-        return n.substring(0,n.offsetByCodePoints(0,1)).toUpperCase(new Locale("es","CL"));
+        java.util.regex.Matcher m=java.util.regex.Pattern.compile("^"+Lang.anyRegex(R.string.speaker_n)+" (\\d+)$").matcher(n);if(m.matches())return m.group(1);
+        return n.substring(0,n.offsetByCodePoints(0,1)).toUpperCase(Lang.locale());
     }
-    /** «58 %», «< 1 %». */
-    static String percent(double share){if(share<=0)return "0 %";if(share<0.01)return "< 1 %";return Math.round(share*100)+" %";}
+    /** «58 %», «< 1 %» (en inglés y portugués, «58%» y «<1%»). */
+    static String percent(double share){if(share<=0)return Lang.str(R.string.detail_percent,0);if(share<0.01)return Lang.str(R.string.voices_percent_less,1);return Lang.str(R.string.detail_percent,Math.round(share*100));}
 
     // ---------- Guardar (una sola vez) ----------
     private static void commit(Screen s,String id,boolean demo,Transcript tr,String stamp,List<Voice> voices,boolean explicit,Runnable changed){
@@ -245,14 +245,14 @@ final class NameVoices {
             Diagnostics.event("voices_named",demo?null:id,"voices",voices.size(),"merged",merged[0],"changed",edited);
             Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);
             if(changed!=null)changed.run();
-            String done=!edited?"Voces revisadas":merged[0]==0?"Nombres guardados":merged[0]==1?"Nombres guardados · 2 voces quedaron en una":"Nombres guardados · "+merged[0]+" voces se unieron a otras";
-            String saved=after;s.snackbar(done,"Deshacer",()->undo(s,id,demo,tr,before,saved,changed));
-        }catch(Exception e){Diagnostics.event("voices_name_failed",demo?null:id,"error_class",e.getClass().getSimpleName());s.message("No se guardaron los nombres","Vuelve a intentarlo.");}
+            String done=!edited?s.getString(R.string.voices_reviewed):merged[0]==0?s.getString(R.string.voices_names_saved):merged[0]==1?s.getString(R.string.voices_saved_merged_one):s.getString(R.string.voices_saved_merged_many,merged[0]);
+            String saved=after;s.snackbar(done,s.getString(R.string.detail_undo),()->undo(s,id,demo,tr,before,saved,changed));
+        }catch(Exception e){Diagnostics.event("voices_name_failed",demo?null:id,"error_class",e.getClass().getSimpleName());s.message(s.getString(R.string.voices_names_failed),s.getString(R.string.voices_try_again));}
     }
     /** La transcripción cambió por otro lado (otra versión): se avisa en vez de escribir sobre ella. */
     private static void changedMeanwhile(Screen s,String id,String what){
         Diagnostics.event("voices_name_skipped",id,"reason","transcript_changed","kind",what);
-        s.message("Nombrar voces","La transcripción cambió mientras la hoja estaba abierta (por ejemplo, volviste a la otra versión), así que no se aplicó nada. Ábrela de nuevo para nombrar estas voces.");
+        s.message(s.getString(R.string.voices_title),s.getString(R.string.voices_changed_meanwhile));
     }
     private static void restore(Screen s,String id,boolean demo,Transcript tr,Runnable changed){
         try{JSONObject before;String after=null;
@@ -260,20 +260,20 @@ final class NameVoices {
             else synchronized(FilesStore.LOCK){before=Transcript.edit(s,id,Transcript::restore);after=stamp(s,id);}
             Diagnostics.event("transcript_edited",demo?null:id,"action","restore");
             if(changed!=null)changed.run();
-            String saved=after;s.snackbar("Voces originales restauradas","Deshacer",()->undo(s,id,demo,tr,before,saved,changed));
-        }catch(Exception e){s.message("Transcripción","No se pudieron restaurar las voces. Vuelve a intentarlo.");}
+            String saved=after;s.snackbar(s.getString(R.string.voices_restored),s.getString(R.string.detail_undo),()->undo(s,id,demo,tr,before,saved,changed));
+        }catch(Exception e){s.message(s.getString(R.string.detail_transcript),s.getString(R.string.voices_restore_failed));}
     }
     /** saved: marca de la transcripción justo después del cambio; si ya no coincide, «Deshacer» pisaría otra versión. */
     private static void undo(Screen s,String id,boolean demo,Transcript tr,JSONObject before,String saved,Runnable changed){
         try{
             if(demo){replaceData(tr.data,before);writeDemo(s,tr);}
             else synchronized(FilesStore.LOCK){
-                if(saved!=null&&!saved.equals(stamp(s,id))){s.message("Deshacer","La transcripción cambió después (por ejemplo, volviste a la otra versión), así que ya no se puede deshacer este cambio.");return;}
+                if(saved!=null&&!saved.equals(stamp(s,id))){s.message(s.getString(R.string.detail_undo),s.getString(R.string.voices_undo_stale));return;}
                 Transcript.replace(s,id,before);
             }
             Diagnostics.event("transcript_edited",demo?null:id,"action","undo");
             if(changed!=null)changed.run();
-        }catch(Exception e){s.message("Transcripción","No se pudo deshacer el cambio.");}
+        }catch(Exception e){s.message(s.getString(R.string.detail_transcript),s.getString(R.string.detail_undo_change_failed));}
     }
     /** En el ejemplo, la transcripción vive en memoria: se reemplaza su contenido sin cambiar el objeto que usa la pantalla. */
     static void replaceData(JSONObject target,JSONObject source)throws JSONException{
@@ -349,29 +349,29 @@ final class NameVoices {
         void toggle(Voice v){
             if(playing==v){stop();return;}
             stop();
-            if(RecorderService.activeId!=null){s.toast("Guarda la grabación actual antes de escuchar");return;}
+            if(RecorderService.activeId!=null){s.toast(s.getString(R.string.voices_recording_now));return;}
             if(v.sample==null||audio==null)return;
             try{
                 AudioAttributes attr=new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build();
                 if(player==null){
                     player=new MediaPlayer();player.setAudioAttributes(attr);player.setDataSource(audio.getAbsolutePath());player.prepare();
                     player.setOnCompletionListener(mp->stop());
-                    player.setOnErrorListener((mp,w,e)->{release();s.toast("No se pudo reproducir la muestra");return true;});
+                    player.setOnErrorListener((mp,w,e)->{release();s.toast(s.getString(R.string.voices_sample_failed));return true;});
                 }
                 focus=new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(attr).setOnAudioFocusChangeListener(ch->{if(ch<0)stop();}).build();
                 if(s.getSystemService(AudioManager.class).requestAudioFocus(focus)!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED){focus=null;return;}
                 player.seekTo((long)(v.sample[0]*1000),MediaPlayer.SEEK_CLOSEST);player.start();
                 until=(long)(v.sample[1]*1000)+150;playing=v;
-                v.play.setImageResource(R.drawable.ic_pause);v.play.setTag(Boolean.TRUE);v.play.setContentDescription("Detener muestra de "+display(v));paint(v,true);
+                v.play.setImageResource(R.drawable.ic_pause);v.play.setTag(Boolean.TRUE);v.play.setContentDescription(s.getString(R.string.voices_stop_sample,display(v)));paint(v,true);
                 handler.removeCallbacks(tick);handler.postDelayed(tick,100);
                 Diagnostics.event("voice_sample_played",null,"seconds",Math.round(v.sample[1]-v.sample[0]));
-            }catch(Exception e){release();s.toast("No se pudo reproducir la muestra");}
+            }catch(Exception e){release();s.toast(s.getString(R.string.voices_sample_failed));}
         }
         void stop(){
             handler.removeCallbacks(tick);
             try{if(player!=null&&player.isPlaying())player.pause();}catch(IllegalStateException ignored){}
             if(focus!=null){s.getSystemService(AudioManager.class).abandonAudioFocusRequest(focus);focus=null;}
-            if(playing!=null&&playing.play!=null){playing.play.setImageResource(R.drawable.ic_play);playing.play.setTag(null);playing.play.setContentDescription("Escuchar a "+display(playing));paint(playing,false);}
+            if(playing!=null&&playing.play!=null){playing.play.setImageResource(R.drawable.ic_play);playing.play.setTag(null);playing.play.setContentDescription(s.getString(R.string.voices_listen_to,display(playing)));paint(playing,false);}
             playing=null;
         }
         void release(){stop();if(player!=null){try{player.release();}catch(Exception ignored){}player=null;}}

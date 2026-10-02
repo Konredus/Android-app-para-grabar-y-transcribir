@@ -87,13 +87,13 @@ public class RecordingActivity extends Screen {
     @Override public void onCreate(Bundle state){
         super.onCreate(state);demo=getIntent().getBooleanExtra("demo",false);id=getIntent().getStringExtra("id");prefs=getSharedPreferences("detail",MODE_PRIVATE);if(!demo&&id!=null)Transcriber.clearDone(this,id);
         if(state!=null){intentHandled=true;offeredKeepAt=state.getLong("offeredKeepAt",-1);markedOpened=state.getBoolean("markedOpened");correctionOpened=state.getBoolean("correcting");onlySpeaker=state.getString("onlySpeaker");saveAsNote=state.getBoolean("saveAsNote");}
-        shell(demo?"Ajustes":"Biblioteca",-1);
+        shell(getString(demo?R.string.nav_settings:R.string.nav_library),-1);
         try{
-            if(demo){recording=new Recording("00000000-0000-0000-0000-000000000000","Conversación de ejemplo",System.currentTimeMillis(),27000);java.io.File f=demoFile();transcript=f.exists()?new Transcript(FilesStore.read(f)):example();demoStamp=f.exists()?f.lastModified():0;}
+            if(demo){recording=new Recording("00000000-0000-0000-0000-000000000000",getString(R.string.detail_demo_title),System.currentTimeMillis(),27000);java.io.File f=demoFile();transcript=f.exists()?new Transcript(FilesStore.read(f)):example();demoStamp=f.exists()?f.lastModified():0;}
             else{recording=FilesStore.recording(this,id);if(recording==null)throw new java.io.FileNotFoundException();}
-        }catch(Exception e){recording=null;largeTitle(page,"No disponible","Esta grabación ya no existe o no se pudo abrir.");return;}
+        }catch(Exception e){recording=null;largeTitle(page,getString(R.string.detail_missing_title),getString(R.string.detail_missing_body));return;}
         // ← y ⋯ son los dos botones redondos de vidrio de la barra (el menú es el mismo de siempre).
-        if(!demo)barButton(R.drawable.ic_more,"Más opciones",v->RecordingActions.menu(this,recording,this::reload,this::releasePlayer));
+        if(!demo)barButton(R.drawable.ic_more,getString(R.string.detail_more_options),v->RecordingActions.menu(this,recording,this::reload,this::releasePlayer));
         else if(barActions!=null)barActions.addView(ui.space(48)); // el ejemplo no tiene ⋯: el hueco mantiene centrado el título de la barra
         // El título grande se va con el contenido; al desplazarte aparece centrado en la barra (Outfit), entre los dos botones.
         barTitle=ui.oneLine(ui.text(recording.title,Type.TITLE_MEDIUM,p.onSurface));barTitle.setTextSize(17);barTitle.setGravity(Gravity.CENTER);barTitle.setPadding(ui.dp(S3),0,ui.dp(S3),0);
@@ -101,7 +101,7 @@ public class RecordingActivity extends Screen {
         if(bar!=null&&bar.getChildCount()>2){bar.removeViewAt(1);bar.addView(barTitle,1,new LinearLayout.LayoutParams(0,-2,1));}
         // La zona desplazable lleva encima el chip flotante «Volver a lo que suena».
         int at=root.indexOfChild(scroll);root.removeView(scroll);FrameLayout stage=new FrameLayout(this);stage.addView(scroll,new FrameLayout.LayoutParams(-1,-1));
-        followChip=ui.text("↓ Volver a lo que suena",Type.LABEL_LARGE,p.onInk);followChip.setGravity(Gravity.CENTER);followChip.setMinHeight(ui.dp(48));followChip.setPadding(ui.dp(S5),0,ui.dp(S5),0);
+        followChip=ui.text("↓ "+getString(R.string.detail_follow),Type.LABEL_LARGE,p.onInk);followChip.setGravity(Gravity.CENTER);followChip.setMinHeight(ui.dp(48));followChip.setPadding(ui.dp(S5),0,ui.dp(S5),0);
         // Píldora de tinta que flota (como la barra de pestañas): se distingue de cualquier texto que pase por detrás.
         followChip.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.stateLayer(p.onInk)),shape(this,p.ink,R_FULL),null));followChip.setElevation(ui.dp(6));lift(followChip);
         followChip.setAccessibilityDelegate(Ui.buttonRole());followChip.setVisibility(View.GONE);Ui.pressable(followChip);
@@ -242,33 +242,38 @@ public class RecordingActivity extends Screen {
         titleView=ui.heading("",Type.HEADLINE_MEDIUM);ui.highlightLast(titleView,recording.title);titleView.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_BALANCED);titleView.setPadding(0,ui.dp(S2),ui.dp(S1),ui.dp(S1));row.addView(titleView,new LinearLayout.LayoutParams(0,-2,1));
         if(!demo){titleView.setOnClickListener(v->rename());
             // El lápiz queda a la altura de la primera línea del título, aunque este ocupe varias.
-            ImageButton edit=ui.iconButton(R.drawable.ic_edit,"Cambiar título",p.onSurfaceVariant,0,48);edit.setOnClickListener(v->rename());LinearLayout.LayoutParams el=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));el.topMargin=ui.dp(2);row.addView(edit,el);}
+            ImageButton edit=ui.iconButton(R.drawable.ic_edit,getString(R.string.detail_rename_title),p.onSurfaceVariant,0,48);edit.setOnClickListener(v->rename());LinearLayout.LayoutParams el=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));el.topMargin=ui.dp(2);row.addView(edit,el);}
         content.addView(row,Ui.fill());
         // Fecha · hora · duración en Outfit con cifras fijas (se leen como datos, no como frase).
         LinearLayout metaRow=ui.row();metaRow.setPadding(ui.dp(S1),0,0,ui.dp(S1));metaRow.setMinimumHeight(ui.dp(32));
         metaRow.addView(Ui.tabular(ui.text(metaText(),Type.LABEL_LARGE,p.onSurfaceVariant)),new LinearLayout.LayoutParams(0,-2,1));
         // Lo terminado va en silencio: el estado solo se muestra cuando pide atención o está en curso.
-        if(demo||mode!=Mode.DONE){RecState state=RecState.of(st,false);TextView chip=ui.chip(demo?"Ejemplo":state.label,demo?p.onPrimaryContainer:state.onBg(p),demo?p.primaryContainer:state.bg(p));
+        if(demo||mode!=Mode.DONE){RecState state=RecState.of(st,false);TextView chip=ui.chip(demo?getString(R.string.detail_demo_chip):state.label,demo?p.onPrimaryContainer:state.onBg(p),demo?p.primaryContainer:state.bg(p));
             LinearLayout.LayoutParams cl=Ui.wrap();cl.setMarginStart(ui.dp(S2));metaRow.addView(chip,cl);}
         content.addView(metaRow,Ui.fill());
         if(!demo){String suggested=st.optString("suggestedTitle","").trim();
             if(!suggested.isEmpty()&&!sameTitle(suggested,recording.title)){
-                TextView chip=chip("Usar «"+quote(suggested,48)+"»",R.drawable.ic_sparkle,p.primary,p.onSurface,0,true);chip.setContentDescription("Título sugerido: "+suggested+". Toca para usarlo");
+                TextView chip=chip(getString(R.string.detail_use_suggested,quote(suggested,48)),R.drawable.ic_sparkle,p.primary,p.onSurface,0,true);chip.setContentDescription(getString(R.string.detail_suggested_desc,suggested));
                 chip.setOnClickListener(v->useSuggested(suggested));content.addView(chip,Ui.wrap());}}
     }
     private void rename(){RecordingActions.rename(this,recording,this::reload);}
-    private String metaText(){return dayLabel(recording.created)+" · "+new SimpleDateFormat("HH:mm",Locale.ROOT).format(new Date(recording.created))+" · "+Ui.humanDuration(recording.duration);}
-    /** «29 sept»; con el año si no es el actual. */
-    private static String dayLabel(long ms){Calendar now=Calendar.getInstance(),c=Calendar.getInstance();c.setTimeInMillis(ms);
-        return new SimpleDateFormat(now.get(Calendar.YEAR)==c.get(Calendar.YEAR)?"d MMM":"d MMM yyyy",new Locale("es","CL")).format(new Date(ms)).replace(".","");}
+    private String metaText(){return dayLabel(recording.created)+" · "+clock(recording.created)+" · "+Ui.humanDuration(recording.duration);}
+    /** «29 sept» («Sep 29» en inglés, «29 de set» en portugués); con el año si no es el actual. */
+    private String dayLabel(long ms){Calendar now=Calendar.getInstance(),c=Calendar.getInstance();c.setTimeInMillis(ms);
+        return new SimpleDateFormat(getString(now.get(Calendar.YEAR)==c.get(Calendar.YEAR)?R.string.detail_date_day:R.string.detail_date_day_year),Lang.locale(this)).format(new Date(ms)).replace(".","");}
+    /**
+     * Hora del día: «16:05» con el reloj de 24 horas del teléfono; con el de 12 horas, la del idioma (detail_time_12h:
+     * «4:05 PM» en inglés). En español siempre «16:05», como antes.
+     */
+    private String clock(long ms){return new SimpleDateFormat(android.text.format.DateFormat.is24HourFormat(this)?"HH:mm":getString(R.string.detail_time_12h),Lang.locale(this)).format(new Date(ms));}
     private static boolean sameTitle(String a,String b){return strip(a).equalsIgnoreCase(strip(b));}
     private static String strip(String t){return (t==null?"":t.trim()).replaceFirst("^\\d{4}-\\d{2}-\\d{2}\\s*","").trim();}
     /** El título sugerido por la nota nunca pisa uno escrito: se ofrece y se puede deshacer. */
     private void useSuggested(String suggested){
         String previous=recording.title;
         try{recording.title=suggested;recording.save(this);Pipeline.edited(this,id);Diagnostics.event("title_suggestion_used",id);Ui.haptic(content,Ui.Haptic.CONFIRM);reload();
-            snackbar("Título cambiado","Deshacer",()->{try{recording.title=previous;recording.save(this);Pipeline.edited(this,id);reload();}catch(Exception e){message("Título","No se pudo deshacer el cambio.");}});}
-        catch(Exception e){recording.title=previous;message("Título","No se pudo cambiar el título.");}
+            snackbar(getString(R.string.detail_title_changed),getString(R.string.detail_undo),()->{try{recording.title=previous;recording.save(this);Pipeline.edited(this,id);reload();}catch(Exception e){message(getString(R.string.detail_title),getString(R.string.detail_undo_change_failed));}});}
+        catch(Exception e){recording.title=previous;message(getString(R.string.detail_title),getString(R.string.detail_title_failed));}
     }
 
     // ---------- Zona fija de abajo: onda, controles y botón que avanza ----------
@@ -283,7 +288,7 @@ public class RecordingActivity extends Screen {
         dock.setElevation(ui.dp(p.dark?0:6));lift(dock);dock.setPadding(ui.dp(S3),ui.dp(S3),ui.dp(S3),ui.dp(S3));
         if(!demo){
             LinearLayout wave=ui.row();
-            play=ui.iconButton(R.drawable.ic_play,"Reproducir",p.onBrand,p.brand,48);play.setOnClickListener(v->toggle());wave.addView(play);
+            play=ui.iconButton(R.drawable.ic_play,getString(R.string.detail_play),p.onBrand,p.brand,48);play.setOnClickListener(v->toggle());wave.addView(play);
             scrubber=new Scrubber(this,p,dockColor());scrubber.setDuration(recording.duration);scrubber.listener=this::onScrub;
             LinearLayout.LayoutParams sl=new LinearLayout.LayoutParams(0,ui.dp(48),1);sl.setMarginStart(ui.dp(S2));wave.addView(scrubber,sl);
             dock.addView(wave,Ui.fill());
@@ -293,7 +298,7 @@ public class RecordingActivity extends Screen {
             controls.addView(skipButton(false));controls.addView(skipButton(true));controls.addView(speedBox());
             dock.addView(controls,Ui.fill()); // las dos filas de 48 dp ya traen su aire: la cápsula no crece más que el reproductor de antes
         }
-        primary=ui.split(demo?"Nombrar voces":"Transcribir",demo?R.drawable.ic_people:R.drawable.ic_sparkle,v->onPrimary(),v->moreSheet());
+        primary=ui.split(getString(demo?R.string.voices_title:R.string.detail_transcribe),demo?R.drawable.ic_people:R.drawable.ic_sparkle,v->onPrimary(),v->moreSheet());
         LinearLayout.LayoutParams lp=Ui.fill();lp.topMargin=ui.dp(demo?0:S2);dock.addView(primary,lp);
         LinearLayout.LayoutParams dl=Ui.fill();dl.topMargin=ui.dp(S2);bottom.addView(dock,dl);
     }
@@ -307,7 +312,7 @@ public class RecordingActivity extends Screen {
     private View skipButton(boolean forward){
         // Íconos redondos con el «15» adentro: se entienden de un vistazo y ocupan lo mismo que el texto de antes.
         ImageButton b=new ImageButton(this);b.setImageResource(forward?R.drawable.ic_forward_15:R.drawable.ic_replay_15);b.setImageTintList(ColorStateList.valueOf(p.onSurface));b.setScaleType(ImageView.ScaleType.CENTER);
-        b.setBackground(new RippleDrawable(ColorStateList.valueOf(p.ripple),null,oval(0xFF000000)));b.setContentDescription(forward?"Adelantar 15 segundos":"Retroceder 15 segundos");
+        b.setBackground(new RippleDrawable(ColorStateList.valueOf(p.ripple),null,oval(0xFF000000)));b.setContentDescription(getString(forward?R.string.detail_forward_15:R.string.detail_back_15));
         b.setOnClickListener(v->skip(forward?15000:-15000));Ui.pressable(b);b.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));return b;
     }
     private View speedBox(){
@@ -315,17 +320,17 @@ public class RecordingActivity extends Screen {
         // Velocidad como píldora de vidrio: borde fino sobre la cápsula, cifras fijas en Outfit.
         speedChip=Ui.tabular(ui.chip(speedLabel(),p.onSurface,0));speedChip.setBackground(outline(this,p.dark?p.glass:p.surfaceContainerLow,p.outlineVariant,R_FULL,false));speedChip.setMinWidth(ui.dp(48));speedChip.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         box.addView(speedChip,new FrameLayout.LayoutParams(-2,ui.dp(32),Gravity.CENTER));
-        box.setClickable(true);box.setFocusable(true);box.setContentDescription("Velocidad "+speedLabel());box.setAccessibilityDelegate(Ui.buttonRole());box.setOnClickListener(v->cycleSpeed());Ui.pressable(box);
+        box.setClickable(true);box.setFocusable(true);box.setContentDescription(getString(R.string.detail_speed_desc,speedLabel()));box.setAccessibilityDelegate(Ui.buttonRole());box.setOnClickListener(v->cycleSpeed());Ui.pressable(box);
         box.setLayoutParams(new LinearLayout.LayoutParams(-2,ui.dp(48)));speedBox=box;return box;
     }
     /** El botón principal según el siguiente paso de la grabación (Transcribir → Revisar voces → Guardar → ✓). */
     private void refreshPrimary(){
         if(primary==null)return;
-        if(demo){primary.setLabel("Nombrar voces");primary.setIcon(R.drawable.ic_people);primary.setTonal(false);primary.setBusy(false);return;}
+        if(demo){primary.setLabel(getString(R.string.voices_title));primary.setIcon(R.drawable.ic_people);primary.setTonal(false);primary.setBusy(false);return;}
         Next n;try{n=Next.of(this,recording);}catch(Exception e){n=null;}
         next=n;
-        if(saving){primary.setLabel("Guardando…");primary.setBusy(true);return;}
-        if(n==null){primary.setLabel(transcript!=null?"Guardar o compartir":"Transcribir");primary.setTonal(false);primary.setBusy(false);return;}
+        if(saving){primary.setLabel(getString(R.string.detail_saving));primary.setBusy(true);return;}
+        if(n==null){primary.setLabel(getString(transcript!=null?R.string.detail_save_or_share:R.string.detail_transcribe));primary.setTonal(false);primary.setBusy(false);return;}
         // Se repinta cada 3 s mientras está en cola (renderConditions): solo si cambió algo, para no rehacer el ícono.
         if(primary.main.busy()&&n.step==Next.Step.WORKING&&n.label.contentEquals(primary.main.label.getText()))return;
         primary.setLabel(n.label);primary.setIcon(n.icon);primary.setTonal(n.step==Next.Step.SAVED);primary.setBusy(n.step==Next.Step.WORKING);
@@ -346,17 +351,17 @@ public class RecordingActivity extends Screen {
     /** ▾: todas las salidas siguen a mano (copiar, compartir, .txt, nota, otra carpeta, volver a transcribir). */
     private void moreSheet(){
         if(transcript==null){if(!demo)RecordingActions.menu(this,recording,this::reload,this::releasePlayer);return;}
-        Sheet s=sheet("Guardar o compartir",null);
-        s.action(R.drawable.ic_copy,"Copiar texto",false,this::copy);
-        s.action(R.drawable.ic_share,"Compartir",false,this::shareText);
-        s.action(R.drawable.ic_doc,"Archivo .txt",false,this::shareTxt);
+        Sheet s=sheet(getString(R.string.detail_save_or_share),null);
+        s.action(R.drawable.ic_copy,getString(R.string.detail_copy_text),false,this::copy);
+        s.action(R.drawable.ic_share,getString(R.string.detail_share),false,this::shareText);
+        s.action(R.drawable.ic_doc,getString(R.string.detail_txt_file),false,this::shareTxt);
         if(!demo){
-            if(Notes.exists(this,id))s.action(R.drawable.ic_sparkle,"Compartir nota .md",false,this::shareNote);
+            if(Notes.exists(this,id))s.action(R.drawable.ic_sparkle,getString(R.string.detail_share_note_md),false,this::shareNote);
             Next.Step step=next==null?null:next.step;
-            if(Inbox.configured(this)&&step!=Next.Step.SAVE&&step!=Next.Step.UPDATE){String verb=step==Next.Step.SAVED?"Guardar de nuevo en ":"Guardar en ";
-                privateAction(s,R.drawable.ic_save,verb+"carpeta rápida",verb+Inbox.folderName(this),this::inboxSave);}
-            s.action(R.drawable.ic_folder,"Guardar en otra carpeta…",false,this::saveAs);
-            s.action(R.drawable.ic_refresh,"Volver a transcribir…",false,()->RetranscribeSheet.show(this,recording,this::reload));
+            if(Inbox.configured(this)&&step!=Next.Step.SAVE&&step!=Next.Step.UPDATE){int verb=step==Next.Step.SAVED?R.string.detail_save_again_in:R.string.detail_save_in;
+                privateAction(s,R.drawable.ic_save,getString(verb,getString(R.string.detail_quick_folder)),getString(verb,Inbox.folderName(this)),this::inboxSave);}
+            s.action(R.drawable.ic_folder,getString(R.string.detail_save_elsewhere),false,this::saveAs);
+            s.action(R.drawable.ic_refresh,getString(R.string.detail_retranscribe),false,()->RetranscribeSheet.show(this,recording,this::reload));
         }
         s.show();
     }
@@ -373,23 +378,23 @@ public class RecordingActivity extends Screen {
     }
     private void savedSheet(){
         String folder=Inbox.folderName(this);long at=Inbox.savedAt(this,id);
-        sheet("Ya está en "+folder,(at>0?"Guardado a las "+new SimpleDateFormat("HH:mm",Locale.ROOT).format(new Date(at))+". ":"")+"Si cambiaste algo, vuelve a guardarlo: se reemplaza el mismo archivo, sin crear copias.")
-            .primary("Guardar de nuevo",this::inboxSave).secondary("Más opciones",this::moreSheet).show();
+        sheet(getString(R.string.detail_saved_title,folder),at>0?getString(R.string.detail_saved_body_at,clock(at)):getString(R.string.detail_saved_body))
+            .primary(getString(R.string.detail_save_again),this::inboxSave).secondary(getString(R.string.detail_more_options),this::moreSheet).show();
     }
 
     // ---------- Reproductor ----------
     private long total(){return player!=null&&prepared?player.getDuration():recording.duration;}
     private void ensurePlayer(){
         if(player!=null||demo)return;
-        if(RecorderService.activeId!=null){message("Grabación en curso","Guarda la grabación actual antes de reproducir.");return;}
+        if(RecorderService.activeId!=null){message(getString(R.string.detail_recording_now),getString(R.string.detail_recording_now_body));return;}
         try{
             player=new MediaPlayer();AudioAttributes attr=new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build();player.setAudioAttributes(attr);
             focus=new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(attr).setOnAudioFocusChangeListener(c->{if(c<0&&player!=null&&player.isPlaying()){player.pause();setPlaying(false);}}).build();
             player.setDataSource(recording.audio(this).getAbsolutePath());player.prepare();prepared=true;if(scrubber!=null)scrubber.setDuration(player.getDuration());
             player.setOnCompletionListener(mp->{setPlaying(false);if(playUntil>0){playUntil=0;if(tramoEnded!=null)tramoEnded.run();}});
-            player.setOnErrorListener((mp,w,e)->{releasePlayer();message("No se pudo reproducir","El audio puede haberse interrumpido al grabar.");return true;});
+            player.setOnErrorListener((mp,w,e)->{releasePlayer();message(getString(R.string.detail_play_failed),getString(R.string.detail_play_failed_cut));return true;});
             Diagnostics.event("playback_open",id);
-        }catch(Exception e){releasePlayer();message("No se pudo reproducir","El archivo de audio no se pudo abrir.");}
+        }catch(Exception e){releasePlayer();message(getString(R.string.detail_play_failed),getString(R.string.detail_play_failed_open));}
     }
     private void toggle(){ensurePlayer();if(!prepared)return;
         if(player.isPlaying()){player.pause();setPlaying(false);}
@@ -403,7 +408,7 @@ public class RecordingActivity extends Screen {
      */
     private void setPlaying(boolean on){
         if(play==null)return;
-        play.setImageResource(on?R.drawable.ic_pause:R.drawable.ic_play);play.setContentDescription(on?"Pausar":"Reproducir");play.setImageTintList(ColorStateList.valueOf(p.onBrand));
+        play.setImageResource(on?R.drawable.ic_pause:R.drawable.ic_play);play.setContentDescription(getString(on?R.string.detail_pause:R.string.detail_play));play.setImageTintList(ColorStateList.valueOf(p.onBrand));
         float round=ui.dp(24),square=ui.dp(R_CONTROL),to=on?square:round,from=playShown?square:round;boolean changed=on!=playShown;playShown=on;
         GradientDrawable fill=new GradientDrawable(),mask=new GradientDrawable();fill.setColor(p.brand);mask.setColor(0xFF000000);fill.setCornerRadius(to);mask.setCornerRadius(to);
         play.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.stateLayer(p.onBrand)),fill,mask));
@@ -457,7 +462,7 @@ public class RecordingActivity extends Screen {
     }
     private boolean restoringPlaying;
     /** La hora de la intervención que suena dice «· sonando» y se pone verde. */
-    private void labelPlaying(boolean on){Object[] t=playingTurn==null?null:turnOf(playingTurn);if(t!=null){((TextView)t[3]).setText(on?t[4]+" · sonando":(String)t[4]);((TextView)t[3]).setTextColor(on?p.primary:p.onSurfaceVariant);}}
+    private void labelPlaying(boolean on){Object[] t=playingTurn==null?null:turnOf(playingTurn);if(t!=null){((TextView)t[3]).setText(on?getString(R.string.detail_turn_playing,t[4]):(String)t[4]);((TextView)t[3]).setTextColor(on?p.primary:p.onSurfaceVariant);}}
     private Object[] turnOf(View v){for(Object[] t:turns)if(t[0]==v)return t;return null;}
     /** Trae la intervención a la vista con un desplazamiento suave (solo si no está ya en la zona cómoda de lectura). */
     private void followTo(View turn,boolean force){
@@ -474,7 +479,7 @@ public class RecordingActivity extends Screen {
             Rect r=new Rect();playingTurn.getDrawingRect(r);
             try{scroll.offsetDescendantRectToMyCoords(playingTurn,r);int y=scroll.getScrollY(),h=scroll.getHeight();if(r.bottom<=y||r.top>=y+h){show=true;below=r.top>=y+h;}}catch(IllegalArgumentException ignored){}
         }
-        if(show){String label=(below?"↓":"↑")+" Volver a lo que suena";if(!label.contentEquals(followChip.getText())){followChip.setText(label);followChip.setContentDescription("Volver a lo que suena");}}
+        if(show){String back=getString(R.string.detail_follow),label=(below?"↓":"↑")+" "+back;if(!label.contentEquals(followChip.getText())){followChip.setText(label);followChip.setContentDescription(back);}}
         boolean visible=followChip.getVisibility()==View.VISIBLE;
         if(show!=visible){followChip.setVisibility(show?View.VISIBLE:View.GONE);if(show)ui.fadeIn(followChip);}
     }
@@ -485,9 +490,10 @@ public class RecordingActivity extends Screen {
         // Entra subiendo 8 dp y se va bajando, más rápido (curvas emphasized de entrada y salida).
         if(show!=barTitleShown){barTitleShown=show;barTitle.animate().alpha(show?1f:0f).translationY(show?0f:ui.dp(S2)).setDuration(show?MOTION_BASE:MOTION_FAST+50).setInterpolator(show?EMPHASIZED_DECELERATE:EMPHASIZED_ACCELERATE).start();}
     }
-    private String speedLabel(){String v=rate==(int)rate?String.valueOf((int)rate):String.valueOf(rate).replace('.',',');return v+"×";}
+    /** «1,25×» (con el separador decimal del idioma: «1.25×» en inglés). */
+    private String speedLabel(){java.text.NumberFormat f=java.text.NumberFormat.getNumberInstance(Lang.locale(this));f.setMaximumFractionDigits(2);return f.format(rate)+"×";}
     private void cycleSpeed(){float[] rates={1f,1.25f,1.5f,2f,0.75f};int i=0;for(int k=0;k<rates.length;k++)if(Math.abs(rates[k]-rate)<0.01f)i=k;rate=rates[(i+1)%rates.length];
-        speedChip.setText(speedLabel());speedBox.setContentDescription("Velocidad "+speedLabel());applySpeed();}
+        speedChip.setText(speedLabel());speedBox.setContentDescription(getString(R.string.detail_speed_desc,speedLabel()));applySpeed();}
     private void applySpeed(){if(player!=null&&prepared)try{boolean playing=player.isPlaying();player.setPlaybackParams(player.getPlaybackParams().setSpeed(rate));if(!playing&&player.isPlaying())player.pause();}catch(Exception ignored){}}
     private void releasePlayer(){prepared=false;if(player!=null){player.release();player=null;}if(focus!=null){getSystemService(AudioManager.class).abandonAudioFocusRequest(focus);focus=null;}setPlaying(false);}
     /** La envolvente guardada se dibuja al tiro; si no existe, se calcula en segundo plano y la onda aparece al terminar. */
@@ -507,18 +513,18 @@ public class RecordingActivity extends Screen {
         // que un modelo nuevo salga con su nombre y no con el final de su identificador.
         if(s.openRouter())Models.cached(this);
         card.addView(sparkTile(44));
-        TextView h=ui.heading("Transcribe este audio",Type.TITLE_LARGE);h.setPadding(0,ui.dp(S4),0,ui.dp(S1));card.addView(h);
+        TextView h=ui.heading(getString(R.string.detail_new_title),Type.TITLE_LARGE);h.setPadding(0,ui.dp(S4),0,ui.dp(S1));card.addView(h);
         // Sin clave se nombra a OpenRouter (0.8.0: es el único proveedor que ofrece la app) y se dice que el audio viaja allá.
-        card.addView(ui.text(s.hasKey()?"Toca «Transcribir» abajo. Al transcribir eliges si separar voces. Proveedor: "+SettingsActivity.modelSummary(s)+"."
-            :"Agrega tu clave de OpenRouter para transcribir: toca «Transcribir» abajo. El audio se envía a OpenRouter y pagas solo lo que usas.",Type.BODY_MEDIUM,p.onSurfaceVariant));
+        card.addView(ui.text(s.hasKey()?getString(R.string.detail_new_body,SettingsActivity.modelSummary(s))
+            :getString(R.string.detail_new_body_nokey),Type.BODY_MEDIUM,p.onSurfaceVariant));
         // Costos con el proveedor y los modelos reales (0.8.0: también OpenRouter, con el precio de su catálogo). Un servidor
         // propio no tiene tarifa conocida y no muestra nada; un modelo que no separa voces muestra solo el del texto.
         // Con voces y OpenRouter, el estimado cuenta las muestras de voz que viajan con cada parte (Pricing.billedMs, la regla única).
         if(s.hasKey()){String provider=s.provider();
             double voices=s.canSeparate()?Pricing.estimate(this,provider,RecordingActions.model(s,true),Pricing.billedMs(this,recording.duration,true)):-1,text=Pricing.estimate(this,provider,RecordingActions.model(s,false),recording.duration);
             // Los dos costos como píldoras, una bajo la otra (juntas no caben en un teléfono angosto): se comparan de un vistazo.
-            if(voices>=0){TextView both=Ui.tabular(ui.chip("≈ "+Pricing.usd(voices)+" separando voces",p.onPrimaryContainer,p.primaryContainer));LinearLayout.LayoutParams bl=Ui.wrap();bl.topMargin=ui.dp(S3);card.addView(both,bl);}
-            if(text>=0){TextView plain=Ui.tabular(ui.chip("≈ "+Pricing.usd(text)+" solo el texto",p.onSurfaceVariant,0));plain.setBackground(outline(this,chipFill(),p.outlineVariant,R_FULL,false));
+            if(voices>=0){TextView both=Ui.tabular(ui.chip(getString(R.string.detail_cost_voices,Pricing.usd(voices)),p.onPrimaryContainer,p.primaryContainer));LinearLayout.LayoutParams bl=Ui.wrap();bl.topMargin=ui.dp(S3);card.addView(both,bl);}
+            if(text>=0){TextView plain=Ui.tabular(ui.chip(getString(R.string.detail_cost_text,Pricing.usd(text)),p.onSurfaceVariant,0));plain.setBackground(outline(this,chipFill(),p.outlineVariant,R_FULL,false));
                 LinearLayout.LayoutParams pl=Ui.wrap();pl.topMargin=ui.dp(voices>=0?S2:S3);card.addView(plain,pl);}}
         content.addView(card,gap());
     }
@@ -538,7 +544,7 @@ public class RecordingActivity extends Screen {
         progEstimate=Ui.tabular(ui.chip("",p.onPrimaryContainer,p.primaryContainer));LinearLayout.LayoutParams el=Ui.wrap();el.setMarginStart(ui.dp(S2));head.addView(progEstimate,el);
         card.addView(head,Ui.fill());
         phaseElapsed=ui.text("",Type.BODY_SMALL,p.onSurfaceVariant);phaseElapsed.setFontFeatureSettings("tnum");phaseElapsed.setPadding(ui.dp(22+S3),ui.dp(2),0,0);card.addView(phaseElapsed);
-        if(st.has("retranscribe")){TextView r=ui.text("Volviendo a transcribir · tu versión anterior se conserva",Type.BODY_MEDIUM,p.onSurfaceVariant);r.setPadding(0,ui.dp(S3),0,0);card.addView(r);}
+        if(st.has("retranscribe")){TextView r=ui.text(getString(R.string.detail_again_note),Type.BODY_MEDIUM,p.onSurfaceVariant);r.setPadding(0,ui.dp(S3),0,0);card.addView(r);}
         progParts=Ui.tabular(ui.text("",Type.TITLE_MEDIUM,p.onSurface));progParts.setPadding(0,ui.dp(S4),0,ui.dp(S2));card.addView(progParts);
         // Barras en verde sobre menta: avanzan solo con lo terminado de verdad.
         progBar=new Meter(this,p.primary,p.primaryContainer);card.addView(progBar,new LinearLayout.LayoutParams(-1,ui.dp(8)));
@@ -546,7 +552,7 @@ public class RecordingActivity extends Screen {
         upBar=new Meter(this,p.primary,p.primaryContainer);card.addView(upBar,new LinearLayout.LayoutParams(-1,ui.dp(8)));
         HorizontalScrollView hs=new HorizontalScrollView(this);hs.setHorizontalScrollBarEnabled(false);progStages=ui.row();hs.addView(progStages);card.addView(hs,ui.top(S4));
         conditions=ui.column();conditions.setPadding(0,ui.dp(S3),0,0);card.addView(conditions,Ui.fill());
-        startNow=ui.button("Empezar ahora",R.drawable.ic_play,Ui.Style.TONAL,v->{if(Pipeline.startForeground(this,true))toast("Transcribiendo en primer plano");else message("Empezar ahora","Android no permitió empezar todavía. Se hará automáticamente.");});
+        startNow=ui.button(getString(R.string.detail_start_now),R.drawable.ic_play,Ui.Style.TONAL,v->{if(Pipeline.startForeground(this,true))toast(getString(R.string.detail_start_now_ok));else message(getString(R.string.detail_start_now),getString(R.string.detail_start_now_denied));});
         card.addView(startNow,ui.top(S3));
         View div=new View(this);div.setBackgroundColor(p.outlineVariant);LinearLayout.LayoutParams dl=new LinearLayout.LayoutParams(-1,Math.max(1,ui.dp(1)));dl.topMargin=ui.dp(S4);card.addView(div,dl);
         progNote=ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant);progNote.setPadding(0,ui.dp(S3),0,0);card.addView(progNote);
@@ -560,14 +566,14 @@ public class RecordingActivity extends Screen {
         liveState=st;phaseSince=st.optLong("since",System.currentTimeMillis());
         // «Preparando el audio» con su avance en % (0.8.0, tercera ronda): la conversión ya no parece detenida.
         int prep=prepPercent(st);String head=human(st.optString("status",""));
-        progHeadline.setText(prep>=0&&StatusText.preparing(head)?head+" · "+prep+" %":head);
+        progHeadline.setText(prep>=0&&StatusText.preparing(head)?head+" · "+getString(R.string.detail_percent,prep):head);
         int blocks=st.optInt("blocks"),done=st.optInt("blocksDone");boolean parts=blocks>1;
         progParts.setVisibility(parts?View.VISIBLE:View.GONE);progBar.setVisibility(parts?View.VISIBLE:View.GONE);
-        if(parts){progParts.setText(done+" de "+blocks+" partes listas");progBar.set(done/(float)blocks);}
+        if(parts){progParts.setText(getString(R.string.detail_parts_done,done,blocks));progBar.set(done/(float)blocks);}
         long sent=st.optLong("upSent"),total=st.optLong("upTotal");boolean uploading=total>0&&sent<total,preparing=!uploading&&prep>=0;
         upText.setVisibility(uploading||preparing?View.VISIBLE:View.GONE);upBar.setVisibility(uploading||preparing?View.VISIBLE:View.GONE);
-        if(uploading){upText.setText(String.format(Locale.ROOT,"Enviando %.1f de %.1f MB",sent/1e6,total/1e6).replace('.',','));upBar.set(sent/(float)total);}
-        else if(preparing){upText.setText("Preparando el audio · "+prep+" %");upBar.set(prep/100f);}
+        if(uploading){upText.setText(getString(R.string.detail_sending_mb,sent/1e6,total/1e6));upBar.set(sent/(float)total);}
+        else if(preparing){upText.setText(getString(R.string.detail_preparing_pct,prep));upBar.set(prep/100f);}
         renderStages(st);refreshWaiting(shownBlocker);
         if(statsHolder!=null){statsHolder.removeAllViews();statsHolder.addView(stats(st,true),Ui.fill());}
         if(logList!=null){JSONArray log=st.optJSONArray("log");int n=log==null?0:log.length();JSONObject last=n==0?null:log.optJSONObject(n-1);long lastT=last==null?0:last.optLong("t");
@@ -583,13 +589,13 @@ public class RecordingActivity extends Screen {
         int blocks=st.optInt("blocks"),done=st.optInt("blocksDone");long sent=st.optLong("upSent"),total=st.optLong("upTotal");
         boolean uploaded=done>0||(total>0&&sent>=total)||StatusText.uploadedInLog(st),partsDone=blocks>0&&done>=blocks;
         boolean preparing=st.optInt("prepping")>0||StatusText.preparing(st.optString("status"));int prep=prepPercent(st);
-        if("openrouter".equals(st.optString("provider")))stage(preparing&&prep>=0?"Preparar audio "+prep+" %":"Preparar audio",preparing?1:(uploaded||st.optInt("prepCount")>0)?2:0);
+        if("openrouter".equals(st.optString("provider")))stage(preparing&&prep>=0?getString(R.string.detail_stage_prepare_pct,prep):getString(R.string.detail_stage_prepare),preparing?1:(uploaded||st.optInt("prepCount")>0)?2:0);
         // «Subido» en curso solo si se está enviando ESTA (con otra en curso, esta sigue en cola).
-        stage("Subido",uploaded?2:mine()&&!preparing?1:0);
-        stage(blocks>1?"Partes "+done+"/"+blocks:"Texto",partsDone?2:uploaded?1:0);
-        if(st.optBoolean("speakers")&&blocks>1)stage("Unir voces",partsDone?1:0);
-        if(new Settings(this).noteAuto()&&Notes.canGenerate(this))stage("Nota",0);
-        stage("Lista",0);
+        stage(getString(R.string.detail_stage_uploaded),uploaded?2:mine()&&!preparing?1:0);
+        stage(blocks>1?getString(R.string.detail_stage_parts,done,blocks):getString(R.string.detail_stage_text),partsDone?2:uploaded?1:0);
+        if(st.optBoolean("speakers")&&blocks>1)stage(getString(R.string.detail_stage_join),partsDone?1:0);
+        if(new Settings(this).noteAuto()&&Notes.canGenerate(this))stage(getString(R.string.detail_stage_note),0);
+        stage(getString(R.string.detail_stage_done),0);
     }
     /**
      * state: 0 pendiente, 1 en curso, 2 listo. Píldoras: lo listo en menta con ✓, lo que está en curso con borde verde
@@ -599,7 +605,7 @@ public class RecordingActivity extends Screen {
         TextView t=Ui.tabular(ui.text(state==2?"✓ "+label:label,Type.LABEL_MEDIUM,state==2?p.onPrimaryContainer:state==1?p.primary:p.onSurfaceVariant));
         t.setGravity(Gravity.CENTER);t.setMinHeight(ui.dp(28));t.setPadding(ui.dp(S3),0,ui.dp(S3),0);
         t.setBackground(state==2?shape(this,p.primaryContainer,R_FULL):state==1?outline(this,chipFill(),p.primary,R_FULL,false):outline(this,0x00000000,p.outlineVariant,R_FULL,false));
-        t.setContentDescription(label+(state==2?": listo":state==1?": en curso":": pendiente"));
+        t.setContentDescription(getString(state==2?R.string.detail_stage_state_done:state==1?R.string.detail_stage_state_now:R.string.detail_stage_state_pending,label));
         LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginEnd(ui.dp(6));progStages.addView(t,lp);
     }
     /** Avance de «Preparando el audio» (0–100) si alguna parte se está convirtiendo ahora; -1 si no. */
@@ -632,13 +638,13 @@ public class RecordingActivity extends Screen {
     private String estimate(JSONObject st){
         long now=System.currentTimeMillis(),audio=st.optLong("audioMs",recording.duration),sum=st.optLong("blockMsSum");int blocks=st.optInt("blocks"),done=st.optInt("blocksDone"),count=st.optInt("blockCount");
         long left;
-        if(blocks>1&&count>0){if(done>=blocks)return "casi lista";int rounds=(blocks-done+Transcriber.PARALLEL-1)/Transcriber.PARALLEL;long avg=sum/count;left=Math.max(avg/5,rounds*avg-(now-st.optLong("since",now)));}
+        if(blocks>1&&count>0){if(done>=blocks)return getString(R.string.detail_almost_ready);int rounds=(blocks-done+Transcriber.PARALLEL-1)/Transcriber.PARALLEL;long avg=sum/count;left=Math.max(avg/5,rounds*avg-(now-st.optLong("since",now)));}
         else{
             double factor=st.optBoolean("speakers",true)?0.16:0.08;int prepared=st.optInt("prepCount");
             long prep="openrouter".equals(st.optString("provider"))?(prepared>0?st.optLong("prepMsSum")/prepared:Transcriber.prepEstimate(audio)):0;
             left=(long)(audio*factor)+20000+prep-(now-startedAt(st));
         }
-        if(left<=20000)return left>-120000?"casi lista":"";
+        if(left<=20000)return left>-120000?getString(R.string.detail_almost_ready):"";
         long lo=Math.max(1,Math.round(left*0.8/60000.0)),hi=Math.max(lo+1,Math.round(left*1.3/60000.0));
         return hi>=60?"≈ "+Ui.humanDuration(left):"≈ "+lo+"–"+hi+" min";
     }
@@ -659,23 +665,24 @@ public class RecordingActivity extends Screen {
         boolean online=Pipeline.network(this)!=null,wifi=Pipeline.unmetered(this);android.os.BatteryManager bm=getSystemService(android.os.BatteryManager.class);boolean charging=bm.isCharging();int level=bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY);
         JSONObject st=FilesStore.state(this,id);boolean mobileOk=st.optBoolean("mobileOk");
         boolean netOk=online&&(!s.wifiOnly()||wifi||mobileOk),chargeOk=!s.charging()||charging,batteryOk=charging||level>15,free=Battery.unrestricted(this);
-        if(netOk&&chargeOk&&batteryOk&&free)condition(true,(wifi?"Wi-Fi":mobileOk&&s.wifiOnly()?"Datos móviles, solo para esta grabación":"Datos móviles")+" · batería "+level+" % · sigue con la pantalla bloqueada");
+        if(netOk&&chargeOk&&batteryOk&&free)condition(true,getString(R.string.detail_cond_all_ok,wifi?"Wi-Fi":getString(mobileOk&&s.wifiOnly()?R.string.detail_cond_mobile_this:R.string.detail_cond_mobile),level));
         else{
-            condition(netOk,!online?"Sin conexión a internet":s.wifiOnly()?(wifi?"Wi-Fi conectado":mobileOk?"Datos móviles, solo para esta grabación":"Se requiere Wi-Fi · ahora usas datos móviles"):(wifi?"Conectado por Wi-Fi":"Conectado por datos móviles"));
+            condition(netOk,getString(!online?R.string.detail_cond_offline:s.wifiOnly()?(wifi?R.string.detail_cond_wifi_on:mobileOk?R.string.detail_cond_mobile_this:R.string.detail_cond_wifi_needed):(wifi?R.string.detail_cond_via_wifi:R.string.detail_cond_via_mobile)));
             // Espera Wi-Fi teniendo datos móviles: la salida a la vista, grande, con lo que pesaría el envío (0.8.0, tercera
             // ronda). Vale solo para esta grabación; «Solo con Wi-Fi» sigue igual para las demás.
             if(Pipeline.waitsForWifi(s.wifiOnly(),online,wifi,st)&&!mine()){
                 String size=Pipeline.megabytes(Pipeline.uploadBytes(this,recording));
-                Ui.Btn mobile=ui.button("Usar datos móviles ahora ("+size+")",R.drawable.ic_upload,Ui.Style.PRIMARY,v->useMobile());
-                mobile.setContentDescription("Usar datos móviles ahora para esta grabación, "+size.replace("≈","aproximadamente "));
+                Ui.Btn mobile=ui.button(getString(R.string.detail_use_mobile,size),R.drawable.ic_upload,Ui.Style.PRIMARY,v->useMobile());
+                // TalkBack lee «≈6,4 MB» como «aproximadamente 6,4 MB».
+                mobile.setContentDescription(getString(R.string.detail_use_mobile_desc,size.startsWith("≈")?getString(R.string.detail_about,size.substring(1).trim()):size));
                 conditions.addView(mobile,ui.top(S3));
-                TextView why=ui.text("Solo para esta grabación. Las demás siguen esperando Wi-Fi.",Type.BODY_SMALL,p.onSurfaceVariant);why.setPadding(0,ui.dp(S2),0,ui.dp(S1));conditions.addView(why);
+                TextView why=ui.text(getString(R.string.detail_use_mobile_why),Type.BODY_SMALL,p.onSurfaceVariant);why.setPadding(0,ui.dp(S2),0,ui.dp(S1));conditions.addView(why);
             }
-            condition(chargeOk,s.charging()?(charging?"Cargando":"Se requiere conectar el cargador"):"Cargador no requerido");
-            condition(batteryOk,"Batería "+level+" %"+(batteryOk?"":" · Android espera a que cargues"));
+            condition(chargeOk,getString(s.charging()?(charging?R.string.detail_cond_charging:R.string.detail_cond_charger_needed):R.string.detail_cond_charger_optional));
+            condition(batteryOk,getString(batteryOk?R.string.detail_cond_battery:R.string.detail_cond_battery_low,level));
             // Con la optimización activa, algunos teléfonos congelan la app con la pantalla bloqueada y cortan la conexión.
-            condition(free,free?"Puede trabajar con la pantalla bloqueada":"Android optimiza la batería de Verbapp · puede cortar la transcripción al bloquear");
-            if(!free){Ui.Btn allow=ui.button("Permitir en segundo plano",R.drawable.ic_battery,Ui.Style.TONAL,v->RecordingActions.allowBackground(this));conditions.addView(allow,ui.top(S2));}
+            condition(free,getString(free?R.string.detail_cond_background_ok:R.string.detail_cond_background_limited));
+            if(!free){Ui.Btn allow=ui.button(getString(R.string.detail_allow_background),R.drawable.ic_battery,Ui.Style.TONAL,v->RecordingActions.allowBackground(this));conditions.addView(allow,ui.top(S2));}
         }
         refreshWaiting(blocker);
         // El botón de abajo dice lo mismo (Next.working): «Esperando Wi-Fi…» pasa a «Transcribiendo…» cuando esta empieza,
@@ -690,7 +697,7 @@ public class RecordingActivity extends Screen {
         if(demo||id==null)return;
         if(Pipeline.allowMobile(this,id)){
             Diagnostics.event("ui_action",id,"screen","RecordingActivity","action","mobile_ok");
-            Ui.haptic(content,Ui.Haptic.CONFIRM);Pipeline.start(this,true);toast("Usando datos móviles para esta grabación");
+            Ui.haptic(content,Ui.Haptic.CONFIRM);Pipeline.start(this,true);toast(getString(R.string.detail_using_mobile));
         }
         conditionsAt=0;renderConditions();
     }
@@ -700,7 +707,7 @@ public class RecordingActivity extends Screen {
         if(liveTotal!=null&&liveState!=null&&liveTotal.isAttachedToWindow()){liveTotal.setText(Recording.time(System.currentTimeMillis()-liveState.optLong("queuedAt",System.currentTimeMillis())));if(liveRemaining!=null)liveRemaining.setText(remainingText(liveState));}
         if(mode!=Mode.QUEUED||phaseElapsed==null||!phaseElapsed.isAttachedToWindow())return;
         long now=System.currentTimeMillis();
-        phaseElapsed.setText("En este paso hace "+Recording.time(now-phaseSince));
+        phaseElapsed.setText(getString(R.string.detail_phase_elapsed,Recording.time(now-phaseSince)));
         if(now-lastEstimateAt>=1000)refreshEstimate();
         if(now-conditionsAt>3000)renderConditions();
     }
@@ -714,13 +721,13 @@ public class RecordingActivity extends Screen {
         long now=System.currentTimeMillis(),queued=st.optLong("queuedAt",now),audio=st.optLong("audioMs",recording.duration),doneAudio=st.optLong("doneAudioMs");
         long elapsed=live?now-queued:st.optLong("doneIn",now-queued);String model=st.optString("model","");
         List<String[]> cells=new ArrayList<>();
-        cells.add(new String[]{"Tiempo total",Recording.time(elapsed)});
-        if(live)cells.add(new String[]{"Restante (aprox.)",remainingText(st)});
-        cells.add(new String[]{"Audio procesado",Recording.time(live?doneAudio:audio)+" de "+Recording.time(audio)});
-        long speedBase=live?doneAudio:audio;if(speedBase>0&&elapsed>0)cells.add(new String[]{"Velocidad",String.format(Locale.ROOT,"%.1f",speedBase/(double)elapsed).replace('.',',')+"× tiempo real"});
+        cells.add(new String[]{getString(R.string.detail_stat_total),Recording.time(elapsed)});
+        if(live)cells.add(new String[]{getString(R.string.detail_stat_left),remainingText(st)});
+        cells.add(new String[]{getString(R.string.detail_stat_audio),getString(R.string.detail_of,Recording.time(live?doneAudio:audio),Recording.time(audio))});
+        long speedBase=live?doneAudio:audio;if(speedBase>0&&elapsed>0)cells.add(new String[]{getString(R.string.detail_stat_speed),getString(R.string.detail_stat_speed_value,speedBase/(double)elapsed)});
         // OpenRouter: cuánto tomó convertir el audio antes de enviarlo (la etapa «Preparar audio»), sumado entre partes.
         long prepMs=st.optLong("prepMsSum");int prepN=st.optInt("prepCount");
-        if(prepMs>0)cells.add(new String[]{"Preparar el audio",(prepMs<1000?"< 1 s":Recording.time(prepMs))+(prepN>1?" ("+prepN+" partes)":"")});
+        if(prepMs>0){String took=prepMs<1000?"< 1 s":Recording.time(prepMs);cells.add(new String[]{getString(R.string.detail_stat_prep),prepN>1?getString(R.string.detail_stat_prep_parts,took,prepN):took});}
         // Con OpenRouter se cobra también lo que suenan las muestras de voz que van antes de cada parte (Pricing.billedMs, la
         // regla única), con el proveedor y el modelo de ESTA transcripción; «sin cortar» las lleva una sola vez.
         String provider=st.optString("provider","openai");
@@ -730,14 +737,14 @@ public class RecordingActivity extends Screen {
         // Costo real (0.8.0): OpenRouter informa lo que cobró cada envío y el motor lo suma en "costUsd". Si existe, va en
         // vez del estimado (sin «≈»); mientras se transcribe, junto al total estimado si se conoce.
         double real=Pricing.real(st);
-        if(real>=0)cells.add(new String[]{live?"Costo hasta ahora":"Costo",Pricing.usd(real)+(live&&total>=0?" · total ≈"+Pricing.usd(total):"")});
-        else if(total>=0)cells.add(new String[]{live?"Costo hasta ahora":"Costo estimado",Pricing.usd(spent)+(live?" · total ≈"+Pricing.usd(total):"")});
+        if(real>=0)cells.add(new String[]{getString(live?R.string.detail_stat_cost_so_far:R.string.detail_stat_cost),live&&total>=0?getString(R.string.detail_stat_cost_total,Pricing.usd(real),Pricing.usd(total)):Pricing.usd(real)});
+        else if(total>=0)cells.add(new String[]{getString(live?R.string.detail_stat_cost_so_far:R.string.detail_stat_cost_estimated),live?getString(R.string.detail_stat_cost_total,Pricing.usd(spent),Pricing.usd(total)):Pricing.usd(spent)});
         long in=st.optLong("inTokens"),out=st.optLong("outTokens");double secs=st.optDouble("usageSec",0);
-        if(in+out>0)cells.add(new String[]{"Tokens",String.format(Locale.ROOT,"%,d",in+out).replace(',','.')+" ("+String.format(Locale.ROOT,"%,d",in).replace(',','.')+" entrada)"});
-        else if(secs>0)cells.add(new String[]{"Audio facturado",Recording.time((long)(secs*1000))});
-        long sent=st.optLong("bytesSent")+(live?st.optLong("upSent"):0);if(sent>0)cells.add(new String[]{"Datos enviados",String.format(Locale.ROOT,"%.1f MB",sent/1e6).replace('.',',')});
-        int chars=st.optInt("liveChars");if(live&&chars>0)cells.add(new String[]{"Texto recibido",String.format(Locale.ROOT,"%,d",chars).replace(',','.')+" caracteres"});
-        int retries=st.optInt("retries",st.optInt("attempts"));if(retries>0)cells.add(new String[]{"Reintentos",retries+(st.optInt("localCuts")>0?" · "+st.optInt("localCuts")+" por el teléfono":"")});
+        if(in+out>0)cells.add(new String[]{getString(R.string.detail_stat_tokens),getString(R.string.detail_stat_tokens_value,in+out,in)});
+        else if(secs>0)cells.add(new String[]{getString(R.string.detail_stat_billed),Recording.time((long)(secs*1000))});
+        long sent=st.optLong("bytesSent")+(live?st.optLong("upSent"):0);if(sent>0)cells.add(new String[]{getString(R.string.detail_stat_sent),String.format(Lang.locale(this),"%.1f MB",sent/1e6)});
+        int chars=st.optInt("liveChars");if(live&&chars>0)cells.add(new String[]{getString(R.string.detail_stat_received),getResources().getQuantityString(R.plurals.detail_stat_chars,chars,chars)});
+        int retries=st.optInt("retries",st.optInt("attempts")),cuts=st.optInt("localCuts");if(retries>0)cells.add(new String[]{getString(R.string.detail_stat_retries),cuts>0?getString(R.string.detail_stat_retries_phone,retries,cuts):String.valueOf(retries)});
         for(int i=0;i<cells.size();i+=2){
             LinearLayout line=ui.row();line.setGravity(Gravity.TOP);line.setPadding(0,ui.dp(S1),0,ui.dp(S1));
             for(int k=i;k<Math.min(i+2,cells.size());k++){LinearLayout cell=ui.column();cell.addView(ui.text(cells.get(k)[0],Type.LABEL_MEDIUM,p.onSurfaceVariant));TextView v=ui.text(cells.get(k)[1],Type.TITLE_SMALL,p.onSurface);v.setFontFeatureSettings("tnum");cell.addView(v);line.addView(cell,new LinearLayout.LayoutParams(0,-2,1));
@@ -745,8 +752,8 @@ public class RecordingActivity extends Screen {
             if(cells.size()-i==1)line.addView(ui.flex());grid.addView(line,Ui.fill());
         }
         // De dónde sale el costo: informado por el proveedor (real), del catálogo de OpenRouter o de la tabla pública de OpenAI.
-        String priced=real>=0?" · costo informado por "+RecordingActions.providerName(provider):total<0?"":"openrouter".equals(provider)?" · precio del catálogo de OpenRouter, el cobro real puede variar":" · tarifa pública al "+Pricing.REVIEWED+", el cobro real puede variar";
-        if(!model.isEmpty()){TextView m=ui.text("Modelo: "+model+(st.optBoolean("speakers")?" · separa voces":"")+priced,Type.BODY_SMALL,p.onSurfaceVariant);m.setPadding(0,ui.dp(S2),0,0);grid.addView(m);}
+        String priced=real>=0?getString(R.string.detail_cost_reported,RecordingActions.providerName(provider)):total<0?"":"openrouter".equals(provider)?getString(R.string.detail_cost_catalog):getString(R.string.detail_cost_public,Pricing.REVIEWED);
+        if(!model.isEmpty()){TextView m=ui.text(getString(R.string.detail_model,model)+(st.optBoolean("speakers")?" · "+getString(R.string.detail_model_voices):"")+(priced.isEmpty()?"":" · "+priced),Type.BODY_SMALL,p.onSurfaceVariant);m.setPadding(0,ui.dp(S2),0,0);grid.addView(m);}
         if(live)liveState=st;return grid;
     }
     /**
@@ -754,11 +761,11 @@ public class RecordingActivity extends Screen {
      * un restante que cumplir. Una en cola o esperando Wi-Fi dice «en espera»; antes la cuenta bajaba igual hasta un
      * mínimo y se quedaba ahí durante toda la espera, junto a «Esperando: Wi-Fi».
      */
-    private String remainingText(JSONObject st){return mine()?remaining(st):"en espera";}
+    private String remainingText(JSONObject st){return mine()?remaining(st):getString(R.string.detail_waiting);}
     /** Estimación: promedio por bloque × rondas restantes (bloques de a PARALLEL en paralelo). */
     private String remaining(JSONObject st){
         int blocks=st.optInt("blocks"),done=st.optInt("blocksDone"),count=st.optInt("blockCount");long sum=st.optLong("blockMsSum");
-        if(blocks<=0||count==0)return "calculando…";if(done>=blocks)return "casi listo";
+        if(blocks<=0||count==0)return getString(R.string.detail_calculating);if(done>=blocks)return getString(R.string.detail_almost_done);
         int left=blocks-done;int rounds=(left+Transcriber.PARALLEL-1)/Transcriber.PARALLEL;long avg=sum/count;
         long est=Math.max(avg/5,rounds*avg-(System.currentTimeMillis()-st.optLong("since",System.currentTimeMillis())));return "≈ "+Recording.time(est);
     }
@@ -772,12 +779,12 @@ public class RecordingActivity extends Screen {
         LinearLayout body=ui.column();
         if(live)body.setPadding(0,ui.dp(S2),0,0);else{body.setBackground(glass(this,p,R_CARD));body.setPadding(ui.dp(S4),ui.dp(S4),ui.dp(S4),ui.dp(S3));}
         LinearLayout statsBox=ui.column();body.addView(statsBox,Ui.fill());if(live||st.has("model"))statsBox.addView(stats(st,live),Ui.fill());
-        TextView h=ui.text("Bitácora",Type.TITLE_SMALL,p.primary);h.setPadding(0,ui.dp(S4),0,ui.dp(S1));body.addView(h);
+        TextView h=ui.text(getString(R.string.detail_log),Type.TITLE_SMALL,p.primary);h.setPadding(0,ui.dp(S4),0,ui.dp(S1));body.addView(h);
         LinearLayout list=ui.column();body.addView(list,Ui.fill());renderLog(list,log);
         if(live){statsHolder=statsBox;logList=list;logCount=log==null?0:log.length();JSONObject last=logCount==0?null:log.optJSONObject(logCount-1);logLast=last==null?0:last.optLong("t");}
         Settings settings=new Settings(this);boolean open=live?settings.bitacoraOpen():detailsOpen;
-        Ui.Btn toggle=ui.button(open?"Ocultar detalles":"Ver detalles del proceso",R.drawable.ic_info,Ui.Style.PLAIN,null);body.setVisibility(open?View.VISIBLE:View.GONE);
-        toggle.setOnClickListener(v->{boolean show=body.getVisibility()!=View.VISIBLE;body.setVisibility(show?View.VISIBLE:View.GONE);toggle.setText(show?"Ocultar detalles":"Ver detalles del proceso");if(live)settings.setBitacoraOpen(show);else detailsOpen=show;});
+        Ui.Btn toggle=ui.button(getString(open?R.string.detail_hide_details:R.string.detail_show_details),R.drawable.ic_info,Ui.Style.PLAIN,null);body.setVisibility(open?View.VISIBLE:View.GONE);
+        toggle.setOnClickListener(v->{boolean show=body.getVisibility()!=View.VISIBLE;body.setVisibility(show?View.VISIBLE:View.GONE);toggle.setText(getString(show?R.string.detail_hide_details:R.string.detail_show_details));if(live)settings.setBitacoraOpen(show);else detailsOpen=show;});
         LinearLayout.LayoutParams tl=Ui.wrap();tl.topMargin=ui.dp(live?S1:S2);box.addView(toggle,tl);box.addView(body,Ui.fill());return box;
     }
     private void renderLog(LinearLayout list,JSONArray log){
@@ -790,16 +797,16 @@ public class RecordingActivity extends Screen {
     private void showFailed(JSONObject st){
         LinearLayout card=ui.card();card.setPadding(ui.dp(S5),ui.dp(S5),ui.dp(S5),ui.dp(S4));
         card.addView(ui.tile(R.drawable.ic_alert,p.onErrorContainer,p.errorContainer,44,24));
-        TextView h=ui.heading("No se pudo transcribir",Type.TITLE_LARGE);h.setPadding(0,ui.dp(S4),0,ui.dp(S1));card.addView(h);
-        card.addView(ui.text(st.optString("status","No se pudo transcribir"),Type.BODY_MEDIUM,p.onSurface));
-        TextView hint=ui.text("Cuando lo revises, toca «Reintentar» abajo.",Type.BODY_SMALL,p.onSurfaceVariant);hint.setPadding(0,ui.dp(S2),0,0);card.addView(hint);
-        if(Retranscribe.hasPrevious(this,id))card.addView(ui.button("Volver a la versión anterior",R.drawable.ic_refresh,Ui.Style.TONAL,v->restorePrevious()),ui.top(S4));
-        card.addView(ui.button("Revisar ajustes",0,Ui.Style.PLAIN,v->startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true))),ui.top(S1));
+        TextView h=ui.heading(getString(R.string.detail_failed_title),Type.TITLE_LARGE);h.setPadding(0,ui.dp(S4),0,ui.dp(S1));card.addView(h);
+        card.addView(ui.text(st.optString("status",getString(R.string.detail_failed_title)),Type.BODY_MEDIUM,p.onSurface));
+        TextView hint=ui.text(getString(R.string.detail_failed_hint),Type.BODY_SMALL,p.onSurfaceVariant);hint.setPadding(0,ui.dp(S2),0,0);card.addView(hint);
+        if(Retranscribe.hasPrevious(this,id))card.addView(ui.button(getString(R.string.detail_restore_previous),R.drawable.ic_refresh,Ui.Style.TONAL,v->restorePrevious()),ui.top(S4));
+        card.addView(ui.button(getString(R.string.detail_check_settings),0,Ui.Style.PLAIN,v->startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true))),ui.top(S1));
         content.addView(card,gap());content.addView(details(st,false));
     }
     private void restorePrevious(){
-        try{Retranscribe.restorePrevious(this,id);Diagnostics.event("retranscribe_restored",id);reload();snackbar("Volviste a la versión anterior",null,null);}
-        catch(Exception e){message("Versión anterior","No se pudo recuperar la versión anterior.");}
+        try{Retranscribe.restorePrevious(this,id);Diagnostics.event("retranscribe_restored",id);reload();snackbar(getString(R.string.retr_restored),null,null);}
+        catch(Exception e){message(getString(R.string.detail_previous_title),getString(R.string.detail_previous_failed));}
     }
 
     // ---------- Transcripción como documento ----------
@@ -818,25 +825,25 @@ public class RecordingActivity extends Screen {
             if(onlySpeaker!=null&&!names.containsKey(onlySpeaker))onlySpeaker=null;
             List<String> order=transcript.order();colors.clear();for(String key:names.keySet())colors.put(key,p.speaker(order.indexOf(key)));
             if(diarized&&!names.isEmpty())content.addView(ficha(names),gap());
-            if(demo)content.addView(note(R.drawable.ic_info,"Texto de demostración: no proviene de la API. Prueba a nombrar las voces."));
+            if(demo)content.addView(note(R.drawable.ic_info,getString(R.string.detail_demo_note)));
             // Aviso honesto: la separación automática puede equivocarse; se oculta cuando el usuario ya revisó las voces.
-            if(diarized&&!transcript.reviewed()&&segments.length()>0)content.addView(note(R.drawable.ic_info,"Voces separadas automáticamente: pueden tener errores. Toca el nombre de una intervención para escuchar y corregir quién habla."));
-            else if(!diarized&&transcript.data.optInt("parts",1)>1)content.addView(note(R.drawable.ic_info,"Audio procesado en partes: los tiempos indican el inicio de cada parte."));
+            if(diarized&&!transcript.reviewed()&&segments.length()>0)content.addView(note(R.drawable.ic_info,getString(R.string.detail_auto_voices_note)));
+            else if(!diarized&&transcript.data.optInt("parts",1)>1)content.addView(note(R.drawable.ic_info,getString(R.string.detail_parts_note)));
             if(!demo&&segments.length()>0)content.addView(noteCard(st,names));
             addMarks();
             // La transcripción es una tarjeta de vidrio con poco margen: las intervenciones van casi a todo el ancho (se leen
             // mejor) y el resaltado de la que suena queda con esquinas concéntricas a las de la tarjeta.
             LinearLayout doc=ui.card();doc.setPadding(ui.dp(S1),ui.dp(S2),ui.dp(S1),ui.dp(S2));
-            LinearLayout head=cardHeader(doc,R.drawable.ic_transcribe,"Transcripción",null);head.setPadding(ui.dp(S3),0,ui.dp(S3),ui.dp(S1));
+            LinearLayout head=cardHeader(doc,R.drawable.ic_transcribe,getString(R.string.detail_transcript),null);head.setPadding(ui.dp(S3),0,ui.dp(S3),ui.dp(S1));
             if(onlySpeaker!=null){
                 // Filtro activo en una franja menta, con la salida a mano.
                 LinearLayout f=ui.row();f.setBackground(shape(this,p.primaryContainer,R_FULL));f.setPadding(ui.dp(S4),0,ui.dp(S1),0);f.setMinimumHeight(ui.dp(48));
                 View dot=new View(this);Integer only=colors.get(onlySpeaker);dot.setBackground(oval(only==null?p.primary:only));f.addView(dot,new LinearLayout.LayoutParams(ui.dp(8),ui.dp(8)));f.addView(ui.space(S2));
                 // Sin cortar: un nombre largo baja a una segunda línea (la franja crece) en vez de perderse con «…».
-                f.addView(ui.text("Mostrando solo a "+names.get(onlySpeaker),Type.LABEL_LARGE,p.onPrimaryContainer),new LinearLayout.LayoutParams(0,-2,1));
-                f.addView(ui.button("Ver todo",0,Ui.Style.PLAIN,v->{onlySpeaker=null;reload(true);}));
+                f.addView(ui.text(getString(R.string.detail_only_showing,names.get(onlySpeaker)),Type.LABEL_LARGE,p.onPrimaryContainer),new LinearLayout.LayoutParams(0,-2,1));
+                f.addView(ui.button(getString(R.string.detail_show_all),0,Ui.Style.PLAIN,v->{onlySpeaker=null;reload(true);}));
                 LinearLayout.LayoutParams fl=Ui.fill();fl.setMargins(ui.dp(S2),ui.dp(S1),ui.dp(S2),ui.dp(S2));doc.addView(f,fl);}
-            if(segments.length()==0){TextView none=ui.text("No se detectó habla en este audio.",Type.BODY_LARGE,p.onSurfaceVariant);none.setPadding(ui.dp(S3),ui.dp(S2),ui.dp(S3),ui.dp(S3));doc.addView(none);}
+            if(segments.length()==0){TextView none=ui.text(getString(R.string.export_no_speech),Type.BODY_LARGE,p.onSurfaceVariant);none.setPadding(ui.dp(S3),ui.dp(S2),ui.dp(S3),ui.dp(S3));doc.addView(none);}
             // Los separadores de parte solo se ven al corregir voces: ahí es donde una voz puede cruzarse entre partes.
             boolean dividers=correctionOpened||transcript.edited();
             List<Double> blocks=diarized?transcript.blockStarts(demo?null:st):new ArrayList<>();
@@ -856,15 +863,15 @@ public class RecordingActivity extends Screen {
             if(!demo){String foot=footer(st);if(!foot.isEmpty()){TextView t=Ui.tabular(ui.text(foot,Type.LABEL_MEDIUM,p.onSurfaceVariant));t.setGravity(Gravity.CENTER);t.setPadding(ui.dp(S4),ui.dp(S5),ui.dp(S4),0);content.addView(t,Ui.fill());}
                 if(st.has("log"))content.addView(details(st,false));}
             updateStrip(segments,diarized);
-        }catch(Exception e){content.addView(ui.text("No se pudo leer la transcripción.",Type.BODY_LARGE,p.error));}
+        }catch(Exception e){content.addView(ui.text(getString(R.string.detail_transcript_unreadable),Type.BODY_LARGE,p.error));}
     }
     /**
      * Pie en palabras simples: «Transcrito el 23 sept · tardó 2 min · ≈ US$0,02». El modelo queda en los detalles.
      * Con el costo real del proveedor (estado "costUsd", 0.8.0) va sin «≈»: es lo que se cobró, no un estimado.
      */
     private String footer(JSONObject st){
-        List<String> parts=new ArrayList<>();long at=transcribedAt(st);if(at>0)parts.add("Transcrito el "+dayLabel(at));
-        long took=st.optLong("doneIn");if(took>0)parts.add("tardó "+Ui.humanDuration(took));
+        List<String> parts=new ArrayList<>();long at=transcribedAt(st);if(at>0)parts.add(getString(R.string.detail_footer_transcribed,dayLabel(at)));
+        long took=st.optLong("doneIn");if(took>0)parts.add(getString(R.string.detail_footer_took,Ui.humanDuration(took)));
         double real=Pricing.real(st),cost=real>=0?real:Pricing.estimate(this,transcript.data.optString("provider","openai"),transcript.data.optString("model"),recording.duration);
         if(cost>=0&&took>0)parts.add((real>=0?"":"≈ ")+Pricing.usd(cost));
         return TextUtils.join(" · ",parts);
@@ -881,15 +888,15 @@ public class RecordingActivity extends Screen {
      */
     private View ficha(Map<String,String> names)throws JSONException{
         LinearLayout card=ui.card();card.setPadding(ui.dp(S4),ui.dp(S2),ui.dp(S4),ui.dp(S3));
-        LinearLayout head=cardHeader(card,R.drawable.ic_people,"Personas",null);
-        boolean reviewed=transcript.reviewed();
-        TextView status=chip(reviewed?"Voces revisadas":"Voces sin revisar",reviewed?R.drawable.ic_check:R.drawable.ic_voice,p.primary,reviewed?p.onSurfaceVariant:p.onPrimaryContainer,reviewed?0:p.primaryContainer,reviewed);
-        status.setContentDescription((reviewed?"Voces revisadas":"Voces sin revisar")+". Nombrar voces");status.setOnClickListener(v->openNameVoices());
+        String people=getString(R.string.detail_people);LinearLayout head=cardHeader(card,R.drawable.ic_people,people,null);
+        boolean reviewed=transcript.reviewed();String state=getString(reviewed?R.string.voices_reviewed:R.string.detail_voices_unreviewed);
+        TextView status=chip(state,reviewed?R.drawable.ic_check:R.drawable.ic_voice,p.primary,reviewed?p.onSurfaceVariant:p.onPrimaryContainer,reviewed?0:p.primaryContainer,reviewed);
+        status.setContentDescription(getString(R.string.detail_voices_status_desc,state));status.setOnClickListener(v->openNameVoices());
         // El estado va junto al título solo si los dos caben enteros. Con letra grande le quitaba el ancho al título y partía
         // «Personas»: en ese caso va al final de la fila de personas, como en 0.6.
         android.text.TextPaint probe=new android.text.TextPaint();probe.setTypeface(AppTheme.font(this,Type.TITLE_MEDIUM));probe.setTextSize(android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP,Type.TITLE_MEDIUM.size,getResources().getDisplayMetrics()));
         status.measure(View.MeasureSpec.UNSPECIFIED,View.MeasureSpec.UNSPECIFIED);
-        boolean beside=probe.measureText("Personas")+status.getMeasuredWidth()+ui.dp(S2)<=getResources().getDisplayMetrics().widthPixels-ui.dp(2*S4+2*S4+20+S3);
+        boolean beside=probe.measureText(people)+status.getMeasuredWidth()+ui.dp(S2)<=getResources().getDisplayMetrics().widthPixels-ui.dp(2*S4+2*S4+20+S3);
         if(beside)head.addView(status,Ui.wrap());
         Map<String,Double> share=transcript.talkShare();
         float[] parts=new float[names.size()];int[] tones=new int[names.size()];int n=0;
@@ -902,13 +909,14 @@ public class RecordingActivity extends Screen {
             GradientDrawable mark=oval(color);if(only)mark.setStroke(Math.max(1,ui.dp(1.5f)),p.onInk);View dot=new View(this);dot.setBackground(mark);c.addView(dot,new LinearLayout.LayoutParams(ui.dp(10),ui.dp(10)));c.addView(ui.space(S2));
             c.addView(ui.text(names.get(key),Type.LABEL_LARGE,only?p.onInk:p.onSurface));
             if(!pct.isEmpty()){TextView pc=Ui.tabular(ui.text(pct,Type.LABEL_LARGE,only?withAlpha(p.onInk,0xB3):p.onSurfaceVariant));pc.setPadding(ui.dp(6),0,0,0);c.addView(pc);}
-            c.setClickable(true);c.setFocusable(true);c.setContentDescription(names.get(key)+(pct.isEmpty()?"":", "+pct+" del tiempo")+". Opciones");c.setAccessibilityDelegate(Ui.buttonRole());c.setOnClickListener(v->personSheet(key));Ui.pressable(c);
+            c.setClickable(true);c.setFocusable(true);c.setContentDescription(pct.isEmpty()?getString(R.string.detail_person_desc,names.get(key)):getString(R.string.detail_person_desc_share,names.get(key),pct));c.setAccessibilityDelegate(Ui.buttonRole());c.setOnClickListener(v->personSheet(key));Ui.pressable(c);
             LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginEnd(ui.dp(S2));chips.addView(c,lp);}
         if(!beside)chips.addView(status,Ui.wrap());
         LinearLayout.LayoutParams hl=Ui.fill();hl.topMargin=ui.dp(S2);hl.setMarginStart(-ui.dp(S4));hl.setMarginEnd(-ui.dp(S4));card.addView(hs,hl);
         return card;
     }
-    private static String percent(Double share){if(share==null)return "";long r=Math.round(share*100);return r<1?"<1 %":r+" %";}
+    /** «46 %», «<1 %» («46%» en inglés y portugués). */
+    private String percent(Double share){if(share==null)return "";long r=Math.round(share*100);return r<1?getString(R.string.detail_percent_less,1):getString(R.string.detail_percent,r);}
     /** Franja de la onda con el color de quién habla en cada tramo (al corregir una voz, cambia al instante). */
     private void updateStrip(JSONArray segs,boolean diarized){
         if(scrubber==null)return;if(!diarized){scrubber.setStrip(null,null,null);return;}
@@ -967,21 +975,22 @@ public class RecordingActivity extends Screen {
     private View marksRow(){
         if(demo||marksMs.length==0)return null;JSONArray marks=Marks.list(this,id);
         LinearLayout card=ui.card();card.setPadding(ui.dp(S4),ui.dp(S2),ui.dp(S4),ui.dp(S3));
-        cardHeader(card,R.drawable.ic_star_fill,"Momentos","Toca para escuchar · mantén para nombrar"); // la ★ del nombre es el ícono
+        cardHeader(card,R.drawable.ic_star_fill,getString(R.string.detail_marks),getString(R.string.detail_marks_hint)); // la ★ del nombre es el ícono
         HorizontalScrollView hs=new HorizontalScrollView(this);hs.setHorizontalScrollBarEnabled(false);LinearLayout row=ui.row();row.setPadding(ui.dp(S4),0,ui.dp(S2),0);hs.addView(row);
         for(int i=0;i<marks.length();i++){JSONObject m=marks.optJSONObject(i);if(m==null)continue;long t=m.optLong("t");String label=m.optString("label","").trim();int index=i;
             TextView c=Ui.tabular(chip(Recording.time(t)+(label.isEmpty()?"":" · "+label),R.drawable.ic_star_fill,p.primary,p.onPrimaryContainer,p.primaryContainer,false));
-            c.setContentDescription("Momento "+Recording.time(t)+(label.isEmpty()?"":", "+label)+". Toca para escuchar; mantén pulsado para editar");
+            c.setContentDescription(label.isEmpty()?getString(R.string.detail_mark_desc,Recording.time(t)):getString(R.string.detail_mark_desc_label,Recording.time(t),label));
             c.setOnClickListener(v->{Diagnostics.event("mark_played",id);playAt(t);});c.setOnLongClickListener(v->{markSheet(index,t,label);return true;});
             LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginEnd(ui.dp(S2));row.addView(c,lp);}
         LinearLayout.LayoutParams hl=Ui.fill();hl.topMargin=ui.dp(S1);hl.setMarginStart(-ui.dp(S4));hl.setMarginEnd(-ui.dp(S4));card.addView(hs,hl);return card;
     }
     private void markSheet(int index,long t,String label){
-        Sheet s=sheet("Momento "+Recording.time(t),"Ponle un nombre para encontrarlo después («precio», «idea»…).");
-        EditText f=ui.field("Nombre del momento","Nombre del momento");f.setText(label);f.setSingleLine(true);f.setFilters(new InputFilter[]{new InputFilter.LengthFilter(60)});s.add(f);
-        s.primary("Guardar",Ui.Style.PRIMARY,()->{try{Marks.rename(this,id,index,f.getText().toString().trim());Diagnostics.event("mark_renamed",id);reload();}catch(Exception e){message("Momento","No se pudo guardar el nombre.");}return true;}).secondary("Cancelar",null);
-        s.action(R.drawable.ic_trash,"Eliminar momento",true,()->{try{Marks.remove(this,id,index);Diagnostics.event("mark_removed",id);reload();
-            snackbar("Momento eliminado","Deshacer",()->{try{Marks.add(this,id,t,label);reload();}catch(Exception e){message("Momento","No se pudo deshacer.");}});}catch(Exception e){message("Momento","No se pudo eliminar el momento.");}});
+        Sheet s=sheet(getString(R.string.detail_mark_title,Recording.time(t)),getString(R.string.detail_mark_body));
+        String name=getString(R.string.detail_mark_name),mark=getString(R.string.detail_mark);
+        EditText f=ui.field(name,name);f.setText(label);f.setSingleLine(true);f.setFilters(new InputFilter[]{new InputFilter.LengthFilter(60)});s.add(f);
+        s.primary(getString(R.string.detail_save),Ui.Style.PRIMARY,()->{try{Marks.rename(this,id,index,f.getText().toString().trim());Diagnostics.event("mark_renamed",id);reload();}catch(Exception e){message(mark,getString(R.string.detail_mark_name_failed));}return true;}).secondary(getString(R.string.common_cancel),null);
+        s.action(R.drawable.ic_trash,getString(R.string.detail_mark_delete),true,()->{try{Marks.remove(this,id,index);Diagnostics.event("mark_removed",id);reload();
+            snackbar(getString(R.string.detail_mark_deleted),getString(R.string.detail_undo),()->{try{Marks.add(this,id,t,label);reload();}catch(Exception e){message(mark,getString(R.string.detail_undo_failed));}});}catch(Exception e){message(mark,getString(R.string.detail_mark_delete_failed));}});
         s.show();
     }
 
@@ -1002,22 +1011,22 @@ public class RecordingActivity extends Screen {
             return noteSkeleton();
         }
         String error="failed".equals(state)?st.optString("noteError",""):null;
-        if(note!=null)return noteFull(note,names,stale?"se interrumpió antes de terminar":error);
-        if(stale)return noteMessage("No se pudo armar la nota","Se interrumpió antes de terminar (por ejemplo, si se cerró la app). Vuelve a intentarlo.","Reintentar",R.drawable.ic_refresh);
-        if(error!=null)return noteMessage("No se pudo armar la nota",error.isEmpty()?"Vuelve a intentarlo en un momento.":error,"Reintentar",R.drawable.ic_refresh);
-        if(Notes.canGenerate(this))return noteMessage("Nota para tu segundo cerebro","Resumen, decisiones, tareas y frases clave de esta grabación, listos para guardar.","Armar nota",R.drawable.ic_sparkle);
+        if(note!=null)return noteFull(note,names,stale?getString(R.string.detail_note_interrupted_short):error);
+        if(stale)return noteMessage(false,getString(R.string.detail_note_failed_title),getString(R.string.detail_note_interrupted),getString(R.string.detail_retry),R.drawable.ic_refresh);
+        if(error!=null)return noteMessage(false,getString(R.string.detail_note_failed_title),error.isEmpty()?getString(R.string.detail_try_again_soon):error,getString(R.string.detail_retry),R.drawable.ic_refresh);
+        if(Notes.canGenerate(this))return noteMessage(true,null,getString(R.string.detail_note_pitch),getString(R.string.detail_note_make),R.drawable.ic_sparkle);
         // Sin IA para la nota: una pista corta que lleva directo a configurarla.
-        LinearLayout box=ui.row();TextView hint=chip("Configura la IA de la nota en Ajustes",R.drawable.ic_sparkle,p.primary,p.onSurface,0,true);
+        LinearLayout box=ui.row();TextView hint=chip(getString(R.string.detail_note_setup),R.drawable.ic_sparkle,p.primary,p.onSurface,0,true);
         hint.setOnClickListener(v->openNoteAi());box.addView(hint);box.setLayoutParams(gap());return box;
     }
     /** Ajustes con la hoja «IA de la nota» abierta; Atrás vuelve aquí. */
     private void openNoteAi(){startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true).putExtra("noteAi",true));}
     /** Título de la nota con el destello ✦ verde del logo: lo que armó la IA lleva la misma chispa que la marca. */
-    private LinearLayout noteHeader(LinearLayout card,String subtitle){return cardHeader(card,new Spark(this,p.primary),"Nota para tu segundo cerebro",subtitle);}
+    private LinearLayout noteHeader(LinearLayout card,String subtitle){return cardHeader(card,new Spark(this,p.primary),getString(R.string.detail_note_title),subtitle);}
     private LinearLayout noteSurface(){LinearLayout card=ui.card();card.setPadding(ui.dp(S4),ui.dp(S2),ui.dp(S2),ui.dp(S4));card.setLayoutParams(gap());return card;}
     private View noteSkeleton(){
         LinearLayout card=noteSurface();noteHeader(card,null);
-        TextView w=ui.text("Armando la nota…",Type.BODY_MEDIUM,p.onSurfaceVariant);w.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);w.setPadding(0,0,0,ui.dp(S3));card.addView(w);
+        TextView w=ui.text(getString(R.string.detail_note_working),Type.BODY_MEDIUM,p.onSurfaceVariant);w.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);w.setPadding(0,0,0,ui.dp(S3));card.addView(w);
         // Líneas menta que laten mientras la IA escribe.
         for(float width:new float[]{1f,0.92f,0.7f}){LinearLayout line=ui.row();View bar=new View(this);bar.setBackground(shape(this,p.primaryContainer,R_FULL));line.addView(bar,new LinearLayout.LayoutParams(0,ui.dp(12),width));if(width<1f)line.addView(new View(this),new LinearLayout.LayoutParams(0,1,1f-width));
             LinearLayout.LayoutParams lp=Ui.fill();lp.bottomMargin=ui.dp(S2);lp.setMarginEnd(ui.dp(S2));card.addView(line,lp);pulse(bar);}
@@ -1028,39 +1037,43 @@ public class RecordingActivity extends Screen {
         ValueAnimator a=ValueAnimator.ofFloat(1f,0.45f);a.setDuration(900);a.setRepeatMode(ValueAnimator.REVERSE);a.setRepeatCount(ValueAnimator.INFINITE);a.addUpdateListener(x->v.setAlpha((float)x.getAnimatedValue()));
         v.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){public void onViewAttachedToWindow(View view){a.start();}public void onViewDetachedFromWindow(View view){a.cancel();}});
     }
-    private View noteMessage(String title,String text,String action,int icon){
+    /**
+     * brand: con el encabezado de la nota (✦ y «Nota para tu segundo cerebro»; title no se usa). Si no, algo falló: title
+     * va con la alerta roja. Antes se decidía por si el título empezaba con «Nota», que no sirve en otros idiomas.
+     */
+    private View noteMessage(boolean brand,String title,String text,String action,int icon){
         LinearLayout card=noteSurface();
-        if(title.startsWith("Nota"))noteHeader(card,null);else cardHeader(card,ui.icon(R.drawable.ic_alert,p.error,20),title,null);
+        if(brand)noteHeader(card,null);else cardHeader(card,ui.icon(R.drawable.ic_alert,p.error,20),title,null);
         TextView d=ui.text(text,Type.BODY_MEDIUM,p.onSurfaceVariant);d.setPadding(0,0,ui.dp(S2),0);card.addView(d);
         LinearLayout.LayoutParams lp=Ui.wrap();lp.topMargin=ui.dp(S3);card.addView(ui.button(action,icon,Ui.Style.TONAL,v->generateNote()),lp);
         return card;
     }
     private View noteFull(JSONObject note,Map<String,String> names,String error){
         Map<String,String> who=noteNames(note,names);
-        LinearLayout card=noteSurface();LinearLayout head=noteHeader(card,"Generada por IA · revísala");
-        ImageButton more=ui.iconButton(R.drawable.ic_more,"Opciones de la nota",p.onSurfaceVariant,0,48);more.setOnClickListener(v->noteMenu());head.addView(more);
-        ImageButton fold=ui.iconButton(R.drawable.ic_chevron_down,"Contraer la nota",p.onSurfaceVariant,0,48);head.addView(fold);
+        LinearLayout card=noteSurface();LinearLayout head=noteHeader(card,getString(R.string.detail_note_ai));
+        ImageButton more=ui.iconButton(R.drawable.ic_more,getString(R.string.detail_note_options),p.onSurfaceVariant,0,48);more.setOnClickListener(v->noteMenu());head.addView(more);
+        ImageButton fold=ui.iconButton(R.drawable.ic_chevron_down,getString(R.string.detail_note_collapse),p.onSurfaceVariant,0,48);head.addView(fold);
         LinearLayout body=ui.column();body.setPadding(0,0,ui.dp(S2),0);
         String summary=Notes.resolve(note.optString("summary",""),who).trim();
         if(!summary.isEmpty()){TextView s=ui.text(summary,Type.BODY_LARGE,p.onSurface);s.setLineSpacing(ui.dp(3),1f);s.setTextIsSelectable(true);s.setPadding(0,ui.dp(S1),0,0);body.addView(s,Ui.fill());}
-        bullets(body,"Decisiones",note.optJSONArray("decisions"),who);
+        bullets(body,getString(R.string.detail_note_decisions),note.optJSONArray("decisions"),who);
         tasks(body,note.optJSONArray("tasks"),who);
         quotes(body,note.optJSONArray("quotes"),who);
         // Etiquetas como píldoras menta que se reparten en líneas como palabras (nunca se cortan por la mitad).
         JSONArray tags=note.optJSONArray("tags");if(tags!=null&&tags.length()>0){SpannableStringBuilder b=new SpannableStringBuilder();
             for(int i=0;i<tags.length();i++){String tag=tags.optString(i).trim().replaceFirst("^#","");if(tag.isEmpty())continue;if(b.length()>0)b.append("  ");int from=b.length();b.append('#').append(tag);b.setSpan(new TagSpan(p.primaryContainer,p.onPrimaryContainer,ui.dp(10),ui.dp(5),getResources().getDisplayMetrics().widthPixels-ui.dp(72)),from,b.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);}
             if(b.length()>0){TextView t=ui.text("",Type.LABEL_MEDIUM,p.onPrimaryContainer);t.setText(b);t.setLineSpacing(ui.dp(S2),1f);t.setPadding(0,ui.dp(S4),0,0);body.addView(t,Ui.fill());}}
-        if(error!=null&&!error.isEmpty()){TextView e=ui.text("No se pudo volver a armar: "+error,Type.BODY_SMALL,p.error);e.setPadding(0,ui.dp(S3),0,0);body.addView(e);}
+        if(error!=null&&!error.isEmpty()){TextView e=ui.text(getString(R.string.detail_note_rewrite_failed,error),Type.BODY_SMALL,p.error);e.setPadding(0,ui.dp(S3),0,0);body.addView(e);}
         // Con qué IA se armó (0.8.0): el modelo que respondió de verdad (con OpenRouter se pide un alias «el más nuevo» y así
         // se sabe qué versión fue) y lo que costó. Discreto, al pie de la nota.
         String credit=Notes.credit(note);
         if(!credit.isEmpty()){TextView made=Ui.tabular(ui.text(credit,Type.BODY_SMALL,p.onSurfaceVariant));made.setPadding(0,ui.dp(S4),0,0);body.addView(made,Ui.fill());}
         card.addView(body,Ui.fill());
-        TextView collapsed=ui.text(summary.isEmpty()?"Toca para ver la nota":summary,Type.BODY_MEDIUM,p.onSurfaceVariant);collapsed.setMaxLines(2);collapsed.setEllipsize(TextUtils.TruncateAt.END);collapsed.setPadding(0,0,ui.dp(S2),0);card.addView(collapsed);
+        TextView collapsed=ui.text(summary.isEmpty()?getString(R.string.detail_note_tap):summary,Type.BODY_MEDIUM,p.onSurfaceVariant);collapsed.setMaxLines(2);collapsed.setEllipsize(TextUtils.TruncateAt.END);collapsed.setPadding(0,0,ui.dp(S2),0);card.addView(collapsed);
         // ⌄ para abrir y ⌃ para cerrar; al tocarla, la flecha gira (sin animación si están quitadas).
         Runnable apply=()->{boolean open=prefs.getBoolean("noteOpen",true);body.setVisibility(open?View.VISIBLE:View.GONE);collapsed.setVisibility(open?View.GONE:View.VISIBLE);
             float angle=open?180f:0f;if(AppTheme.motion()&&fold.isAttachedToWindow())fold.animate().rotation(angle).setDuration(MOTION_BASE).setInterpolator(EMPHASIZED).start();else fold.setRotation(angle);
-            fold.setContentDescription(open?"Contraer la nota":"Expandir la nota");};
+            fold.setContentDescription(getString(open?R.string.detail_note_collapse:R.string.detail_note_expand));};
         apply.run();
         View.OnClickListener toggle=v->{prefs.edit().putBoolean("noteOpen",!prefs.getBoolean("noteOpen",true)).apply();apply.run();};
         fold.setOnClickListener(toggle);collapsed.setOnClickListener(toggle);
@@ -1085,7 +1098,7 @@ public class RecordingActivity extends Screen {
             TextView t=ui.text(text,Type.BODY_MEDIUM,p.onSurface);t.setTextIsSelectable(true);r.addView(t,new LinearLayout.LayoutParams(0,-2,1));body.addView(r,Ui.fill());}
     }
     private void tasks(LinearLayout body,JSONArray tasks,Map<String,String> who){
-        if(tasks==null||tasks.length()==0)return;noteLabel(body,"Tareas");
+        if(tasks==null||tasks.length()==0)return;noteLabel(body,getString(R.string.detail_note_tasks));
         for(int i=0;i<tasks.length();i++){JSONObject t=tasks.optJSONObject(i);if(t==null)continue;int index=i;
             String text=Notes.resolve(t.optString("text"),who).trim(),person=whoName(t.optString("who",""),who),when=t.optString("when","").trim();if(text.isEmpty())continue;
             // Casilla redonda: anillo gris vacío; al marcarla se llena de verde con ✓ blanco. Sigue siendo un CheckBox (TalkBack igual).
@@ -1102,10 +1115,10 @@ public class RecordingActivity extends Screen {
         try{Notes.setTaskDone(this,id,index,on);
             // Es un cambio propio y ya se ve: no hace falta volver a armar la pantalla.
             dataVersion=FilesStore.version.get();lastSig=signature();styleTask(b,on);Ui.haptic(b,on?Ui.Haptic.TOGGLE_ON:Ui.Haptic.TOGGLE_OFF);Diagnostics.event("note_task_toggled",id);}
-        catch(Exception e){suppressTask=true;b.setChecked(!on);suppressTask=false;message("Nota","No se pudo guardar la tarea.");}
+        catch(Exception e){suppressTask=true;b.setChecked(!on);suppressTask=false;message(getString(R.string.detail_note),getString(R.string.detail_task_failed));}
     }
     private void quotes(LinearLayout body,JSONArray quotes,Map<String,String> who){
-        if(quotes==null||quotes.length()==0)return;noteLabel(body,"Frases clave");
+        if(quotes==null||quotes.length()==0)return;noteLabel(body,getString(R.string.detail_note_quotes));
         for(int i=0;i<quotes.length();i++){JSONObject q=quotes.optJSONObject(i);if(q==null)continue;String text=Notes.resolve(q.optString("text"),who).trim();if(text.isEmpty())continue;
             long ms=(long)(q.optDouble("t",0)*1000);String person=whoName(q.optString("who",""),who);
             // Cita con una barra verde a la izquierda; debajo, ▶ hora (toca para escuchar ahí) y quién la dijo.
@@ -1113,49 +1126,49 @@ public class RecordingActivity extends Screen {
             View rule=new View(this);rule.setBackground(shape(this,p.primary,R_FULL));LinearLayout.LayoutParams rl=new LinearLayout.LayoutParams(ui.dp(3),-1);rl.topMargin=ui.dp(S1);rl.bottomMargin=ui.dp(S1);r.addView(rule,rl);
             // Sin recorte: la onda del toque de la hora ocupa los 4 dp que el margen negativo le quita (así ▶ se alinea con la cita).
             LinearLayout col=ui.column();col.setPadding(ui.dp(S3),0,0,0);col.setClipToPadding(false);
-            TextView t=ui.text("«"+text+"»",Type.BODY_MEDIUM,p.onSurface);t.setLineSpacing(ui.dp(2),1f);t.setPadding(0,ui.dp(S1),0,0);t.setTextIsSelectable(true);col.addView(t,Ui.fill());
+            TextView t=ui.text(getString(R.string.detail_quoted,text),Type.BODY_MEDIUM,p.onSurface);t.setLineSpacing(ui.dp(2),1f);t.setPadding(0,ui.dp(S1),0,0);t.setTextIsSelectable(true);col.addView(t,Ui.fill());
             LinearLayout by=ui.row();by.setClipChildren(false);
             TextView time=Ui.tabular(ui.text(Recording.time(ms),Type.LABEL_LARGE,p.primary));time.setGravity(Gravity.CENTER_VERTICAL);time.setMinHeight(ui.dp(48));time.setPadding(ui.dp(S1),0,ui.dp(S2),0);
             Drawable go=getDrawable(R.drawable.ic_play).mutate();go.setTint(p.primary);go.setBounds(0,0,ui.dp(16),ui.dp(16));time.setCompoundDrawablesRelative(go,null,null,null);time.setCompoundDrawablePadding(ui.dp(2));
-            time.setBackground(ui.ripple(null,R_SMALL));time.setContentDescription("Escuchar desde "+Recording.time(ms));time.setAccessibilityDelegate(Ui.buttonRole());time.setOnClickListener(v->playAt(ms));
+            time.setBackground(ui.ripple(null,R_SMALL));time.setContentDescription(getString(R.string.detail_listen_from,Recording.time(ms)));time.setAccessibilityDelegate(Ui.buttonRole());time.setOnClickListener(v->playAt(ms));
             LinearLayout.LayoutParams tl=Ui.wrap();tl.setMarginStart(-ui.dp(S1));by.addView(time,tl);
             if(!person.isEmpty())by.addView(ui.oneLine(ui.text("· "+person,Type.LABEL_MEDIUM,p.onSurfaceVariant)),new LinearLayout.LayoutParams(0,-2,1));
             col.addView(by,Ui.fill());r.addView(col,new LinearLayout.LayoutParams(0,-2,1));
             LinearLayout.LayoutParams ql=Ui.fill();ql.topMargin=ui.dp(S2);body.addView(r,ql);}
     }
     private void noteMenu(){
-        sheet("Nota para tu segundo cerebro",null)
-            .action(R.drawable.ic_refresh,"Volver a armar la nota",false,()->confirm("¿Volver a armar la nota?","Se reemplaza la nota actual, incluidas las tareas marcadas. El texto se vuelve a enviar a la IA.","Volver a armar",false,this::generateNote))
-            .action(R.drawable.ic_copy,"Copiar nota",false,this::copyNote)
-            .action(R.drawable.ic_share,"Compartir nota .md",false,this::shareNote)
+        sheet(getString(R.string.detail_note_title),null)
+            .action(R.drawable.ic_refresh,getString(R.string.detail_note_rewrite),false,()->confirm(getString(R.string.detail_note_rewrite_q),getString(R.string.detail_note_rewrite_body),getString(R.string.detail_note_rewrite_action),false,this::generateNote))
+            .action(R.drawable.ic_copy,getString(R.string.detail_note_copy),false,this::copyNote)
+            .action(R.drawable.ic_share,getString(R.string.detail_share_note_md),false,this::shareNote)
             .show();
     }
     /** Arma la nota en segundo plano; mientras tanto se ve «Armando la nota…». */
     private void generateNote(){
         if(noteBusy||demo)return;
         // 0.8.0: la nota se arma con OpenRouter, con la misma clave con que se transcribe.
-        if(!Notes.canGenerate(this)){sheet("Falta tu clave de OpenRouter","La nota se arma con OpenRouter, con la misma clave con que transcribes. Agrégala en Ajustes.").primary("Ir a Ajustes",this::openNoteAi).secondary("Ahora no",null).show();return;}
+        if(!Notes.canGenerate(this)){sheet(getString(R.string.detail_note_nokey_title),getString(R.string.detail_note_nokey_body)).primary(getString(R.string.detail_go_settings),this::openNoteAi).secondary(getString(R.string.detail_not_now),null).show();return;}
         noteBusy=true;reload();Diagnostics.event("note_requested",id);
         Context app=getApplicationContext();Recording r=recording;
         new Thread(()->{String error=null;
             try{Notes.generate(app,r,new HttpApi());}
-            catch(UnsupportedOperationException e){error="La nota todavía no está disponible en esta versión.";}
+            catch(UnsupportedOperationException e){error=getString(R.string.detail_note_unavailable);}
             catch(HttpApi.UserAction e){error=e.getMessage();}
-            catch(Exception e){error="No se pudo armar la nota. Revisa tu conexión y vuelve a intentarlo.";}
+            catch(Exception e){error=getString(R.string.detail_note_failed_net);}
             String failed=error;
             runOnUiThread(()->{noteBusy=false;if(isDestroyed())return;reload();
-                if(failed!=null){Ui.haptic(content,Ui.Haptic.REJECT);message("Nota para tu segundo cerebro",failed);}else Ui.haptic(content,Ui.Haptic.CONFIRM);});
+                if(failed!=null){Ui.haptic(content,Ui.Haptic.REJECT);message(getString(R.string.detail_note_title),failed);}else Ui.haptic(content,Ui.Haptic.CONFIRM);});
         },"note").start();
     }
-    private void copyNote(){try{getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("Nota",Notes.markdown(this,recording)));if(Build.VERSION.SDK_INT<33)toast("Nota copiada");}catch(Exception e){message("Copiar nota","No se pudo copiar la nota.");}}
+    private void copyNote(){try{getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText(getString(R.string.detail_note),Notes.markdown(this,recording)));if(Build.VERSION.SDK_INT<33)toast(getString(R.string.detail_note_copied));}catch(Exception e){message(getString(R.string.detail_note_copy),getString(R.string.detail_note_copy_failed));}}
     /** Comparte la nota en Markdown como texto (Obsidian y la mayoría de las apps de notas la reciben así). */
-    private void shareNote(){try{startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT,recording.title).putExtra(Intent.EXTRA_TEXT,Notes.markdown(this,recording)),"Compartir nota"));}catch(Exception e){message("Compartir nota","No se pudo compartir la nota.");}}
+    private void shareNote(){try{startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT,recording.title).putExtra(Intent.EXTRA_TEXT,Notes.markdown(this,recording)),getString(R.string.detail_note_share)));}catch(Exception e){message(getString(R.string.detail_note_share),getString(R.string.detail_note_share_failed));}}
 
     // ---------- Exportar y guardar ----------
     private String exportText()throws Exception{if(demo)return transcript.text(recording);Recording r=FilesStore.recording(this,id);return Transcript.load(this,id).text(r==null?recording:r);}
-    private void copy(){try{getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("Transcripción",exportText()));if(Build.VERSION.SDK_INT<33)toast("Texto copiado");}catch(Exception e){message("Copiar","No se pudo copiar el texto.");}}
-    private void shareText(){try{startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT,recording.title).putExtra(Intent.EXTRA_TEXT,exportText()),"Compartir transcripción"));}catch(Exception e){message("Compartir","No se pudo compartir el texto.");}}
-    private void shareTxt(){try{Transcript t=demo?transcript:Transcript.load(this,id);Uri uri=TranscriptExport.create(this,recording,t);startActivity(Intent.createChooser(TranscriptExport.shareIntent(uri),"Compartir archivo .txt"));}catch(Exception e){message("Archivo","No se pudo crear el archivo.");}}
+    private void copy(){try{getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText(getString(R.string.detail_transcript),exportText()));if(Build.VERSION.SDK_INT<33)toast(getString(R.string.detail_text_copied));}catch(Exception e){message(getString(R.string.detail_copy),getString(R.string.detail_copy_failed));}}
+    private void shareText(){try{startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT,recording.title).putExtra(Intent.EXTRA_TEXT,exportText()),getString(R.string.detail_share_transcript)));}catch(Exception e){message(getString(R.string.detail_share),getString(R.string.detail_share_failed));}}
+    private void shareTxt(){try{Transcript t=demo?transcript:Transcript.load(this,id);Uri uri=TranscriptExport.create(this,recording,t);startActivity(Intent.createChooser(TranscriptExport.shareIntent(uri),getString(R.string.detail_share_txt)));}catch(Exception e){message(getString(R.string.detail_file),getString(R.string.detail_file_failed));}}
     /**
      * Guardar en 0-Inbox (carpeta rápida): la nota .md o el .txt, con un toque. «Actualizar» reemplaza el mismo archivo.
      * Mientras guarda, el botón queda ocupado; al terminar vibra y lo confirma.
@@ -1169,10 +1182,10 @@ public class RecordingActivity extends Screen {
             catch(Exception e){error=e;Diagnostics.event("transcript_quick_save_failed",r.id,"error_class",e.getClass().getSimpleName());}
             Exception failed=error;
             runOnUiThread(()->{saving=false;if(isDestroyed())return;refreshPrimary();
-                if(failed==null){Ui.haptic(primary,Ui.Haptic.CONFIRM);snackbar("Guardado en "+folder,null,null);}
+                if(failed==null){Ui.haptic(primary,Ui.Haptic.CONFIRM);snackbar(getString(R.string.detail_saved_in,folder),null,null);}
                 else{Ui.haptic(primary,Ui.Haptic.REJECT);
-                    sheet("No se pudo guardar en "+folder,failed instanceof HttpApi.UserAction?failed.getMessage():"Puede que Android haya retirado el permiso a esa carpeta. Elígela de nuevo o usa «Otra carpeta».")
-                        .primary("Elegir la carpeta de nuevo",()->RecordingActions.chooseFolder(this)).secondary("Otra carpeta",this::saveAs).show();}});
+                    sheet(getString(R.string.detail_save_failed_in,folder),failed instanceof HttpApi.UserAction?failed.getMessage():getString(R.string.detail_save_failed_body))
+                        .primary(getString(R.string.detail_choose_folder_again),()->RecordingActions.chooseFolder(this)).secondary(getString(R.string.detail_other_folder),this::saveAs).show();}});
         },"inbox").start();
     }
     /** Respaldo mientras Inbox no esté disponible: crea el .txt en la carpeta rápida, como en la 0.5. */
@@ -1189,12 +1202,12 @@ public class RecordingActivity extends Screen {
         Intent pick=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(saveAsNote?"text/markdown":"text/plain").putExtra(Intent.EXTRA_TITLE,name);
         // Abre directamente donde guardaste la última vez (p. ej. tu carpeta Inbox de Drive).
         String last=new Settings(this).prefs.getString("lastSaveUri","");if(!last.isEmpty())pick.putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI,Uri.parse(last));
-        startActivityForResult(pick,SAVE_AS);}catch(ActivityNotFoundException e){message("Guardar en…","Este teléfono no tiene un selector de archivos disponible.");}}
+        startActivityForResult(pick,SAVE_AS);}catch(ActivityNotFoundException e){message(getString(R.string.detail_save_to),getString(R.string.detail_no_picker));}}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==SAVE_AS&&result==RESULT_OK&&data!=null&&data.getData()!=null){Uri target=data.getData();new Settings(this).prefs.edit().putString("lastSaveUri",target.toString()).apply();boolean note=saveAsNote;
-            new Thread(()->{try{LocalStorage.writeText(this,target,note?Notes.markdown(this,recording):exportText());Diagnostics.event("transcript_saved_as",id);runOnUiThread(()->{Ui.haptic(content,Ui.Haptic.CONFIRM);toast(note?"Nota guardada":"Transcripción guardada");});}
-                catch(Exception e){Diagnostics.event("transcript_save_as_failed",id,"error_class",e.getClass().getSimpleName());runOnUiThread(()->message("Guardar en…","No se pudo escribir el archivo en esa ubicación. Prueba otra carpeta."));}}).start();}
+            new Thread(()->{try{LocalStorage.writeText(this,target,note?Notes.markdown(this,recording):exportText());Diagnostics.event("transcript_saved_as",id);runOnUiThread(()->{Ui.haptic(content,Ui.Haptic.CONFIRM);toast(getString(note?R.string.detail_note_saved:R.string.detail_transcript_saved));});}
+                catch(Exception e){Diagnostics.event("transcript_save_as_failed",id,"error_class",e.getClass().getSimpleName());runOnUiThread(()->message(getString(R.string.detail_save_to),getString(R.string.detail_write_failed)));}}).start();}
     }
 
     // ---------- Intervenciones y corrección de voces ----------
@@ -1209,12 +1222,12 @@ public class RecordingActivity extends Screen {
             DottedName name=new DottedName(this,color);name.setText(names.get(speaker));AppTheme.type(name,Type.LABEL_LARGE);name.setTextColor(color);name.setGravity(Gravity.CENTER_VERTICAL);name.setMinHeight(ui.dp(48));
             GradientDrawable dot=oval(color);dot.setSize(ui.dp(8),ui.dp(8));name.setCompoundDrawablesRelativeWithIntrinsicBounds(dot,null,null,null);name.setCompoundDrawablePadding(ui.dp(S2));
             // 4 dp de aire para la onda del toque, compensados con un margen negativo: el punto queda alineado con el texto.
-            name.setBackground(ui.ripple(null,R_SMALL));name.setPadding(ui.dp(S1),0,ui.dp(S2),0);name.setContentDescription(names.get(speaker)+", "+when+". Cambiar quién habla");name.setAccessibilityDelegate(Ui.buttonRole());name.setOnClickListener(v->whoSheet(a,b));
+            name.setBackground(ui.ripple(null,R_SMALL));name.setPadding(ui.dp(S1),0,ui.dp(S2),0);name.setContentDescription(getString(R.string.detail_turn_desc,names.get(speaker),when));name.setAccessibilityDelegate(Ui.buttonRole());name.setOnClickListener(v->whoSheet(a,b));
             LinearLayout.LayoutParams nl=Ui.wrap();nl.setMarginStart(-ui.dp(S1));h.addView(name,nl);}
-        if(hasMark(start,end)){TextView star=ui.text("★",Type.LABEL_LARGE,p.primary);star.setPadding(ui.dp(S1),0,0,0);star.setContentDescription("Momento marcado");h.addView(star);}
+        if(hasMark(start,end)){TextView star=ui.text("★",Type.LABEL_LARGE,p.primary);star.setPadding(ui.dp(S1),0,0,0);star.setContentDescription(getString(R.string.detail_marked));h.addView(star);}
         View flex=new View(this);h.addView(flex,new LinearLayout.LayoutParams(0,ui.dp(1),1));
         TextView time=Ui.tabular(ui.text(when,Type.LABEL_MEDIUM,p.onSurfaceVariant));time.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);time.setMinHeight(ui.dp(48));time.setPadding(ui.dp(S2),0,ui.dp(S1),0);
-        if(!demo){time.setBackground(ui.ripple(null,R_SMALL));time.setContentDescription("Escuchar desde "+when);time.setAccessibilityDelegate(Ui.buttonRole());time.setOnClickListener(v->playTurn(t,start));}
+        if(!demo){time.setBackground(ui.ripple(null,R_SMALL));time.setContentDescription(getString(R.string.detail_listen_from,when));time.setAccessibilityDelegate(Ui.buttonRole());time.setOnClickListener(v->playTurn(t,start));}
         LinearLayout.LayoutParams wl=Ui.wrap();wl.setMarginEnd(-ui.dp(S1));h.addView(time,wl);t.addView(h,Ui.fill());
         // El texto sigue en Roboto BODY_LARGE: en párrafos largos se lee mejor que una letra geométrica.
         JSONArray segments=transcript.segments();
@@ -1227,7 +1240,7 @@ public class RecordingActivity extends Screen {
         LinearLayout r=ui.row();r.setGravity(Gravity.CENTER_VERTICAL);r.setPadding(ui.dp(S3),ui.dp(S3),ui.dp(S3),ui.dp(S2));
         View a=new View(this);a.setBackgroundColor(p.outlineVariant);r.addView(a,new LinearLayout.LayoutParams(0,Math.max(1,ui.dp(1)),1));
         // La etiqueta va en una píldora de vidrio entre las dos líneas.
-        TextView label=Ui.tabular(ui.text("Parte "+(index+1)+" · desde "+Recording.time((long)(startS*1000)),Type.LABEL_MEDIUM,p.onSurfaceVariant));label.setBackground(outline(this,chipFill(),p.outlineVariant,R_FULL,false));label.setPadding(ui.dp(S3),ui.dp(S1),ui.dp(S3),ui.dp(S1));
+        TextView label=Ui.tabular(ui.text(getString(R.string.detail_part_from,index+1,Recording.time((long)(startS*1000))),Type.LABEL_MEDIUM,p.onSurfaceVariant));label.setBackground(outline(this,chipFill(),p.outlineVariant,R_FULL,false));label.setPadding(ui.dp(S3),ui.dp(S1),ui.dp(S3),ui.dp(S1));
         LinearLayout.LayoutParams ll=Ui.wrap();ll.setMargins(ui.dp(S2),0,ui.dp(S2),0);r.addView(label,ll);
         View b=new View(this);b.setBackgroundColor(p.outlineVariant);r.addView(b,new LinearLayout.LayoutParams(0,ui.dp(1),1));
         return r;
@@ -1236,7 +1249,7 @@ public class RecordingActivity extends Screen {
     /** Botón "Escuchar" dentro de una hoja: reproduce solo ese tramo y no cierra la hoja. */
     private void listenButton(Sheet s,String label,double from,double to){
         if(demo)return;Ui.Btn listen=ui.button(label,R.drawable.ic_play,Ui.Style.TONAL,null);
-        listen.setOnClickListener(v->{if(playUntil>0){stopTramo();listen.setText(label);}else if(playRange(from,to))listen.setText("Detener");});
+        listen.setOnClickListener(v->{if(playUntil>0){stopTramo();listen.setText(label);}else if(playRange(from,to))listen.setText(getString(R.string.detail_stop));});
         tramoEnded=()->listen.setText(label);LinearLayout.LayoutParams lp=Ui.wrap();lp.bottomMargin=ui.dp(S2);s.body.addView(listen,lp);
         s.onDismiss(()->{tramoEnded=null;if(playUntil>0)stopTramo();});
     }
@@ -1252,62 +1265,62 @@ public class RecordingActivity extends Screen {
         JSONArray segs=transcript.segments();JSONObject first=segs.getJSONObject(a),last=segs.getJSONObject(b-1);String current=first.getString("speaker");
         double from=first.getDouble("start"),to=last.optDouble("end",from);Map<String,String> names=transcript.speakers();
         StringBuilder said=new StringBuilder();for(int k=a;k<b&&said.length()<120;k++)said.append(said.length()==0?"":" ").append(segs.getJSONObject(k).getString("text").trim());
-        Sheet s=sheet("¿Quién habla aquí?",Recording.time((long)(from*1000))+" – "+Recording.time((long)(to*1000))+" · «"+quote(said.toString(),90)+"»");
-        listenButton(s,"Escuchar este tramo",from,to);
+        Sheet s=sheet(getString(R.string.detail_who_title),getString(R.string.detail_who_body,Recording.time((long)(from*1000)),Recording.time((long)(to*1000)),quote(said.toString(),90)));
+        listenButton(s,getString(R.string.detail_listen_clip),from,to);
         for(String key:names.keySet()){boolean now=key.equals(current);String name=names.get(key);
-            s.choice(name,now?"Así está ahora":null,now,p.speaker(transcript.colorIndex(key)),()->applyEdit(t->t.assign(a,b,key),"Ahora lo dice "+name,"reassign"));}
-        s.choice("Otra persona","Una voz que no está en la lista",false,0,()->applyEdit(t->t.assign(a,b,t.newPerson()),"Ahora lo dice una persona nueva","new_person"));
+            s.choice(name,now?getString(R.string.detail_who_current):null,now,p.speaker(transcript.colorIndex(key)),()->applyEdit(t->t.assign(a,b,key),getString(R.string.detail_now_says,name),"reassign"));}
+        s.choice(getString(R.string.detail_other_person),getString(R.string.detail_other_person_detail),false,0,()->applyEdit(t->t.assign(a,b,t.newPerson()),getString(R.string.detail_now_new_person),"new_person"));
         List<String> others=new ArrayList<>(names.keySet());others.remove(current);
-        if(!others.isEmpty())privateAction(s,R.drawable.ic_swap,"Intercambiar voces desde aquí",others.size()==1?"Intercambiar "+names.get(current)+" y "+names.get(others.get(0))+" desde aquí":"Intercambiar "+names.get(current)+" con otra voz desde aquí",()->swapPartner(a,current));
-        if(b-a>1)s.action(R.drawable.ic_edit,"Corregir solo una frase",false,()->pickSentence(a,b));
+        if(!others.isEmpty())privateAction(s,R.drawable.ic_swap,getString(R.string.detail_swap_here),others.size()==1?getString(R.string.detail_swap_pair_here,names.get(current),names.get(others.get(0))):getString(R.string.detail_swap_other_here,names.get(current)),()->swapPartner(a,current));
+        if(b-a>1)s.action(R.drawable.ic_edit,getString(R.string.detail_fix_one),false,()->pickSentence(a,b));
         s.show();
-    }catch(Exception e){message("Transcripción","No se pudo abrir esta intervención.");}}
+    }catch(Exception e){message(getString(R.string.detail_transcript),getString(R.string.detail_turn_open_failed));}}
     private void pickSentence(int a,int b){try{
-        JSONArray segs=transcript.segments();Sheet s=sheet("¿Qué frase?","Elige la frase que dijo otra persona.");
+        JSONArray segs=transcript.segments();Sheet s=sheet(getString(R.string.detail_which_sentence),getString(R.string.detail_which_sentence_body));
         for(int k=a;k<b;k++){JSONObject seg=segs.getJSONObject(k);int index=k;s.choice(Recording.time((long)(seg.getDouble("start")*1000))+" · "+quote(seg.getString("text"),70),null,false,()->whoSheet(index,index+1));}
-        s.secondary("Cancelar",null).show();
-    }catch(Exception e){message("Transcripción","No se pudieron cargar las frases.");}}
+        s.secondary(getString(R.string.common_cancel),null).show();
+    }catch(Exception e){message(getString(R.string.detail_transcript),getString(R.string.detail_sentences_failed));}}
     private void swapPartner(int a,String x){try{
         Map<String,String> names=transcript.speakers();List<String> others=new ArrayList<>(names.keySet());others.remove(x);
         if(others.size()==1){swapScope(a,x,others.get(0));return;}
-        Sheet s=sheet("¿Con quién se cruzó "+names.get(x)+"?","Elige la otra voz que quedó cruzada.");
+        Sheet s=sheet(getString(R.string.detail_swap_with_title,names.get(x)),getString(R.string.detail_swap_with_body));
         for(String y:others)s.choice(names.get(y),null,false,p.speaker(transcript.colorIndex(y)),()->swapScope(a,x,y));
-        s.secondary("Cancelar",null).show();
-    }catch(Exception e){message("Transcripción","No se pudieron cargar las voces.");}}
+        s.secondary(getString(R.string.common_cancel),null).show();
+    }catch(Exception e){message(getString(R.string.detail_transcript),getString(R.string.voices_load_failed));}}
     /** Intercambiar dos voces desde este punto: hasta el final o solo hasta el fin de la parte. */
     private void swapScope(int a,String x,String y){try{
         Map<String,String> names=transcript.speakers();String nx=names.get(x),ny=names.get(y);double from=transcript.segments().getJSONObject(a).getDouble("start");String when=Recording.time((long)(from*1000));
         List<Double> blocks=transcript.blockStarts(demo?null:FilesStore.state(this,id));int k=0;for(int i=0;i<blocks.size();i++)if(blocks.get(i)<=from+0.05)k=i;double blockEnd=k+1<blocks.size()?blocks.get(k+1):-1;int blockNo=k+1;
-        Sheet s=sheet("Intercambiar "+nx+" y "+ny,"Desde "+when+", lo que dice "+nx+" pasa a "+ny+" y al revés. Si más adelante vuelven a cruzarse, repite desde ese punto.");
-        s.option(R.drawable.ic_swap,"Hasta el final","Hasta "+Recording.time(recording.duration),()->applyEdit(t->t.swap(x,y,from,Double.MAX_VALUE),"Intercambiadas desde "+when,"swap"));
-        if(blockEnd>from)s.option(R.drawable.ic_swap,"Solo en la parte "+blockNo,"Hasta "+Recording.time((long)(blockEnd*1000)),()->applyEdit(t->t.swap(x,y,from,blockEnd),"Intercambiadas en la parte "+blockNo,"swap_block"));
-        s.secondary("Cancelar",null).show();
-    }catch(Exception e){message("Transcripción","No se pudo preparar el intercambio.");}}
+        Sheet s=sheet(getString(R.string.detail_swap_title,nx,ny),getString(R.string.detail_swap_body,when,nx,ny));
+        s.option(R.drawable.ic_swap,getString(R.string.detail_swap_to_end),getString(R.string.detail_until,Recording.time(recording.duration)),()->applyEdit(t->t.swap(x,y,from,Double.MAX_VALUE),getString(R.string.detail_swapped_from,when),"swap"));
+        if(blockEnd>from)s.option(R.drawable.ic_swap,getString(R.string.detail_swap_in_part,blockNo),getString(R.string.detail_until,Recording.time((long)(blockEnd*1000))),()->applyEdit(t->t.swap(x,y,from,blockEnd),getString(R.string.detail_swapped_in_part,blockNo),"swap_block"));
+        s.secondary(getString(R.string.common_cancel),null).show();
+    }catch(Exception e){message(getString(R.string.detail_transcript),getString(R.string.detail_swap_failed));}}
     /** Hoja de una persona (desde su chip): escuchar, cambiar nombre, unir con otra, ver solo sus intervenciones. */
     private void personSheet(String key){try{
         correctionOpened=true;
         Map<String,String> names=transcript.speakers();String name=names.get(key);JSONArray segs=transcript.segments();
         int count=0;double talk=0,firstAt=-1,bestLen=0,bestFrom=0,bestTo=0;
         for(int i=0;i<segs.length();i++){JSONObject s=segs.getJSONObject(i);if(!s.getString("speaker").equals(key))continue;double a=s.getDouble("start"),b=s.optDouble("end",a);count++;talk+=Math.max(0,b-a);if(firstAt<0)firstAt=a;if(b-a>bestLen&&b-a<=15){bestLen=b-a;bestFrom=a;bestTo=b;}}
-        Sheet s=sheet(name,count+(count==1?" frase":" frases")+" · "+Recording.time((long)(talk*1000))+" en total · desde "+Recording.time((long)(Math.max(0,firstAt)*1000)));
-        if(bestLen>0)listenButton(s,"Escuchar una muestra",bestFrom,bestTo);
-        s.action(R.drawable.ic_edit,"Cambiar nombre",false,()->renameOne(key));
-        if(names.size()>1)s.action(R.drawable.ic_merge,"Es la misma persona que…",false,()->mergeSheet(key));
-        boolean only=key.equals(onlySpeaker);s.action(R.drawable.ic_filter,only?"Ver todas las intervenciones":"Ver solo sus intervenciones",false,()->{onlySpeaker=only?null:key;reload(true);});
-        s.action(R.drawable.ic_voice,"Nombrar todas las voces",false,this::openNameVoices);
+        Sheet s=sheet(name,getResources().getQuantityString(R.plurals.detail_person_summary,count,count,Recording.time((long)(talk*1000)),Recording.time((long)(Math.max(0,firstAt)*1000))));
+        if(bestLen>0)listenButton(s,getString(R.string.detail_listen_sample),bestFrom,bestTo);
+        s.action(R.drawable.ic_edit,getString(R.string.detail_rename),false,()->renameOne(key));
+        if(names.size()>1)s.action(R.drawable.ic_merge,getString(R.string.detail_same_person),false,()->mergeSheet(key));
+        boolean only=key.equals(onlySpeaker);s.action(R.drawable.ic_filter,getString(only?R.string.detail_show_everyone:R.string.detail_show_only),false,()->{onlySpeaker=only?null:key;reload(true);});
+        s.action(R.drawable.ic_voice,getString(R.string.detail_name_all),false,this::openNameVoices);
         // Guardar su voz para reconocerla en los próximos audios: con un nombre puesto por el usuario, si aún no es una voz
         // conocida y hay un tramo limpio (sin otra voz encima) de 3 s o más. Solo si el servicio usa voces conocidas:
         // OpenAI (muestras) u OpenRouter (anclas, 0.8.0); con un servidor propio no servirían de nada.
         double[] clean=!demo&&transcript.diarized()&&!key.startsWith(Voices.TARGET)&&!name.equals(transcript.defaultLabel(key))&&!name.trim().isEmpty()
             &&TranscribeClient.knowsVoices(new Settings(this).provider())&&recording.audio(this).isFile()?NameVoices.sample(segs,key):null;
-        if(clean!=null&&(clean[1]-clean[0])*1000>=Voices.MIN_MS)privateAction(s,R.drawable.ic_mic_fill,"Guardar la voz","Guardar la voz de "+name,()->saveVoice(name,clean));
+        if(clean!=null&&(clean[1]-clean[0])*1000>=Voices.MIN_MS)privateAction(s,R.drawable.ic_mic_fill,getString(R.string.detail_save_voice),getString(R.string.detail_save_voice_of,name),()->saveVoice(name,clean));
         s.show();
-    }catch(Exception e){message("Transcripción","No se pudo abrir esta voz.");}}
+    }catch(Exception e){message(getString(R.string.detail_transcript),getString(R.string.detail_voice_open_failed));}}
     /** Guarda el tramo limpio de esta voz como voz conocida (si ya hay una con ese nombre, pregunta antes de reemplazarla). */
     private void saveVoice(String name,double[] range){
         Voices.Voice same=Voices.findByName(this,name);
         if(same==null){cutVoice(name,range,null);return;}
-        confirm("¿Reemplazar la voz guardada de "+same.name+"?","Se usará este tramo de "+Math.round(Math.min(range[1]-range[0],Voices.MAX_MS/1000d))+" s en lugar de la muestra anterior.","Reemplazar",false,()->cutVoice(name,range,same.id));
+        confirm(getString(R.string.detail_replace_voice_q,same.name),getString(R.string.detail_replace_voice_body,Math.round(Math.min(range[1]-range[0],Voices.MAX_MS/1000d))),getString(R.string.detail_replace),false,()->cutVoice(name,range,same.id));
     }
     /** Recorta el tramo del audio original en segundo plano (máx. 9,5 s) y lo guarda en la biblioteca de voces. */
     private void cutVoice(String name,double[] range,String replaceId){
@@ -1321,39 +1334,39 @@ public class RecordingActivity extends Screen {
             finally{tmp.delete();}
             boolean saved=ok;
             runOnUiThread(()->{if(isDestroyed())return;
-                if(saved){Ui.haptic(content,Ui.Haptic.CONFIRM);toast("Voz de "+name+" guardada · la reconocerá en tus próximos audios");}
-                else message("Guardar la voz","No se pudo recortar la voz de "+name+" de este audio. Vuelve a intentarlo.");});
+                if(saved){Ui.haptic(content,Ui.Haptic.CONFIRM);toast(getString(R.string.detail_voice_saved,name));}
+                else message(getString(R.string.detail_save_voice),getString(R.string.detail_voice_cut_failed,name));});
         },"voice").start();
     }
     private void mergeSheet(String x){try{
         Map<String,String> names=transcript.speakers();String nx=names.get(x);
-        Sheet s=sheet("¿Con quién unir a "+nx+"?","Sus intervenciones pasan a esa persona. Puedes deshacerlo.");
-        for(String y:names.keySet()){if(y.equals(x))continue;String ny=names.get(y);s.choice(ny,null,false,p.speaker(transcript.colorIndex(y)),()->applyEdit(t->t.merge(x,y),nx+" se unió con "+ny,"merge"));}
-        s.secondary("Cancelar",null).show();
-    }catch(Exception e){message("Transcripción","No se pudieron cargar las voces.");}}
+        Sheet s=sheet(getString(R.string.detail_merge_title,nx),getString(R.string.detail_merge_body));
+        for(String y:names.keySet()){if(y.equals(x))continue;String ny=names.get(y);s.choice(ny,null,false,p.speaker(transcript.colorIndex(y)),()->applyEdit(t->t.merge(x,y),getString(R.string.detail_merged,nx,ny),"merge"));}
+        s.secondary(getString(R.string.common_cancel),null).show();
+    }catch(Exception e){message(getString(R.string.detail_transcript),getString(R.string.voices_load_failed));}}
     private void renameOne(String key){try{
         Map<String,String> names=transcript.speakers();String current=names.get(key);
-        Sheet s=sheet("Cambiar nombre","Si le pones el nombre de otra voz, se unen en una sola persona.");
-        EditText f=ui.field(current,"Nombre");if(!current.equals(transcript.defaultLabel(key)))f.setText(current);f.setSingleLine(true);f.setFilters(new InputFilter[]{new InputFilter.LengthFilter(80)});s.add(f);
-        s.primary("Guardar",Ui.Style.PRIMARY,()->{Map<String,String> one=new LinkedHashMap<>();one.put(key,f.getText().toString().trim());saveNames(one);return true;}).secondary("Cancelar",null).show();
-    }catch(Exception e){message("Transcripción","No se pudo cargar el nombre.");}}
+        Sheet s=sheet(getString(R.string.detail_rename),getString(R.string.detail_rename_body));
+        EditText f=ui.field(current,getString(R.string.detail_name));if(!current.equals(transcript.defaultLabel(key)))f.setText(current);f.setSingleLine(true);f.setFilters(new InputFilter[]{new InputFilter.LengthFilter(80)});s.add(f);
+        s.primary(getString(R.string.detail_save),Ui.Style.PRIMARY,()->{Map<String,String> one=new LinkedHashMap<>();one.put(key,f.getText().toString().trim());saveNames(one);return true;}).secondary(getString(R.string.common_cancel),null).show();
+    }catch(Exception e){message(getString(R.string.detail_transcript),getString(R.string.detail_name_load_failed));}}
     /** Aplica una corrección, guarda y ofrece "Deshacer". La pantalla conserva su posición. */
     private void applyEdit(Transcript.Edit op,String done,String action){
         try{JSONObject before;String saved=null;
             if(demo){before=new JSONObject(transcript.data.toString());op.apply(transcript);writeDemo();}
             else synchronized(FilesStore.LOCK){before=Transcript.edit(this,id,op);saved=NameVoices.stamp(this,id);}
             Diagnostics.event("transcript_edited",demo?null:id,"action",action);
-            String stamp=saved;reload();snackbar(done,"Deshacer",()->undo(before,stamp));
-        }catch(Exception e){message("Transcripción","No se pudo guardar el cambio. Vuelve a intentarlo.");}
+            String stamp=saved;reload();snackbar(done,getString(R.string.detail_undo),()->undo(before,stamp));
+        }catch(Exception e){message(getString(R.string.detail_transcript),getString(R.string.detail_change_failed));}
     }
     /** saved: marca de la transcripción tras el cambio. Si otra versión llegó entretanto, «Deshacer» la pisaría: no se hace. */
     private void undo(JSONObject before,String saved){
         try{if(demo){transcript=new Transcript(before);writeDemo();}
             else synchronized(FilesStore.LOCK){
-                if(saved!=null&&!saved.equals(NameVoices.stamp(this,id))){message("Deshacer","La transcripción cambió después (por ejemplo, volviste a la otra versión), así que ya no se puede deshacer este cambio.");return;}
+                if(saved!=null&&!saved.equals(NameVoices.stamp(this,id))){message(getString(R.string.detail_undo),getString(R.string.voices_undo_stale));return;}
                 Transcript.replace(this,id,before);}
             Diagnostics.event("transcript_edited",demo?null:id,"action","undo");reload();}
-        catch(Exception e){message("Transcripción","No se pudo deshacer el cambio.");}
+        catch(Exception e){message(getString(R.string.detail_transcript),getString(R.string.detail_undo_change_failed));}
     }
     private java.io.File demoFile(){return new java.io.File(getFilesDir(),"demo-transcript.json");}
     private void writeDemo()throws Exception{java.io.File f=demoFile();FilesStore.write(f,transcript.data);demoStamp=f.lastModified();}
@@ -1366,25 +1379,30 @@ public class RecordingActivity extends Screen {
             if(demo){before=new JSONObject(transcript.data.toString());merged[0]=transcript.applyNames(names);writeDemo();}
             else synchronized(FilesStore.LOCK){before=Transcript.edit(this,id,t->merged[0]=t.applyNames(names));saved=NameVoices.stamp(this,id);}
             String stamp=saved;reload();
-            if(merged[0]>0)snackbar(merged[0]==1?"Se unieron 2 voces con el mismo nombre":"Se unieron las voces con el mismo nombre","Deshacer",()->undo(before,stamp));else toast("Nombres guardados");
-        }catch(Exception e){message("No se guardaron los nombres","Vuelve a intentarlo.");}
+            if(merged[0]>0)snackbar(getString(merged[0]==1?R.string.detail_merged_two:R.string.detail_merged_many),getString(R.string.detail_undo),()->undo(before,stamp));else toast(getString(R.string.voices_names_saved));
+        }catch(Exception e){message(getString(R.string.voices_names_failed),getString(R.string.voices_try_again));}
     }
     /** Hoja clásica «Nombrar voces» (respaldo si la hoja nueva no está disponible). */
     private void editSpeakers(){try{
         correctionOpened=true;
         Map<String,String> current=transcript.speakers();Map<String,EditText> fields=new LinkedHashMap<>();
-        Sheet s=sheet("Nombrar voces","El nombre se aplica a todas las intervenciones de esa voz. Si dos voces son la misma persona, dales el mismo nombre y se unen.");
+        Sheet s=sheet(getString(R.string.voices_title),getString(R.string.detail_name_voices_body));
         for(String key:current.keySet()){LinearLayout row=ui.row();row.setPadding(0,ui.dp(S1),0,ui.dp(S1));View dot=new View(this);dot.setBackground(oval(p.speaker(transcript.colorIndex(key))));row.addView(dot,new LinearLayout.LayoutParams(ui.dp(12),ui.dp(12)));row.addView(ui.space(S3));
-            String label=transcript.defaultLabel(key);EditText f=ui.field(label,"Nombre para "+label);String value=current.get(key);if(!value.equals(label))f.setText(value);f.setFilters(new InputFilter[]{new InputFilter.LengthFilter(80)});row.addView(f,new LinearLayout.LayoutParams(0,-2,1));fields.put(key,f);s.add(row);}
-        if(transcript.edited()){Ui.Btn restore=ui.button("Restaurar voces originales",R.drawable.ic_refresh,Ui.Style.PLAIN,v->{s.dismiss();confirm("¿Restaurar voces originales?","Se deshacen todas las correcciones de quién habla. Los nombres se mantienen.","Restaurar",false,()->applyEdit(Transcript::restore,"Voces originales restauradas","restore"));});
+            String label=transcript.defaultLabel(key);EditText f=ui.field(label,getString(R.string.voices_name_for,label));String value=current.get(key);if(!value.equals(label))f.setText(value);f.setFilters(new InputFilter[]{new InputFilter.LengthFilter(80)});row.addView(f,new LinearLayout.LayoutParams(0,-2,1));fields.put(key,f);s.add(row);}
+        if(transcript.edited()){Ui.Btn restore=ui.button(getString(R.string.voices_restore),R.drawable.ic_refresh,Ui.Style.PLAIN,v->{s.dismiss();confirm(getString(R.string.voices_restore_q),getString(R.string.voices_restore_body),getString(R.string.voices_restore_action),false,()->applyEdit(Transcript::restore,getString(R.string.voices_restored),"restore"));});
             LinearLayout.LayoutParams lp=Ui.wrap();lp.topMargin=ui.dp(S2);s.body.addView(restore,lp);}
-        s.primary("Guardar nombres",Ui.Style.PRIMARY,()->{
+        s.primary(getString(R.string.detail_save_names),Ui.Style.PRIMARY,()->{
             Map<String,String> names=new LinkedHashMap<>();for(Map.Entry<String,EditText> f:fields.entrySet())names.put(f.getKey(),f.getValue().getText().toString().trim());
             saveNames(names);return true;
-        }).secondary("Cancelar",null).show();
-    }catch(Exception e){message("Transcripción","No se pudieron cargar las voces.");}}
+        }).secondary(getString(R.string.common_cancel),null).show();
+    }catch(Exception e){message(getString(R.string.detail_transcript),getString(R.string.voices_load_failed));}}
 
-    static Transcript example()throws Exception{return new Transcript(new JSONObject("{\"demo\":true,\"names\":{},\"segments\":[{\"speaker\":\"A\",\"start\":0,\"end\":7,\"text\":\"Me gustaría que guardemos las ideas de esta conversación.\"},{\"speaker\":\"B\",\"start\":7,\"end\":14,\"text\":\"Sí, y después podemos revisar juntos lo que dijimos.\"},{\"speaker\":\"C\",\"start\":14,\"end\":20,\"text\":\"Yo puedo ayudar a ordenar los próximos pasos.\"},{\"speaker\":\"A\",\"start\":20,\"end\":27,\"text\":\"Perfecto. Así no se nos pierde ninguna idea.\"}]}"));}
+    /** La conversación de ejemplo (27 s, tres voces), en el idioma de la app. */
+    static Transcript example()throws Exception{
+        String[] who={"A","B","C","A"};int[] at={0,7,14,20,27};int[] lines={R.string.detail_demo_line1,R.string.detail_demo_line2,R.string.detail_demo_line3,R.string.detail_demo_line4};
+        JSONArray segments=new JSONArray();for(int i=0;i<lines.length;i++)segments.put(new JSONObject().put("speaker",who[i]).put("start",at[i]).put("end",at[i+1]).put("text",Lang.str(lines[i])));
+        return new Transcript(new JSONObject().put("demo",true).put("names",new JSONObject()).put("segments",segments));
+    }
 
     // ---------- Vistas propias ----------
     /** Nombre de una persona con subrayado de puntos: se nota que se puede tocar (abre «¿Quién habla aquí?»). */
@@ -1533,7 +1551,8 @@ public class RecordingActivity extends Screen {
             return super.onTouchEvent(e);
         }
         @Override public boolean performClick(){return super.performClick();}
-        private void describe(){setContentDescription("Posición del audio: "+Recording.time(position)+" de "+Recording.time(duration));}
+        /** Su contexto es la pantalla, que ya va en el idioma de la app. */
+        private void describe(){setContentDescription(getContext().getString(R.string.detail_scrubber_desc,Recording.time(position),Recording.time(duration)));}
         @Override public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info){
             super.onInitializeAccessibilityNodeInfo(info);info.setClassName(SeekBar.class.getName());
             info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD);info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD);

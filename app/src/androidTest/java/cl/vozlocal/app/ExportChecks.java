@@ -70,11 +70,26 @@ final class ExportChecks {
             Intent send = TranscriptExport.shareIntent(first);
             check("text/plain".equals(send.getType()) && (send.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0, "Share intent lacks MIME type/read grant");
             check(first.equals(send.getClipData().getItemAt(0).getUri()), "Share intent lacks ClipData URI grant");
+            languages(renamed);
         } finally {
             for (Uri uri : exports) new File(context.getCacheDir(), uri.getLastPathSegment()).delete();
             File[] files = Recording.directory(context).listFiles((dir, name) -> name.startsWith(fixture.id + "."));
             if (files != null) for (File file : files) file.delete();
         }
+    }
+    /** 0.9.0: el nombre de respaldo y el contenido del .txt van en el idioma de la app (el resto de las pruebas, en español). */
+    private static void languages(Recording r) throws Exception {
+        Transcript voices = new Transcript(new JSONObject("{\"diarized\":true,\"segments\":[{\"speaker\":\"A\",\"start\":0,\"end\":2,\"text\":\"Hi.\"}]}"));
+        Transcript plain = new Transcript(new JSONObject("{\"diarized\":false,\"parts\":2,\"segments\":[{\"speaker\":\"text\",\"start\":0,\"end\":0,\"text\":\"Hi.\"}]}"));
+        try {
+            Lang.override(Lang.EN);
+            check("Transcript.txt".equals(TranscriptExport.filename("... /\\")) && "Transcript CON.txt".equals(TranscriptExport.filename("CON")), "English export fallback name wrong: " + TranscriptExport.filename("... /\\"));
+            String en = voices.text(r);
+            check(en.contains("Person 1: Hi.") && en.contains("there may be mistakes") && plain.text(r).contains("start of each block"), "English TXT wrong: " + en);
+            Lang.override(Lang.PT);
+            check("Transcrição.txt".equals(TranscriptExport.filename("... /\\")) && voices.text(r).contains("Pessoa 1: Hi."), "Portuguese export wrong: " + voices.text(r));
+        } finally { Lang.override(Lang.ES); }
+        check("Transcripción.txt".equals(TranscriptExport.filename("... /\\")) && voices.text(r).contains("Persona 1: Hi."), "Spanish not back after the language checks");
     }
     private static String name(Context context, Uri uri) {
         try (Cursor cursor = context.getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {

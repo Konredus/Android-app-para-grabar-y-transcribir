@@ -36,27 +36,34 @@ final class Retranscribe {
     /** Tope de «sin cortar» con el proveedor elegido en Ajustes, en ms (para los textos de las pantallas). */
     static long singleMaxMs(Context c){Settings s=new Settings(c);return s.openRouter()?singleMaxMs(Models.recipe(Models.chosen(s,true))):SINGLE_MAX_MS;}
 
-    // ---------- Textos (para la hoja «¿Cómo quieres volver a transcribir?») ----------
-    static String label(Mode m){
+    // ---------- Textos (para la hoja «¿Cómo quieres volver a transcribir?»), en el idioma de la app ----------
+    static String label(Mode m){return Lang.str(labelId(m));}
+    /** El nombre de cada alternativa (recurso). */
+    static int labelId(Mode m){
         switch(m){
-            case CORRECTIONS:return "Segunda pasada con tus correcciones";
-            case SINGLE:return "Separar voces sin cortar el audio";
-            case SPEAKERS:return "Separar voces de nuevo";
-            default:return "Solo el texto";
+            case CORRECTIONS:return R.string.retr_mode_corrections;
+            case SINGLE:return R.string.retr_mode_single;
+            case SPEAKERS:return R.string.retr_mode_speakers;
+            default:return R.string.retr_mode_text;
         }
     }
+    /**
+     * Los nombres de las alternativas en los tres idiomas: la bitácora («Volver a transcribir: «…»») queda en el idioma de
+     * cuando se escribió, y el informe de soporte (Diagnostics) los reconoce como textos fijos, no como datos personales.
+     */
+    static Set<String> allLabels(){Set<String> out=new LinkedHashSet<>();for(Mode m:Mode.values())out.addAll(Arrays.asList(Lang.all(labelId(m))));return out;}
     /** Una línea que explica qué cambia con cada alternativa. */
     static String detail(Context c,Mode m){
         switch(m){
-            case CORRECTIONS:return "Reconoce desde el inicio a las personas que nombraste o corregiste. La que más mejora.";
-            case SINGLE:return "Todo el audio en un solo envío: sin uniones donde las voces se crucen. Más lento.";
+            case CORRECTIONS:return Lang.str(c,R.string.retr_detail_corrections);
+            case SINGLE:return Lang.str(c,R.string.retr_detail_single);
             case SPEAKERS:{
                 List<Voices.Voice> known=TranscribeClient.knowsVoices(new Settings(c).provider())?Voices.selected(c):Collections.emptyList();
-                if(known.isEmpty())return "Otra pasada completa.";
-                if(known.size()==1&&known.get(0).me)return "Otra pasada completa, reconociéndote como "+known.get(0).name+".";
-                return "Otra pasada completa, "+(known.get(0).me?"reconociéndote ":"reconociendo ")+Voices.people(known)+".";
+                if(known.isEmpty())return Lang.str(c,R.string.retr_detail_speakers);
+                if(known.size()==1&&known.get(0).me)return Lang.str(c,R.string.retr_detail_speakers_me,known.get(0).name);
+                return Lang.str(c,known.get(0).me?R.string.retr_detail_speakers_you:R.string.retr_detail_speakers_people,Voices.people(known));
             }
-            default:return "Sin separar voces. Sirve si lo que falló fueron las palabras.";
+            default:return Lang.str(c,R.string.retr_detail_text);
         }
     }
     static boolean speakers(Mode m){return m!=Mode.TEXT;}
@@ -112,33 +119,33 @@ final class Retranscribe {
      * primero se elige («Quedarme con la nueva» o «Volver a la anterior»).
      */
     static String chooseFirst(){return Lang.str(R.string.retranscribe_choose_first);}
-    /** Motivo en palabras simples por el que la alternativa no se puede usar, o null si se puede. */
+    /** Motivo en palabras simples (en el idioma de la app) por el que la alternativa no se puede usar, o null si se puede. */
     static String reason(Facts f,Mode mode){
-        if(!f.exists)return "No se encontró el audio de esta grabación.";
-        if(f.demo)return "El ejemplo no se vuelve a transcribir.";
-        if(f.busy)return "Ya se está transcribiendo. Espera a que termine.";
-        if(!f.transcribed)return f.previous?"La nueva versión no terminó. Reintenta o vuelve a la anterior.":"Todavía no tiene transcripción. Usa «Transcribir».";
+        if(!f.exists)return Lang.str(R.string.retr_no_audio);
+        if(f.demo)return Lang.str(R.string.retr_demo);
+        if(f.busy)return Lang.str(R.string.retr_busy);
+        if(!f.transcribed)return Lang.str(f.previous?R.string.retr_unfinished:R.string.retr_untranscribed);
         if(f.previous)return chooseFirst();
         // La nota que se está armando es de esta versión: si cambiara ahora, se perdería.
-        if(f.noteWorking)return "Se está armando la nota. Espera a que termine.";
-        if(!f.hasKey)return "Agrega tu clave de OpenRouter en Ajustes para volver a transcribir.";
+        if(f.noteWorking)return Lang.str(R.string.retr_note_working);
+        if(!f.hasKey)return Lang.str(R.string.retr_no_key);
         switch(mode){
             case CORRECTIONS:
-                if(!f.openai&&!f.openrouter)return "Solo funciona con OpenRouter u OpenAI: tu servicio de transcripción no acepta muestras de voz.";
+                if(!f.openai&&!f.openrouter)return Lang.str(R.string.retr_needs_samples);
                 // OpenRouter con un modelo que solo entrega texto: las muestras no servirían de nada.
-                if(!f.canSeparate)return "El modelo elegido no separa voces. Elige uno que separe voces en Ajustes.";
-                if(!f.diarized)return "Esta versión no tiene voces separadas.";
-                if(!f.confirmed)return "Primero nombra o corrige las voces: la segunda pasada aprende de eso.";
-                if(f.samples==0)return f.saved>=Transcriber.MAX_KNOWN?"Ya van "+Transcriber.MAX_KNOWN+" voces conocidas en cada envío: no queda lugar para muestras de esta grabación.":"No hay tramos claros de cada persona para usar como muestra.";
+                if(!f.canSeparate)return Lang.str(R.string.retr_model_no_voices);
+                if(!f.diarized)return Lang.str(R.string.retr_not_diarized);
+                if(!f.confirmed)return Lang.str(R.string.retr_not_confirmed);
+                if(f.samples==0)return f.saved>=Transcriber.MAX_KNOWN?Lang.str(R.string.retr_slots_full,Transcriber.MAX_KNOWN):Lang.str(R.string.retr_no_samples);
                 return null;
             case SINGLE:
-                if(!f.canSeparate)return "Tu servicio de transcripción no separa voces.";
-                if(f.durationMs>f.singleMaxMs)return "Solo para audios de hasta "+(f.singleMaxMs/60_000)+" min. Este dura "+Recording.time(f.durationMs)+".";
-                if(f.bytes>f.singleMaxBytes)return "El archivo es muy pesado para enviarlo de una vez (más de 24 MB).";
-                if(f.diarized&&f.parts<=1)return "La versión actual ya separó voces sin cortar el audio.";
+                if(!f.canSeparate)return Lang.str(R.string.retr_service_no_voices);
+                if(f.durationMs>f.singleMaxMs)return Lang.str(R.string.retr_too_long,f.singleMaxMs/60_000,Recording.time(f.durationMs));
+                if(f.bytes>f.singleMaxBytes)return Lang.str(R.string.retr_too_big);
+                if(f.diarized&&f.parts<=1)return Lang.str(R.string.retr_already_single);
                 return null;
             case SPEAKERS:
-                return f.canSeparate?null:"Tu servicio de transcripción no separa voces.";
+                return f.canSeparate?null:Lang.str(R.string.retr_service_no_voices);
             default:
                 return null;
         }
@@ -150,7 +157,7 @@ final class Retranscribe {
             Facts f=facts(c,r);
             if(mode==Mode.CORRECTIONS&&reason(f,mode)==null)f.samples=samples(c,r.id,f.transcript);
             return reason(f,mode);
-        }catch(Exception e){return "No se pudo revisar esta grabación.";}
+        }catch(Exception e){return Lang.str(c,R.string.retr_check_failed);}
     }
     /** Cuántas muestras tendría la segunda pasada (se recuerda mientras nada cambie: la hoja lo pregunta varias veces). */
     private static String samplesKey;private static int samplesCount;
@@ -218,7 +225,7 @@ final class Retranscribe {
         String why=reason(f,mode);if(why!=null)throw new HttpApi.UserAction(why);
         prepare(c,r,mode,fixed);
         try{Pipeline.request(c,r.id,speakers(mode));}
-        catch(Exception e){try{restore(c,r.id,"No se pudo poner en cola · se mantiene la versión anterior","retranscribe_queue_failed");}catch(Exception ignored){}throw e;}
+        catch(Exception e){try{restore(c,r.id,Lang.str(c,R.string.retr_log_queue_failed),"retranscribe_queue_failed");}catch(Exception ignored){}throw e;}
         // La bitácora dice qué alternativa se usó (lo escribe Pipeline.request, que empieza una bitácora nueva).
         Diagnostics.event("retranscribe_start",r.id,"mode",mode.name(),"count",fixed==null?0:fixed.length(),"duration_ms",r.duration);
     }
@@ -226,7 +233,7 @@ final class Retranscribe {
     static void prepare(Context c,Recording r,Mode mode,JSONArray fixed)throws Exception{
         String id=r.id;
         synchronized(FilesStore.LOCK){
-            File current=FilesStore.file(c,id,".transcript.json");if(!current.isFile())throw new HttpApi.UserAction("Todavía no tiene transcripción.");
+            File current=FilesStore.file(c,id,".transcript.json");if(!current.isFile())throw new HttpApi.UserAction(Lang.str(c,R.string.retr_no_transcript));
             // Solo se guarda una versión anterior: con una esperando la elección, repetir la borraría sin aviso.
             File prev=FilesStore.file(c,id,".transcript.prev.json");if(prev.isFile())throw new HttpApi.UserAction(chooseFirst());
             move(current,prev);
@@ -264,12 +271,12 @@ final class Retranscribe {
             new AtomicFile(FilesStore.file(c,id,".transcript.prev.json")).delete();new AtomicFile(FilesStore.file(c,id,".note.prev.json")).delete();
             try{FilesStore.update(c,id,s->{s.remove("retranscribe");s.remove("fixedRefs");});}catch(Exception ignored){}
         }
-        Pipeline.log(c,id,"Te quedaste con la nueva versión");
+        Pipeline.log(c,id,Lang.str(c,R.string.retr_kept_new));
         Diagnostics.event("retranscribe_keep",id,"mode",m==null?"":m.name());
     }
     /** Volver a la anterior (también con la nota y los datos del proceso). Si la nueva aún se estaba haciendo, se detiene. */
-    static void restorePrevious(Context c,String id)throws Exception{restore(c,id,"Volviste a la versión anterior","retranscribe_restore");}
-    /** message: línea para la bitácora; event: registro técnico (elegida por el usuario, cancelada o fallida). */
+    static void restorePrevious(Context c,String id)throws Exception{restore(c,id,Lang.str(c,R.string.retr_restored),"retranscribe_restore");}
+    /** message: línea para la bitácora (en el idioma de la app); event: registro técnico (elegida por el usuario, cancelada o fallida). */
     static void restore(Context c,String id,String message,String event)throws Exception{
         if(!hasPrevious(c,id))return;
         if(FilesStore.state(c,id).optBoolean("requested"))Pipeline.cancel(c,id,false);

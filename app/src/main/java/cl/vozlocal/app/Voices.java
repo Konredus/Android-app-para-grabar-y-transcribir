@@ -44,8 +44,8 @@ final class Voices {
         String target(){return me?ME:TARGET+id;}
         /** Nombre con que se envía la muestra. */
         String sentName(){return me?MINE:"voz_"+id;}
-        /** «Konrad (tú)» o «Fran». */
-        String label(){return me?name+" (tú)":name;}
+        /** «Konrad (tú)» o «Fran» (en el idioma de la app). */
+        String label(){return me?Lang.str(R.string.voices_me_label,name):name;}
         JSONObject json()throws JSONException{return new JSONObject().put("id",id).put("name",name).put("me",me).put("createdAt",createdAt).put("use",use);}
         Voice with(String name,boolean use){return new Voice(id,name,me,createdAt,use);}
     }
@@ -172,10 +172,14 @@ final class Voices {
         for(Voice v:used){File f=file(c,v.id);if(b.length()>0)b.append(',');b.append(v.id).append(':').append(f.length()).append('-').append(f.lastModified());}
         return b.toString();
     }
-    /** «a ti y a Fran», «a Fran, a Pedro y a Ana» (para los textos que dicen a quién reconoce). */
+    /**
+     * «a ti y a Fran», «a Fran, a Pedro y a Ana» (para los textos que dicen a quién reconoce). En el idioma de la app:
+     * «you and Fran», «você e Fran». Cada persona (voices_people_item) y la unión del último (voices_people_last).
+     */
     static String people(List<Voice> voices){
         StringBuilder b=new StringBuilder();
-        for(int i=0;i<voices.size();i++){if(i>0)b.append(i==voices.size()-1?" y ":", ");b.append("a ").append(voices.get(i).me?"ti":voices.get(i).name);}
+        for(int i=0;i<voices.size();i++){Voice v=voices.get(i);String who=Lang.str(R.string.voices_people_item,v.me?Lang.str(R.string.voices_people_you):v.name);
+            if(i==0)b.append(who);else if(i<voices.size()-1)b.append(", ").append(who);else{String head=b.toString();b.setLength(0);b.append(Lang.str(R.string.voices_people_last,head,who));}}
         return b.toString();
     }
 
@@ -187,7 +191,7 @@ final class Voices {
             JSONArray a=new JSONArray(new String(index.readFully(),StandardCharsets.UTF_8));
             for(int i=0;i<a.length();i++){
                 JSONObject o=a.optJSONObject(i);if(o==null)continue;String id=o.optString("id");if(!validId(id)||find(out,id)!=null)continue;
-                String name=clean(o.optString("name"));boolean me=ME_ID.equals(id);if(name.isEmpty())name=me?defaultMeName():"Voz guardada";
+                String name=clean(o.optString("name"));boolean me=ME_ID.equals(id);if(name.isEmpty())name=me?defaultMeName():Lang.str(c,R.string.voices_saved_default);
                 out.add(new Voice(id,name,me,o.optLong("createdAt",0),o.optBoolean("use",true)));
             }
         }catch(FileNotFoundException none){/* primera vez */}catch(Exception ignored){}
@@ -210,7 +214,8 @@ final class Voices {
     private static boolean trySave(Context c,List<Voice> all){try{save(c,all);return true;}catch(IOException e){return false;}}
     private static Voice find(List<Voice> all,String id){for(Voice v:all)if(v.id.equals(id))return v;return null;}
     private static void sort(List<Voice> all){
-        java.text.Collator collator=java.text.Collator.getInstance(new Locale("es","CL"));collator.setStrength(java.text.Collator.SECONDARY);
+        // Orden alfabético del idioma de la app (los nombres se muestran en ese orden).
+        java.text.Collator collator=java.text.Collator.getInstance(Lang.locale());collator.setStrength(java.text.Collator.SECONDARY);
         all.sort((a,b)->a.me!=b.me?(a.me?-1:1):collator.compare(a.name,b.name)!=0?collator.compare(a.name,b.name):Long.compare(a.createdAt,b.createdAt));
     }
     private static String newId(Context c,List<Voice> all){
