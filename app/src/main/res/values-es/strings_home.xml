@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- ===== Grabar: saludo, micrófono e «Importar audio» ===== -->
+    <string name="home_good_morning">Buenos días,</string>
+    <string name="home_good_afternoon">Buenas tardes,</string>
+    <string name="home_good_evening">Buenas noches,</string>
+    <string name="home_what_today">¿Qué grabamos hoy?</string>
+    <string name="home_record">Grabar</string>
+    <string name="home_stop_save">Detener y guardar</string>
+    <string name="home_tap_to_record">Toca para grabar</string>
+    <string name="home_works_offline_inline">funciona sin internet</string>
+    <string name="home_works_offline">Funciona sin internet</string>
+    <string name="home_tap_to_record_spoken">Toca para grabar. Funciona sin internet.</string>
+    <string name="home_import">Importar audio</string>
+    <string name="home_import_spoken">Importar audio de WhatsApp, grabadoras o archivos</string>
+    <string name="home_import_status_spoken">Importar audio: %1$s</string>
+    <string name="home_importing">Importando…</string>
+    <string name="home_importing_percent">Importando… %1$d %%</string>
+    <string name="home_import_pending">Importación pendiente</string>
+    <string name="home_import_ready">Audio listo para guardar</string>
+    <string name="home_recording_in_progress">Grabación en curso</string>
+    <string name="home_save_current_first">Guarda primero la grabación actual.</string>
+
+    <!-- ===== Grabar: grabando ===== -->
+    <string name="home_go_library_spoken">Ir a Biblioteca, la grabación sigue</string>
+    <string name="home_add_title">Añadir título</string>
+    <string name="home_add_title_spoken">Añadir título a la grabación</string>
+    <string name="home_title_spoken">Título: %1$s. Toca para cambiarlo</string>
+    <string name="home_new_recording">Nueva grabación</string>
+    <string name="home_recording">Grabando</string>
+    <string name="home_paused">En pausa</string>
+    <string name="home_stop">Detener</string>
+    <string name="home_pause">Pausa</string>
+    <string name="home_pause_action">Pausar</string>
+    <string name="home_resume">Reanudar</string>
+    <string name="home_resume_spoken">Reanudar grabación</string>
+    <string name="home_mark_moment">Marcar momento</string>
+    <string name="home_mark_moment_spoken">Marcar momento. %1$s</string>
+    <string name="home_mark_with_word">Marcar con una palabra</string>
+    <string name="home_moment_marked">Momento marcado</string>
+    <string name="home_mark_failed">No se pudo marcar el momento.</string>
+    <string name="home_word_hint">Ej. precio, idea, tarea</string>
+    <string name="home_word_spoken">Palabra para este momento</string>
+    <string name="home_word_body">Momento %1$s. La grabación sigue mientras escribes.</string>
+    <string name="home_mark">Marcar</string>
+    <string name="home_hint_paused">En pausa · toca %1$s para seguir o %2$s para guardar.</string>
+    <string name="home_hint_marks">%1$s · mantén ★ para anotar una palabra.</string>
+    <string name="home_hint_idle">Puedes bloquear el teléfono: la grabación sigue. Toca ★ para marcar un momento.</string>
+    <string name="home_title_hint">Ej. Reunión con el equipo</string>
+    <string name="home_recording_title">Título de la grabación</string>
+    <string name="home_keeps_recording">La grabación sigue mientras escribes.</string>
+    <string name="home_save_title">Guardar título</string>
+    <plurals name="home_marks">
+        <item quantity="one">%1$d momento ★</item>
+        <item quantity="many">%1$d momentos ★</item>
+        <item quantity="other">%1$d momentos ★</item>
+    </plurals>
+    <plurals name="home_marks_spoken">
+        <item quantity="one">%1$d momento marcado</item>
+        <item quantity="many">%1$d momentos marcados</item>
+        <item quantity="other">%1$d momentos marcados</item>
+    </plurals>
+
+    <!-- ===== Grabar: al detener («Nombra esta grabación») y permisos ===== -->
+    <string name="home_saved_library">Guardado en Biblioteca · %1$s</string>
+    <string name="home_name_title">Nombra esta grabación</string>
+    <string name="home_listen">Escuchar la grabación</string>
+    <string name="home_duration_spoken">Duración %1$s</string>
+    <string name="home_date_fixed_spoken">Fecha %1$s, fija</string>
+    <string name="home_name_hint">Nombre</string>
+    <string name="home_saved_on_phone">Guardada en este teléfono</string>
+    <string name="home_will_auto_transcribe">se transcribirá automáticamente</string>
+    <string name="home_view_recording">Ver grabación</string>
+    <string name="home_done">Listo</string>
+    <string name="home_play_failed">No se pudo reproducir el audio.</string>
+    <string name="home_mic_title">Permitir el micrófono</string>
+    <string name="home_mic_body">Verbapp usa el micrófono solo mientras grabas. El audio queda en tu teléfono hasta que lo transcribes.</string>
+    <string name="home_continue">Continuar</string>
+    <string name="home_recording_noun">Grabación</string>
+    <string name="home_mic_failed">No se pudo iniciar el micrófono. Vuelve a intentarlo con la app abierta.</string>
+    <string name="home_mic_off_title">El micrófono está desactivado</string>
+    <string name="home_mic_off_body">Actívalo en los ajustes de Android para poder grabar.</string>
+    <string name="home_open_settings">Abrir ajustes</string>
+
+    <!-- ===== Grabar: «Tu semana» ===== -->
+    <string name="home_your_week">Tu semana</string>
+    <string name="home_last_7_days">Últimos 7 días</string>
+    <string name="home_week_recorded">Grabado</string>
+    <plurals name="home_week_recordings" tools:ignore="ImpliedQuantity">
+        <item quantity="one">Grabación</item>
+        <item quantity="many">Grabaciones</item>
+        <item quantity="other">Grabaciones</item>
+    </plurals>
+    <plurals name="home_week_notes" tools:ignore="ImpliedQuantity">
+        <item quantity="one">Nota</item>
+        <item quantity="many">Notas</item>
+        <item quantity="other">Notas</item>
+    </plurals>
+    <string name="home_week_spoken">Tu semana, últimos 7 días: %1$s, %2$s grabado, %3$s. Toca para ver tus métricas</string>
+    <plurals name="home_count_recordings">
+        <item quantity="one">%1$d grabación</item>
+        <item quantity="many">%1$d grabaciones</item>
+        <item quantity="other">%1$d grabaciones</item>
+    </plurals>
+    <plurals name="home_count_notes">
+        <item quantity="one">%1$d nota</item>
+        <item quantity="many">%1$d notas</item>
+        <item quantity="other">%1$d notas</item>
+    </plurals>
+
+    <!-- ===== Grabar: cómo traer un audio de WhatsApp ===== -->
+    <string name="home_whatsapp_title">Transcribir un audio de WhatsApp</string>
+    <string name="home_whatsapp_step1">Abre el chat y mantén presionado el audio.</string>
+    <string name="home_whatsapp_step2">Toca Compartir (o ⋮ → Compartir).</string>
+    <string name="home_whatsapp_step3">Elige Verbapp en la lista de apps.</string>
+    <string name="home_whatsapp_step4">Revisa el título y toca Guardar audio.</string>
+    <string name="home_whatsapp_note">También funciona con grabadoras, Telegram y cualquier app que comparta audio.</string>
+
+    <!-- ===== Grabar: estado (botón redondo y píldora bajo el saludo) ===== -->
+    <string name="home_setup">Configurar transcripción</string>
+    <string name="home_setup_spoken">Configurar transcripción: agrega tu clave de OpenRouter</string>
+    <string name="home_need_attention">%1$d necesitan atención</string>
+    <string name="home_check_transcription">Revisar transcripción</string>
+    <string name="home_check_key">Revisa tu clave de OpenRouter</string>
+    <string name="home_review_title">Revisar · «%1$s»</string>
+    <string name="home_ready">Listo para transcribir</string>
+    <string name="home_ready_spoken">Listo para transcribir. Abrir ajustes</string>
+    <string name="home_queue_running">Transcribiendo «%1$s»</string>
+    <string name="home_queue_parts">%1$d de %2$d</string>
+    <string name="home_queue_behind">%1$d en cola</string>
+    <string name="home_queue_count">%1$d audios en cola</string>
+    <string name="home_queue_one">«%1$s» · %2$s</string>
+    <string name="home_transcribing">Transcribiendo</string>
+    <string name="home_transcribing_dots">Transcribiendo…</string>
+    <string name="home_parts">%1$s · %2$d de %3$d partes</string>
+
+    <!-- ===== Grabar: «Última grabación» ===== -->
+    <string name="home_last_recording">Última grabación</string>
+    <string name="home_empty_title">Aún no hay grabaciones</string>
+    <string name="home_empty_last_body">Graba una idea o trae un audio de WhatsApp.</string>
+    <string name="home_whatsapp_how">Cómo traer un audio de WhatsApp</string>
+    <string name="home_last_empty_spoken">Última grabación: aún no hay grabaciones</string>
+    <string name="home_see_progress">Ver avance</string>
+    <string name="home_failed">No se pudo transcribir</string>
+    <string name="home_ready_short">Lista</string>
+    <string name="home_voices_to_review">voces por revisar</string>
+    <string name="home_voices_to_review_n">%1$d voces por revisar</string>
+    <string name="home_unsaved_inline">por guardar</string>
+    <string name="home_unsaved_changes">Hay cambios sin guardar</string>
+    <string name="home_transcript_ready">Transcripción lista</string>
+    <string name="home_open">Abrir</string>
+    <string name="home_last_spoken">Última grabación: %1$s. %2$s. Toca para abrirla</string>
+    <string name="home_saving">Guardando…</string>
+    <string name="home_saved_check">✓ Guardado en %1$s</string>
+    <string name="home_quick_save_unavailable">El guardado rápido aún no está disponible.</string>
+    <string name="home_save_failed">No se pudo guardar en %1$s. Revisa la carpeta rápida en Ajustes.</string>
+
+    <!-- ===== Biblioteca ===== -->
+    <string name="home_search_hint">Buscar por título</string>
+    <string name="home_search_spoken">Buscar grabaciones por título</string>
+    <string name="home_clear_search">Borrar búsqueda</string>
+    <string name="home_stop_save_recording">Detener y guardar la grabación</string>
+    <string name="home_pill_spoken">Grabación en curso. Toca para ir a %1$s</string>
+    <string name="home_library_subtitle">Tus audios y transcripciones</string>
+    <string name="home_count_unsaved">%1$d por guardar</string>
+    <plurals name="home_count_transcribed">
+        <item quantity="one">%1$d transcrita</item>
+        <item quantity="many">%1$d transcritas</item>
+        <item quantity="other">%1$d transcritas</item>
+    </plurals>
+    <string name="home_filter_all">Todas</string>
+    <string name="home_unsaved">Por guardar</string>
+    <string name="home_filter_transcribed">Transcritas</string>
+    <string name="home_filter_failed">Con error</string>
+    <string name="home_today">Hoy</string>
+    <string name="home_yesterday">Ayer</string>
+    <string name="home_this_week">Esta semana</string>
+    <string name="home_month_pattern">MMMM yyyy</string>
+    <string name="home_no_results">Sin resultados</string>
+    <string name="home_empty_body">Graba una idea o importa un audio para empezar.</string>
+    <string name="home_no_results_filter">No hay grabaciones con este filtro.</string>
+    <string name="home_no_results_filter_search">No hay grabaciones con este filtro y esta búsqueda.</string>
+    <string name="home_try_another_word">Prueba con otra palabra.</string>
+    <string name="home_record_now">Grabar ahora</string>
+    <string name="home_clear_filter">Quitar filtro</string>
+    <string name="home_snippet">«%1$s»</string>
+    <string name="home_retry_spoken">Reintentar transcripción de %1$s</string>
+    <string name="home_options_spoken">Opciones de %1$s</string>
+    <string name="home_new_spoken">Nueva</string>
+    <string name="home_in_folder">✓ En %1$s</string>
+
+    <!-- ===== Siguiente paso de una grabación (Next) y su estado (RecState) ===== -->
+    <string name="act_retry">Reintentar</string>
+    <string name="act_transcribe">Transcribir</string>
+    <string name="act_review_voices">Revisar voces</string>
+    <string name="act_choose_folder">Elegir carpeta rápida</string>
+    <string name="act_save_to">Guardar en %1$s</string>
+    <string name="act_update_in">Actualizar en %1$s</string>
+    <string name="act_save_again_to">Guardar de nuevo en %1$s</string>
+    <string name="act_saved_in">En %1$s · %2$s</string>
+    <string name="act_date_pattern">d MMM</string>
+    <string name="act_folder_fallback">la carpeta</string>
+    <string name="act_state_queued">En proceso</string>
+    <string name="act_state_done">Transcrito</string>
+    <string name="act_state_failed">Necesita atención</string>
+    <string name="act_not_transcribed">Sin transcribir</string>
+    <string name="act_state_audio_only">Solo audio</string>
+    <string name="act_doing_transcribe">Transcribiendo</string>
+
+    <!-- ===== Menú de una grabación ===== -->
+    <string name="act_rename">Cambiar título</string>
+    <string name="act_share_audio">Compartir audio</string>
+    <string name="act_trim_copy">Recortar una copia</string>
+    <string name="act_retry_transcription">Reintentar transcripción</string>
+    <string name="act_back_to_previous">Volver a la versión anterior</string>
+    <string name="act_retranscribe">Volver a transcribir…</string>
+    <string name="act_choose_version">Elegir versión: nueva o anterior…</string>
+    <string name="act_cancel_transcription">Cancelar transcripción</string>
+    <string name="act_delete">Eliminar</string>
+    <string name="act_open_failed">No se pudo abrir la transcripción.</string>
+
+    <!-- ===== Carpeta rápida ===== -->
+    <string name="act_already_in">Ya está en %1$s</string>
+    <string name="act_saved_today_body">Se guardó hoy a las %1$s. Si cambias algo, se reemplaza el mismo archivo, sin crear una copia.</string>
+    <string name="act_saved_day_body">Se guardó el %1$s. Si cambias algo, se reemplaza el mismo archivo, sin crear una copia.</string>
+    <string name="act_save_again">Guardar de nuevo</string>
+    <string name="act_saved_to">Guardado en %1$s</string>
+    <string name="act_save_failed_title">No se pudo guardar en %1$s</string>
+    <string name="act_save_failed_body">Puede que Android haya retirado el permiso a esa carpeta. Elígela de nuevo y vuelve a intentarlo.</string>
+    <string name="act_choose_folder_again">Elegir la carpeta de nuevo</string>
+
+    <!-- ===== Cambiar título ===== -->
+    <string name="act_title_hint">Título</string>
+    <string name="act_save">Guardar</string>
+    <string name="act_title_required">Escribe un título</string>
+    <string name="act_title_save_failed">No se pudo guardar el título</string>
+
+    <!-- ===== Transcribir: clave, voces y cola ===== -->
+    <string name="act_your_server">tu servidor</string>
+    <string name="act_now_openrouter_title">Verbapp ahora usa OpenRouter</string>
+    <string name="act_now_openrouter_body">Para transcribir y armar tus notas, Verbapp ahora usa OpenRouter: una sola clave para elegir entre varios modelos. La clave de %1$s que tenías queda guardada, pero ya no se usa. Pega una de OpenRouter para seguir transcribiendo.</string>
+    <string name="act_missing_key_title">Falta tu clave de OpenRouter</string>
+    <string name="act_missing_key_body">Para transcribir, Verbapp usa tu propia cuenta de OpenRouter: una sola clave para varios modelos y para tus notas. Solo pagas lo que usas.</string>
+    <string name="act_setup_now">Configurar ahora</string>
+    <string name="act_later">Más tarde</string>
+    <string name="act_who_new">Para reuniones y conversaciones: %1$s, %2$s…</string>
+    <string name="act_who_me_sure">Te reconoce como %1$s desde el inicio; las demás, %2$s…</string>
+    <string name="act_who_me_try">Busca tu voz para ponerte como %1$s; las demás, %2$s…</string>
+    <string name="act_who_with_me_sure">Te reconoce %1$s; las demás, %2$s…</string>
+    <string name="act_who_with_me_try">Busca reconocerte %1$s; las demás, %2$s…</string>
+    <string name="act_who_known_sure">Reconoce %1$s; las demás, %2$s…</string>
+    <string name="act_who_known_try">Busca reconocer %1$s; las demás, %2$s…</string>
+    <string name="act_speakers_title">¿Separar voces?</string>
+    <string name="act_speakers_body">Audio de %1$s. Puedes cambiar esta pregunta en Ajustes.</string>
+    <string name="act_speakers_yes">Sí, separar voces</string>
+    <string name="act_speakers_yes_me">Sí, separar voces · con Mi voz</string>
+    <string name="act_speakers_yes_known">Sí, separar voces · con voces conocidas</string>
+    <string name="act_slower">Más lento</string>
+    <string name="act_slower_inline">más lento</string>
+    <string name="act_speakers_no">No, solo el texto</string>
+    <string name="act_speakers_no_for">Para dictados y notas</string>
+    <string name="act_speakers_no_detail">Para dictados y notas · más rápido</string>
+    <string name="act_speakers_no_detail_live">Para dictados y notas · más rápido, el texto aparece en vivo</string>
+    <string name="act_faster">Más rápido</string>
+    <string name="act_live_text">Texto en vivo</string>
+    <string name="act_record_my_voice">Grabar mi voz para que me reconozca</string>
+    <string name="act_queue_failed">No se pudo poner en cola</string>
+    <string name="act_try_again">Vuelve a intentarlo.</string>
+    <string name="act_recommended">Recomendada</string>
+
+    <!-- ===== Pantalla bloqueada (optimización de batería) ===== -->
+    <string name="act_background_title">Trabajar con la pantalla bloqueada</string>
+    <string name="act_background_body">Con la optimización de batería activa, Android puede congelar Verbapp al bloquear el teléfono y cortar el envío a %1$s. Solo gasta batería mientras transcribe.</string>
+    <string name="act_allow">Permitir</string>
+    <string name="act_open_app_settings">Abrir ajustes de la app</string>
+    <string name="act_not_now">Ahora no</string>
+
+    <!-- ===== Cancelar, versión anterior y eliminar ===== -->
+    <string name="act_cancel_title">¿Cancelar la transcripción?</string>
+    <string name="act_cancel_body_again">Se detiene el envío y vuelves a tu versión anterior, tal como estaba.</string>
+    <string name="act_cancel_body">Se detiene el envío. Las partes ya listas no se vuelven a cobrar si la reanudas más tarde con la misma opción de voces.</string>
+    <string name="act_transcription">Transcripción</string>
+    <string name="act_cancel_failed">No se pudo cancelar el trabajo.</string>
+    <string name="act_keep_transcribing">Seguir transcribiendo</string>
+    <string name="act_restored">Volviste a la versión anterior</string>
+    <string name="act_previous_version">Versión anterior</string>
+    <string name="act_restore_failed">No se pudo recuperar la versión anterior. Tu audio sigue intacto.</string>
+    <string name="act_delete_title">¿Eliminar «%1$s»?</string>
+    <string name="act_delete_body">Se borrarán el audio y la transcripción de este teléfono. Las copias en tu carpeta elegida se conservan. No se puede deshacer.</string>
+    <string name="act_delete_failed">No se pudo eliminar el audio.</string>
+
+    <!-- ===== Kit de interfaz (Ui, Sheet) ===== -->
+    <string name="ui_duration_s">%1$d s</string>
+    <string name="ui_duration_min">%1$d min</string>
+    <string name="ui_duration_h">%1$d h</string>
+    <string name="ui_duration_h_min">%1$d h %2$02d min</string>
+    <string name="ui_busy">En curso</string>
+    <string name="ui_more_save_share">Más opciones para guardar o compartir</string>
+    <string name="ui_selected_item">%1$s, seleccionado</string>
+    <string name="ui_close">Cerrar</string>
+
+    <!-- ===== Carpeta rápida y copia local (Inbox, LocalStorage) ===== -->
+    <string name="inbox_choose_first">Primero elige tu carpeta rápida en Ajustes.</string>
+    <string name="inbox_no_transcript">Esta grabación aún no tiene transcripción.</string>
+    <string name="inbox_save_failed">No se pudo guardar en %1$s. Puede que Android haya retirado el permiso a esa carpeta: elígela de nuevo en Ajustes o usa «Otra carpeta».</string>
+    <string name="inbox_local_failed">No se pudo actualizar la carpeta · el original sigue en la app</string>
+    <string name="inbox_local_done">Copia local actualizada</string>
+    <string name="inbox_info_duration">Duración: %1$s</string>
+    <string name="inbox_file_info">informacion.txt</string>
+    <string name="inbox_file_transcript">transcripcion.txt</string>
+    <string name="inbox_file_transcript_json">transcripcion.json</string>
+    <string name="inbox_file_note">nota.md</string>
+</resources>

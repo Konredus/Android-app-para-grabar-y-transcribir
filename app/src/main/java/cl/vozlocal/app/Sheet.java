@@ -93,7 +93,7 @@ final class Sheet {
      */
     Sheet closable(Runnable onClose){
         if(close!=null)return this;
-        close=ui.glassButton(R.drawable.ic_close,"Cerrar");close.setElevation(0);
+        close=ui.glassButton(R.drawable.ic_close,Lang.str(activity,R.string.ui_close));close.setElevation(0);
         // El InsetDrawable trae su propio relleno (4 dp parejos) y setBackground lo aplica a la vista: no se pone otro relleno
         // después. El ícono va centrado (ScaleType.CENTER), así que no se mueve. El vidrio se suelta antes de envolverlo: si
         // no, al cambiar el fondo la vista le quita el aviso de redibujo al fondo anterior y la onda del toque no se animaría.
@@ -140,7 +140,7 @@ final class Sheet {
         if(dot!=0){View d=new View(activity);d.setBackground(oval(dot));row.addView(d,new LinearLayout.LayoutParams(ui.dp(10),ui.dp(10)));row.addView(ui.space(S3));}
         LinearLayout texts=ui.column();texts.addView(ui.text(label,Type.ITEM,ui.p.onSurface));if(detail!=null&&!detail.isEmpty()){TextView d=ui.text(detail,Type.BODY_MEDIUM,ui.p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);texts.addView(d);}
         row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
-        row.setBackground(ui.ripple(null,0));row.setClickable(true);row.setContentDescription(label+(selected?", seleccionado":""));row.setAccessibilityDelegate(Ui.buttonRole());
+        row.setBackground(ui.ripple(null,0));row.setClickable(true);row.setContentDescription(selected?Lang.str(activity,R.string.ui_selected_item,label):label);row.setAccessibilityDelegate(Ui.buttonRole());
         row.setOnClickListener(v->{dialog.dismiss();if(!selected)run.run();});
         list.addView(row,Ui.fill());return this;
     }
