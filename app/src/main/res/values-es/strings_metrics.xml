@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Tus métricas»: los textos de siempre (las pruebas los comparan tal cual). -->
+<resources>
+    <string name="met_subtitle">Calculadas en tu teléfono con tus grabaciones. Nada se envía.</string>
+    <string name="met_by_period">Por período</string>
+    <string name="met_chip_week">7 días</string>
+    <string name="met_chip_month">Este mes</string>
+    <string name="met_chip_all">Todo</string>
+    <string name="met_period_week">Últimos 7 días</string>
+    <string name="met_period_all">Desde el comienzo</string>
+    <string name="met_quiet_week">No grabaste en los últimos 7 días</string>
+    <string name="met_quiet_month">Aún no grabas este mes</string>
+    <string name="met_quiet_body">Toca «%1$s» para ver tu historial, o graba algo y aquí aparece al tiro.</string>
+
+    <string name="met_hero_title">Tu voz en Verbapp</string>
+    <plurals name="met_hero_words">
+        <item quantity="one">palabra transcrita</item>
+        <item quantity="many">palabras transcritas</item>
+        <item quantity="other">palabras transcritas</item>
+    </plurals>
+    <string name="met_hero_untranscribed">grabadas, todavía sin transcribir</string>
+    <string name="met_hero_saved">≈ %1$s que no tuviste que escribir a mano</string>
+    <string name="met_hero_saved_none">Transcribe tus audios y aquí verás cuántas palabras llevas.</string>
+    <plurals name="met_keep_streak">
+        <item quantity="one">Graba hoy para seguir tu racha de %1$s día.</item>
+        <item quantity="many">Graba hoy para seguir tu racha de %1$s días.</item>
+        <item quantity="other">Graba hoy para seguir tu racha de %1$s días.</item>
+    </plurals>
+    <plurals name="met_stat_recordings">
+        <item quantity="one">Grabación</item>
+        <item quantity="many">Grabaciones</item>
+        <item quantity="other">Grabaciones</item>
+    </plurals>
+    <string name="met_stat_recorded">Grabado</string>
+    <plurals name="met_stat_days">
+        <item quantity="one">Día grabando</item>
+        <item quantity="many">Días grabando</item>
+        <item quantity="other">Días grabando</item>
+    </plurals>
+    <string name="met_stat_best_streak">Mejor racha</string>
+    <plurals name="met_days">
+        <item quantity="one">%1$s día</item>
+        <item quantity="many">%1$s días</item>
+        <item quantity="other">%1$s días</item>
+    </plurals>
+    <plurals name="met_recordings">
+        <item quantity="one">%1$s grabación</item>
+        <item quantity="many">%1$s grabaciones</item>
+        <item quantity="other">%1$s grabaciones</item>
+    </plurals>
+    <string name="met_streak_today">Grabaste hoy</string>
+    <plurals name="met_streak_days">
+        <item quantity="one">%1$d día seguido</item>
+        <item quantity="many">%1$d días seguidos</item>
+        <item quantity="other">%1$d días seguidos</item>
+    </plurals>
+    <plurals name="met_say_words">
+        <item quantity="one">%1$s palabra transcrita. %2$s.</item>
+        <item quantity="many">%1$s palabras transcritas. %2$s.</item>
+        <item quantity="other">%1$s palabras transcritas. %2$s.</item>
+    </plurals>
+    <string name="met_say_recorded">%1$s grabadas.</string>
+    <string name="met_say_streak">Racha actual: %1$s.</string>
+    <string name="met_say_streak_keep">Racha actual: %1$s, graba hoy para seguirla.</string>
+    <string name="met_say_best">Mejor racha: %1$s.</string>
+
+    <string name="met_weeks_title">Últimas 8 semanas</string>
+    <string name="met_weeks_hint">Toca una semana</string>
+    <string name="met_chart_minutes">Minutos grabados</string>
+    <string name="met_chart_spend">Gasto</string>
+    <string name="met_billed">Cobrado</string>
+    <string name="met_estimated">Estimado</string>
+    <string name="met_legend_est">≈ estimado</string>
+    <string name="met_weeks_no_spend">Sin gastos en estas 8 semanas.</string>
+    <string name="met_usd_zero">US$0</string>
+    <string name="met_no_recordings">sin grabaciones</string>
+    <string name="met_billed_and_est_lc">cobrado y estimado</string>
+    <string name="met_est_lc">estimado</string>
+    <string name="met_billed_lc">cobrado</string>
+    <string name="met_no_spend_lc">sin gasto</string>
+    <string name="met_this_week">Esta semana</string>
+    <string name="met_last_week">Semana pasada</string>
+    <string name="met_week_of">Semana del %1$s de %2$s</string>
+    <string name="met_day_month">%1$s %2$s</string>
+    <string name="met_say_this_week">esta semana</string>
+    <string name="met_say_last_week">la semana pasada</string>
+    <string name="met_say_week_of">la semana del %1$s de %2$s</string>
+    <string name="met_say_minutes_chart">Gráfico de minutos grabados por semana.</string>
+    <string name="met_say_nothing">nada</string>
+    <string name="met_say_bars_how">Ajústalo como un deslizador, usa las flechas o toca una semana para elegirla.</string>
+    <string name="met_say_spend_chart">Gráfico de gasto por semana.</string>
+    <string name="met_say_billed">%1$s cobrado</string>
+    <string name="met_say_est">unos %1$s estimado</string>
+    <string name="met_say_billed_est">%1$s cobrado y unos %2$s estimado</string>
+    <string name="met_say_about">unos %1$s</string>
+
+    <string name="met_voice_title">Tu voz en números</string>
+    <string name="met_stat_words">Palabras</string>
+    <string name="met_stat_wpm">Palabras por minuto</string>
+    <string name="met_stat_saved">Ahorrado al no teclear</string>
+    <plurals name="met_days_with_recordings">
+        <item quantity="one">%1$s día con grabaciones</item>
+        <item quantity="many">%1$s días con grabaciones</item>
+        <item quantity="other">%1$s días con grabaciones</item>
+    </plurals>
+    <plurals name="met_marks">
+        <item quantity="one">%1$s momento ★</item>
+        <item quantity="many">%1$s momentos ★</item>
+        <item quantity="other">%1$s momentos ★</item>
+    </plurals>
+    <string name="met_voice_note">Palabras y ritmo cuentan solo lo transcrito.</string>
+
+    <string name="met_funnel_title">Hacia tu segundo cerebro</string>
+    <string name="met_funnel_recorded">Grabadas</string>
+    <string name="met_funnel_transcribed">Transcritas</string>
+    <string name="met_funnel_note">Con nota</string>
+    <string name="met_funnel_inbox">En 0-Inbox</string>
+    <string name="met_percent">%1$d %%</string>
+    <string name="met_say_funnel_step">%1$s: %2$s de %3$s, %4$d por ciento</string>
+    <string name="met_stall_failed">Con error</string>
+    <string name="met_stall_failed_hint">Revisa qué pasó y reintenta</string>
+    <string name="met_stall_queued">En proceso</string>
+    <string name="met_stall_queued_hint">En cola o transcribiéndose</string>
+    <string name="met_stall_new">Sin transcribir</string>
+    <string name="met_stall_new_hint">Solo audio, por ahora</string>
+    <string name="met_stall_no_note">Transcritas sin nota</string>
+    <string name="met_stall_no_note_many">Abre la más reciente</string>
+    <string name="met_stall_no_note_one">Ábrela para armar la nota</string>
+    <string name="met_stall_inbox">Por guardar en 0-Inbox</string>
+    <string name="met_stall_inbox_hint">Guárdalas con un toque</string>
+    <string name="met_choose_inbox">Elige tu carpeta 0-Inbox</string>
+    <string name="met_choose_inbox_hint">Para guardar cada nota con un toque</string>
+    <string name="met_halfway">A medio camino</string>
+    <string name="met_all_arrived">Todo lo grabado llegó a tu segundo cerebro</string>
+    <string name="met_stall_total">%1$s · %2$s en total en la Biblioteca</string>
+
+    <string name="met_costs_title">Costos</string>
+    <string name="met_spent">gastado %1$s</string>
+    <string name="met_spent_notes">gastado %1$s, contando las notas</string>
+    <string name="met_no_spend_in">Sin gastos %1$s.</string>
+    <string name="met_when_week">en los últimos 7 días</string>
+    <string name="met_when_month">este mes</string>
+    <string name="met_when_all">desde el comienzo</string>
+    <string name="met_per_audio_hour">Por hora de audio</string>
+    <string name="met_by_model">Por modelo</string>
+    <string name="met_no_rate">Sin tarifa</string>
+    <plurals name="met_transcriptions">
+        <item quantity="one">%1$s transcripción</item>
+        <item quantity="many">%1$s transcripciones</item>
+        <item quantity="other">%1$s transcripciones</item>
+    </plurals>
+    <string name="met_notes_title">Notas para tu segundo cerebro</string>
+    <string name="met_note_tokens">%1$s tokens de entrada · %2$s de salida</string>
+    <string name="met_no_tokens">Sin datos de tokens</string>
+    <plurals name="met_notes">
+        <item quantity="one">%1$s nota</item>
+        <item quantity="many">%1$s notas</item>
+        <item quantity="other">%1$s notas</item>
+    </plurals>
+    <string name="met_balance">Saldo en OpenRouter: %1$s (al comprobar tu clave el %2$s).</string>
+    <string name="met_costs_foot">Cobrado: lo que informó OpenRouter. ≈ Estimado: duración × tarifa pública del modelo; el cobro final lo ves en tu cuenta.</string>
+    <plurals name="met_unknown_router">
+        <item quantity="one">%1$s transcripción de OpenRouter sin precio conocido: no informó el costo y el modelo no tiene tarifa por minuto.</item>
+        <item quantity="many">%1$s transcripciones de OpenRouter sin precio conocido: no informó el costo y el modelo no tiene tarifa por minuto.</item>
+        <item quantity="other">%1$s transcripciones de OpenRouter sin precio conocido: no informó el costo y el modelo no tiene tarifa por minuto.</item>
+    </plurals>
+    <plurals name="met_unknown_openai">
+        <item quantity="one">%1$s transcripción de OpenAI sin tarifa conocida para su modelo.</item>
+        <item quantity="many">%1$s transcripciones de OpenAI sin tarifa conocida para su modelo.</item>
+        <item quantity="other">%1$s transcripciones de OpenAI sin tarifa conocida para su modelo.</item>
+    </plurals>
+    <plurals name="met_unknown_server">
+        <item quantity="one">%1$s transcripción con tu servidor: sin tarifa conocida.</item>
+        <item quantity="many">%1$s transcripciones con tu servidor: sin tarifa conocida.</item>
+        <item quantity="other">%1$s transcripciones con tu servidor: sin tarifa conocida.</item>
+    </plurals>
+    <string name="met_your_server">Tu servidor</string>
+    <string name="met_model_unnamed">Modelo sin nombre</string>
+
+    <string name="met_heat_title">Cuándo grabas</string>
+    <string name="met_heat_cell">%1$s de %2$s a %3$s · %4$s</string>
+    <string name="met_duration_in">%1$s en %2$s</string>
+    <string name="met_less">Menos</string>
+    <string name="met_more">Más</string>
+    <string name="met_heat_hint">Toca una casilla para ver su detalle.</string>
+    <string name="met_insight_same">Hablas más %1$s, sobre todo entre %2$s y %3$s.</string>
+    <string name="met_insight_other">Hablas más %1$s; tu hora con más voz: %2$s a las %3$s.</string>
+    <string name="met_on_monday">los lunes</string>
+    <string name="met_on_tuesday">los martes</string>
+    <string name="met_on_wednesday">los miércoles</string>
+    <string name="met_on_thursday">los jueves</string>
+    <string name="met_on_friday">los viernes</string>
+    <string name="met_on_saturday">los sábados</string>
+    <string name="met_on_sunday">los domingos</string>
+    <string name="met_say_heat_title">Mapa de días y horas en que grabas.</string>
+    <string name="met_say_heat_day">%1$s, más a las %2$s</string>
+    <string name="met_say_heat_how">Toca o usa las flechas para recorrer las horas.</string>
+    <string name="met_axis_hour">%1$d h</string>
+
+    <string name="met_people_title">Con quién más conversas</string>
+    <string name="met_people_empty">Ponle nombre a las voces de tus transcripciones y aquí verás con quién más conversas.</string>
+    <plurals name="met_audios">
+        <item quantity="one">%1$s audio</item>
+        <item quantity="many">%1$s audios</item>
+        <item quantity="other">%1$s audios</item>
+    </plurals>
+    <plurals name="met_known_voices">
+        <item quantity="one">%1$s voz conocida guardada.</item>
+        <item quantity="many">%1$s voces conocidas guardadas.</item>
+        <item quantity="other">%1$s voces conocidas guardadas.</item>
+    </plurals>
+    <string name="met_people_foot">Según cuánto habla cada persona con nombre. Los nombres solo se ven aquí.</string>
+
+    <string name="met_footer">Todo se calcula en este teléfono con lo que Verbapp guarda de cada grabación. Nada de esto se envía.</string>
+    <string name="met_how_button">¿Cómo se calcula?</string>
+    <string name="met_how_title">Cómo se calculan tus métricas</string>
+    <string name="met_how_body">Todo se calcula en este teléfono con lo que Verbapp ya guarda de cada grabación. Nada se envía.\n\nGrabado: la duración de tus grabaciones, en el día en que grabaste.\nPalabras: las de tus transcripciones (la versión vigente).\nPalabras por minuto: palabras ÷ minutos de audio transcrito.\nAhorrado al no teclear: lo que tardarías en escribir esas palabras a mano, a %1$d palabras por minuto.\nRacha: días seguidos con al menos una grabación. Si hoy aún no grabas, sigue viva hasta medianoche.\n\nHacia tu segundo cerebro: de lo grabado en el período, cuánto se transcribió, cuánto tiene nota y cuánto guardaste en tu carpeta 0-Inbox.\n\nCostos: van en el día en que se transcribió o se armó la nota. «Cobrado» es lo que informó OpenRouter. «≈ Estimado» es la duración por la tarifa pública del modelo y puede diferir de lo que te cobran. Si volviste a transcribir, mientras guardes la versión anterior también se cuenta lo que costó.\n\nPersonas: el tiempo que habla cada voz a la que le pusiste nombre, sin contarte a ti. Los nombres solo se ven en esta pantalla.</string>
+
+    <string name="met_empty_title">Aquí verás tu voz en números</string>
+    <string name="met_empty_body">Cuando grabes, verás cuánto hablas, cuántas palabras escribe Verbapp por ti, cuánto llega a tu segundo cerebro y cuánto gastas al transcribir.</string>
+    <string name="met_empty_words">Palabras transcritas y tiempo ahorrado</string>
+    <string name="met_empty_streak">Tu racha de días grabando</string>
+    <string name="met_empty_spend">Tu gasto, mes a mes y por modelo</string>
+    <string name="met_empty_button">Hacer mi primera grabación</string>
+    <string name="met_loading">Contando tus palabras…</string>
+    <string name="met_error_title">No se pudieron calcular tus métricas</string>
+    <string name="met_error_body">Tus grabaciones están bien. Vuelve a intentarlo en un momento.</string>
+    <string name="met_retry">Reintentar</string>
+
+    <string name="met_unit_h">%1$s h</string>
+    <string name="met_unit_min">%1$s min</string>
+    <string name="met_under_min">&lt; 1 min</string>
+
+    <string name="met_summary_zero_label">grabaciones</string>
+    <string name="met_summary_empty">aquí verás tu voz en números</string>
+    <string name="met_summary_recorded">grabadas</string>
+    <string name="met_summary_month">%1$s este mes</string>
+</resources>

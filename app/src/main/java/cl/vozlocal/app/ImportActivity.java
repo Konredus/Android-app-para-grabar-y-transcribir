@@ -34,7 +34,7 @@ public class ImportActivity extends Screen {
     static boolean inFront;
 
     @Override public void onCreate(Bundle saved){
-        super.onCreate(saved);shell("Grabar",-1);largeTitle(page,"Importar audio","Audios de WhatsApp, grabadoras y notas de voz.");
+        super.onCreate(saved);shell(getString(R.string.nav_record),-1);largeTitle(page,getString(R.string.imp_title),getString(R.string.imp_subtitle));
 
         // Paso 1: elegir un archivo (+ cómo traerlo desde WhatsApp). Zona de vidrio con borde punteado verde.
         pickerSection=ui.column();
@@ -42,28 +42,28 @@ public class ImportActivity extends Screen {
         // Círculo menta dentro de un halo suave (el mismo gesto del micrófono en Grabar).
         FrameLayout art=new FrameLayout(this);art.setBackground(oval(withAlpha(p.primary,0x14)));art.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         art.addView(ui.tile(R.drawable.ic_upload,p.onPrimaryContainer,p.primaryContainer,64,30),new FrameLayout.LayoutParams(ui.dp(64),ui.dp(64),Gravity.CENTER));picker.addView(art,new LinearLayout.LayoutParams(ui.dp(92),ui.dp(92)));
-        TextView pt=ui.text("Elegir un archivo de audio",Type.TITLE_LARGE,p.onSurface);pt.setGravity(Gravity.CENTER);pt.setPadding(0,ui.dp(S4),0,ui.dp(S1));picker.addView(pt,Ui.wrap());
-        TextView ps=ui.text("Hasta 1 GB · tu archivo original no se modifica",Type.BODY_MEDIUM,p.onSurfaceVariant);ps.setGravity(Gravity.CENTER);picker.addView(ps,Ui.wrap());
+        TextView pt=ui.text(getString(R.string.imp_pick),Type.TITLE_LARGE,p.onSurface);pt.setGravity(Gravity.CENTER);pt.setPadding(0,ui.dp(S4),0,ui.dp(S1));picker.addView(pt,Ui.wrap());
+        TextView ps=ui.text(getString(R.string.imp_pick_hint),Type.BODY_MEDIUM,p.onSurfaceVariant);ps.setGravity(Gravity.CENTER);picker.addView(ps,Ui.wrap());
         LinearLayout formats=ui.row();formats.setPadding(0,ui.dp(S4),0,0);
         for(String f:new String[]{"M4A","MP3","WAV","OGG","OPUS"}){TextView c=ui.chip(f,p.onSurfaceVariant,p.dark?p.surfaceContainerHighest:p.surfaceContainerHigh);AppTheme.type(c,Type.LABEL_MEDIUM);c.setPadding(ui.dp(10),ui.dp(S1),ui.dp(10),ui.dp(S1));LinearLayout.LayoutParams lp=Ui.wrap();lp.setMargins(ui.dp(2),0,ui.dp(2),0);formats.addView(c,lp);}
         picker.addView(formats,Ui.wrap());
-        picker.setClickable(true);picker.setFocusable(true);picker.setContentDescription("Elegir un archivo de audio");picker.setAccessibilityDelegate(Ui.buttonRole());picker.setOnClickListener(v->pick());Ui.pressable(picker);
+        picker.setClickable(true);picker.setFocusable(true);picker.setContentDescription(getString(R.string.imp_pick));picker.setAccessibilityDelegate(Ui.buttonRole());picker.setOnClickListener(v->pick());Ui.pressable(picker);
         pickerSection.addView(picker,Ui.fill());
-        TextView wa=ui.section("Desde WhatsApp");wa.setPadding(ui.dp(S1),ui.dp(S6),0,ui.dp(S2));pickerSection.addView(wa);
-        LinearLayout steps=ui.card();steps.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),ui.dp(S4));String[] texts={"Abre el chat y mantén presionado el audio.","Toca Compartir (o ⋮ → Compartir).","Elige Verbapp en la lista de apps.","Revisa el título y toca Guardar audio."};
-        for(int i=0;i<texts.length;i++){LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(0,ui.dp(S1),0,ui.dp(S1));TextView n=ui.text(String.valueOf(i+1),Type.LABEL_MEDIUM,p.onPrimaryContainer);n.setGravity(Gravity.CENTER);n.setBackground(oval(p.primaryContainer));n.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);r.addView(n,new LinearLayout.LayoutParams(ui.dp(24),ui.dp(24)));r.addView(ui.space(S3));TextView t=ui.text(texts[i],Type.BODY_LARGE,p.onSurface);t.setContentDescription("Paso "+(i+1)+": "+texts[i]);r.addView(t,new LinearLayout.LayoutParams(0,-2,1));steps.addView(r,Ui.fill());}
-        TextView note=ui.text("También funciona con grabadoras, Telegram y cualquier app que comparta audio.",Type.BODY_MEDIUM,p.onSurfaceVariant);note.setPadding(0,ui.dp(S3),0,0);steps.addView(note);
+        TextView wa=ui.section(getString(R.string.imp_whatsapp));wa.setPadding(ui.dp(S1),ui.dp(S6),0,ui.dp(S2));pickerSection.addView(wa);
+        LinearLayout steps=ui.card();steps.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),ui.dp(S4));String[] texts={getString(R.string.imp_step_open),getString(R.string.imp_step_share),getString(R.string.imp_step_choose),getString(R.string.imp_step_save,getString(R.string.imp_save))};
+        for(int i=0;i<texts.length;i++){LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(0,ui.dp(S1),0,ui.dp(S1));TextView n=ui.text(String.valueOf(i+1),Type.LABEL_MEDIUM,p.onPrimaryContainer);n.setGravity(Gravity.CENTER);n.setBackground(oval(p.primaryContainer));n.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);r.addView(n,new LinearLayout.LayoutParams(ui.dp(24),ui.dp(24)));r.addView(ui.space(S3));TextView t=ui.text(texts[i],Type.BODY_LARGE,p.onSurface);t.setContentDescription(getString(R.string.imp_step_say,i+1,texts[i]));r.addView(t,new LinearLayout.LayoutParams(0,-2,1));steps.addView(r,Ui.fill());}
+        TextView note=ui.text(getString(R.string.imp_also),Type.BODY_MEDIUM,p.onSurfaceVariant);note.setPadding(0,ui.dp(S3),0,0);steps.addView(note);
         pickerSection.addView(steps,Ui.fill());
         page.addView(pickerSection,Ui.fill());
 
         // Paso 2: avance (copiar o guardar). Sigue aunque se salga de la pantalla.
         progressPanel=ui.card();progressPanel.setPadding(ui.dp(S5),ui.dp(S5),ui.dp(S5),ui.dp(S4));
-        stage=ui.text("Leyendo archivo",Type.TITLE_MEDIUM,p.onSurface);stage.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);progressPanel.addView(stage);
+        stage=ui.text(getString(R.string.imp_stage_reading),Type.TITLE_MEDIUM,p.onSurface);stage.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);progressPanel.addView(stage);
         percent=Ui.tabular(ui.text("",Type.DISPLAY_MEDIUM,p.primary));percent.setIncludeFontPadding(false);percent.setPadding(0,ui.dp(S3),0,ui.dp(S3));progressPanel.addView(percent);
         progress=progressBar();progressPanel.addView(progress,new LinearLayout.LayoutParams(-1,ui.dp(8)));
         detail=Ui.tabular(ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant));detail.setPadding(0,ui.dp(S3),0,ui.dp(S3));progressPanel.addView(detail);
-        progressPanel.addView(ui.text("Puedes salir de esta pantalla o bloquear el teléfono: la importación sigue y te aviso al terminar.",Type.BODY_MEDIUM,p.onSurfaceVariant));
-        cancel=ui.button("Cancelar importación",0,Ui.Style.PLAIN,v->confirmCancel());progressPanel.addView(cancel,ui.top(S2));
+        progressPanel.addView(ui.text(getString(R.string.imp_progress_note),Type.BODY_MEDIUM,p.onSurfaceVariant));
+        cancel=ui.button(getString(R.string.imp_cancel),0,Ui.Style.PLAIN,v->confirmCancel());progressPanel.addView(cancel,ui.top(S2));
         page.addView(progressPanel,ui.top(S2));
 
         // Paso 3: nombrar y recortar.
@@ -71,23 +71,23 @@ public class ImportActivity extends Screen {
         problem=ui.text("",Type.BODY_MEDIUM,p.onErrorContainer);problem.setBackground(shape(this,p.errorContainer,R_CONTROL));problem.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),ui.dp(S3));problem.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);form.addView(problem,ui.top(0));
         LinearLayout file=ui.card();file.setOrientation(LinearLayout.HORIZONTAL);file.setGravity(Gravity.CENTER_VERTICAL);file.addView(ui.tile(R.drawable.ic_wave,p.onPrimaryContainer,p.primaryContainer,44,22));file.addView(ui.space(S3));
         LinearLayout ft=ui.column();fileName=ui.oneLine(ui.text("",Type.TITLE_MEDIUM,p.onSurface));fileMeta=Ui.tabular(ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant));ft.addView(fileName);ft.addView(fileMeta);file.addView(ft,new LinearLayout.LayoutParams(0,-2,1));
-        Ui.Btn other=ui.button("Cambiar",0,Ui.Style.PLAIN,v->{release();ImportService.dismiss(this);boundId="";pick();});other.setPadding(ui.dp(S3),0,ui.dp(S1),0);file.addView(other);
+        Ui.Btn other=ui.button(getString(R.string.imp_change),0,Ui.Style.PLAIN,v->{release();ImportService.dismiss(this);boundId="";pick();});other.setPadding(ui.dp(S3),0,ui.dp(S1),0);file.addView(other);
         form.addView(file,ui.top(S3));
-        form.addView(ui.section("Título"));title=ui.field("Nombre de la grabación","Título");title.setFilters(new InputFilter[]{new InputFilter.LengthFilter(120)});form.addView(title,Ui.fill());
-        form.addView(ui.section("Tramo (opcional)"));
+        form.addView(ui.section(getString(R.string.imp_title_label)));title=ui.field(getString(R.string.imp_title_hint),getString(R.string.imp_title_label));title.setFilters(new InputFilter[]{new InputFilter.LengthFilter(120)});form.addView(title,Ui.fill());
+        form.addView(ui.section(getString(R.string.imp_range)));
         LinearLayout trim=ui.card();range=new RangeView(this,p);trim.addView(range,new LinearLayout.LayoutParams(-1,ui.dp(56)));
         summary=Ui.tabular(ui.text("",Type.TITLE_MEDIUM,p.onSurface));summary.setGravity(Gravity.CENTER);summary.setPadding(0,ui.dp(S1),0,ui.dp(S2));summary.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);trim.addView(summary,Ui.fill());
-        LinearLayout fields=ui.row();LinearLayout a=ui.column(),b=ui.column();start=ui.labeled(a,"Desde (seg.)","0");end=ui.labeled(b,"Hasta (seg.)","Final");start.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);end.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);start.setText("0");
+        LinearLayout fields=ui.row();LinearLayout a=ui.column(),b=ui.column();start=ui.labeled(a,getString(R.string.imp_from),"0");end=ui.labeled(b,getString(R.string.imp_to),getString(R.string.imp_end_hint));start.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);end.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);start.setText("0");
         fields.addView(a,new LinearLayout.LayoutParams(0,-2,1));fields.addView(ui.space(S3));fields.addView(b,new LinearLayout.LayoutParams(0,-2,1));trim.addView(fields,Ui.fill());
-        trim.addView(ui.button("Escuchar el tramo",R.drawable.ic_play,Ui.Style.TONAL,v->listen()),ui.top(S4));
+        trim.addView(ui.button(getString(R.string.imp_listen),R.drawable.ic_play,Ui.Style.TONAL,v->listen()),ui.top(S4));
         form.addView(trim,Ui.fill());
-        TextView keep=ui.footnote("Tu archivo original no se modifica.");keep.setPadding(ui.dp(S1),ui.dp(S2),0,0);form.addView(keep);
+        TextView keep=ui.footnote(getString(R.string.imp_original_kept));keep.setPadding(ui.dp(S1),ui.dp(S2),0,0);form.addView(keep);
         range.setListener((from,to)->{syncing=true;start.setText(number(from));end.setText(number(to));syncing=false;describe(from,to);});
         TextWatcher sync=new TextWatcher(){public void beforeTextChanged(CharSequence s,int x,int y,int z){}public void onTextChanged(CharSequence s,int x,int y,int z){}public void afterTextChanged(Editable e){if(syncing)return;ImportSession s=ImportService.session(ImportActivity.this);if(s==null||!s.ready)return;try{long f=seconds(start),t=seconds(end);range.set(s.duration,f,t);describe(f,t);}catch(Exception ignored){}}};
         start.addTextChangedListener(sync);end.addTextChangedListener(sync);
 
-        save=ui.button("Guardar audio",R.drawable.ic_check,Ui.Style.PRIMARY,v->save());bottom.addView(save,Ui.fill());
-        if(new Settings(this).automatic()&&new Settings(this).hasKey()){TextView n=ui.text("Se transcribirá automáticamente al guardar.",Type.BODY_MEDIUM,p.onSurfaceVariant);n.setGravity(Gravity.CENTER);n.setPadding(0,ui.dp(S2),0,0);bottom.addView(n,Ui.fill());}
+        save=ui.button(getString(R.string.imp_save),R.drawable.ic_check,Ui.Style.PRIMARY,v->save());bottom.addView(save,Ui.fill());
+        if(new Settings(this).automatic()&&new Settings(this).hasKey()){TextView n=ui.text(getString(R.string.imp_auto),Type.BODY_MEDIUM,p.onSurfaceVariant);n.setGravity(Gravity.CENTER);n.setPadding(0,ui.dp(S2),0,0);bottom.addView(n,Ui.fill());}
 
         if(saved!=null){boundId=saved.getString("boundId","");title.setText(saved.getString("title",""));start.setText(saved.getString("from","0"));end.setText(saved.getString("to",""));}
         // Desde el aviso «Audio listo para guardar» («resume») la copia se retoma aunque hayan pasado más de 30 min.
@@ -96,7 +96,7 @@ public class ImportActivity extends Screen {
         if(saved==null){
             Uri uri=getIntent().getParcelableExtra(Intent.EXTRA_STREAM);String id=getIntent().getStringExtra("sourceId");
             // Un audio compartido o «Recortar una copia» reemplaza un archivo viejo que quedó cargado; nunca interrumpe uno en curso.
-            if(uri!=null||id!=null){if(existing!=null&&existing.busy)toast("Termina la importación en curso antes de traer otro audio.");else ImportService.load(this,uri,id);}
+            if(uri!=null||id!=null){if(existing!=null&&existing.busy)toast(getString(R.string.imp_busy));else ImportService.load(this,uri,id);}
             // Sin una importación activa, directo al selector. Una en curso, recién preparada o interrumpida se muestra tal cual.
             else if(existing==null)pick();
         }
@@ -110,8 +110,8 @@ public class ImportActivity extends Screen {
     }
     private void save(){
         try{ImportSession s=ImportService.session(this);if(s==null||s.busy||!s.ready||s.done)return;long from=seconds(start),to=seconds(end);if(from<0||to-from<RangeView.MIN_GAP||to>s.duration+100)throw new IllegalArgumentException();
-            String label=title.getText().toString().trim();if(label.isEmpty())label="Audio importado";release();ImportService.save(this,label,from,Math.min(to,s.duration));render();}
-        catch(Exception e){message("Revisa el tramo","El final debe superar el inicio por al menos medio segundo y no pasar la duración del archivo.");}
+            String label=title.getText().toString().trim();if(label.isEmpty())label=getString(R.string.imp_default_name);release();ImportService.save(this,label,from,Math.min(to,s.duration));render();}
+        catch(Exception e){message(getString(R.string.imp_check_range),getString(R.string.imp_check_range_body));}
     }
     private void render(){
         ImportSession s=ImportService.session(this);boolean busy=s!=null&&s.busy,ready=s!=null&&s.ready&&!busy;
@@ -121,27 +121,27 @@ public class ImportActivity extends Screen {
         if(s==null)return;
         if(s.cancelled&&!s.busy){ImportService.dismiss(this);if(visible)finish();return;}
         if(busy){
-            stage.setText(s.cancelled?"Cancelando…":s.stage);detail.setText(ImportService.progressText(s));
+            stage.setText(s.cancelled?getString(R.string.imp_cancelling):getString(s.stage));detail.setText(ImportService.progressText(s));
             // Determinada siempre que se conoce el total (copiar y guardar); indeterminada solo si el archivo no dice su tamaño.
-            boolean known=s.total>0;progress.setIndeterminate(!known);if(known)progress.setProgress(ImportService.percent(s));percent.setText(known?ImportService.percent(s)+" %":"");cancel.setEnabled(!s.cancelled);
+            boolean known=s.total>0;progress.setIndeterminate(!known);if(known)progress.setProgress(ImportService.percent(s));percent.setText(known?getString(R.string.imp_percent,ImportService.percent(s)):"");cancel.setEnabled(!s.cancelled);
         }
         problem.setVisibility(s.error.isEmpty()?View.GONE:View.VISIBLE);problem.setText(s.error);
-        fileName.setText(s.name);fileMeta.setText(s.ready?"Duración "+Recording.time(s.duration):s.stage);
-        save.setEnabled(ready&&!s.done&&!s.cancelled);save.setText(s.error.isEmpty()?"Guardar audio":"Volver a intentar");
+        fileName.setText(s.name);fileMeta.setText(s.ready?getString(R.string.imp_duration,Recording.time(s.duration)):getString(s.stage));
+        save.setEnabled(ready&&!s.done&&!s.cancelled);save.setText(getString(s.error.isEmpty()?R.string.imp_save:R.string.imp_retry));
         if(s.ready&&!boundId.equals(s.id)){boundId=s.id;title.setText(s.name);syncing=true;long to=s.to>0?s.to:s.duration;start.setText(number(s.from));end.setText(number(to));syncing=false;range.set(s.duration,s.from,to);describe(s.from,to);}
         else if(s.ready&&summary.getText().length()==0){try{describe(seconds(start),seconds(end));}catch(Exception ignored){}}
         if(s.done&&!s.busy&&visible){ImportService.dismiss(this);startActivity(new Intent(this,MainActivity.class).putExtra("library",true).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP));finish();}
     }
     /** Resumen legible del tramo: «00:12 – 03:40 · 03:28». */
-    private void describe(long from,long to){if(to<=from){summary.setText("");return;}summary.setText(Recording.time(from)+" – "+Recording.time(to)+" · "+Recording.time(to-from));summary.setContentDescription("Tramo de "+Recording.time(from)+" a "+Recording.time(to)+", dura "+Ui.humanDuration(to-from));}
+    private void describe(long from,long to){if(to<=from){summary.setText("");return;}summary.setText(Recording.time(from)+" – "+Recording.time(to)+" · "+Recording.time(to-from));summary.setContentDescription(getString(R.string.imp_range_say,Recording.time(from),Recording.time(to),Ui.humanDuration(to-from)));}
     private static String number(long ms){return String.format(java.util.Locale.ROOT,"%.1f",ms/1000d);}
-    private void listen(){ImportSession s=ImportService.session(this);if(s==null||!s.ready||s.busy)return;try{long from=seconds(start),to=seconds(end);if(from<0||to<=from||to>s.duration+100)throw new IllegalArgumentException();release();preview=new android.media.MediaPlayer();preview.setDataSource(s.source.getPath());preview.prepare();preview.seekTo((int)from);preview.start();final android.media.MediaPlayer player=preview;handler.postDelayed(()->{if(preview==player)release();},to-from);preview.setOnCompletionListener(mp->release());toast("Reproduciendo el tramo…");}catch(Exception e){message("Escuchar","Revisa el tramo e inténtalo otra vez.");}}
-    private void pick(){try{startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("audio/*").addCategory(Intent.CATEGORY_OPENABLE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),61);}catch(ActivityNotFoundException e){message("Importar","Este teléfono no tiene un selector de archivos disponible.");}}
+    private void listen(){ImportSession s=ImportService.session(this);if(s==null||!s.ready||s.busy)return;try{long from=seconds(start),to=seconds(end);if(from<0||to<=from||to>s.duration+100)throw new IllegalArgumentException();release();preview=new android.media.MediaPlayer();preview.setDataSource(s.source.getPath());preview.prepare();preview.seekTo((int)from);preview.start();final android.media.MediaPlayer player=preview;handler.postDelayed(()->{if(preview==player)release();},to-from);preview.setOnCompletionListener(mp->release());toast(getString(R.string.imp_playing));}catch(Exception e){message(getString(R.string.imp_listen_title),getString(R.string.imp_listen_error));}}
+    private void pick(){try{startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("audio/*").addCategory(Intent.CATEGORY_OPENABLE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),61);}catch(ActivityNotFoundException e){message(getString(R.string.imp_import),getString(R.string.imp_no_picker));}}
     private static long seconds(EditText field){double value=Double.parseDouble(field.getText().toString().replace(',','.'));if(!Double.isFinite(value))throw new IllegalArgumentException();return (long)(value*1000);}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==61){if(result==RESULT_OK&&data!=null&&data.getData()!=null){ImportService.load(this,data.getData(),null);render();}else if(ImportService.session(this)==null)render();}}
-    private void confirmCancel(){confirm("¿Cancelar la importación?","Se elimina solo la copia temporal. Tu archivo original se conserva.","Cancelar importación",true,()->{ImportService.cancel(this);render();});}
+    private void confirmCancel(){confirm(getString(R.string.imp_cancel_title),getString(R.string.imp_cancel_body),getString(R.string.imp_cancel),true,()->{ImportService.cancel(this);render();});}
     /** Volver no cancela: la importación sigue en segundo plano (con su notificación). */
-    @Override public void onBackPressed(){release();ImportSession s=ImportService.session(this);if(s!=null&&s.busy&&!s.cancelled)toast("La importación sigue en segundo plano. Te aviso al terminar.");super.onBackPressed();}
+    @Override public void onBackPressed(){release();ImportSession s=ImportService.session(this);if(s!=null&&s.busy&&!s.cancelled)toast(getString(R.string.imp_continues));super.onBackPressed();}
     @Override protected void onResume(){super.onResume();visible=true;inFront=true;handler.post(poll);}
     /** Al salir con un audio listo sin guardar, los 30 min antes de ofrecer otro archivo se cuentan desde aquí. */
     @Override protected void onPause(){visible=false;inFront=false;handler.removeCallbacks(poll);release();ImportSession s=ImportService.session(this);if(s!=null)s.touch();super.onPause();}

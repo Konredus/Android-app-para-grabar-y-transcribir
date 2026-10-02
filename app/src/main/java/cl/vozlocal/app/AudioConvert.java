@@ -7,7 +7,14 @@ import java.nio.*;
 
 /** Streaming conversion. Originals are read-only and an incomplete destination is always removed. */
 final class AudioConvert {
+    /**
+     * Avance de la conversión. stage es un código de etapa (CONVERT, REMUX o VERIFY), no un texto: no depende del idioma y
+     * quien lo muestra lo traduce (ImportService.friendlyStage). Los mensajes de las IOException de abajo tampoco se
+     * traducen: son técnicos y llegan al informe de soporte (HttpApi.safeReason); la pantalla dice su propio texto.
+     */
     interface Progress { void update(String stage,long positionMs,long totalMs); }
+    /** Etapas: convertir (decodificar y volver a codificar), reempaquetar un AAC completo sin reconvertir y verificar el resultado. */
+    static final String CONVERT="convert",REMUX="remux",VERIFY="verify";
     static long duration(File file)throws Exception{try(MediaMetadataRetriever m=new MediaMetadataRetriever()){m.setDataSource(file.getPath());return Long.parseLong(m.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION));}}
     static void convert(File source,File target,long startMs,long endMs,HttpApi cancel)throws Exception{convert(source,target,startMs,endMs,cancel,(s,p,t)->{});}
     static void convert(File source,File target,long startMs,long endMs,HttpApi cancel,Progress progress)throws Exception{convert(source,target,startMs,endMs,cancel,progress,96000);}
@@ -30,7 +37,7 @@ final class AudioConvert {
             muxer=new MediaMuxer(target.getPath(),MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
             MediaCodec.BufferInfo decoded=new MediaCodec.BufferInfo(),encoded=new MediaCodec.BufferInfo();
             boolean sourceEnd=false,decodeEnd=false,encodeEnd=false;byte[] pending=null;int position=0,rate=0,channels=0,outputTrack=-1;long frames=0,lastMediaUs=-1,lastProgress=SystemClock.elapsedRealtime(),lastUi=0;
-            progress.update("Convirtiendo audio",0,endMs-startMs);
+            progress.update(CONVERT,0,endMs-startMs);
             while(true){
                 cancel.check();
                 if(!sourceEnd&&!decodeEnd){int input=decoder.dequeueInputBuffer(1000);if(input>=0){ByteBuffer buffer=decoder.getInputBuffer(input);buffer.clear();int size=extractor.readSampleData(buffer,0);long pts=extractor.getSampleTime();if(size<0||pts>endMs*1000+1_000_000){decoder.queueInputBuffer(input,0,0,0,MediaCodec.BUFFER_FLAG_END_OF_STREAM);sourceEnd=true;}else{decoder.queueInputBuffer(input,0,size,pts,0);extractor.advance();}}}
@@ -56,22 +63,22 @@ final class AudioConvert {
                     else if(output>=0){if(encoded.size>0&&(encoded.flags&MediaCodec.BUFFER_FLAG_CODEC_CONFIG)==0){if(!muxStarted)throw new IOException("Muxer unavailable");ByteBuffer data=encoder.getOutputBuffer(output);data.position(encoded.offset);data.limit(encoded.offset+encoded.size);muxer.writeSampleData(outputTrack,data,encoded);}
                         boolean done=(encoded.flags&MediaCodec.BUFFER_FLAG_END_OF_STREAM)!=0;encoder.releaseOutputBuffer(output,false);if(done)break;}
                 }else if(decodeEnd)throw new IOException("No decodable audio");
-                long now=SystemClock.elapsedRealtime();if(now-lastUi>=200){progress.update("Convirtiendo audio",Math.min(endMs-startMs,Math.max(0,lastMediaUs/1000-startMs)),endMs-startMs);lastUi=now;}
+                long now=SystemClock.elapsedRealtime();if(now-lastUi>=200){progress.update(CONVERT,Math.min(endMs-startMs,Math.max(0,lastMediaUs/1000-startMs)),endMs-startMs);lastUi=now;}
                 // A dequeue operation alone is not evidence of progress: timestamps must advance.
                 if(now-lastProgress>60000)throw new IOException("Audio decoder stopped advancing");
             }
-            cancel.check();if(frames<rate/2)throw new IOException("Audio too short");muxer.stop();muxStarted=false;success=true;progress.update("Verificando audio",endMs-startMs,endMs-startMs);
+            cancel.check();if(frames<rate/2)throw new IOException("Audio too short");muxer.stop();muxStarted=false;success=true;progress.update(VERIFY,endMs-startMs,endMs-startMs);
         }finally{extractor.release();if(decoder!=null){try{decoder.stop();}catch(Exception ignored){}decoder.release();}if(encoder!=null){try{encoder.stop();}catch(Exception ignored){}encoder.release();}if(muxer!=null){try{if(muxStarted)muxer.stop();}catch(Exception ignored){}muxer.release();}if(!success)target.delete();}
     }
     private static void remux(MediaExtractor extractor,MediaFormat format,File target,long duration,HttpApi cancel,Progress progress)throws Exception{
         MediaMuxer muxer=new MediaMuxer(target.getPath(),MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);boolean started=false;
         try{
             int track=muxer.addTrack(format);muxer.start();started=true;ByteBuffer data=ByteBuffer.allocateDirect(65536);MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();long first=-1,last=-1,count=0,lastUi=0;
-            progress.update("Preparando audio sin reconvertir",0,duration);
+            progress.update(REMUX,0,duration);
             while(true){cancel.check();long size=android.os.Build.VERSION.SDK_INT>=28?extractor.getSampleSize():(extractor.getSampleTime()<0?-1:data.capacity());if(size<0)break;if(size>16_000_000)throw new IOException("Audio sample too large");if(size>data.capacity())data=ByteBuffer.allocateDirect((int)size);data.clear();int n=extractor.readSampleData(data,0);if(n<0)break;long pts=extractor.getSampleTime();if((extractor.getSampleFlags()&MediaExtractor.SAMPLE_FLAG_ENCRYPTED)!=0)throw new IOException("Encrypted audio unsupported");if(first<0)first=pts;if(pts<last)throw new IOException("Audio timestamps out of order");last=pts;
-                info.set(0,n,pts-first,(extractor.getSampleFlags()&MediaExtractor.SAMPLE_FLAG_SYNC)!=0?MediaCodec.BUFFER_FLAG_KEY_FRAME:0);data.position(0);data.limit(n);muxer.writeSampleData(track,data,info);count++;extractor.advance();long now=SystemClock.elapsedRealtime();if(now-lastUi>=200){progress.update("Preparando audio sin reconvertir",Math.min(duration,(pts-first)/1000),duration);lastUi=now;}
+                info.set(0,n,pts-first,(extractor.getSampleFlags()&MediaExtractor.SAMPLE_FLAG_SYNC)!=0?MediaCodec.BUFFER_FLAG_KEY_FRAME:0);data.position(0);data.limit(n);muxer.writeSampleData(track,data,info);count++;extractor.advance();long now=SystemClock.elapsedRealtime();if(now-lastUi>=200){progress.update(REMUX,Math.min(duration,(pts-first)/1000),duration);lastUi=now;}
             }
-            cancel.check();if(count==0||last-first<400000)throw new IOException("Audio too short");muxer.stop();started=false;progress.update("Verificando audio",duration,duration);
+            cancel.check();if(count==0||last-first<400000)throw new IOException("Audio too short");muxer.stop();started=false;progress.update(VERIFY,duration,duration);
         }finally{try{if(started)muxer.stop();}catch(Exception ignored){}muxer.release();}
     }
 }
