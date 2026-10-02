@@ -65,6 +65,33 @@ final class FeatureChecks {
         assertThat(parts.size()>1,"Large recording split path not exercised");
         for(AudioParts.Part part:parts){assertThat(part.offset>previous && part.file.length()>0,"Audio part missing or out of order");previous=part.offset;try(android.media.MediaMetadataRetriever m=new android.media.MediaMetadataRetriever()){m.setDataSource(part.file.getPath());assertThat(m.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)!=null,"Split M4A invalid");}part.file.delete();}
         blocksAndModels(c,r,response);
+        homeTexts();
+    }
+    /**
+     * 0.9.0: textos de Grabar, la Biblioteca y las acciones de una grabación en los tres idiomas. El resto de las pruebas
+     * corre en español (RecorderSmokeTest): aquí se pasa un momento a inglés y a portugués, y se vuelve al español.
+     */
+    static void homeTexts()throws Exception{
+        // Español: el texto de siempre.
+        assertThat(Next.shortName(" ").equals("la carpeta")&&Next.shortName("Mi carpeta con un nombre largo").equals("Mi carpeta con un…"),"Folder short name wrong: "+Next.shortName(" "));
+        assertThat(RecState.of(new JSONObject(),false).label.equals("Sin transcribir")&&RecState.of(new JSONObject(),true).label.equals("Transcrito")&&RecState.of(new JSONObject().put("failed",true),false).label.equals("Necesita atención"),"Spanish recording states changed");
+        assertThat(RecordingActions.providerName("custom").equals("tu servidor")&&RecordingActions.providerName("openrouter").equals("OpenRouter"),"Provider name wrong");
+        assertThat(SheetParts.recommended().text.equals("Recomendada"),"Recommended pill wrong");
+        assertThat(Next.when(System.currentTimeMillis()).matches("\\d{2}:\\d{2}"),"Today should show the time: "+Next.when(System.currentTimeMillis()));
+        long older=new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.ROOT).parse("2025-09-28 12:00").getTime();
+        try{
+            Lang.override(Lang.EN);
+            assertThat(Ui.humanDuration(3840000).equals("1 hr 4 min")&&Ui.humanDuration(5000).equals("5 sec")&&Ui.humanDuration(3600000).equals("1 hr")&&Ui.humanDuration(240000).equals("4 min"),"English durations: "+Ui.humanDuration(3840000));
+            assertThat(MainActivity.queueText(3,"Meeting",3,1,"Other",null).equals("Transcribing “Meeting” · 1 of 3 · 2 queued"),"English queue pill: "+MainActivity.queueText(3,"Meeting",3,1,"Other",null));
+            assertThat(MainActivity.queueText(3,null,0,0,"Meeting","x").equals("3 recordings queued"),"English queue count");
+            assertThat(Next.shortName("").equals("your folder")&&RecState.of(new JSONObject(),false).label.equals("Not transcribed"),"English folder/state texts");
+            String when=Next.when(older);assertThat(when.startsWith("Sep")&&when.contains("28")&&!when.endsWith("."),"English short date: "+when);
+            Lang.override(Lang.PT);
+            assertThat(Ui.humanDuration(3840000).equals("1 h 04 min")&&Next.shortName("").equals("sua pasta"),"Portuguese texts: "+Ui.humanDuration(3840000));
+            assertThat(Lang.plural(R.plurals.home_count_recordings,2).equals("2 gravações")&&Lang.str(R.string.act_save_to,"0-Inbox").equals("Salvar em 0-Inbox"),"Portuguese plural or format wrong");
+            when=Next.when(older);assertThat(when.contains("28")&&!when.endsWith("."),"Portuguese short date: "+when);
+        }finally{Lang.override(Lang.ES);}
+        assertThat(Ui.humanDuration(3840000).equals("1 h 04 min"),"Spanish not restored after the language checks");
     }
     /** 0.4.2: modelo rápido, muestras de voz entre bloques, tramos, pausas y costos. */
     static void blocksAndModels(Context c,Recording r,JSONObject diarized)throws Exception{
