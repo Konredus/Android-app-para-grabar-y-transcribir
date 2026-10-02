@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.9.0",
+    "date": "2026-10-02",
+    "title": "Verbapp en tu idioma",
+    "items": [
+      "Verbapp habla tu idioma: inglés, español o portugués de Brasil. Parte en el idioma de tu teléfono y lo cambias cuando quieras en la bienvenida o en Ajustes → Idioma.",
+      "Idioma del audio: elige inglés, español, portugués o detección automática para transcribir mejor. Si no eliges, se usa el idioma de la app.",
+      "Privacidad clara: antes de la primera transcripción, la app te explica qué se envía a OpenRouter y te pide aceptarlo. La política de privacidad está a un toque, en Ajustes.",
+      "Detener desde la notificación: corta una transcripción en curso sin abrir la app.",
+      "Lista para Google Play y Android 16."
+    ]
+  },
+  {
     "version": "0.8.0",
     "date": "2026-10-01",
     "title": "Una sola clave para todo",

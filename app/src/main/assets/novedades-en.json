@@ -1,0 +1,114 @@
+[
+  {
+    "version": "0.9.0",
+    "date": "2026-10-02",
+    "title": "Verbapp in your language",
+    "items": [
+      "Verbapp speaks your language: English, Spanish or Brazilian Portuguese. It starts in your phone's language, and you can change it anytime in the welcome screen or in Settings → Language.",
+      "Audio language: choose English, Spanish, Portuguese or automatic detection for better transcriptions. If you don't choose, the app's language is used.",
+      "Privacy made clear: before your first transcription, the app explains what's sent to OpenRouter and asks for your OK. The privacy policy is one tap away, in Settings.",
+      "Stop from the notification: end a transcription in progress without opening the app.",
+      "Ready for Google Play and Android 16."
+    ]
+  },
+  {
+    "version": "0.8.0",
+    "date": "2026-10-01",
+    "title": "One key for everything",
+    "items": [
+      "Everything through OpenRouter: one key to transcribe and write your notes. If you used OpenAI or your own server, create a key at openrouter.ai and paste it in Settings → Your AI (OpenRouter); the old one is no longer used.",
+      "Models always up to date: the list updates itself and shows which ones separate voices and what they cost per hour. “Automatic” picks the recommended one for you.",
+      "Your known voices with OpenRouter: the app places your voice samples before the audio to recognize who's speaking. If a name comes out swapped, fix it as usual.",
+      "Your metrics: in Settings (or by tapping “Your week”) you see how much you talk, your streaks, what time you record, who you talk with and how much you've spent, with the real cost of each transcription.",
+      "Notes with the latest AI: the note always uses the newest version of the model you choose (Claude, GPT or Gemini) and tells you which one answered.",
+      "Faster and no more getting stuck: preparing the audio is several times faster and shows its progress in %. On Android 14 or later, whatever you ask to transcribe keeps going even if you close the app.",
+      "Use mobile data now: if a transcription is waiting for Wi-Fi, a button (also in the notification) sends it over mobile data just that once.",
+      "A welcome for first-time installs, with the permission to transcribe while the phone is locked and the steps for vivo and other brands. You can see it again in Settings → Help & support.",
+      "Support reports with the date and time in the name, so you can tell them apart. And a new icon for the Library."
+    ]
+  },
+  {
+    "version": "0.7.0",
+    "date": "2026-09-29",
+    "title": "Verbapp: a new face, the same brain",
+    "items": [
+      "New name and icon: Voz local is now called Verbapp, because spoken words fly away and written ones remain. Your recordings and settings stay just as they were.",
+      "Green, glass and a new typeface: glass cards on a green background and the Outfit typeface, in dark mode too.",
+      "Full-screen recording: a giant timer and your voice's live waveform, with Stop, Pause and ★ always at hand.",
+      "Name this recording: when you stop, a sheet with a mini player appears so you can name it right away.",
+      "Floating bar: Record, Library and Settings live in a capsule that floats at the bottom, within thumb's reach.",
+      "Everything it already did still works: recording, marking moments, transcribing, recognizing voices, writing your note and saving to 0-Inbox work just like before."
+    ]
+  },
+  {
+    "version": "0.6.0",
+    "date": "2026-09-29",
+    "title": "From the red button to your second brain",
+    "items": [
+      "A button that moves forward with you: each recording shows you its next step (Transcribe, Review voices, Save to 0-Inbox). If you fix something later, “Update” replaces the same file, with no copies.",
+      "A note for your second brain: when it's done, the app writes a summary with decisions, tasks and key quotes, and saves it to 0-Inbox with the transcript at the end. In Settings you choose whether OpenAI or Claude writes it.",
+      "★ Mark moments: while recording, tap ★ to mark what matters, even from the notification with the phone locked. Later you jump straight to each moment.",
+      "Recording and reading, clearer: while recording you see a big waveform, the time and the buttons, always in place. Each recording reads like a document, with the audio waveform to move around.",
+      "Progress in sight: in the recording, on Home and in the Library you see how many parts are ready and how much is left. The Library shows the start of the text and who's speaking.",
+      "Known voices and second passes: save your voice and those of the people you talk to most (up to 4 per audio) so they're recognized by name from the start; edit or delete them in Settings. Plus, name voices all at once and transcribe again without losing the previous version."
+    ]
+  },
+  {
+    "version": "0.5.0",
+    "date": "2026-09-28",
+    "title": "Voices that get mixed up less",
+    "items": [
+      "My voice: record 10 seconds in Settings and, when separating voices, the app recognizes you by name from the very first second.",
+      "Fewer mistakes when separating voices: cleaner samples of each person and fewer cuts in the audio, so nobody shows up twice and names don't get crossed.",
+      "Fix it with a tap: tap the name on a passage to hear it and choose the right person, or swap two people from that point on.",
+      "Same name, same person: if you give two voices the same name, they merge into one, with a single color.",
+      "You can always undo: every fix can be undone, and you can go back to the original voices.",
+      "Easier-to-read text: the .txt file joins into one paragraph what a person says in a row."
+    ]
+  },
+  {
+    "version": "0.4.4",
+    "date": "2026-09-28",
+    "title": "Transcribe even with your phone locked",
+    "items": [
+      "With the screen locked: the app tells you if Android is holding it back and takes you to the permission, with the path for your phone's brand.",
+      "Nothing gets stuck: if an upload stops moving, the app cuts it off and retries on its own.",
+      "Phone hiccups don't count as failures: it retries within seconds and, when you unlock, right away.",
+      "Goodbye to accidental taps: recordings shorter than 3 seconds aren't saved or sent."
+    ]
+  },
+  {
+    "version": "0.4.3",
+    "date": "2026-09-27",
+    "title": "Long audio without endless waits",
+    "items": [
+      "Faster and more reliable: the audio is no longer recompressed and, if something fails, the app picks up where it left off instead of starting over.",
+      "Retries that don't get lost: they keep working even if you close the app.",
+      "Quick save: choose a folder (for example Drive/0-Inbox) and save each transcription with one tap.",
+      "Date before the name: your files sort themselves by date.",
+      "Cancel with confirmation: you no longer lose a transcription to one tap too many."
+    ]
+  },
+  {
+    "version": "0.4.2",
+    "date": "2026-09-23",
+    "title": "Faster transcription, right in view",
+    "items": [
+      "A new model for text: faster and cheaper when you don't need to separate voices.",
+      "Separate voices?: when transcribing you choose, seeing how long each option takes and what it costs.",
+      "Long audio in less time: it's split at the pauses and several parts are sent at once, without mixing up anyone's name.",
+      "Live figures: while it transcribes you see the time left, the speed and the estimated cost."
+    ]
+  },
+  {
+    "version": "0.4.1",
+    "date": "2026-09-23",
+    "title": "Transcription that doesn't stop",
+    "items": [
+      "Keeps going with the phone locked: a notification shows you the progress.",
+      "Process details: you see which step it's on, how long it's taken and what it's waiting for (Wi-Fi, charger or battery).",
+      "No repeat charges on long audio: the app waits as long as needed before sending again.",
+      "Record stays put: the transcription status goes in a notice at the top, without moving the screen."
+    ]
+  }
+]

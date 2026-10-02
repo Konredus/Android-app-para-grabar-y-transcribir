@@ -1,0 +1,114 @@
+[
+  {
+    "version": "0.9.0",
+    "date": "2026-10-02",
+    "title": "Verbapp no seu idioma",
+    "items": [
+      "O Verbapp fala o seu idioma: inglês, espanhol ou português do Brasil. Ele começa no idioma do seu celular, e você pode mudar quando quiser na tela de boas-vindas ou em Ajustes → Idioma.",
+      "Idioma do áudio: escolha inglês, espanhol, português ou detecção automática para transcrever melhor. Se você não escolher, é usado o idioma do app.",
+      "Privacidade clara: antes da primeira transcrição, o app explica o que é enviado ao OpenRouter e pede o seu aceite. A política de privacidade está a um toque, em Ajustes.",
+      "Parar pela notificação: interrompa uma transcrição em andamento sem abrir o app.",
+      "Pronto para o Google Play e o Android 16."
+    ]
+  },
+  {
+    "version": "0.8.0",
+    "date": "2026-10-01",
+    "title": "Uma só chave para tudo",
+    "items": [
+      "Tudo com o OpenRouter: uma só chave para transcrever e montar suas notas. Se você usava a OpenAI ou seu servidor, crie uma chave em openrouter.ai e cole em Ajustes → Sua IA (OpenRouter); a anterior não é mais usada.",
+      "Modelos sempre atualizados: a lista se atualiza sozinha e mostra quais separam vozes e quanto custam por hora. “Automático” escolhe o recomendado para você.",
+      "Suas vozes conhecidas com o OpenRouter: o app coloca suas amostras de voz antes do áudio para reconhecer quem fala. Se algum nome sair trocado, corrija como sempre.",
+      "Suas métricas: em Ajustes (ou tocando em “Sua semana”) você vê quanto fala, suas sequências, a que horas grava, com quem conversa e quanto já gastou, com o custo real de cada transcrição.",
+      "Notas com a IA mais recente: a nota usa sempre a versão mais nova do modelo que você escolher (Claude, GPT ou Gemini) e diz qual respondeu.",
+      "Mais rápido e sem travar: preparar o áudio ficou várias vezes mais rápido e mostra o progresso em %. No Android 14 ou superior, o que você pede para transcrever continua mesmo se você fechar o app.",
+      "Usar dados móveis agora: se uma transcrição estiver esperando Wi-Fi, um botão (também na notificação) a envia com dados móveis só dessa vez.",
+      "Boas-vindas para quem instala pela primeira vez, com a permissão para transcrever com o celular bloqueado e os passos para vivo e outras marcas. Você pode ver de novo em Ajustes → Ajuda e suporte.",
+      "Relatório de suporte com data e hora no nome, para saber qual é qual. E um ícone novo para a Biblioteca."
+    ]
+  },
+  {
+    "version": "0.7.0",
+    "date": "2026-09-29",
+    "title": "Verbapp: cara nova, o mesmo cérebro",
+    "items": [
+      "Novo nome e ícone: o Voz local agora se chama Verbapp, porque as palavras voam e o que está escrito permanece. Suas gravações e ajustes continuam iguais.",
+      "Verde, vidro e fonte nova: cartões de vidro sobre um fundo verde e a fonte Outfit, também no modo escuro.",
+      "Gravar em tela cheia: um cronômetro gigante e a onda da sua voz ao vivo, com Parar, Pausar e ★ sempre à mão.",
+      "Dê nome a esta gravação: ao parar, aparece um painel com um miniplayer para dar nome na hora.",
+      "Barra flutuante: Gravar, Biblioteca e Ajustes ficam numa cápsula que flutua embaixo, ao alcance do polegar.",
+      "Tudo o que ele já fazia continua igual: gravar, marcar momentos, transcrever, reconhecer vozes, montar sua nota e salvar no 0-Inbox funcionam como antes."
+    ]
+  },
+  {
+    "version": "0.6.0",
+    "date": "2026-09-29",
+    "title": "Do botão vermelho ao seu segundo cérebro",
+    "items": [
+      "Um botão que avança com você: cada gravação mostra o próximo passo (Transcrever, Revisar vozes, Salvar no 0-Inbox). Se depois você corrigir algo, “Atualizar” substitui o mesmo arquivo, sem cópias.",
+      "Nota para o seu segundo cérebro: ao terminar, o app monta um resumo com decisões, tarefas e frases-chave, e salva no 0-Inbox com a transcrição no final. Em Ajustes você escolhe se quem monta é a OpenAI ou o Claude.",
+      "★ Marcar momentos: enquanto grava, toque em ★ para marcar o que importa, também pela notificação com o celular bloqueado. Depois você pula direto para cada momento.",
+      "Gravar e ler, mais claro: ao gravar você vê uma onda grande, o tempo e os botões sempre no lugar. Cada gravação se lê como um documento, com a onda do áudio para navegar.",
+      "O progresso à vista: na gravação, no Início e na Biblioteca você vê quantas partes já estão prontas e quanto falta. A Biblioteca mostra o começo do texto e quem fala.",
+      "Vozes conhecidas e segundas passadas: salve a sua voz e a das pessoas com quem você mais fala (até 4 por áudio) para que sejam reconhecidas pelo nome desde o início; edite ou apague em Ajustes. Além disso, dê nome às vozes de uma vez e transcreva de novo sem perder a versão anterior."
+    ]
+  },
+  {
+    "version": "0.5.0",
+    "date": "2026-09-28",
+    "title": "Vozes que se confundem menos",
+    "items": [
+      "Minha voz: grave 10 segundos em Ajustes e, ao separar vozes, o app reconhece você pelo nome desde o primeiro segundo.",
+      "Menos erros ao separar vozes: amostras mais limpas de cada pessoa e menos cortes no áudio, para que ninguém apareça repetido nem os nomes se cruzem.",
+      "Corrija com um toque: toque no nome de uma fala para ouvi-la e escolher a pessoa certa, ou troque duas pessoas a partir desse ponto.",
+      "Mesmo nome, mesma pessoa: se você der o mesmo nome a duas vozes, elas se unem em uma só, com uma só cor.",
+      "Sempre dá para desfazer: cada correção pode ser desfeita, e você pode voltar às vozes originais.",
+      "Texto mais fácil de ler: o arquivo .txt junta em um parágrafo o que uma pessoa diz em sequência."
+    ]
+  },
+  {
+    "version": "0.4.4",
+    "date": "2026-09-28",
+    "title": "Transcreva mesmo com o celular bloqueado",
+    "items": [
+      "Com a tela bloqueada: o app avisa se o Android estiver freando o app e leva você à permissão, com o caminho para a marca do seu celular.",
+      "Nada fica travado: se o envio parar de avançar, o app interrompe e tenta de novo sozinho.",
+      "Interrupções do celular não contam como falhas: o app tenta de novo em segundos e, ao desbloquear, na hora.",
+      "Adeus aos toques acidentais: gravações com menos de 3 segundos não são salvas nem enviadas."
+    ]
+  },
+  {
+    "version": "0.4.3",
+    "date": "2026-09-27",
+    "title": "Áudios longos sem esperas eternas",
+    "items": [
+      "Mais rápido e confiável: o áudio não é mais recomprimido e, se algo falhar, o app continua de onde parou em vez de começar de novo.",
+      "Novas tentativas que não se perdem: continuam funcionando mesmo se você fechar o app.",
+      "Salvamento rápido: você escolhe uma pasta (por exemplo, Drive/0-Inbox) e salva cada transcrição com um toque.",
+      "Data antes do nome: seus arquivos se ordenam sozinhos por data.",
+      "Cancelar com confirmação: você não perde mais uma transcrição por um toque a mais."
+    ]
+  },
+  {
+    "version": "0.4.2",
+    "date": "2026-09-23",
+    "title": "Transcrição mais rápida e à vista",
+    "items": [
+      "Um modelo novo para o texto: mais rápido e econômico quando você não precisa separar vozes.",
+      "Separar vozes?: ao transcrever, você escolhe, vendo quanto tempo leva e quanto custa cada opção.",
+      "Áudios longos em menos tempo: são cortados nas pausas e várias partes são enviadas ao mesmo tempo, sem trocar o nome de ninguém.",
+      "Números ao vivo: enquanto transcreve, você vê o tempo restante, a velocidade e o custo estimado."
+    ]
+  },
+  {
+    "version": "0.4.1",
+    "date": "2026-09-23",
+    "title": "Transcrição que não para",
+    "items": [
+      "Continua com o celular bloqueado: uma notificação mostra o progresso.",
+      "Detalhes do processo: você vê em que etapa está, quanto tempo já levou e o que está esperando (Wi-Fi, carregador ou bateria).",
+      "Sem cobranças repetidas em áudios longos: o app espera o necessário antes de enviar de novo.",
+      "Gravar fica fixo: o status da transcrição aparece em um aviso no topo, sem mexer a tela."
+    ]
+  }
+]
