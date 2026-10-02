@@ -22,6 +22,9 @@ import java.util.concurrent.TimeUnit;
  * 0.8.0, tercera ronda: las rondas con reintentos (rounds) las comparte la transferencia iniciada por el usuario de
  * Android 14+ (PipelineJob). Si lo único que queda espera Wi-Fi desde el comienzo de una ronda, no se retiene el servicio:
  * la tarea de fondo lo retoma. Si el Wi-Fi se va a mitad, se espera aquí (hasta 15 min) con el aviso «Esperando Wi-Fi».
+ *
+ * 0.9.0: «Detener» en la notificación de avance (ver Stop) y el wake lock con plazo, renovado mientras el servicio trabaja
+ * (Google Play no acepta wake locks largos sin tope).
  */
 public class TranscribeService extends Service {
     /** Idioma de la app (Lang): textos y notificaciones en el idioma elegido, aunque el teléfono esté en otro. */
@@ -33,7 +36,14 @@ public class TranscribeService extends Service {
     private static final long[] BACKOFF={20_000,60_000,120_000,300_000};
     /** Tras un corte del propio teléfono se reintenta pronto: no es un problema del proveedor. */
     private static final long LOCAL_CUT_DELAY=15_000;
+    /**
+     * Cada toma del wake lock vence sola a los 10 min (antes, 3 h); mientras el servicio trabaja se renueva cada 5. Si algo
+     * impidiera soltarlo (el proceso queda vivo sin el servicio), no queda tomado más de 10 min.
+     */
+    static final long WAKE_MS=10*60_000L,WAKE_RENEW_MS=5*60_000L;
     private volatile HttpApi http;private PowerManager.WakeLock wake;private android.net.wifi.WifiManager.WifiLock wifi;
+    private final Handler handler=new Handler(Looper.getMainLooper());
+    private final Runnable keepAwake=new Runnable(){@Override public void run(){PowerManager.WakeLock w=wake;if(running&&w!=null){w.acquire(WAKE_MS);handler.postDelayed(this,WAKE_RENEW_MS);}}};
     private final java.util.concurrent.atomic.AtomicBoolean nudged=new java.util.concurrent.atomic.AtomicBoolean();
     /** Pantalla encendida o desbloqueada: buen momento para reintentar (Android deja de frenar la app). */
     private final BroadcastReceiver screen=new BroadcastReceiver(){@Override public void onReceive(Context c,Intent i){nudged.set(true);}};
@@ -41,11 +51,12 @@ public class TranscribeService extends Service {
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         if(running)return START_NOT_STICKY;
         try{
-            android.app.Notification n=Transcriber.build(this,"Preparando…",true,-1);
+            android.app.Notification n=Transcriber.build(this,Lang.str(this,R.string.eng_notif_preparing),true,-1);
             if(Build.VERSION.SDK_INT>=29)startForeground(Transcriber.NOTIFICATION,n,ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);else startForeground(Transcriber.NOTIFICATION,n);
         }catch(RuntimeException e){Diagnostics.event("transcribe_fgs_failed",null,"error_class",e.getClass().getSimpleName());Pipeline.schedule(this,true);stopSelf();return START_NOT_STICKY;}
         running=true;http=new HttpApi();current=http;
-        wake=getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"VozLocal:Transcribe");wake.acquire(3*60*60*1000L);
+        // Sin contar referencias: cada acquire renueva el plazo y un solo release lo suelta.
+        wake=getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"VozLocal:Transcribe");wake.setReferenceCounted(false);wake.acquire(WAKE_MS);handler.postDelayed(keepAwake,WAKE_RENEW_MS);
         // Mantiene el Wi-Fi despierto con la pantalla apagada mientras se transcribe (se libera al terminar).
         try{android.net.wifi.WifiManager wm=getApplicationContext().getSystemService(android.net.wifi.WifiManager.class);if(wm!=null){wifi=wm.createWifiLock(Build.VERSION.SDK_INT>=29?android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY:android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF,"VozLocal:Transcribe");wifi.setReferenceCounted(false);wifi.acquire();}}catch(RuntimeException ignored){wifi=null;}
         IntentFilter screenFilter=new IntentFilter(Intent.ACTION_SCREEN_ON);screenFilter.addAction(Intent.ACTION_USER_PRESENT);
@@ -119,9 +130,9 @@ public class TranscribeService extends Service {
             Transcriber.retryingId=again;
             // «Reintento en…» solo en la que de verdad se reintenta: antes iba a la primera pedida, aunque nunca se hubiera
             // enviado (una que esperaba su turno, o el Wi-Fi). La que espera su turno conserva su «En cola · …».
-            if(blocker!=null){if(id!=null)Pipeline.log(c,id,"En pausa: "+blocker+" · se retoma sola al cumplirse");}
-            else if(again!=null)Pipeline.log(c,again,"Reintento en "+(delay/1000)+" s · sigue trabajando");
-            if(Pipeline.isWifiWait(blocker))wifiWait(c,http,id);else if(blocker!=null)hold(c,http,blocker);
+            if(blocker!=null){if(id!=null)Pipeline.log(c,id,Lang.str(c,R.string.eng_log_paused,blocker));}
+            else if(again!=null)Pipeline.log(c,again,Lang.str(c,R.string.eng_log_retry_in,(int)(delay/1000)));
+            if(Pipeline.isWifiWait(blocker))wifiWait(c,http,id);else if(blocker!=null)hold(c,http,blocker,id);
             boolean wifiOnly=new Settings(c).wifiOnly(),wasMetered=metered(c,wifiOnly);
             // elapsedRealtime sigue contando si Android congela la app: así se detecta (y se anota) una espera que se alargó.
             // due: cuándo toca reintentar según la escala de esperas, aunque el Wi-Fi se vaya y vuelva antes.
@@ -132,7 +143,7 @@ public class TranscribeService extends Service {
                 // más en ella. Si el envío era de otra, http no se corta y la espera sigue.
                 if(again!=null&&!again.equals(Transcriber.retryingId))again=null;
                 String who=again!=null?again:id;
-                if(now-last>30_000&&who!=null){Pipeline.log(c,who,"Android tuvo la app congelada "+Recording.time(now-last)+" (ahorro de batería con la pantalla bloqueada)");Diagnostics.event("app_frozen",who,"elapsed_ms",now-last,"display",Battery.screenOn(c)?"on":"off","battery",Battery.unrestricted(c)?"unrestricted":"optimized");}
+                if(now-last>30_000&&who!=null){Pipeline.log(c,who,Lang.str(c,R.string.eng_log_frozen,Recording.time(now-last)));Diagnostics.event("app_frozen",who,"elapsed_ms",now-last,"display",Battery.screenOn(c)?"on":"off","battery",Battery.unrestricted(c)?"unrestricted":"optimized");}
                 last=now;
                 // Se fue el Wi-Fi durante la espera (el motivo completo, que recorre la biblioteca, se mira solo al pasar a datos
                 // móviles): se avisa y, si era una espera corta, pasa a ser la de 15 min, como si hubiera faltado desde el comienzo.
@@ -141,10 +152,10 @@ public class TranscribeService extends Service {
                     // La que se iba a reintentar ahora espera Wi-Fi: ya no se procesa, espera (y se le ofrece «Usar datos móviles»).
                     // Su titular lo dice: el aviso de abajo es de la primera pedida, que puede ser otra, y la que se reintentaba
                     // seguía con «Reintento en 20 s» hasta 15 min.
-                    if(again!=null&&Pipeline.waitsForWifi(c,again)){Transcriber.retryingId=null;Pipeline.log(c,again,"En pausa: "+Pipeline.wifiWait()+" · se retoma sola al cumplirse");again=null;}
+                    if(again!=null&&Pipeline.waitsForWifi(c,again)){Transcriber.retryingId=null;Pipeline.log(c,again,Lang.str(c,R.string.eng_log_paused,Pipeline.wifiWait()));again=null;}
                     if(Pipeline.isWifiWait(Pipeline.blocker(c))){
                         Transcriber.retryingId=null;again=null;
-                        String waiting=pendingId(c);if(waiting!=null)Pipeline.log(c,waiting,"En pausa: "+Pipeline.wifiWait()+" · se retoma sola al cumplirse");
+                        String waiting=pendingId(c);if(waiting!=null)Pipeline.log(c,waiting,Lang.str(c,R.string.eng_log_paused,Pipeline.wifiWait()));
                         wifiWait(c,http,waiting);
                         if(blocker==null){blocker=Pipeline.wifiWait();until=now+15*60_000;}
                     }
@@ -152,25 +163,26 @@ public class TranscribeService extends Service {
                 wasMetered=onMobile;
                 if(blocker!=null&&now>=due&&Pipeline.blocker(c)==null)return true;
                 if(nudged.get()&&Pipeline.blocker(c)==null){
-                    if(again!=null)Pipeline.log(c,again,"Pantalla encendida · se reintenta ahora");else if(id!=null)Pipeline.log(c,id,"Pantalla encendida · se retoma ahora");
+                    if(again!=null)Pipeline.log(c,again,Lang.str(c,R.string.eng_log_screen_on_retry));else if(id!=null)Pipeline.log(c,id,Lang.str(c,R.string.eng_log_screen_on_resume));
                     return true;
                 }
             }
             // Se cumplió la espera pero ahora falta algo (p. ej. se desconectó el cargador): se cede a la tarea de fondo, y la que
             // se iba a reintentar lo dice (conservaba «Reintento en 20 s · sigue trabajando» mientras esperaba).
             String still=http.cancelled?null:Pipeline.blocker(c);
-            if(still!=null&&again!=null&&again.equals(Transcriber.retryingId))Pipeline.log(c,again,"En pausa: "+still+" · se retoma sola al cumplirse");
+            if(still!=null&&again!=null&&again.equals(Transcriber.retryingId))Pipeline.log(c,again,Lang.str(c,R.string.eng_log_paused,still));
             return !http.cancelled&&still==null;
         }finally{Transcriber.retryingId=null;}
     }
     /**
      * Espera por el cargador, la batería o internet (Transcriber.holds): la notificación de avance lo dice, en vez de quedar
      * en lo último que se envió («Transcribiendo · 3 de 3 partes listas»; la del servicio en primer plano no se puede quitar).
+     * id: la grabación que espera (la de la bitácora), la que corta «Detener».
      */
-    private static void hold(Context c,HttpApi http,String blocker){
+    private static void hold(Context c,HttpApi http,String blocker,String id){
         if(http.cancelled||blocker.isEmpty())return;
-        String text=Character.toUpperCase(blocker.charAt(0))+blocker.substring(1)+" · se retoma sola al cumplirse";
-        try{c.getSystemService(android.app.NotificationManager.class).notify(Transcriber.NOTIFICATION,Transcriber.build(c,text,true,-1));}catch(RuntimeException ignored){}
+        String text=Lang.str(c,R.string.eng_notif_hold,Character.toUpperCase(blocker.charAt(0))+blocker.substring(1));
+        try{c.getSystemService(android.app.NotificationManager.class).notify(Transcriber.NOTIFICATION,Transcriber.build(c,text,true,-1,id));}catch(RuntimeException ignored){}
     }
     /** «Solo con Wi-Fi», hay red y no es Wi-Fi (barato: no lee la biblioteca). */
     private static boolean metered(Context c,boolean wifiOnly){return wifiOnly&&Pipeline.network(c)!=null&&!Pipeline.unmetered(c);}
@@ -182,15 +194,53 @@ public class TranscribeService extends Service {
     private static void wifiWait(Context c,HttpApi http,String id){
         if(id==null||http.cancelled)return;
         Pipeline.waitingWifi(c,id);
-        try{c.getSystemService(android.app.NotificationManager.class).notify(Transcriber.NOTIFICATION,Transcriber.build(c,Transcriber.WIFI_WAIT_TEXT,true,-1));}catch(RuntimeException ignored){}
+        try{c.getSystemService(android.app.NotificationManager.class).notify(Transcriber.NOTIFICATION,Transcriber.build(c,Transcriber.wifiWaitText(),true,-1,id));}catch(RuntimeException ignored){}
     }
     private static String pendingId(Context c){for(Recording r:Recording.list(c))if(FilesStore.state(c,r.id).optBoolean("requested"))return r.id;return null;}
     @Override public void onDestroy(){HttpApi h=http;if(running&&h!=null)h.cancel();running=false;releaseLocks();super.onDestroy();}
     private void releaseLocks(){
+        handler.removeCallbacks(keepAwake);
         if(wake!=null&&wake.isHeld())wake.release();
         if(wifi!=null&&wifi.isHeld())wifi.release();
         try{unregisterReceiver(screen);}catch(IllegalArgumentException ignored){}
     }
     /** Android 15 limita el tiempo de dataSync; al agotarse, se cede a la tarea diferida sin perder bloques ya listos. */
     @Override public void onTimeout(int startId,int fgsType){HttpApi h=http;if(h!=null)h.cancel();Pipeline.schedule(this,true);stopSelf();}
+
+    // ---------- «Detener» en la notificación de avance (0.9.0) ----------
+    /** Acción del intent de «Detener» (extra "id": la grabación). */
+    static final String STOP="cl.vozlocal.app.STOP_TRANSCRIPTION";
+    /**
+     * Recibe «Detener» de la notificación de avance (Transcriber.build). Es un receptor del manifiesto, sin pantalla: sirve
+     * con la app cerrada y con el teléfono bloqueado, lo esté enviando este servicio, la transferencia iniciada por el
+     * usuario o la tarea de fondo. Lo pesado (disco, JobScheduler) va en otro hilo.
+     */
+    public static final class Stop extends BroadcastReceiver{
+        @Override public void onReceive(Context context,Intent intent){
+            String id=intent==null||!STOP.equals(intent.getAction())?null:intent.getStringExtra("id");if(id==null)return;
+            Context app=context.getApplicationContext();PendingResult result=goAsync();
+            new Thread(()->{
+                try{stop(app,id);}catch(Exception e){Diagnostics.event("notification_stop_failed",id,"error_class",e.getClass().getSimpleName());}
+                finally{result.finish();}
+            },"VozLocal-stop").start();
+        }
+    }
+    /**
+     * Lo que hace «Detener» (separado del receptor para poder probarlo): lo mismo que «Cancelar transcripción» del detalle
+     * (Pipeline.cancel). La grabación queda sin pedir, con «Transcribir» o «Reintentar» para retomarla: las partes ya listas
+     * se reutilizan si se vuelve a pedir con la misma opción de voces; si era «Volver a transcribir», vuelve la versión
+     * anterior. La bitácora dice «Detenida desde la notificación». Mientras el trabajo solo espera (el cargador, la batería,
+     * el Wi-Fi o el próximo intento) o no queda nada más pedido, se detiene también, y con él su notificación: lo demás pedido
+     * lo retoma la tarea de fondo, como tras cancelar la que se enviaba. false si esa grabación ya no estaba pedida (la
+     * notificación era vieja: terminó o ya se canceló).
+     */
+    static boolean stop(Context c,String id)throws Exception{
+        if(id==null||!FilesStore.state(c,id).optBoolean("requested"))return false;
+        Diagnostics.event("notification_stop",id);
+        Pipeline.cancel(c,id,true,Lang.str(c,R.string.eng_log_stopped));
+        if(Transcriber.currentId==null||!Pipeline.pending(c))for(HttpApi h:new HttpApi[]{current,PipelineJob.current})if(h!=null)h.cancel();
+        // La tarea de fondo deja su notificación de avance (no es la de un servicio): sin otro trabajo andando, se quita ya.
+        if(!Pipeline.working())try{c.getSystemService(android.app.NotificationManager.class).cancel(Transcriber.NOTIFICATION);}catch(RuntimeException ignored){}
+        return true;
+    }
 }

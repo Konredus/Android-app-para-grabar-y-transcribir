@@ -27,6 +27,8 @@ final class EngineChecks {
         mobileData(c,r);
         userJob(c);
         waits(c);
+        languages(c);
+        stopFromNotification(c,r);
         Recording d=copy(c,r);
         try{versions(c,d);snippet(c,d);notification(c,d);}
         catch(Throwable failure){try{d.delete(c);}catch(Exception ignored){}throw failure;}
@@ -146,11 +148,122 @@ final class EngineChecks {
         check(Transcriber.holds("esperando que conectes el cargador",0)&&Transcriber.holds("esperando conexión a internet",0)&&Transcriber.holds("batería baja: Android espera a que cargues",0),"Round not held for the charger, the battery or the network");
         check(!Transcriber.holds(Pipeline.wifiWait(),0)&&!Transcriber.holds(null,0)&&!Transcriber.holds("esperando que conectes el cargador",Transcriber.JOB_BUDGET_MS),"Round held for Wi-Fi, for nothing, or in the background job");
         // Una espera no se titula «Transcribiendo» ni lleva la barra ocupada; un envío sí.
-        Notification wait=Transcriber.build(c,Transcriber.WIFI_WAIT_TEXT,true,-1),send=Transcriber.build(c,"Enviando parte 1 de 3",true,40);
+        Notification wait=Transcriber.build(c,Transcriber.wifiWaitText(),true,-1),send=Transcriber.build(c,"Enviando parte 1 de 3",true,40);
         check("En pausa".equals(title(wait))&&wait.extras.getInt(Notification.EXTRA_PROGRESS_MAX)==0&&!wait.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE),"Waiting notification titled as working or with a busy bar");
         check("Transcribiendo".equals(title(send))&&send.extras.getInt(Notification.EXTRA_PROGRESS)==40&&send.extras.getInt(Notification.EXTRA_PROGRESS_MAX)==100,"Progress notification lost its title or bar");
         check(Transcriber.waiting("Intento 2 de 5 no resultó · se reintenta solo")&&Transcriber.waiting("Esperando que conectes el cargador · se retoma sola al cumplirse")
             &&!Transcriber.waiting("Preparando…")&&!Transcriber.waiting("Transcribiendo · 2 de 3 partes listas")&&!Transcriber.waiting("Enviando parte 1 de 3"),"Waiting notification texts wrong");
+    }
+
+    // ---------- 0.9.0: los textos del motor en los tres idiomas ----------
+    private static JSONObject line(long t,String m)throws JSONException{return new JSONObject().put("t",t).put("m",m);}
+    /** El mensaje de HttpApi.require para ese código (null si no lanza un UserAction). */
+    private static String keyError(String service,int code){try{HttpApi.require(new HttpApi.Response(code,"",null),service);return null;}catch(HttpApi.UserAction e){return e.getMessage();}catch(Exception e){return null;}}
+    /** El mensaje de un error que se reintenta (IOException) de HttpApi.require. */
+    private static String retryError(String service,int code){try{HttpApi.require(new HttpApi.Response(code,"",null),service);return null;}catch(java.io.IOException e){return e.getMessage();}catch(Exception e){return null;}}
+    /** El mensaje de Models.checkKey cuando OpenRouter responde ese código (sin red: un HttpApi falso). */
+    private static String checkKeyError(int code){
+        HttpApi fake=new HttpApi(){@Override Response request(String method,String url,String token,String contentType,Body body,Map<String,String> extra){return new Response(code,"{}",null);}};
+        try{Models.checkKey(fake,"sk-or-prueba-no-es-una-clave-real");return null;}catch(Exception e){return e.getMessage();}
+    }
+    /**
+     * El motor escribe en el idioma de la app y StatusText (y Transcriber.waiting) lo vuelve a leer en cualquiera de los
+     * tres: lo guardado (la bitácora, el estado) puede venir de antes de cambiar el idioma. En cada idioma se arman los
+     * textos con los mismos recursos que usa el motor y se leen de vuelta; con la app en inglés se lee una bitácora escrita
+     * en español, y al revés. Siempre vuelve al español, el idioma de las demás pruebas.
+     */
+    static void languages(Context c)throws Exception{
+        // Español: el texto de siempre, letra por letra.
+        check("Esperando Wi-Fi · se retoma sola cuando vuelva".equals(Transcriber.wifiWaitText())&&"No queda espacio en el teléfono para preparar el audio. Libera espacio y pulsa Reintentar.".equals(OrAudio.noSpace())
+            &&"Android agotó el tiempo que le da a la app en segundo plano".equals(PipelineJob.stopReason(android.app.job.JobParameters.STOP_REASON_QUOTA))&&"≈6,4 MB".equals(Pipeline.megabytes(6_400_000)),"Spanish engine texts changed");
+        check("1 voz".equals(Lang.plural(c,R.plurals.eng_voices,1))&&"3 voces".equals(Lang.plural(c,R.plurals.eng_voices,3))&&"★ 2 momentos marcados".equals(Lang.plural(c,R.plurals.eng_rec_marks,2)),"Spanish plurals wrong");
+        String es401=keyError(HttpApi.OPENROUTER,401);
+        check("La clave del proveedor no es válida o fue revocada. Revísala en Ajustes.".equals(es401)&&"La clave de OpenRouter no es válida o fue revocada. Revísala en Ajustes.".equals(checkKeyError(401)),"Spanish key errors changed: "+es401);
+        try{
+            for(String lang:new String[]{Lang.EN,Lang.PT,Lang.ES}){Lang.override(lang);readBack(c,lang);}
+            // Una bitácora escrita en español, leída con la app en inglés.
+            Lang.override(Lang.EN);
+            check("Parte 2 de 3 lista · reconoció 2 voces".equals(StatusText.human("Parte 2 de 3 lista · tardó 01:23 · reconoció 2 voces"))&&StatusText.transcriptionDone("Transcripción lista · tiempo total 05:12")
+                &&"En espera de Wi-Fi · ahora hay datos móviles".equals(StatusText.inDetail("En espera de Wi-Fi · ahora hay datos móviles: puedes usarlos para esta grabación desde su detalle")),"Spanish log not read with the app in English");
+            check(Transcriber.waiting("Intento 2 de 5 no resultó · se reintenta solo")&&Transcriber.waiting("Esperando que conectes el cargador · se retoma sola al cumplirse")&&!Transcriber.waiting("Enviando parte 1 de 3")
+                &&Lang.str(c,R.string.eng_btn_wait_charger).equals(StatusText.working(false,false,"esperando que conectes el cargador")),"Spanish waits not read with the app in English");
+            JSONObject es=new JSONObject().put("log",new JSONArray().put(line(1,"En cola · esperando que conectes el cargador")).put(line(2,"En pausa: batería baja: Android espera a que cargues · se retoma sola al cumplirse"))
+                .put(line(3,"Preparando audio")).put(line(4,"Audio enviado · OpenRouter está transcribiendo")));
+            check(StatusText.startedAt(es)==3&&StatusText.uploadedInLog(es)&&StatusText.preparing("Preparando el audio de la parte 1 de 2")&&StatusText.aboutKey(es401)
+                &&"La clave del proveedor no es válida o fue revocada.".equals(StatusText.withoutSettingsHint(es401)),"Spanish state not read with the app in English");
+        }finally{Lang.override(Lang.ES);}
+        // Y al revés: líneas en inglés y en portugués, con la app en español.
+        check("Part 2 of 3 ready".equals(StatusText.human("Part 2 of 3 ready · took 01:23"))&&StatusText.transcriptionDone("Transcript ready · total time 05:12")&&StatusText.transcriptionDone("Transcrição pronta · tempo total 05:12")
+            &&Transcriber.waiting("Attempt 2 of 5 didn't work · retrying automatically")&&Transcriber.waiting("Aguardando Wi-Fi · retoma sozinha quando voltar"),"English or Portuguese log not read with the app in Spanish");
+    }
+    /** Con la app en ese idioma: los textos del motor, armados con sus mismos recursos, se leen de vuelta. */
+    private static void readBack(Context c,String lang)throws Exception{
+        String wifi=Pipeline.wifiWait(),charger=Lang.str(c,R.string.eng_wait_charger),internet=Lang.str(c,R.string.eng_wait_internet),battery=Lang.str(c,R.string.eng_wait_battery),word=Lang.str(c,R.string.eng_waiting_word)+" ";
+        // El botón dice qué espera; la nota del detalle y la Biblioteca, sin la palabra de espera ni el paréntesis.
+        check(Lang.str(c,R.string.eng_btn_wait_wifi).equals(StatusText.working(false,false,wifi))&&Lang.str(c,R.string.eng_btn_wait_charger).equals(StatusText.working(false,false,charger))
+            &&Lang.str(c,R.string.eng_btn_wait_connection).equals(StatusText.working(false,false,internet))&&Lang.str(c,R.string.eng_btn_battery_low).equals(StatusText.working(true,false,battery))
+            &&Lang.str(c,R.string.eng_btn_queued).equals(StatusText.working(false,false,null))&&Lang.str(c,R.string.eng_btn_working_again).equals(StatusText.working(true,true,wifi)),lang+": waiting button wrong");
+        for(String b:new String[]{wifi,charger,internet,battery}){
+            String note=StatusText.waitingNote(false,true,true,true,b),queued=StatusText.queuedLine(b);
+            check(!note.contains("(")&&!note.contains(word)&&!queued.contains("(")&&queued.startsWith(Lang.str(c,R.string.eng_queued)),lang+": wait not simplified: «"+note+"» «"+queued+"»");
+        }
+        check(Transcriber.holds(charger,0)&&Transcriber.holds(battery,0)&&Transcriber.holds(internet,0)&&!Transcriber.holds(wifi,0),lang+": round held for the wrong waits");
+        // La bitácora: el titular salta los detalles técnicos (tardó, en paralelo, tiempo total) y lo que manda al detalle.
+        String took=Lang.str(c,R.string.eng_frag_took,"01:23"),voices=" · "+Lang.plural(c,R.plurals.eng_voices,2),ready=Lang.str(c,R.string.eng_log_part_ready,2,3,took,voices),answer=Lang.str(c,R.string.eng_log_answer,took,"");
+        check((ready.substring(0,ready.indexOf(" · "))+voices).equals(StatusText.human(ready))&&answer.substring(0,answer.indexOf(" · ")).equals(StatusText.human(answer)),lang+": part line not simplified: "+StatusText.human(ready));
+        String done=Lang.str(c,R.string.eng_log_done,Lang.str(c,R.string.eng_frag_total,"05:12")),split=Lang.str(c,R.string.eng_log_split,"26:00",3,8,Lang.str(c,R.string.eng_frag_parallel,3));
+        check(Lang.str(c,R.string.eng_done_title).equals(StatusText.human(done))&&StatusText.transcriptionDone(done)&&split.substring(0,split.lastIndexOf(" · ")).equals(StatusText.human(split)),lang+": done or split line not simplified: "+StatusText.human(split));
+        // «bloque» → «parte» solo en bitácoras viejas y en palabras completas: «pantalla bloqueada» no se toca.
+        String frozen=Lang.str(c,R.string.eng_log_frozen,"01:23"),locked=Lang.str(c,R.string.eng_log_continues_foreground);
+        check(frozen.equals(StatusText.human(frozen))&&locked.equals(StatusText.human(locked))&&"Parte 2 de 3 lista".equals(StatusText.human("Bloque 2 de 3 listo · tardó 01:23")),lang+": headline rewrote a word it should keep: "+StatusText.human(frozen)+" / "+StatusText.human(locked));
+        String hint=Lang.str(c,R.string.eng_log_mobile_hint),waiting=Lang.str(c,R.string.eng_log_wifi_wait,hint),lost=Lang.str(c,R.string.eng_log_wifi_lost,hint);
+        check(Lang.str(c,R.string.eng_log_wifi_wait,"").equals(StatusText.inDetail(waiting))&&Lang.str(c,R.string.eng_log_wifi_lost,"").equals(StatusText.inDetail(lost))
+            &&Lang.str(c,R.string.eng_log_paused,wifi.substring(0,wifi.indexOf(" ("))).equals(StatusText.inDetail(Lang.str(c,R.string.eng_log_paused,wifi))),lang+": Wi-Fi details not removed: "+StatusText.inDetail(waiting));
+        // Estado y bitácora guardados: cuándo empezó a trabajar de verdad, si ya se envió algo, si se prepara el audio.
+        JSONObject st=new JSONObject().put("queuedAt",0).put("log",new JSONArray().put(line(1,Pipeline.queuedLine(charger,false))).put(line(2,Lang.str(c,R.string.eng_log_paused,battery)))
+            .put(line(3,Lang.str(c,R.string.eng_log_hold_recording))).put(line(4,waiting)).put(line(5,Lang.str(c,R.string.eng_st_preparing_audio))).put(line(6,Lang.str(c,R.string.eng_log_part_sent,1,HttpApi.OPENROUTER))));
+        check(StatusText.startedAt(st)==5&&StatusText.uploadedInLog(st)&&!StatusText.uploadedInLog(new JSONObject().put("log",new JSONArray().put(line(1,Pipeline.queuedLine(null,true))))),lang+": log reading wrong, started at "+StatusText.startedAt(st));
+        check(StatusText.preparing(Lang.str(c,R.string.eng_st_preparing_audio))&&StatusText.preparing(Lang.str(c,R.string.eng_st_preparing_part,1,2))&&StatusText.preparing(Lang.str(c,R.string.eng_st_preparing_send))
+            &&!StatusText.preparing(Lang.str(c,R.string.eng_st_sending_audio)),lang+": preparing status not recognized");
+        // La notificación de avance: una espera se titula «En pausa» y no lleva la barra ocupada.
+        String hold=Lang.str(c,R.string.eng_notif_hold,Character.toUpperCase(charger.charAt(0))+charger.substring(1));
+        check(Transcriber.waiting(Transcriber.wifiWaitText())&&Transcriber.waiting(hold)&&Transcriber.waiting(Lang.str(c,R.string.eng_notif_cut_retry))&&Transcriber.waiting(Lang.str(c,R.string.eng_notif_attempt_retry,2,5))
+            &&!Transcriber.waiting(Lang.str(c,R.string.eng_notif_preparing))&&!Transcriber.waiting(Lang.str(c,R.string.eng_notif_parts_ready,2,3))&&!Transcriber.waiting(Lang.str(c,R.string.eng_st_sending_part,1,3)),lang+": notification waits wrong");
+        check(Lang.str(c,R.string.eng_notif_title_paused).equals(title(Transcriber.build(c,hold,true,-1,null))),lang+": waiting notification title wrong");
+        // Errores de la clave: dicen la palabra «clave» del idioma y terminan con «Revísala en Ajustes.», que la bienvenida quita.
+        String fix=" "+Lang.str(c,R.string.key_fix_in_settings);
+        for(String m:new String[]{keyError(OpenAiClient.provider(),401),checkKeyError(403),checkKeyError(401)})
+            check(m!=null&&m.endsWith(fix)&&m.contains(Lang.str(c,R.string.key_word))&&StatusText.aboutKey(m)&&!StatusText.withoutSettingsHint(m).endsWith(fix.trim()),lang+": key error wrong: "+m);
+        // Los errores que se reintentan empiezan con el nombre del servicio (Notes y Ajustes lo miran) y no hablan de la clave.
+        String down=retryError(HttpApi.OPENROUTER,503),odd=checkKeyError(400),busy=retryError(HttpApi.OPENROUTER,429);
+        for(String m:new String[]{down,odd,busy})check(m!=null&&m.startsWith(HttpApi.OPENROUTER)&&!StatusText.aboutKey(m),lang+": service error wrong: "+m);
+    }
+
+    // ---------- 0.9.0: «Detener» en la notificación de avance ----------
+    static void stopFromNotification(Context c,Recording r)throws Exception{
+        Recording d=new Recording(UUID.randomUUID().toString(),"Prueba detener",System.currentTimeMillis(),r.duration);
+        java.nio.file.Files.copy(r.audio(c).toPath(),d.audio(c).toPath());d.save(c);
+        HttpApi part=new HttpApi(),other=new HttpApi();part.jobId=d.id;other.jobId="otra";
+        try{
+            // La acción va solo en la notificación de avance, y solo con una grabación a la que apuntar.
+            Notification with=Transcriber.build(c,"Enviando parte 1 de 3",true,40,d.id),without=Transcriber.build(c,"Preparando…",true,-1,null),finished=Transcriber.build(c,"Lista",false,-1,d.id);
+            check(with.actions!=null&&with.actions.length==1&&"Detener".equals(with.actions[0].title.toString())&&with.actions[0].actionIntent!=null
+                &&(without.actions==null||without.actions.length==0)&&(finished.actions==null||finished.actions.length==0),"Stop action missing, or offered without a recording");
+            // Lo mismo que «Cancelar transcripción»: queda sin pedir (se puede volver a transcribir), la bitácora lo dice y se
+            // cortan las partes de ESA grabación que se están subiendo, aunque las suba la tarea de fondo. Una notificación
+            // vieja (ya terminó o ya se detuvo) no hace nada.
+            check(!TranscribeService.stop(c,d.id),"Stop acted on a recording that was not requested");
+            FilesStore.update(c,d.id,s->s.put("requested",true));Transcriber.SENDING.add(part);Transcriber.SENDING.add(other);
+            boolean stopped=TranscribeService.stop(c,d.id);JSONObject st=FilesStore.state(c,d.id);
+            check(stopped&&!st.optBoolean("requested")&&!st.optBoolean("failed")&&"Detenida desde la notificación".equals(st.optString("status"))&&!Transcript.exists(c,d.id),"Stop from the notification did not cancel: "+st);
+            check(part.cancelled&&!other.cancelled,"Stop did not cut the parts of that recording being sent");
+            check(!TranscribeService.stop(c,d.id)&&Next.of(c,d).step==Next.Step.TRANSCRIBE,"After Stop the recording should wait for «Transcribir», untouched");
+            // Wake locks con plazo: se renuevan antes de vencer.
+            check(RecorderService.WAKE_RENEW_MS<RecorderService.WAKE_MS&&TranscribeService.WAKE_RENEW_MS<TranscribeService.WAKE_MS&&RecorderService.WAKE_MS<=10*60_000L,"Wake lock renewed after it expires, or held too long");
+        }finally{
+            Transcriber.SENDING.remove(part);Transcriber.SENDING.remove(other);d.delete(c);
+            if(!Pipeline.working())c.getSystemService(NotificationManager.class).cancel(Transcriber.NOTIFICATION);
+        }
     }
 
     // ---------- Disponibilidad y motivos ----------

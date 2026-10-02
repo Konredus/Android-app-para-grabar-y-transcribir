@@ -7,7 +7,6 @@ import android.graphics.drawable.Icon;
 import android.net.*;
 import android.os.BatteryManager;
 import android.os.Build;
-import java.util.Locale;
 import org.json.*;
 
 /**
@@ -36,7 +35,7 @@ final class Pipeline {
      * está visible, en Android 14+ va como transferencia iniciada por el usuario. false: el trabajo automático al guardar.
      */
     static void request(Context c,String id,boolean speakers,boolean byUser)throws Exception{
-        if(FilesStore.state(c,id).optBoolean("demo"))throw new HttpApi.UserAction("El ejemplo no se envía a la API.");
+        if(FilesStore.state(c,id).optBoolean("demo"))throw new HttpApi.UserAction(Lang.str(c,R.string.eng_err_demo));
         if(Transcript.exists(c,id)){LocalStorage.enqueue(c,id);return;}
         // "mobileOk" vale para un pedido: un «Reintentar» o «Volver a transcribir» vuelve a respetar «Solo con Wi-Fi».
         FilesStore.update(c,id,s -> {s.put("requested",true).put("failed",false).put("attempts",0).put("retries",0).put("localCuts",0).put("queuedAt",System.currentTimeMillis()).put("log",new JSONArray()).put("upSent",0).put("upTotal",0).put("speakers",speakers).put("liveChars",0);s.remove("lastError");s.remove("mobileOk");s.remove("prepPct");});
@@ -44,8 +43,8 @@ final class Pipeline {
         // «Volver a transcribir»: la bitácora dice qué alternativa se usó (para aprender cuál funciona mejor). Cuántas
         // personas, no quiénes: la bitácora viaja (sin títulos ni nombres) en el informe de soporte.
         JSONObject state=FilesStore.state(c,id);Retranscribe.Mode again=Retranscribe.mode(state);
-        if(again!=null){JSONArray fixed=state.optJSONArray("fixedRefs");int people=Retranscribe.people(fixed);
-            log(c,id,"Volver a transcribir: «"+Retranscribe.label(again)+"»"+(again==Retranscribe.Mode.CORRECTIONS&&people>0?" · muestras de "+people+(people==1?" persona":" personas"):"")+" · la versión anterior queda guardada");}
+        if(again!=null){JSONArray fixed=state.optJSONArray("fixedRefs");int people=Retranscribe.people(fixed);String label=Retranscribe.label(again);
+            log(c,id,again==Retranscribe.Mode.CORRECTIONS&&people>0?Lang.plural(c,R.plurals.eng_log_again_people,people,label,people):Lang.str(c,R.string.eng_log_again,label));}
         String blocker=blocker(c,id);
         log(c,id,queuedLine(blocker,behind(id)));
         // Esperando Wi-Fi con datos móviles a mano: se avisa con la salida («Usar datos móviles»). Antes solo lo decía la
@@ -113,8 +112,8 @@ final class Pipeline {
      * detrás de otra. Separada del teléfono para poder probarla.
      */
     static String queuedLine(String blocker,boolean behind){
-        if(blocker!=null)return "En cola · "+blocker;
-        return behind?"En cola · empieza cuando termine la transcripción en curso":"En cola · empezando";
+        if(blocker!=null)return Lang.str(R.string.eng_queued_wait,blocker);
+        return Lang.str(behind?R.string.eng_queued_behind:R.string.eng_queued_starting);
     }
     /** Arranca lo pedido por el camino que corresponda. byUser: viene de un toque de la persona. */
     static void start(Context c,boolean byUser){
@@ -250,17 +249,20 @@ final class Pipeline {
     static String wifiWait(){return Lang.str(R.string.wait_wifi);}
     /** ¿Este motivo de espera es el del Wi-Fi? (en cualquiera de los tres idiomas: puede venir de antes de cambiar el idioma). */
     static boolean isWifiWait(String blocker){return Lang.isAny(R.string.wait_wifi,blocker);}
-    /** Motivo por el que aún no puede empezar ningún trabajo (según tus ajustes), o null si alguno puede empezar ya. */
+    /**
+     * Motivo por el que aún no puede empezar ningún trabajo (según tus ajustes), o null si alguno puede empezar ya. En el
+     * idioma de la app; StatusText lo reconoce en cualquiera de los tres (eng_wait_*, wait_wifi).
+     */
     static String blocker(Context c){return blocker(c,anyMobileOk(c));}
     /** Lo mismo para una grabación: con «Usar datos móviles ahora» no espera Wi-Fi. */
     static String blocker(Context c,String id){return blocker(c,FilesStore.state(c,id).optBoolean("mobileOk"));}
     private static String blocker(Context c,boolean mobileOk){
         Settings settings=new Settings(c);Network network=network(c);
-        if(network==null)return "esperando conexión a internet";
+        if(network==null)return Lang.str(c,R.string.eng_wait_internet);
         if(settings.wifiOnly()&&!mobileOk&&!unmetered(c))return wifiWait();
         BatteryManager battery=c.getSystemService(BatteryManager.class);
-        if(settings.charging()&&!battery.isCharging())return "esperando que conectes el cargador";
-        if(!battery.isCharging()&&battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)<=15)return "batería baja: Android espera a que cargues";
+        if(settings.charging()&&!battery.isCharging())return Lang.str(c,R.string.eng_wait_charger);
+        if(!battery.isCharging()&&battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)<=15)return Lang.str(c,R.string.eng_wait_battery);
         return null;
     }
     static Network network(Context c){ConnectivityManager cm=c.getSystemService(ConnectivityManager.class);Network n=cm.getActiveNetwork();NetworkCapabilities caps=n==null?null:cm.getNetworkCapabilities(n);return caps!=null&&caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)?n:null;}
@@ -306,11 +308,10 @@ final class Pipeline {
     }
     /** Lo que falta subir de todas las grabaciones pedidas (para avisarle a Android el tamaño de la transferencia). */
     static long pendingUploadBytes(Context c){long sum=0;for(Recording r:Recording.list(c))if(FilesStore.state(c,r.id).optBoolean("requested"))sum+=uploadBytes(c,r.id);return sum;}
-    /** «≈6,4 MB», «≈26 MB», «≈0,3 MB». */
+    /** «≈6,4 MB», «≈26 MB», «≈0,3 MB» (nunca menos de 0,1), con la coma o el punto decimal del idioma de la app. */
     static String megabytes(long bytes){
         double mb=Math.max(0,bytes)/1e6;
-        if(mb<0.1)return "≈0,1 MB";
-        return "≈"+(mb<10?String.format(Locale.ROOT,"%.1f",mb).replace('.',','):String.valueOf(Math.round(mb)))+" MB";
+        return "≈"+(mb<10?String.format(Lang.locale(),"%.1f",Math.max(0.1,mb)):String.valueOf(Math.round(mb)))+" MB";
     }
     /**
      * «Usar datos móviles ahora» para una grabación: solo ella (la preferencia «Solo con Wi-Fi» no cambia). Devuelve false
@@ -321,7 +322,7 @@ final class Pipeline {
         long bytes=uploadBytes(c,id);
         try{FilesStore.update(c,id,s->s.put("mobileOk",true));}catch(Exception e){return false;}
         // Sin « »: el informe de soporte tapa lo que va entre comillas angulares.
-        log(c,id,"Usarás datos móviles para esta grabación ("+megabytes(bytes)+") · para las demás sigue Solo con Wi-Fi");
+        log(c,id,Lang.str(c,R.string.eng_log_mobile_ok,megabytes(bytes)));
         Diagnostics.event("mobile_ok",id,"bytes",bytes,"net",networkName(c));
         clearWaitingWifi(c,id);
         return true;
@@ -333,16 +334,16 @@ final class Pipeline {
     static void waitingWifi(Context c,String id){
         try{
             Recording r=FilesStore.recording(c,id);if(r==null)return;long bytes=uploadBytes(c,id);String size=megabytes(bytes);
-            NotificationManager m=c.getSystemService(NotificationManager.class);m.createNotificationChannel(new NotificationChannel("processing","Transcripciones",NotificationManager.IMPORTANCE_LOW));
+            NotificationManager m=c.getSystemService(NotificationManager.class);m.createNotificationChannel(new NotificationChannel("processing",Lang.str(c,R.string.eng_channel_processing),NotificationManager.IMPORTANCE_LOW));
             Intent open=new Intent(c,RecordingActivity.class).putExtra("id",id).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             // Códigos propios (bit 30): los de Transcriber usan los bits 0 a 29 y, con el mismo código, Android reutilizaría su PendingIntent.
             int code=0x40000000|((id.hashCode()&0x0fffffff)<<1);
             PendingIntent tap=PendingIntent.getActivity(c,code,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
             PendingIntent use=PendingIntent.getActivity(c,code|1,new Intent(open).putExtra("mobileOk",true),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-            String text="«"+r.title+"» espera Wi-Fi porque elegiste «Solo con Wi-Fi». Puedes usar datos móviles solo para esta grabación ("+size+").";
-            Notification n=new Notification.Builder(c,"processing").setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle("Esperando Wi-Fi para transcribir").setContentText(text)
+            String text=Lang.str(c,R.string.eng_notif_wifi_text,r.title,size);
+            Notification n=new Notification.Builder(c,"processing").setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle(Lang.str(c,R.string.eng_notif_wifi_title)).setContentText(text)
                 .setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(tap).setAutoCancel(true).setOnlyAlertOnce(true).setCategory(Notification.CATEGORY_STATUS)
-                .addAction(new Notification.Action.Builder(Icon.createWithResource(c,R.drawable.ic_upload),"Usar datos móviles ("+size+")",use).build()).build();
+                .addAction(new Notification.Action.Builder(Icon.createWithResource(c,R.drawable.ic_upload),Lang.str(c,R.string.eng_notif_wifi_action,size),use).build()).build();
             m.notify(WIFI_NOTIFICATION,n);wifiNoticeId=id;
             Diagnostics.event("wifi_wait",id,"bytes",bytes);
         }catch(RuntimeException ignored){}
@@ -360,16 +361,21 @@ final class Pipeline {
     /** Cancela y, si era «Volver a transcribir» y la nueva versión aún no estaba, vuelve sola la anterior. */
     static void cancel(Context c,String id)throws Exception{cancel(c,id,true);}
     /** restorePrevious: false al eliminar la grabación (no tiene sentido restaurar algo que se va a borrar). */
-    static void cancel(Context c,String id,boolean restorePrevious)throws Exception{
-        Diagnostics.event("job_cancelled",id);FilesStore.update(c,id,s -> {s.put("requested",false);s.remove("mobileOk");s.remove("prepPct");});log(c,id,"Transcripción cancelada");AudioParts.clearBlocks(c,id);
+    static void cancel(Context c,String id,boolean restorePrevious)throws Exception{cancel(c,id,restorePrevious,Lang.str(c,R.string.eng_log_cancelled));}
+    /** line: lo que dice la bitácora («Transcripción cancelada»; «Detenida desde la notificación» si fue desde ahí). */
+    static void cancel(Context c,String id,boolean restorePrevious,String line)throws Exception{
+        Diagnostics.event("job_cancelled",id);FilesStore.update(c,id,s -> {s.put("requested",false);s.remove("mobileOk");s.remove("prepPct");});log(c,id,line);AudioParts.clearBlocks(c,id);
         // El envío en curso se corta ya, lo haga el servicio en primer plano o la transferencia iniciada por el usuario.
         for(HttpApi active:new HttpApi[]{TranscribeService.current,PipelineJob.current})if(active!=null&&id.equals(active.jobId))active.cancel();
+        // También las partes de esta grabación que se están preparando o subiendo, aunque las envíe la tarea de fondo (su
+        // conexión no está a mano): antes seguían subiendo hasta terminar. El trabajo sigue con las demás grabaciones.
+        for(HttpApi part:Transcriber.SENDING)if(id.equals(part.jobId))part.cancel();
         // Si el trabajo esperaba para reintentarla, ya no la tiene (Pipeline.processing).
         if(id.equals(Transcriber.retryingId))Transcriber.retryingId=null;
         clearWaitingWifi(c,id);
         // La grabación nunca queda sin transcripción por cancelar una versión nueva.
         if(restorePrevious&&Retranscribe.hasPrevious(c,id)&&!Transcript.exists(c,id)){
-            try{Retranscribe.restore(c,id,"Se mantiene la versión anterior","retranscribe_cancelled");}catch(Exception e){Diagnostics.event("retranscribe_restore_failed",id,"error_class",e.getClass().getSimpleName());}
+            try{Retranscribe.restore(c,id,Lang.str(c,R.string.eng_log_keep_previous),"retranscribe_cancelled");}catch(Exception e){Diagnostics.event("retranscribe_restore_failed",id,"error_class",e.getClass().getSimpleName());}
         }
         JobScheduler scheduler=c.getSystemService(JobScheduler.class);scheduler.cancel(JOB_ID);
         // Sin nada más pedido, la transferencia que esperaba la red ya no tiene qué hacer (si estaba trabajando, termina sola).

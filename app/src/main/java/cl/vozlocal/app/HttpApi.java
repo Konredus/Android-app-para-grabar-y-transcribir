@@ -101,7 +101,7 @@ class HttpApi {
     }
     Response request(String method,String url,String token,String contentType,Body body,Map<String,String> extra) throws Exception {
         check();Gate gate=beforeSend;if(gate!=null)gate.pass(); URL target=new URL(url);long started=System.currentTimeMillis();Diagnostics.event("http_start",jobId,"bytes",body==null?0:body.length());
-        if(!"https".equals(target.getProtocol()))throw new SecurityException("Solo HTTPS");
+        if(!"https".equals(target.getProtocol()))throw new SecurityException(Lang.str(R.string.eng_err_https_only));
         HttpURLConnection c=(HttpURLConnection)target.openConnection();active=c;stalled=null;stalledLocal=true;phase(body!=null?UPLOAD:WAIT);touch();
         try{
             c.setInstanceFollowRedirects(false);c.setConnectTimeout(30000);c.setReadTimeout(readTimeoutMs);c.setRequestMethod(method);
@@ -115,12 +115,12 @@ class HttpApi {
                 // Streaming: el texto llega por partes; se guarda solo el evento final (texto completo + uso).
                 JSONObject done=null;
                 try(BufferedReader reader=new BufferedReader(new InputStreamReader(c.getInputStream(),StandardCharsets.UTF_8))){String line;while((line=reader.readLine())!=null){check();touch();if(!line.startsWith("data:"))continue;String data=line.substring(5).trim();if(data.isEmpty()||data.equals("[DONE]"))continue;JSONObject event=new JSONObject(data);events.event(event);if(event.optString("type").endsWith(".done"))done=event;}}
-                if(done==null)throw new IOException("La respuesta en streaming terminó sin el evento final");
+                if(done==null)throw new IOException(Lang.str(R.string.eng_err_stream_cut));
                 String requestId=c.getHeaderField("x-request-id");Diagnostics.event("http_end",jobId,"http",code,"request_id",safeToken(requestId),"elapsed_ms",System.currentTimeMillis()-started);
                 Response response=new Response(code,done.toString(),location,requestId);response.jobId=jobId;return response;
             }
             InputStream raw=code>=400?c.getErrorStream():c.getInputStream(); ByteArrayOutputStream bytes=new ByteArrayOutputStream();
-            if(raw!=null)try(InputStream in=raw){byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1){check();if(bytes.size()+n>8*1024*1024)throw new IOException("Respuesta demasiado grande");bytes.write(buffer,0,n);}}
+            if(raw!=null)try(InputStream in=raw){byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1){check();if(bytes.size()+n>8*1024*1024)throw new IOException(Lang.str(R.string.eng_err_response_too_big));bytes.write(buffer,0,n);}}
             String requestId=c.getHeaderField("x-request-id");Diagnostics.event("http_end",jobId,"http",code,"request_id",safeToken(requestId),"elapsed_ms",System.currentTimeMillis()-started);
             Response response=new Response(code,bytes.toString(StandardCharsets.UTF_8.name()),location,requestId);response.jobId=jobId;return response;
         }catch(Exception e){
@@ -144,7 +144,7 @@ class HttpApi {
         long size=file.length();
         return new Body(){
             public long length(){return prefix.length+base64Length(size)+suffix.length;}
-            public void write(OutputStream out)throws Exception{if(file.length()!=size)throw new IOException("El audio cambió mientras se enviaba");out.write(prefix);copyBase64(file,out);out.write(suffix);}
+            public void write(OutputStream out)throws Exception{if(file.length()!=size)throw new IOException(Lang.str(R.string.eng_err_audio_changed));out.write(prefix);copyBase64(file,out);out.write(suffix);}
         };
     }
     /**
@@ -172,29 +172,36 @@ class HttpApi {
      * con clase propia: el motor la usa para achicar a la mitad los bloques de OpenRouter, una sola vez.
      */
     static class TooLarge extends UserAction{TooLarge(String message){super(message);}}
+    /**
+     * Convierte una respuesta de error en lo que se le dice a la persona, en el idioma de la app. service: el nombre que
+     * se muestra («OpenRouter», «OpenAI», «Proveedor»…). Los errores que se reintentan (IOException) empiezan con ese
+     * nombre en los tres idiomas: Notes y Ajustes lo usan para saber que respondió el servicio (no la red del teléfono).
+     */
     static void require(Response response,String service)throws Exception{
         if(response.code>=200 && response.code<300)return;
         boolean router=OPENROUTER.equals(service);
-        String code="",type="",param="",all="",reason=response.code==413?"Una parte del audio pesa más de lo que acepta el proveedor.":"Revisa el formato del audio y los parámetros del modelo.";
+        String code="",type="",param="",all="";int reason=response.code==413?R.string.eng_reason_too_large:R.string.eng_reason_check_format;
         // OpenRouter: {"error":{"code":N,"message":"…","metadata":{"raw":"…"}}}. El mensaje suele ser genérico («Provider
         // returned error») y el detalle del proveedor final viene en metadata.raw: se miran los dos. Nunca se muestran tal cual.
         try{JSONObject error=response.json().optJSONObject("error");if(error!=null){code=safeToken(error.optString("code"));type=safeToken(error.optString("type"));param=safeToken(error.optString("param"));JSONObject meta=error.optJSONObject("metadata");String message=(error.optString("message")+" "+(meta==null?"":meta.optString("raw"))).toLowerCase(Locale.ROOT);all=message;
-            if(message.contains("duration")||message.contains("too long"))reason="El modelo rechazó la duración del audio. Prueba un tramo más corto.";
-            else if(message.contains("format")||message.contains("decode")||message.contains("corrupt"))reason="El proveedor no pudo decodificar este audio. Prueba importar una copia para convertirla.";
-            else if(message.contains("too short")||message.contains("empty"))reason="El audio está vacío o es demasiado corto. Prueba una grabación de al menos unos segundos.";
-            else if(message.contains("model"))reason="El modelo no está disponible o no admite estos parámetros. Revisa el modelo y sus capacidades.";
-            else if(message.contains("size")||message.contains("large"))reason="Una parte del audio supera un límite del proveedor. Prueba recortar el audio.";
+            if(message.contains("duration")||message.contains("too long"))reason=R.string.eng_reason_duration;
+            else if(message.contains("format")||message.contains("decode")||message.contains("corrupt"))reason=R.string.eng_reason_decode;
+            else if(message.contains("too short")||message.contains("empty"))reason=R.string.eng_reason_short;
+            else if(message.contains("model"))reason=R.string.eng_reason_model;
+            else if(message.contains("size")||message.contains("large"))reason=R.string.eng_reason_size;
         }}catch(Exception ignored){}
         Diagnostics.event("api_rejected",response.jobId,"http",response.code,"request_id",response.requestId,"code",code,"type",type,"param",param);
-        if(response.code==401)throw new UserAction("La clave del proveedor no es válida o fue revocada. Revísala en Ajustes.");
-        if(router&&response.code==402)throw new UserAction("No queda saldo en OpenRouter. Carga créditos en openrouter.ai y pulsa Reintentar.");
+        // Dice «clave» y termina con «Revísala en Ajustes.» (key_word, key_fix_in_settings): StatusText.aboutKey y
+        // withoutSettingsHint lo reconocen en los tres idiomas.
+        if(response.code==401)throw new UserAction(Lang.str(R.string.eng_err_key_rejected,Lang.str(R.string.key_fix_in_settings)));
+        if(router&&response.code==402)throw new UserAction(Lang.str(R.string.eng_err_or_no_credits));
         // 404 de OpenRouter: el modelo se retiró (o ningún proveedor lo ofrece con la privacidad elegida en la cuenta).
-        if(router&&response.code==404)throw new UserAction(all.contains("data policy")||all.contains("privacy")?"OpenRouter no tiene un proveedor para ese modelo con la privacidad que elegiste en tu cuenta. Revísala en openrouter.ai (Ajustes → Privacidad) o elige otro modelo en Ajustes.":"Ese modelo ya no está disponible en OpenRouter. Elige otro en Ajustes.");
-        if(response.code==403)throw new UserAction("Sin permiso en "+service+". Revisa la cuenta y la configuración del servicio.");
-        if(response.code==429 && response.text.contains("insufficient_quota"))throw new UserAction("El proveedor no tiene saldo o cuota disponible. Revisa la facturación de tu API.");
+        if(router&&response.code==404)throw new UserAction(Lang.str(all.contains("data policy")||all.contains("privacy")?R.string.eng_err_or_privacy:R.string.eng_err_or_model_gone));
+        if(response.code==403)throw new UserAction(Lang.str(R.string.eng_err_forbidden,service));
+        if(response.code==429 && response.text.contains("insufficient_quota"))throw new UserAction(Lang.str(R.string.eng_err_no_quota));
         // Se reintentan (con esperas crecientes; al quinto intento se avisa). Con OpenRouter, un 429 es su límite de ritmo.
-        if(response.code==408 || response.code==429 || response.code>=500)throw new IOException(router&&response.code==429?"OpenRouter pidió esperar: demasiadas solicitudes seguidas (429).":service+" no está disponible temporalmente ("+response.code+").");
-        String text=service+" · HTTP "+response.code+". "+reason+(code.isEmpty()?"":" Código: "+code)+(param.isEmpty()?"":" Parámetro: "+param)+(response.requestId.isEmpty()?"":" · Ref: "+response.requestId);
+        if(response.code==408 || response.code==429 || response.code>=500)throw new IOException(router&&response.code==429?Lang.str(R.string.eng_err_or_rate_limited):Lang.str(R.string.eng_err_unavailable,service,response.code));
+        String text=Lang.str(R.string.eng_err_http,service,response.code,Lang.str(reason))+(code.isEmpty()?"":" "+Lang.str(R.string.eng_err_code,code))+(param.isEmpty()?"":" "+Lang.str(R.string.eng_err_param,param))+(response.requestId.isEmpty()?"":" · "+Lang.str(R.string.eng_err_ref,response.requestId));
         if(response.code==413)throw new TooLarge(text);
         throw new UserAction(text);
     }

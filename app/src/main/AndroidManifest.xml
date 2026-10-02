@@ -31,6 +31,8 @@
         <service android:name=".RecorderService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".ImportService" android:exported="false" android:foregroundServiceType="dataSync|mediaProcessing" />
         <service android:name=".TranscribeService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <!-- 0.9.0: «Detener» en la notificación de avance de la transcripción (funciona con la app cerrada). -->
+        <receiver android:name=".TranscribeService$Stop" android:exported="false" />
         <service android:name=".PipelineJob" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="true" />
         <provider android:name=".AudioProvider" android:authorities="${applicationId}.audio" android:exported="false" android:grantUriPermissions="true" />
     </application>
