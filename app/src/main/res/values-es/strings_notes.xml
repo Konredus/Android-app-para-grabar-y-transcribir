@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Los textos de siempre de la nota, sin cambiar una letra: NotesChecks los compara tal cual. -->
+<resources>
+    <string name="note_someone">alguien</string>
+    <string name="note_person">Persona</string>
+    <string name="note_untitled">Grabación</string>
+
+    <string name="note_credit">Armada con %1$s · %2$s</string>
+    <string name="note_cost_real">costó %1$s</string>
+
+    <string name="note_log_started">Armando la nota con %1$s</string>
+    <string name="note_log_retry_simple">OpenRouter no aceptó una opción del pedido · se reintenta en modo simple</string>
+    <string name="note_log_ready">Nota lista</string>
+    <string name="note_log_took">tardó %1$s</string>
+    <string name="note_log_titled">le puso título</string>
+    <string name="note_log_title_applied">Título puesto a partir de la nota (puedes cambiarlo)</string>
+    <string name="note_log_discarded">La nota se descartó: la transcripción cambió mientras se armaba</string>
+    <string name="note_log_failed">No se pudo armar la nota: %1$s</string>
+
+    <string name="note_err_no_key">La nota usa tu clave de OpenRouter. Agrégala en Ajustes → «Tu IA (OpenRouter)».</string>
+    <string name="note_err_key">La clave de %1$s no es válida o fue revocada. %2$s</string>
+    <string name="note_err_no_transcript">Esta grabación aún no tiene transcripción.</string>
+    <string name="note_err_demo">El ejemplo no se envía a la IA.</string>
+    <string name="note_err_no_speech">No se detectó habla en esta grabación: no hay nada que resumir.</string>
+    <string name="note_err_discarded">La transcripción cambió mientras se armaba la nota. Vuelve a armarla cuando la nueva versión esté lista.</string>
+    <string name="note_err_timeout">%1$s tardó demasiado en responder. Vuelve a intentarlo.</string>
+    <string name="note_err_offline">Sin conexión con %1$s. Vuelve a intentarlo cuando tengas internet.</string>
+    <string name="note_err_generic">No se pudo armar la nota. Vuelve a intentarlo.</string>
+    <string name="note_err_format">%1$s respondió en un formato inesperado. Vuelve a intentarlo.</string>
+    <string name="note_err_format_ai">La IA respondió en un formato inesperado. Vuelve a intentarlo.</string>
+    <string name="note_err_empty">%1$s no devolvió la nota. Vuelve a intentarlo.</string>
+    <string name="note_err_cut">La respuesta de %1$s se cortó antes de terminar. Vuelve a intentarlo.</string>
+    <string name="note_err_refused">%1$s no quiso resumir esta grabación.</string>
+    <string name="note_err_no_credits_router">No queda saldo en OpenRouter. Carga créditos en openrouter.ai y vuelve a armar la nota.</string>
+    <string name="note_err_no_credits">Tu cuenta de %1$s no tiene saldo. Revisa la facturación de tu API.</string>
+    <string name="note_err_overloaded">%1$s está saturado en este momento. Vuelve a intentarlo en unos minutos.</string>
+    <string name="note_err_too_long">La transcripción es demasiado larga para el modelo de la nota. Prueba con otro modelo.</string>
+    <string name="note_err_data_policy">OpenRouter no tiene un proveedor para el modelo de la nota con la privacidad que elegiste en tu cuenta. Revísala en openrouter.ai (Settings → Privacy) o elige otro modelo en Ajustes.</string>
+    <string name="note_err_model_gone">El modelo de la nota («%1$s») ya no está disponible en OpenRouter. Elige otro en Ajustes.</string>
+    <string name="note_err_model_unavailable">El modelo de la nota («%1$s») no está disponible en tu cuenta de %2$s.</string>
+    <string name="note_err_rejected">%1$s rechazó el pedido de la nota (HTTP %2$d). Vuelve a intentarlo o prueba otro modelo.</string>
+
+    <string name="note_md_date">fecha</string>
+    <string name="note_md_time">hora</string>
+    <string name="note_md_duration">duracion</string>
+    <string name="note_md_people">personas</string>
+    <string name="note_md_source">fuente</string>
+    <string name="note_md_recording">grabacion</string>
+    <string name="note_md_ai">nota_ia</string>
+    <string name="note_summary">Resumen</string>
+    <string name="note_decisions">Decisiones</string>
+    <string name="note_tasks">Tareas</string>
+    <string name="note_marks">Momentos marcados</string>
+    <string name="note_quotes">Frases clave</string>
+    <string name="note_transcript">Transcripción</string>
+    <string name="note_md_quote">«%1$s»</string>
+    <string name="note_md_demo">Ejemplo de demostración: no proviene de una transcripción real.</string>
+    <string name="note_md_auto_voices">Voces separadas automáticamente: pueden tener errores.</string>
+    <string name="note_md_no_speech">No se detectó habla en este audio.</string>
+</resources>

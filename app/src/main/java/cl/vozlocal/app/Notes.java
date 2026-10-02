@@ -24,6 +24,12 @@ import java.util.regex.Pattern;
  * "model" (el que se pidió), "modelUsed" (el que respondió) y "costUsd", que con OpenRouter es el cobro real
  * ("costReal") y con los demás un estimado. Diseño: docs/diseno/SPEC-0.8.md y SPEC-0.8b.md (segunda ronda: solo
  * OpenRouter). Los caminos de OpenAI y de Claude siguen en el código, con sus pruebas, pero la app ya no los elige.
+ *
+ * Idiomas (0.9.0): la nota se escribe en el idioma de la app (inglés, español o portugués de Brasil). La IA recibe el
+ * pedido entero en ese idioma, instrucciones y cabecera ({@link #system}, {@link #prompt}), con el mismo formato JSON en
+ * los tres; en español es el pedido de siempre, letra por letra. Lo que la app muestra (bitácora, errores, Markdown, pie
+ * de la nota) sale de strings_notes.xml. Lo que devuelve la IA se lee igual en los tres idiomas («nadie», «nobody»,
+ * «ninguém»…), y la nota guarda en qué idioma se pidió ("lang").
  */
 final class Notes {
     private Notes(){}
@@ -54,7 +60,16 @@ final class Notes {
     /** Tope del texto enviado (≈ 10 h de conversación): protege de un pedido absurdo si algo sale mal. */
     static final int MAX_TRANSCRIPT_CHARS=400_000;
 
-    static final String SYSTEM=
+    // ---------- Instrucciones para la IA, en el idioma de la nota (0.9.0) ----------
+    /*
+     * Viven aquí y no en strings_notes.xml: no son textos de pantalla sino un contrato con la IA, que cambia junto con
+     * SHAPE y normalize() (claves, límites). Así las tres versiones se leen una al lado de la otra, el formato JSON es uno
+     * solo y el español queda letra por letra como antes (sin escapes de XML de por medio).
+     */
+    /** Forma exacta del JSON que se pide: la misma en los tres idiomas (normalize la lee igual). */
+    private static final String SHAPE="{\"title\":\"…\",\"summary\":\"…\",\"decisions\":[\"…\"],\"tasks\":[{\"text\":\"…\",\"who\":\"{S1}\",\"when\":\"…\"}],\"quotes\":[{\"t\":192,\"text\":\"…\",\"who\":\"{S2}\"}],\"tags\":[\"…\"]}\n";
+    /** Español: las instrucciones de siempre, sin cambiar una letra (NotesChecks lo vigila). */
+    private static final String SYSTEM_ES=
         "Tomas notas de las grabaciones de una persona en Chile y las guardas en su «segundo cerebro» (Obsidian). "
         +"Recibes la transcripción automática de una grabación: una reunión, una conversación o una nota de voz.\n\n"
         +"Reglas:\n"
@@ -63,13 +78,51 @@ final class Notes {
         +"3. Para referirte a quienes hablan usa SOLO su marca exacta entre llaves, por ejemplo {S1} o {S2}. Nunca escribas «Persona 1» ni «el hablante», y no adivines nombres para las marcas. A otras personas que solo se mencionan en la conversación sí las nombras como se dijo.\n"
         +"4. La transcripción puede traer errores de palabras o de quién habla: interpreta con criterio y no los copies.\n"
         +"5. Responde SOLO con un objeto JSON válido, sin texto antes ni después, con esta forma:\n"
-        +"{\"title\":\"…\",\"summary\":\"…\",\"decisions\":[\"…\"],\"tasks\":[{\"text\":\"…\",\"who\":\"{S1}\",\"when\":\"…\"}],\"quotes\":[{\"t\":192,\"text\":\"…\",\"who\":\"{S2}\"}],\"tags\":[\"…\"]}\n"
+        +SHAPE
         +"- title: título breve y específico del tema, de máximo 60 caracteres, sin fecha, sin marcas como {S1} y sin la palabra «Grabación».\n"
         +"- summary: de 1 a 5 oraciones con lo esencial.\n"
         +"- decisions: lo que se decidió o acordó. Lista vacía si no hubo decisiones.\n"
         +"- tasks: lo que alguien quedó de hacer. text empieza con un verbo; who es la marca de quien lo hará ({S1}), el nombre si es otra persona mencionada, o \"\" si no se sabe; when es el plazo tal como se dijo («el viernes», «antes del 15») o \"\". Lista vacía si no hay tareas.\n"
         +"- quotes: hasta 5 frases textuales que valga la pena recordar, copiadas tal cual; t es el segundo en que empieza su línea (número, según la hora [mm:ss]); who es la marca de quien la dijo o \"\".\n"
         +"- tags: de 3 a 6 etiquetas temáticas en minúsculas, de una palabra cada una, sin «#».";
+    /** Inglés: las mismas reglas, en inglés natural y claro (sin suponer un país). «Person 1» y «Recording» son los textos de la app en inglés. */
+    private static final String SYSTEM_EN=
+        "You take notes from a person's recordings and save them in their “second brain” (Obsidian). "
+        +"You receive the automatic transcript of a recording: a meeting, a conversation or a voice memo.\n\n"
+        +"Rules:\n"
+        +"1. Write in natural, clear and friendly English. Short sentences, no filler.\n"
+        +"2. Use only what is in the transcript. Do not invent facts, figures, dates, names or tasks. If something is unclear, leave it out.\n"
+        +"3. To refer to the speakers, use ONLY their exact marker in braces, for example {S1} or {S2}. Never write “Person 1” or “the speaker”, and do not guess names for the markers. Other people who are only mentioned in the conversation should be named the way they were mentioned.\n"
+        +"4. The transcript may have wrong words or the wrong speaker: interpret it with judgment and do not copy those errors.\n"
+        +"5. Reply ONLY with a valid JSON object, with no text before or after it, in this shape:\n"
+        +SHAPE
+        +"- title: a short, specific title for the topic, at most 60 characters, with no date, no markers like {S1} and without the word “Recording”.\n"
+        +"- summary: 1 to 5 sentences with the essentials.\n"
+        +"- decisions: what was decided or agreed. Empty list if there were no decisions.\n"
+        +"- tasks: what someone committed to do. text starts with a verb; who is the marker of the person who will do it ({S1}), the name if it is another person mentioned, or \"\" if unknown; when is the deadline exactly as it was said (“on Friday”, “before the 15th”) or \"\". Empty list if there are no tasks.\n"
+        +"- quotes: up to 5 verbatim lines worth remembering, copied exactly as said; t is the second at which its line starts (a number, from the [mm:ss] time); who is the marker of the person who said it, or \"\".\n"
+        +"- tags: 3 to 6 topic tags in lowercase, one word each, without “#”.";
+    /** Portugués de Brasil (con «você»): las mismas reglas. «Pessoa 1» y «Gravação» son los textos de la app en portugués. */
+    private static final String SYSTEM_PT=
+        "Você faz anotações das gravações de uma pessoa e as guarda no “segundo cérebro” dela (Obsidian). "
+        +"Você recebe a transcrição automática de uma gravação: uma reunião, uma conversa ou uma nota de voz.\n\n"
+        +"Regras:\n"
+        +"1. Escreva em português do Brasil natural, claro e próximo. Frases curtas, sem rodeios.\n"
+        +"2. Use só o que está na transcrição. Não invente fatos, números, datas, nomes nem tarefas. Se algo não ficar claro, deixe de fora.\n"
+        +"3. Para se referir a quem fala, use SÓ a marca exata entre chaves, por exemplo {S1} ou {S2}. Nunca escreva “Pessoa 1” nem “o falante”, e não adivinhe nomes para as marcas. Já as outras pessoas que só são mencionadas na conversa, nomeie do jeito que foram citadas.\n"
+        +"4. A transcrição pode ter erros de palavras ou de quem fala: interprete com critério e não copie esses erros.\n"
+        +"5. Responda SÓ com um objeto JSON válido, sem texto antes nem depois, neste formato:\n"
+        +SHAPE
+        +"- title: título curto e específico do assunto, com no máximo 60 caracteres, sem data, sem marcas como {S1} e sem a palavra “Gravação”.\n"
+        +"- summary: de 1 a 5 frases com o essencial.\n"
+        +"- decisions: o que foi decidido ou combinado. Lista vazia se não houve decisões.\n"
+        +"- tasks: o que alguém ficou de fazer. text começa com um verbo; who é a marca de quem vai fazer ({S1}), o nome se for outra pessoa mencionada, ou \"\" se não se sabe; when é o prazo do jeito que foi dito (“na sexta”, “antes do dia 15”) ou \"\". Lista vazia se não houver tarefas.\n"
+        +"- quotes: até 5 frases literais que valha a pena lembrar, copiadas tal como foram ditas; t é o segundo em que a linha dela começa (um número, conforme a hora [mm:ss]); who é a marca de quem a disse, ou \"\".\n"
+        +"- tags: de 3 a 6 etiquetas temáticas em minúsculas, de uma palavra cada, sem “#”.";
+    /** Instrucciones para la IA en el idioma de la nota ("en", "es" o "pt"; cualquier otro, inglés, como values/). */
+    static String system(String lang){return ai(lang,SYSTEM_EN,SYSTEM_ES,SYSTEM_PT);}
+    /** El texto para la IA en el idioma de la nota, en el orden de Lang.SUPPORTED: inglés, español, portugués de Brasil. */
+    private static String ai(String lang,String en,String es,String pt){return Lang.ES.equals(lang)?es:Lang.PT.equals(lang)?pt:en;}
 
     // ---------- Consultas ----------
     static boolean exists(Context c,String id){return FilesStore.file(c,id,".note.json").isFile();}
@@ -85,7 +138,7 @@ final class Notes {
         return age>=-60_000&&age<WORKING_MAX_MS;
     }
     /** La respuesta llegó cuando la transcripción ya había cambiado (otra versión o cancelada): no se guarda. */
-    static final class Discarded extends HttpApi.UserAction{Discarded(){super("La transcripción cambió mientras se armaba la nota. Vuelve a armarla cuando la nueva versión esté lista.");}}
+    static final class Discarded extends HttpApi.UserAction{Discarded(){super(Lang.str(R.string.note_err_discarded));}}
     static JSONObject load(Context c,String id){try{return exists(c,id)?FilesStore.read(FilesStore.file(c,id,".note.json")):null;}catch(Exception e){return null;}}
     /** ¿Hay clave para la IA de la nota? Es la de OpenRouter, la misma con que se transcribe. */
     static boolean canGenerate(Context c){return new Settings(c).hasOpenRouterKey();}
@@ -117,15 +170,16 @@ final class Notes {
     /** Modelo que respondió de verdad (con un alias «…-latest», la versión concreta); si no se supo, el que se pidió. */
     static String modelShown(JSONObject note){if(note==null)return "";String used=note.optString("modelUsed","");return used.isEmpty()?note.optString("model",""):used;}
     /**
-     * «Armada con OpenRouter · anthropic/claude-sonnet-5.5 · costó US$0,004»: con qué IA se armó la nota y cuánto costó.
-     * El costo es el real si el proveedor lo informó ("costReal"); si no, el estimado con la tarifa pública («≈»).
+     * «Armada con OpenRouter · anthropic/claude-sonnet-5.5 · costó US$0,004»: con qué IA se armó la nota y cuánto costó,
+     * en el idioma de la app. El costo es el real si el proveedor lo informó ("costReal"); si no, el estimado con la
+     * tarifa pública («≈»).
      */
     static String credit(JSONObject note){
         String model=modelShown(note);if(model.isEmpty())return "";
-        StringBuilder b=new StringBuilder("Armada con ").append(service(note.optString("provider"))).append(" · ").append(model);
+        StringBuilder b=new StringBuilder(Lang.str(R.string.note_credit,service(note.optString("provider")),model));
         double cost=note.optDouble("costUsd",-1);
         // «< US$0,001» ya dice que es aproximado: no lleva «≈» delante.
-        if(cost>=0){String usd=Pricing.usd(cost);b.append(" · ").append(note.optBoolean("costReal")?"costó ":usd.startsWith("<")?"":"≈ ").append(usd);}
+        if(cost>=0){String usd=Pricing.usd(cost);b.append(" · ").append(note.optBoolean("costReal")?Lang.str(R.string.note_cost_real,usd):usd.startsWith("<")?usd:"≈ "+usd);}
         return b.toString();
     }
 
@@ -156,7 +210,7 @@ final class Notes {
         Settings s=new Settings(c);String provider=provider(s);String key="";
         try{key=s.openRouterKey();}catch(Exception ignored){}
         if(key==null||key.isEmpty()){
-            String why="La nota usa tu clave de OpenRouter. Agrégala en Ajustes → «Tu IA (OpenRouter)».";
+            String why=Lang.str(c,R.string.note_err_no_key);
             failed(c,r.id,why);throw new HttpApi.UserAction(why);
         }
         generate(c,r,http,provider,model(s,provider),key);
@@ -171,21 +225,23 @@ final class Notes {
         int attempt=FilesStore.state(c,id).optInt("attempt",0);
         try{
             FilesStore.update(c,id,st->st.put("noteState","working").put("noteStartedAt",started).remove("noteError"));
-            if(!Transcript.exists(c,id))throw new HttpApi.UserAction("Esta grabación aún no tiene transcripción.");
+            if(!Transcript.exists(c,id))throw new HttpApi.UserAction(Lang.str(c,R.string.note_err_no_transcript));
             Transcript t=Transcript.load(c,id);
-            if(t.data.optBoolean("demo")||FilesStore.state(c,id).optBoolean("demo"))throw new HttpApi.UserAction("El ejemplo no se envía a la IA.");
-            if(t.segments().length()==0)throw new HttpApi.UserAction("No se detectó habla en esta grabación: no hay nada que resumir.");
+            if(t.data.optBoolean("demo")||FilesStore.state(c,id).optBoolean("demo"))throw new HttpApi.UserAction(Lang.str(c,R.string.note_err_demo));
+            if(t.segments().length()==0)throw new HttpApi.UserAction(Lang.str(c,R.string.note_err_no_speech));
             Recording latest=FilesStore.recording(c,id);if(latest!=null){r.title=latest.title;r.created=latest.created;r.duration=latest.duration;}
-            Prompt prompt=prompt(t,r,Marks.list(c,id));
-            log(c,id,"Armando la nota con "+service);Diagnostics.event("note_started",id,"provider",provider,"model",model);
+            // La nota sale en el idioma de la app (0.9.0): el pedido entero va en ese idioma.
+            Prompt prompt=prompt(t,r,Marks.list(c,id),Lang.current(c));
+            log(c,id,Lang.str(c,R.string.note_log_started,service));Diagnostics.event("note_started",id,"provider",provider,"model",model);
             // La respuesta llega completa al final: la espera crece con el largo del audio (2 min como mínimo, 5 como máximo).
             http.readTimeoutMs=(int)Math.min(300_000,Math.max(120_000,60_000+r.duration/60_000*2_000));
             http.onUploaded=null;http.onEvent=null;http.onProgress=null;if(http.jobId==null)http.jobId=id;
             Answer answer="anthropic".equals(provider)?anthropic(http,key,model,prompt)
-                :"openrouter".equals(provider)?openrouter(http,key,model,prompt,()->{log(c,id,"OpenRouter no aceptó una opción del pedido · se reintenta en modo simple");Diagnostics.event("note_retry_simple",id,"provider",provider,"model",model,"http",400);})
+                :"openrouter".equals(provider)?openrouter(http,key,model,prompt,()->{log(c,id,Lang.str(c,R.string.note_log_retry_simple));Diagnostics.event("note_retry_simple",id,"provider",provider,"model",model,"http",400);})
                 :openai(http,key,model,prompt);
             JSONObject note=normalize(parseAnswer(answer.text),prompt.tokens,r.duration);
-            note.put("version",1).put("provider",provider).put("model",model).put("createdAt",System.currentTimeMillis()).put("speakers",new JSONObject(prompt.tokens));
+            // "lang" (0.9.0): en qué idioma se pidió la nota ("en", "es" o "pt").
+            note.put("version",1).put("provider",provider).put("model",model).put("createdAt",System.currentTimeMillis()).put("speakers",new JSONObject(prompt.tokens)).put("lang",prompt.lang);
             // "model" es el que se pidió (puede ser un alias); "modelUsed", la versión que respondió de verdad (0.8.0).
             if(!answer.model.isEmpty())note.put("modelUsed",answer.model);
             if(answer.usage!=null)note.put("usage",answer.usage);
@@ -202,7 +258,7 @@ final class Notes {
             boolean applied=!suggested.isEmpty()&&applyTitle(c,r,suggested);
             long took=System.currentTimeMillis()-started;
             FilesStore.update(c,id,st->{st.put("noteState","ready").remove("noteError");if(suggested.isEmpty())st.remove("suggestedTitle");else st.put("suggestedTitle",suggested);});
-            log(c,id,"Nota lista · tardó "+Ui.humanDuration(took)+(applied?" · le puso título":""));
+            log(c,id,Lang.str(c,R.string.note_log_ready)+" · "+Lang.str(c,R.string.note_log_took,Ui.humanDuration(took))+(applied?" · "+Lang.str(c,R.string.note_log_titled):""));
             // Solo datos sin contenido: el costo (un número) sirve para revisar tarifas; el título y el texto nunca se registran.
             Diagnostics.event("note_ready",id,"provider",provider,"model",model,"elapsed_ms",took,"count",note.getJSONArray("tasks").length(),"result",applied?"title_applied":"title_suggested","cost",note.has("costUsd")?(Object)note.optDouble("costUsd"):null);
             LocalStorage.enqueue(c,id);
@@ -210,13 +266,13 @@ final class Notes {
             // El estado de la nota solo se toca si sigue siendo el de ESTE pedido (no el de una versión nueva).
             if(e instanceof Discarded){
                 try{FilesStore.update(c,id,st->{if(ours(st,started,attempt)){st.remove("noteState");st.remove("noteError");}});}catch(Exception ignored){}
-                log(c,id,"La nota se descartó: la transcripción cambió mientras se armaba");Diagnostics.event("note_discarded",id);throw e;
+                log(c,id,Lang.str(c,R.string.note_log_discarded));Diagnostics.event("note_discarded",id);throw e;
             }
             boolean cancelled=http.cancelled||(e instanceof InterruptedIOException&&!(e instanceof java.net.SocketTimeoutException));
             if(cancelled){try{FilesStore.update(c,id,st->{if(ours(st,started,attempt)){st.remove("noteState");st.remove("noteError");}});}catch(Exception ignored){}Diagnostics.event("note_cancelled",id);throw e;}
             String why=friendly(e,service);
             try{FilesStore.update(c,id,st->{if(ours(st,started,attempt))st.put("noteState","failed").put("noteError",why);});}catch(Exception ignored){}
-            log(c,id,"No se pudo armar la nota: "+why);
+            log(c,id,Lang.str(c,R.string.note_log_failed,why));
             Diagnostics.event("note_failed",id,"provider",provider,"model",model,"error_class",e.getClass().getSimpleName(),"reason",HttpApi.safeReason(e));
             throw e;
         }finally{http.readTimeoutMs=timeout;http.onUploaded=uploaded;http.onEvent=events;http.onProgress=progress;http.jobId=job;}
@@ -224,13 +280,16 @@ final class Notes {
     /** ¿El estado sigue siendo el de este pedido? Misma versión de la transcripción y la misma hora de inicio de la nota. */
     private static boolean ours(JSONObject st,long started,int attempt){return st.optInt("attempt",0)==attempt&&st.optLong("noteStartedAt",0)==started;}
     private static void failed(Context c,String id,String why){try{FilesStore.update(c,id,st->st.put("noteState","failed").put("noteError",why));}catch(Exception ignored){}}
-    /** Texto para la persona (sin datos técnicos ni contenido). */
+    /** Texto para la persona (sin datos técnicos ni contenido), en el idioma de la app. */
     static String friendly(Exception e,String service){
         if(e instanceof HttpApi.UserAction||e instanceof BadAnswer)return e.getMessage();
-        if(e instanceof java.net.SocketTimeoutException)return service+" tardó demasiado en responder. Vuelve a intentarlo.";
-        if(e instanceof java.net.UnknownHostException||e instanceof java.net.ConnectException||e instanceof java.net.NoRouteToHostException)return "Sin conexión con "+service+". Vuelve a intentarlo cuando tengas internet.";
-        String m=e.getMessage();if(e instanceof IOException&&m!=null&&m.startsWith(service))return m;
-        return "No se pudo armar la nota. Vuelve a intentarlo.";
+        if(e instanceof java.net.SocketTimeoutException)return Lang.str(R.string.note_err_timeout,service);
+        if(e instanceof java.net.UnknownHostException||e instanceof java.net.ConnectException||e instanceof java.net.NoRouteToHostException)return Lang.str(R.string.note_err_offline,service);
+        // Los avisos pasajeros que nombran al servicio («OpenRouter no está disponible temporalmente (503).», «Claude está
+        // saturado…») ya están escritos para la persona. En inglés o portugués el nombre puede no ir al comienzo
+        // («O OpenRouter está…»): basta con que esté.
+        String m=e.getMessage();if(e instanceof IOException&&m!=null&&m.contains(service))return m;
+        return Lang.str(R.string.note_err_generic);
     }
     /** Bitácora visible del proceso: agrega una línea SIN cambiar el estado (el titular sigue siendo el de la transcripción). */
     private static void log(Context c,String id,String message){
@@ -249,39 +308,50 @@ final class Notes {
         try{
             Recording latest=FilesStore.recording(c,r.id);if(latest==null||!isDefaultTitle(latest.title,latest.created))return false;
             latest.title=suggested;latest.save(c);r.title=latest.title;
-            log(c,r.id,"Título puesto a partir de la nota (puedes cambiarlo)");Diagnostics.event("note_title_applied",r.id);return true;
+            log(c,r.id,Lang.str(c,R.string.note_log_title_applied));Diagnostics.event("note_title_applied",r.id);return true;
         }catch(Exception e){return false;}
     }
 
     // ---------- Pedido ----------
-    /** Texto que se envía y marca → id de voz (S1 → "A"). */
-    static final class Prompt{final String text;final LinkedHashMap<String,String> tokens;final boolean diarized;Prompt(String text,LinkedHashMap<String,String> tokens,boolean diarized){this.text=text;this.tokens=tokens;this.diarized=diarized;}}
+    /**
+     * Texto que se envía, marca → id de voz (S1 → "A") y el idioma del pedido ("en", "es" o "pt"; 0.9.0): las
+     * instrucciones van en ese mismo idioma ({@link #system}), aunque la app cambie de idioma mientras se envía.
+     */
+    static final class Prompt{final String text,lang;final LinkedHashMap<String,String> tokens;final boolean diarized;Prompt(String text,LinkedHashMap<String,String> tokens,boolean diarized,String lang){this.text=text;this.tokens=tokens;this.diarized=diarized;this.lang=lang;}}
 
-    /** Arma el pedido compacto: cabecera, momentos ★ y una línea por intervención «[mm:ss] {S1}: texto». */
-    static Prompt prompt(Transcript t,Recording r,JSONArray marks)throws Exception{
+    /** Arma el pedido compacto en el idioma de la app: cabecera, momentos ★ y una línea por intervención «[mm:ss] {S1}: texto». */
+    static Prompt prompt(Transcript t,Recording r,JSONArray marks)throws Exception{return prompt(t,r,marks,Lang.current());}
+    /**
+     * Igual, en un idioma dado ("en", "es" o "pt"; otro, inglés): todo lo que lee la IA va en ese idioma, así escribe la
+     * nota en él. En español, el pedido de siempre. La fecha, con el formato y los nombres de ese idioma: «martes 29 de
+     * septiembre de 2026, 16:05», «Tuesday, September 29, 2026, 16:05», «terça-feira, 29 de setembro de 2026, 16:05».
+     */
+    static Prompt prompt(Transcript t,Recording r,JSONArray marks,String lang)throws Exception{
+        String l=Lang.normalize(lang);if(l==null)l=Lang.EN;
         boolean diarized=t.diarized();JSONArray s=t.segments();
         LinkedHashMap<String,String> tokens=new LinkedHashMap<>();Map<String,String> byVoice=new HashMap<>();
         if(diarized)for(int i=0;i<s.length();i++){String v=s.getJSONObject(i).getString("speaker");if(!byVoice.containsKey(v)){String k="S"+(byVoice.size()+1);byVoice.put(v,k);tokens.put(k,v);}}
         StringBuilder b=new StringBuilder();
         String title=r.title==null?"":r.title.trim();
-        b.append("Título actual: «").append(title).append("»").append(isDefaultTitle(title,r.created)?" (automático)":" (lo escribió la persona)").append('\n');
-        b.append("Fecha: ").append(new SimpleDateFormat("EEEE d 'de' MMMM 'de' yyyy, HH:mm",new Locale("es","CL")).format(new Date(r.created))).append('\n');
-        b.append("Duración: ").append(Ui.humanDuration(r.duration)).append('\n');
-        if(diarized){b.append("Personas que hablan: ");int n=0;for(String k:tokens.keySet())b.append(n++==0?"":", ").append('{').append(k).append('}');b.append('\n');}
-        else b.append("En esta transcripción no se separaron las voces: deja who vacío (\"\") salvo que se nombre a alguien.\n");
+        b.append(ai(l,"Current title: “","Título actual: «","Título atual: “")).append(title).append(ai(l,"”","»","”"))
+            .append(isDefaultTitle(title,r.created)?ai(l," (automatic)"," (automático)"," (automático)"):ai(l," (written by the person)"," (lo escribió la persona)"," (escrito pela pessoa)")).append('\n');
+        b.append(ai(l,"Date: ","Fecha: ","Data: ")).append(new SimpleDateFormat(ai(l,"EEEE, MMMM d, yyyy, HH:mm","EEEE d 'de' MMMM 'de' yyyy, HH:mm","EEEE, d 'de' MMMM 'de' yyyy, HH:mm"),Lang.locale(l)).format(new Date(r.created))).append('\n');
+        b.append(ai(l,"Duration: ","Duración: ","Duração: ")).append(Ui.humanDuration(r.duration)).append('\n');
+        if(diarized){b.append(ai(l,"Speakers: ","Personas que hablan: ","Pessoas que falam: "));int n=0;for(String k:tokens.keySet())b.append(n++==0?"":", ").append('{').append(k).append('}');b.append('\n');}
+        else b.append(ai(l,"Voices were not separated in this transcript: leave who empty (\"\") unless someone is named.\n","En esta transcripción no se separaron las voces: deja who vacío (\"\") salvo que se nombre a alguien.\n","Nesta transcrição as vozes não foram separadas: deixe who vazio (\"\") a menos que alguém seja nomeado.\n"));
         if(marks!=null&&marks.length()>0){
-            b.append("\nMomentos que la persona marcó con ★ mientras grababa (dales importancia):\n");
+            b.append(ai(l,"\nMoments the person marked with ★ while recording (give them weight):\n","\nMomentos que la persona marcó con ★ mientras grababa (dales importancia):\n","\nMomentos que a pessoa marcou com ★ durante a gravação (dê importância a eles):\n"));
             for(int i=0;i<marks.length();i++){JSONObject m=marks.optJSONObject(i);if(m==null)continue;String label=m.optString("label","").trim();b.append("★ ").append(Recording.time(m.optLong("t"))).append(label.isEmpty()?"":" "+label).append('\n');}
         }
-        b.append("\nTranscripción:\n");int header=b.length();
+        b.append(ai(l,"\nTranscript:\n","\nTranscripción:\n","\nTranscrição:\n"));int header=b.length();
         for(int i=0;i<s.length();){
             JSONObject seg=s.getJSONObject(i);String voice=seg.getString("speaker");StringBuilder turn=new StringBuilder(seg.getString("text").trim());double end=seg.optDouble("end",seg.getDouble("start"));int j=i+1;
             if(diarized)while(j<s.length()){JSONObject next=s.getJSONObject(j);if(!next.getString("speaker").equals(voice)||next.getDouble("start")-end>Transcript.TURN_GAP_S)break;turn.append(' ').append(next.getString("text").trim());end=Math.max(end,next.optDouble("end",end));j++;}
             String line="["+Recording.time((long)(seg.getDouble("start")*1000))+"] "+(diarized?"{"+byVoice.get(voice)+"}: ":"")+turn.toString().replaceAll("\\s+"," ")+"\n";
-            if(b.length()-header+line.length()>MAX_TRANSCRIPT_CHARS){b.append("[…] (transcripción recortada por largo)\n");break;}
+            if(b.length()-header+line.length()>MAX_TRANSCRIPT_CHARS){b.append(ai(l,"[…] (transcript cut for length)\n","[…] (transcripción recortada por largo)\n","[…] (transcrição cortada por ser longa)\n"));break;}
             b.append(line);i=j;
         }
-        return new Prompt(b.toString(),tokens,diarized);
+        return new Prompt(b.toString(),tokens,diarized,l);
     }
 
     /**
@@ -296,10 +366,10 @@ final class Notes {
     /** El nombre de modelo que devuelve el proveedor se guarda y se muestra: solo si parece un id (nada de texto libre). */
     private static String safeModel(String m){return m!=null&&m.matches("[A-Za-z0-9._:/~-]{1,120}")?m:"";}
 
-    /** Cuerpo del pedido a OpenAI (Chat Completions, respuesta JSON). */
+    /** Cuerpo del pedido a OpenAI (Chat Completions, respuesta JSON). Las instrucciones, en el idioma del pedido. */
     static JSONObject openaiBody(String model,Prompt prompt)throws JSONException{
         JSONObject body=new JSONObject().put("model",model)
-            .put("messages",new JSONArray().put(new JSONObject().put("role","system").put("content",SYSTEM)).put(new JSONObject().put("role","user").put("content",prompt.text)))
+            .put("messages",new JSONArray().put(new JSONObject().put("role","system").put("content",system(prompt.lang))).put(new JSONObject().put("role","user").put("content",prompt.text)))
             .put("response_format",new JSONObject().put("type","json_object")).put("max_completion_tokens",8000);
         // Solo los modelos que razonan aceptan reasoning_effort; «low» basta para ordenar una conversación.
         if(model.matches("^(gpt-[5-9]|o[1-9]).*"))body.put("reasoning_effort","low");
@@ -312,12 +382,12 @@ final class Notes {
     }
     /** Lee una respuesta de Chat Completions (el formato de OpenAI, que OpenRouter repite): texto, uso, modelo y costo. */
     private static Answer chatAnswer(HttpApi.Response res,String service)throws Exception{
-        JSONObject json;try{json=res.json();}catch(Exception e){throw new BadAnswer(service+" respondió en un formato inesperado. Vuelve a intentarlo.");}
-        JSONArray choices=json.optJSONArray("choices");if(choices==null||choices.length()==0)throw new BadAnswer(service+" no devolvió la nota. Vuelve a intentarlo.");
+        JSONObject json;try{json=res.json();}catch(Exception e){throw new BadAnswer(Lang.str(R.string.note_err_format,service));}
+        JSONArray choices=json.optJSONArray("choices");if(choices==null||choices.length()==0)throw new BadAnswer(Lang.str(R.string.note_err_empty,service));
         JSONObject choice=choices.getJSONObject(0),message=choice.optJSONObject("message");
-        if(message!=null&&message.has("refusal")&&!message.isNull("refusal")&&!message.optString("refusal").trim().isEmpty())throw new HttpApi.UserAction(service+" no quiso resumir esta grabación.");
+        if(message!=null&&message.has("refusal")&&!message.isNull("refusal")&&!message.optString("refusal").trim().isEmpty())throw new HttpApi.UserAction(Lang.str(R.string.note_err_refused,service));
         String text=message==null||message.isNull("content")?"":content(message.opt("content"));
-        if(text.trim().isEmpty())throw new BadAnswer("length".equals(choice.optString("finish_reason"))?"La respuesta de "+service+" se cortó antes de terminar. Vuelve a intentarlo.":service+" no devolvió la nota. Vuelve a intentarlo.");
+        if(text.trim().isEmpty())throw new BadAnswer(Lang.str("length".equals(choice.optString("finish_reason"))?R.string.note_err_cut:R.string.note_err_empty,service));
         JSONObject u=json.optJSONObject("usage"),usage=u==null?null:new JSONObject().put("input_tokens",u.optLong("prompt_tokens")).put("output_tokens",u.optLong("completion_tokens"));
         // usage.cost: lo que cobró OpenRouter por este pedido, en US$. OpenAI no lo envía. Un 0 no cuenta como cobro real
         // (la misma regla de Pricing.real): con una clave propia del proveedor (BYOK) OpenRouter informa 0 aunque el
@@ -341,7 +411,7 @@ final class Notes {
      */
     static JSONObject openrouterBody(String model,Prompt prompt,boolean simple)throws JSONException{
         JSONObject body=new JSONObject().put("model",model)
-            .put("messages",new JSONArray().put(new JSONObject().put("role","system").put("content",SYSTEM)).put(new JSONObject().put("role","user").put("content",prompt.text)))
+            .put("messages",new JSONArray().put(new JSONObject().put("role","system").put("content",system(prompt.lang))).put(new JSONObject().put("role","user").put("content",prompt.text)))
             .put("max_tokens",8000);
         if(simple)return body;
         body.put("response_format",new JSONObject().put("type","json_object"));
@@ -410,7 +480,7 @@ final class Notes {
 
     /** Cuerpo del pedido a Anthropic (Messages API). */
     static JSONObject anthropicBody(String model,Prompt prompt)throws JSONException{
-        JSONObject body=new JSONObject().put("model",model).put("max_tokens",16000).put("system",SYSTEM)
+        JSONObject body=new JSONObject().put("model",model).put("max_tokens",16000).put("system",system(prompt.lang))
             .put("messages",new JSONArray().put(new JSONObject().put("role","user").put("content",prompt.text)));
         // El esfuerzo solo existe desde Sonnet/Opus 5 (Haiku 4.5 lo rechaza). «medium»: buena redacción sin pensar de más.
         if(model.matches("^claude-(sonnet|opus|fable)-[5-9].*"))body.put("output_config",new JSONObject().put("effort","medium"));
@@ -421,40 +491,45 @@ final class Notes {
     static Answer anthropic(HttpApi http,String key,String model,Prompt prompt)throws Exception{
         HttpApi.Response res=http.request("POST",ANTHROPIC_URL,"","application/json",HttpApi.json(anthropicBody(model,prompt)),anthropicHeaders(key));
         require(res,"Claude",model);
-        JSONObject json;try{json=res.json();}catch(Exception e){throw new BadAnswer("Claude respondió en un formato inesperado. Vuelve a intentarlo.");}
+        JSONObject json;try{json=res.json();}catch(Exception e){throw new BadAnswer(Lang.str(R.string.note_err_format,"Claude"));}
         JSONArray content=json.optJSONArray("content");String text=null;
         // El primer bloque puede ser de razonamiento: se toma el primer bloque de texto.
         if(content!=null)for(int i=0;i<content.length()&&text==null;i++){JSONObject block=content.optJSONObject(i);if(block!=null&&"text".equals(block.optString("type"))&&!block.optString("text").trim().isEmpty())text=block.optString("text");}
         String stop=json.optString("stop_reason");
-        if(text==null){if("refusal".equals(stop))throw new HttpApi.UserAction("Claude no quiso resumir esta grabación.");throw new BadAnswer("max_tokens".equals(stop)?"La respuesta de Claude se cortó antes de terminar. Vuelve a intentarlo.":"Claude no devolvió la nota. Vuelve a intentarlo.");}
+        if(text==null){if("refusal".equals(stop))throw new HttpApi.UserAction(Lang.str(R.string.note_err_refused,"Claude"));throw new BadAnswer(Lang.str("max_tokens".equals(stop)?R.string.note_err_cut:R.string.note_err_empty,"Claude"));}
         JSONObject u=json.optJSONObject("usage"),usage=u==null?null:new JSONObject().put("input_tokens",u.optLong("input_tokens")+u.optLong("cache_read_input_tokens")+u.optLong("cache_creation_input_tokens")).put("output_tokens",u.optLong("output_tokens"));
         return new Answer(text,usage,safeModel(json.optString("model")),-1);
     }
 
-    /** Errores con palabras de la nota (no del audio); el resto, con la clasificación común de HttpApi. */
+    /**
+     * Errores con palabras de la nota (no del audio), en el idioma de la app; el resto, con la clasificación común de
+     * HttpApi. Solo el de la clave (401) nombra la clave: StatusText.aboutKey reconoce key_word en cualquier mensaje.
+     */
     static void require(HttpApi.Response res,String service,String model)throws Exception{
         if(res.code>=200&&res.code<300)return;
         String message=errorText(res),type="";
         try{JSONObject e=res.json().optJSONObject("error");if(e!=null)type=e.optString("type");}catch(Exception ignored){}
         String why=null;boolean transientError=false,router=HttpApi.OPENROUTER.equals(service);
-        String broke=router?"No queda saldo en OpenRouter. Carga créditos en openrouter.ai y vuelve a armar la nota.":"Tu cuenta de "+service+" no tiene saldo. Revisa la facturación de tu API.";
-        if(res.code==401)why="La clave de "+service+" no es válida o fue revocada. Revísala en Ajustes.";
+        String broke=router?Lang.str(R.string.note_err_no_credits_router):Lang.str(R.string.note_err_no_credits,service);
+        // Termina con key_fix_in_settings («Revísala en Ajustes.»), el mismo final que los del motor: la bienvenida lo quita
+        // (StatusText.withoutSettingsHint), porque ahí la clave se corrige en el paso anterior.
+        if(res.code==401)why=Lang.str(R.string.note_err_key,service,Lang.str(R.string.key_fix_in_settings));
         // 402 (0.8.0): así avisa OpenRouter que no quedan créditos. Sin esto, HttpApi.require hablaría del formato del audio.
         else if(res.code==402)why=broke;
-        else if(res.code==529||"overloaded_error".equals(type)){why=service+" está saturado en este momento. Vuelve a intentarlo en unos minutos.";transientError=true;}
+        else if(res.code==529||"overloaded_error".equals(type)){why=Lang.str(R.string.note_err_overloaded,service);transientError=true;}
         else if(res.code==400||res.code==404||res.code==413||res.code==422){
             if(message.contains("credit balance")||message.contains("billing")||message.contains("insufficient credits"))why=broke;
-            else if(res.code==413||message.contains("context")||message.contains("too long")||message.contains("too many tokens")||(message.contains("maximum")&&message.contains("prompt")))why="La transcripción es demasiado larga para el modelo de la nota. Prueba con otro modelo.";
+            else if(res.code==413||message.contains("context")||message.contains("too long")||message.contains("too many tokens")||(message.contains("maximum")&&message.contains("prompt")))why=Lang.str(R.string.note_err_too_long);
             // 404 por la privacidad de la cuenta («No endpoints found matching your data policy»): el modelo existe, pero la
             // configuración de privacidad de OpenRouter descarta a todos sus proveedores. Cambiar de modelo puede no servir:
             // se dice dónde está el ajuste (hallazgo de la revisión; HttpApi.require ya lo distingue para el audio).
-            else if(router&&res.code==404&&(message.contains("data policy")||message.contains("privacy")))why="OpenRouter no tiene un proveedor para el modelo de la nota con la privacidad que elegiste en tu cuenta. Revísala en openrouter.ai (Settings → Privacy) o elige otro modelo en Ajustes.";
+            else if(router&&res.code==404&&(message.contains("data policy")||message.contains("privacy")))why=Lang.str(R.string.note_err_data_policy);
             // OpenRouter responde 404 cuando retiró el modelo o ningún proveedor lo ofrece (y 400 si el id no existe): la
             // salida es elegir otro. Otro 400 que solo nombre «model» puede ser cualquier cosa: va al texto general.
-            else if(router&&(res.code==404||message.contains("not a valid model")))why="El modelo de la nota («"+model+"») ya no está disponible en OpenRouter. Elige otro en Ajustes.";
-            else if(!router&&message.contains("model"))why="El modelo de la nota («"+model+"») no está disponible en tu cuenta de "+service+".";
+            else if(router&&(res.code==404||message.contains("not a valid model")))why=Lang.str(R.string.note_err_model_gone,model);
+            else if(!router&&message.contains("model"))why=Lang.str(R.string.note_err_model_unavailable,model,service);
             // Sin esto, HttpApi.require hablaría del audio, que aquí no se envía.
-            else why=service+" rechazó el pedido de la nota (HTTP "+res.code+"). Vuelve a intentarlo o prueba otro modelo."+(res.requestId.isEmpty()?"":" · Ref: "+res.requestId);
+            else why=Lang.str(R.string.note_err_rejected,service,res.code)+(res.requestId.isEmpty()?"":" · Ref: "+res.requestId);
         }
         if(why==null){HttpApi.require(res,service);return;}
         Diagnostics.event("api_rejected",res.jobId,"http",res.code,"request_id",res.requestId,"type",HttpApi.safeToken(type));
@@ -466,8 +541,8 @@ final class Notes {
     /** Saca el objeto JSON de la respuesta, aunque venga entre ```json … ``` o con texto alrededor. */
     static JSONObject parseAnswer(String text)throws BadAnswer{
         String s=text==null?"":text.trim();int a=s.indexOf('{'),b=s.lastIndexOf('}');
-        if(a<0||b<a)throw new BadAnswer("La IA respondió en un formato inesperado. Vuelve a intentarlo.");
-        try{return new JSONObject(s.substring(a,b+1));}catch(JSONException e){throw new BadAnswer("La IA respondió en un formato inesperado. Vuelve a intentarlo.");}
+        if(a<0||b<a)throw new BadAnswer(Lang.str(R.string.note_err_format_ai));
+        try{return new JSONObject(s.substring(a,b+1));}catch(JSONException e){throw new BadAnswer(Lang.str(R.string.note_err_format_ai));}
     }
     private static final Pattern TOKEN=Pattern.compile("\\{\\s*[Ss](\\d{1,2})\\s*\\}|(?<![\\w{])S(\\d{1,2})(?![\\w}])");
     /** Deja las marcas como {S1} (acepta «{s1}», «{ S1 }» o «S1» suelto de una marca conocida). */
@@ -477,12 +552,19 @@ final class Notes {
             m.appendReplacement(out,Matcher.quoteReplacement(bare&&!known.containsKey(k)?m.group():"{"+k+"}"));}
         m.appendTail(out);return out.toString().trim();
     }
+    /*
+     * «No se sabe» en lo que devuelve la IA, en los tres idiomas y sea cual sea el de la nota (puede responder en otro):
+     * quién («nadie», «nobody», «ninguém»…) y plazo de una tarea («no se sabe», «unknown», «não informado»…) quedan
+     * vacíos. Las palabras en español son las de siempre: lo que la app hacía con ellas no cambia.
+     */
+    private static final Pattern NO_WHO=Pattern.compile("(?iu)(?:null|ninguno|nadie|desconocido|no se sabe|-|—|none|nobody|no one|unknown|n/a|not stated|not specified|nenhum|nenhuma|ninguém|desconhecido|desconhecida|não se sabe|não informado|não informada)");
+    private static final Pattern NO_WHEN=Pattern.compile("(?iu)(?:null|-|—|no se sabe|none|unknown|n/a|not stated|not specified|nenhum|nenhuma|desconhecido|não se sabe|não informado|não informada)");
     /** Quién: "S1" si es una marca conocida; el nombre si es otra persona; "" si no se sabe. */
     static String who(Object value,Map<String,String> known){
         String v=value==null||value==JSONObject.NULL?"":String.valueOf(value).trim();
         Matcher m=Pattern.compile("^\\{?\\s*[Ss](\\d{1,2})\\s*\\}?$").matcher(v);
         if(m.matches()){String k="S"+Integer.parseInt(m.group(1));return known.containsKey(k)?k:"";}
-        if(v.matches("(?i)(null|ninguno|nadie|desconocido|no se sabe|-|—)"))return "";
+        if(NO_WHO.matcher(v).matches())return "";
         v=tokens(v,known);return v.length()>60?v.substring(0,60).trim():v;
     }
     static String cleanTitle(String title){
@@ -497,7 +579,8 @@ final class Notes {
         if(raw instanceof JSONArray){JSONArray a=(JSONArray)raw;for(int i=0;i<a.length();i++)items.add(a.optString(i));}
         else if(raw instanceof String)items.addAll(Arrays.asList(((String)raw).split("[,;]")));
         for(String item:items){
-            String t=item.trim().toLowerCase(new Locale("es","CL")).replace("#","").replaceAll("[\\s_]+","-").replaceAll("[^\\p{L}\\p{N}-]","").replaceAll("-+","-").replaceAll("^-|-$","");
+            // Locale.ROOT: el mismo resultado en los tres idiomas (en español, igual que con es-CL) y sin sorpresas regionales.
+            String t=item.trim().toLowerCase(Locale.ROOT).replace("#","").replaceAll("[\\s_]+","-").replaceAll("[^\\p{L}\\p{N}-]","").replaceAll("-+","-").replaceAll("^-|-$","");
             if(t.isEmpty()||t.matches("\\d+")||t.length()>40||!seen.add(t))continue;
             out.put(t);if(out.length()==6)break;
         }
@@ -526,7 +609,7 @@ final class Notes {
         JSONArray tasks=new JSONArray();
         for(Object item:list(raw.opt("tasks"))){
             String text=textOf(item,known);if(text.isEmpty()||tasks.length()>=20)continue;
-            JSONObject o=item instanceof JSONObject?(JSONObject)item:new JSONObject();String when=o.isNull("when")?"":o.optString("when","").trim();if(when.matches("(?i)null|-|—|no se sabe"))when="";
+            JSONObject o=item instanceof JSONObject?(JSONObject)item:new JSONObject();String when=o.isNull("when")?"":o.optString("when","").trim();if(NO_WHEN.matcher(when).matches())when="";
             tasks.put(new JSONObject().put("text",text).put("who",who(o.opt("who"),known)).put("when",when).put("done",o.optBoolean("done",false)));
         }
         n.put("tasks",tasks);
@@ -543,11 +626,11 @@ final class Notes {
     }
 
     // ---------- Nombres ----------
-    /** Reemplaza {S1}, {S2}… por el nombre actual de cada voz. names acepta claves "S1" o "{S1}". */
+    /** Reemplaza {S1}, {S2}… por el nombre actual de cada voz («alguien», en el idioma de la app, si no está). names acepta claves "S1" o "{S1}". */
     static String resolve(String text,Map<String,String> names){
         if(text==null)return "";if(names==null)names=Collections.emptyMap();
         Matcher m=Pattern.compile("\\{\\s*[Ss](\\d{1,2})\\s*\\}").matcher(text);StringBuffer out=new StringBuffer();
-        while(m.find()){String k="S"+Integer.parseInt(m.group(1));String name=names.get(k);if(name==null)name=names.get("{"+k+"}");m.appendReplacement(out,Matcher.quoteReplacement(name==null||name.trim().isEmpty()?"alguien":name.trim()));}
+        while(m.find()){String k="S"+Integer.parseInt(m.group(1));String name=names.get(k);if(name==null)name=names.get("{"+k+"}");m.appendReplacement(out,Matcher.quoteReplacement(name==null||name.trim().isEmpty()?Lang.str(R.string.note_someone):name.trim()));}
         m.appendTail(out);return out.toString();
     }
     /** Quién (de una tarea o frase) → nombre visible: la marca se resuelve; un nombre escrito se deja tal cual. */
@@ -563,7 +646,7 @@ final class Notes {
     }
     /**
      * Marca → nombre actual. Si la voz ya no aparece (se unió a otra al corregir), toma el nombre de la voz que hoy
-     * dice esos tramos; si no se encuentra, «Persona N».
+     * dice esos tramos; si no se encuentra, «Persona N» en el idioma de la app (speaker_n, como Transcript).
      */
     static LinkedHashMap<String,String> names(JSONObject note,Transcript t){
         LinkedHashMap<String,String> out=new LinkedHashMap<>();JSONObject speakers=note==null?null:note.optJSONObject("speakers");
@@ -574,10 +657,14 @@ final class Notes {
         for(String k:keys){
             String voice=speakers.optString(k),name=current.get(voice);
             if(name==null&&t!=null)name=mergedInto(t,voice,current);
-            out.put(k,name==null?"Persona "+k.replaceAll("\\D",""):name);
+            // El número sale de la marca (S3 → 3); una marca sin número razonable toma su lugar en la lista.
+            if(name==null){int n=number(k);name=Lang.str(R.string.speaker_n,n>0?n:out.size()+1);}
+            out.put(k,name);
         }
         return out;
     }
+    /** El número de una marca ("S3" → 3); 0 si no trae uno o es absurdo (un archivo dañado no rompe la nota). */
+    private static int number(String k){String d=k==null?"":k.replaceAll("\\D","");return d.isEmpty()||d.length()>6?0:Integer.parseInt(d);}
     /** Nombre de la voz que hoy dice la mayoría de los tramos que eran de «voice». */
     private static String mergedInto(Transcript t,String voice,Map<String,String> current){
         Map<String,Integer> count=new HashMap<>();JSONArray s=t.segments();
@@ -611,55 +698,66 @@ final class Notes {
     }
     private static String q(String v){return "\""+(v==null?"":v).replace("\\","\\\\").replace("\"","\\\"").replaceAll("[\\r\\n\\t]+"," ").trim()+"\"";}
     private static String line(String v){return v==null?"":v.replaceAll("[\\r\\n]+"," ").trim();}
-    /** Título visible sin la fecha ISO delante (la fecha ya va en el frontmatter). */
-    static String heading(String title){String t=title==null?"":title.trim();String h=t.replaceFirst("^\\d{4}-\\d{2}-\\d{2}\\s+","").trim();return h.isEmpty()?(t.isEmpty()?"Grabación":t):h;}
+    /** Título visible sin la fecha ISO delante (la fecha ya va en el frontmatter); sin título, «Grabación» en el idioma de la app. */
+    static String heading(String title){String t=title==null?"":title.trim();String h=t.replaceFirst("^\\d{4}-\\d{2}-\\d{2}\\s+","").trim();return h.isEmpty()?(t.isEmpty()?Lang.str(R.string.note_untitled):t):h;}
+    /** «fecha: 2026-09-29»: una propiedad del frontmatter, con su nombre en el idioma de la app. */
+    private static void property(StringBuilder md,int name,String value){md.append(Lang.str(name)).append(": ").append(value).append('\n');}
+    /** «## Resumen»: el título de una sección, en el idioma de la app. */
+    private static void section(StringBuilder md,int title){md.append("## ").append(Lang.str(title)).append("\n\n");}
 
+    /**
+     * Nota en Markdown, en el idioma de la app (0.9.0): propiedades del frontmatter, secciones y avisos. En español, lo de
+     * siempre (fecha, hora, duracion, personas…). Lo escrito por la IA queda en el idioma en que se pidió la nota.
+     */
     static String markdown(Recording r,JSONObject note,Transcript t,JSONArray marks)throws Exception{
         Map<String,String> names=names(note,t);
         LinkedHashMap<String,String> voices=new LinkedHashMap<>();if(t!=null&&t.diarized())voices=t.speakers();
         StringBuilder md=new StringBuilder("---\n");
-        md.append("fecha: ").append(Recording.isoDate(r.created)).append('\n');
-        md.append("hora: ").append(q(new SimpleDateFormat("HH:mm",Locale.ROOT).format(new Date(r.created)))).append('\n');
-        md.append("duracion: ").append(q(Ui.humanDuration(r.duration))).append('\n');
+        property(md,R.string.note_md_date,Recording.isoDate(r.created));
+        property(md,R.string.note_md_time,q(new SimpleDateFormat("HH:mm",Locale.ROOT).format(new Date(r.created))));
+        property(md,R.string.note_md_duration,q(Ui.humanDuration(r.duration)));
         LinkedHashSet<String> people=new LinkedHashSet<>(t!=null?voices.values():names.values());
-        md.append("personas:");if(people.isEmpty())md.append(" []\n");else{md.append('\n');for(String p:people)md.append("  - ").append(q(p)).append('\n');}
-        // "tags" es la propiedad que Obsidian reconoce como etiquetas (con otro nombre no aparecen en su panel de etiquetas).
+        md.append(Lang.str(R.string.note_md_people)).append(':');if(people.isEmpty())md.append(" []\n");else{md.append('\n');for(String p:people)md.append("  - ").append(q(p)).append('\n');}
+        // "tags" es la propiedad que Obsidian reconoce como etiquetas (con otro nombre no aparecen en su panel de
+        // etiquetas): no se traduce.
         JSONArray tags=note==null?null:note.optJSONArray("tags");
         if(tags!=null&&tags.length()>0){md.append("tags:\n");for(int i=0;i<tags.length();i++)md.append("  - ").append(q(tags.optString(i))).append('\n');}
-        md.append("fuente: ").append(q("Verbapp")).append('\n');
-        md.append("grabacion: ").append(q(r.title)).append('\n');
+        property(md,R.string.note_md_source,q("Verbapp"));
+        property(md,R.string.note_md_recording,q(r.title));
         // Con un alias de OpenRouter se escribe la versión que respondió («anthropic/claude-sonnet-5.5»), no el alias.
-        if(note!=null)md.append("nota_ia: ").append(q(service(note.optString("provider"))+" · "+modelShown(note))).append('\n');
+        if(note!=null)property(md,R.string.note_md_ai,q(service(note.optString("provider"))+" · "+modelShown(note)));
         md.append("---\n\n# ").append(line(heading(r.title))).append("\n\n");
         if(note!=null){
-            md.append("## Resumen\n\n").append(resolve(note.optString("summary").trim(),names)).append("\n\n");
+            section(md,R.string.note_summary);md.append(resolve(note.optString("summary").trim(),names)).append("\n\n");
             JSONArray decisions=note.optJSONArray("decisions");
-            if(decisions!=null&&decisions.length()>0){md.append("## Decisiones\n\n");for(int i=0;i<decisions.length();i++)md.append("- ").append(line(resolve(decisions.optString(i),names))).append('\n');md.append('\n');}
+            if(decisions!=null&&decisions.length()>0){section(md,R.string.note_decisions);for(int i=0;i<decisions.length();i++)md.append("- ").append(line(resolve(decisions.optString(i),names))).append('\n');md.append('\n');}
             JSONArray tasks=note.optJSONArray("tasks");
-            if(tasks!=null&&tasks.length()>0){md.append("## Tareas\n\n");
+            if(tasks!=null&&tasks.length()>0){section(md,R.string.note_tasks);
                 for(int i=0;i<tasks.length();i++){JSONObject task=tasks.optJSONObject(i);if(task==null)continue;String who=whoName(task.optString("who"),names),when=task.optString("when").trim();
                     md.append(task.optBoolean("done")?"- [x] ":"- [ ] ").append(line(resolve(task.optString("text"),names))).append(who.isEmpty()?"":" — "+line(who)).append(when.isEmpty()?"":" · "+line(when)).append('\n');}
                 md.append('\n');}
         }
-        if(marks!=null&&marks.length()>0){md.append("## Momentos marcados\n\n");
+        if(marks!=null&&marks.length()>0){section(md,R.string.note_marks);
             for(int i=0;i<marks.length();i++){JSONObject m=marks.optJSONObject(i);if(m==null)continue;String label=line(m.optString("label",""));md.append("- ★ ").append(Recording.time(m.optLong("t"))).append(label.isEmpty()?"":" "+label).append('\n');}
             md.append('\n');}
         if(note!=null){JSONArray quotes=note.optJSONArray("quotes");
-            if(quotes!=null&&quotes.length()>0){md.append("## Frases clave\n\n");
+            if(quotes!=null&&quotes.length()>0){section(md,R.string.note_quotes);
+                // Comillas del idioma de la app: «…» en español, “…” en inglés y portugués.
                 for(int i=0;i<quotes.length();i++){JSONObject qt=quotes.optJSONObject(i);if(qt==null)continue;String who=whoName(qt.optString("who"),names);
-                    md.append("> «").append(line(resolve(qt.optString("text"),names))).append("»");
+                    md.append("> ").append(Lang.str(R.string.note_md_quote,line(resolve(qt.optString("text"),names))));
                     if(!who.isEmpty())md.append(" — ").append(line(who));
                     if(qt.has("t"))md.append(" (").append(Recording.time(qt.optLong("t")*1000)).append(")");
                     md.append("\n\n");}}}
-        if(t!=null){md.append("## Transcripción\n\n");appendTranscript(md,t,voices,marks);}
+        if(t!=null){section(md,R.string.note_transcript);appendTranscript(md,t,voices,marks);}
         return md.toString().replaceAll("\\n{3,}","\n\n").trim()+"\n";
     }
     /** Intervenciones agrupadas «**Nombre** (mm:ss): texto»; las que tienen un momento ★ lo llevan delante. */
     private static void appendTranscript(StringBuilder md,Transcript t,Map<String,String> voices,JSONArray marks)throws Exception{
         boolean diarized=t.diarized();JSONArray s=t.segments();
-        if(t.data.optBoolean("demo"))md.append("_Ejemplo de demostración: no proviene de una transcripción real._\n\n");
-        if(diarized&&!t.reviewed()&&s.length()>0)md.append("_Voces separadas automáticamente: pueden tener errores._\n\n");
-        if(s.length()==0){md.append("_No se detectó habla en este audio._\n");return;}
+        // Avisos en cursiva («_…_»): el texto, en el idioma de la app.
+        if(t.data.optBoolean("demo"))md.append('_').append(Lang.str(R.string.note_md_demo)).append("_\n\n");
+        if(diarized&&!t.reviewed()&&s.length()>0)md.append('_').append(Lang.str(R.string.note_md_auto_voices)).append("_\n\n");
+        if(s.length()==0){md.append('_').append(Lang.str(R.string.note_md_no_speech)).append("_\n");return;}
         List<Double> starts=new ArrayList<>();List<String> who=new ArrayList<>(),text=new ArrayList<>();
         for(int i=0;i<s.length();){
             JSONObject seg=s.getJSONObject(i);String voice=seg.getString("speaker");StringBuilder turn=new StringBuilder(seg.getString("text").trim());double end=seg.optDouble("end",seg.getDouble("start"));int j=i+1;
@@ -672,7 +770,7 @@ final class Notes {
         boolean times=diarized||starts.size()>1;
         for(int i=0;i<starts.size();i++){
             String when=Recording.time((long)(starts.get(i)*1000));md.append(starred[i]?"★ ":"");
-            if(diarized){String name=voices.get(who.get(i));md.append("**").append(line(name==null?"Persona":name)).append("** (").append(when).append("): ");}
+            if(diarized){String name=voices.get(who.get(i));md.append("**").append(line(name==null?Lang.str(R.string.note_person):name)).append("** (").append(when).append("): ");}
             else if(times)md.append("(").append(when).append(") ");
             md.append(text.get(i)).append("\n\n");
         }
