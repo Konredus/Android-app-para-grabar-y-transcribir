@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Bienvenida, guía de batería y novedades en portugués de Brasil. «Ajustes» es la pestaña de la app; los ajustes del
+  teléfono son «Configurações», como los llama Android en Brasil.
+-->
+<resources>
+    <string name="onb_sent">Para transcrever, seu áudio é enviado ao OpenRouter e ao modelo que você escolher; para a nota, o texto. Sua chave paga só o que você usar.</string>
+    <string name="onb_kept">Fica no seu celular até você transcrever.</string>
+    <string name="onb_unchecked">Chave salva. Não foi possível verificar agora: você pode fazer isso depois em Ajustes.</string>
+
+    <string name="onb_key_empty">Cole sua chave para continuar.</string>
+    <string name="onb_key_spaces">A chave não pode ter espaços nem quebras de linha. Copie de novo, inteira.</string>
+    <string name="onb_key_short">Essa chave parece incompleta. Copie inteira e cole de novo.</string>
+    <string name="onb_key_anthropic">Essa chave é da Anthropic (Claude). Aqui vai uma do OpenRouter, que começa com “sk-or-”.</string>
+    <string name="onb_key_openai">Essa chave não é do OpenRouter (parece da OpenAI ou de outro serviço). As do OpenRouter começam com “sk-or-”.</string>
+    <string name="onb_key_valid">Chave válida</string>
+    <string name="onb_key_valid_with">Chave válida · %1$s</string>
+    <string name="onb_key_failed">A chave não funcionou.</string>
+    <string name="onb_ready_title">Tudo pronto!</string>
+    <string name="onb_ready_title_name">Tudo pronto, %1$s</string>
+
+    <string name="onb_back_step">Voltar à etapa anterior</string>
+    <string name="onb_skip">Pular</string>
+    <string name="onb_skip_desc">Pular as boas-vindas</string>
+    <string name="onb_close">Fechar</string>
+    <string name="onb_close_desc">Fechar as boas-vindas</string>
+    <string name="onb_later">Agora não, só gravar</string>
+    <string name="onb_start">Começar</string>
+    <string name="onb_continue">Continuar</string>
+    <string name="onb_done">Pronto</string>
+    <string name="onb_first_recording">Fazer minha primeira gravação</string>
+    <string name="onb_window_title">%1$s, etapa %2$d de %3$d</string>
+    <string name="onb_step_welcome">Boas-vindas</string>
+    <string name="onb_step_you">Você</string>
+    <string name="onb_step_ai">Conecte sua IA</string>
+    <string name="onb_step_ready">Tudo pronto</string>
+    <string name="onb_step_of">Etapa %1$d de %2$d</string>
+
+    <string name="onb_welcome_overline">Boas-vindas ao Verbapp</string>
+    <string name="onb_welcome_title">Suas palavras,\npara sempre</string>
+    <string name="onb_welcome_record">Grave sem internet</string>
+    <string name="onb_welcome_voices">Transcreva separando vozes</string>
+    <string name="onb_welcome_voices_detail">Para saber quem disse o quê.</string>
+    <string name="onb_welcome_note">Uma nota pronta para salvar</string>
+    <string name="onb_welcome_note_detail">Direto para o seu segundo cérebro.</string>
+    <string name="onb_language_desc">Idioma: %1$s</string>
+
+    <string name="onb_you_overline">Muito prazer,</string>
+    <string name="onb_you_title">Como você se chama?</string>
+    <string name="onb_name_hint">Seu nome</string>
+    <string name="onb_name_desc">Seu nome, opcional</string>
+    <string name="onb_name_why">Opcional: para cumprimentar você e colocar seu nome nas transcrições.</string>
+    <string name="onb_mic">Microfone</string>
+    <string name="onb_mic_allow">Permitir microfone</string>
+    <string name="onb_mic_allowed">Microfone permitido</string>
+    <string name="onb_mic_ready">Pronto: você já pode gravar quando quiser.</string>
+    <string name="onb_mic_use_notify">Só é usado enquanto você grava. As notificações mostram que a gravação continua.</string>
+    <string name="onb_mic_use_offline">Só é usado enquanto você grava, e funciona sem internet.</string>
+    <string name="onb_mic_off_title">O microfone está desativado</string>
+    <string name="onb_mic_off_body">Ative nas configurações do Android para poder gravar. Você também pode fazer isso depois.</string>
+    <string name="onb_open_settings">Abrir configurações</string>
+    <string name="onb_settings_failed">Não foi possível abrir as configurações.</string>
+    <string name="onb_not_now">Agora não</string>
+    <string name="onb_battery_title">Com a tela bloqueada</string>
+    <string name="onb_battery_ask">Para que seus áudios sejam transcritos mesmo com o celular bloqueado.</string>
+    <string name="onb_battery_extra">Permitido. Há mais um ajuste em celulares %1$s: toque para ver.</string>
+    <string name="onb_battery_done">Pronto: o Verbapp transcreve mesmo com o celular bloqueado.</string>
+    <string name="onb_battery_allow_desc">Permitir transcrever com a tela bloqueada. %1$s</string>
+    <string name="onb_battery_allowed">Permitido: o Verbapp transcreve mesmo com o celular bloqueado.</string>
+
+    <string name="onb_ai_overline">Uma só chave para tudo</string>
+    <string name="onb_ai_title">Conecte sua IA</string>
+    <string name="onb_ai_how">Como funciona</string>
+    <string name="onb_ai_key_label">Chave do OpenRouter</string>
+    <string name="onb_paste">Colar</string>
+    <string name="onb_paste_desc">Colar a chave copiada</string>
+    <string name="onb_how_get_key">Como consigo uma chave?</string>
+    <string name="onb_key_rejected_paste">%1$s Cole outra chave.</string>
+    <string name="onb_key_saved_already">Já há uma chave salva. Cole outra só se quiser trocá-la.</string>
+    <string name="onb_key_encrypted">Ela fica salva com criptografia neste celular.</string>
+    <string name="onb_paste_empty">Não há nada copiado. Copie sua chave e toque em Colar de novo.</string>
+    <string name="onb_paste_not_key">O que você copiou não parece uma chave. Copie inteira e toque em Colar de novo.</string>
+    <string name="onb_paste_ok">Chave colada. Toque em Continuar.</string>
+    <string name="onb_key_or_later">Cole sua chave ou toque em “%1$s”.</string>
+    <string name="onb_key_save_failed">Não foi possível salvar a chave neste celular. Tente de novo.</string>
+    <string name="onb_howto_title">Como conseguir sua chave</string>
+    <string name="onb_howto_body">O OpenRouter dá acesso a muitas IAs com uma só chave. Você paga só o que usar.</string>
+    <string name="onb_howto_1">Crie sua conta em openrouter.ai.</string>
+    <string name="onb_howto_2">Adicione um pouco de crédito: só é descontado o que você usar.</string>
+    <string name="onb_howto_3">Em “Keys”, crie uma chave e copie.</string>
+    <string name="onb_howto_4">Volte ao Verbapp e toque em Colar.</string>
+    <string name="onb_open_site">Abrir %1$s</string>
+    <string name="onb_no_browser_title">Não foi possível abrir o navegador</string>
+    <string name="onb_no_browser_body">Acesse %1$s em um navegador, crie sua chave e volte para colá-la.</string>
+
+    <string name="onb_ready_overline">Você já pode gravar</string>
+    <string name="onb_checking">Verificando sua chave…</string>
+    <string name="onb_check_key_of">Confira sua chave do %1$s</string>
+    <string name="onb_key_ready">Chave salva: pronta para transcrever.</string>
+    <string name="onb_connect_ai">Conectar sua IA</string>
+    <string name="onb_no_key">Sem chave, você só grava. Adicione quando quiser.</string>
+    <string name="onb_voice">Sua voz</string>
+    <string name="onb_voice_saved">Salva: o Verbapp já reconhece você.</string>
+    <string name="onb_voice_record">Gravar minha voz</string>
+    <string name="onb_voice_optional">Opcional: 10 segundos para o Verbapp reconhecer você.</string>
+    <string name="onb_inbox">Salvamento rápido</string>
+    <string name="onb_inbox_set">Suas notas vão para “%1$s” com um toque.</string>
+    <string name="onb_inbox_pick">Escolher minha pasta 0-Inbox</string>
+    <string name="onb_inbox_optional">Opcional: onde suas notas ficam com um toque.</string>
+
+    <string name="bat_guide_title">Mais um ajuste para %1$s</string>
+    <string name="bat_guide_body">Os celulares %1$s têm uma economia de bateria própria, além da do Android. Sem este ajuste, ela pode pausar suas transcrições quando você bloqueia o celular.</string>
+    <string name="bat_search_tip">Não encontrou? Em Configurações, toque na lupa e busque “segundo plano”.</string>
+    <string name="bat_open_settings">Abrir configurações do Verbapp</string>
+    <string name="bat_step_open">Toque em “%1$s”, aqui embaixo.</string>
+    <string name="bat_find_app">Procure o Verbapp.</string>
+    <string name="bat_vivo_battery">Entre em “Bateria” (ou “Consumo de energia”).</string>
+    <string name="bat_vivo_allow">Escolha a opção que permite o consumo de energia em segundo plano.</string>
+    <string name="bat_vivo_autostart">Se aparecer “Inicialização automática”, ative também.</string>
+    <string name="bat_vivo_old_path">Abra Configurações → Bateria → consumo de energia em segundo plano.</string>
+    <string name="bat_vivo_old_allow">Permita que o Verbapp use energia em segundo plano.</string>
+    <string name="bat_xiaomi_saver">Entre em “Economia de bateria” e escolha “Sem restrições”.</string>
+    <string name="bat_xiaomi_autostart">Ative “Inicialização automática”.</string>
+    <string name="bat_huawei_path">Abra Configurações → Bateria → “Inicialização de apps”.</string>
+    <string name="bat_huawei_manual">Procure o Verbapp e desative “Gerenciar automaticamente”.</string>
+    <string name="bat_huawei_background">Deixe ativado “Executar em segundo plano”.</string>
+    <string name="bat_oppo_usage">Entre em “Uso da bateria”.</string>
+    <string name="bat_oppo_allow">Ative “Permitir atividade em segundo plano” e “Permitir inicialização automática”.</string>
+    <string name="bat_hint_vivo">Em celulares %1$s, também: Configurações → Apps → Verbapp → Bateria → permita o consumo de energia em segundo plano. Se não aparecer, busque “segundo plano” em Configurações.</string>
+    <string name="bat_hint_vivo_old">Em celulares %1$s, também: Configurações → Bateria → consumo de energia em segundo plano → Verbapp → permita o uso de energia em segundo plano.</string>
+    <string name="bat_hint_xiaomi">Em celulares %1$s, também: Configurações → Apps → Verbapp → Economia de bateria → Sem restrições, e ative “Inicialização automática”.</string>
+    <string name="bat_hint_samsung">Em celulares %1$s, também: Configurações → Aplicativos → Verbapp → Bateria → Sem restrições.</string>
+    <string name="bat_hint_huawei">Em celulares %1$s, também: Configurações → Bateria → Inicialização de apps → Verbapp → Gerenciar manualmente, e ative “Executar em segundo plano”.</string>
+    <string name="bat_hint_oppo">Em celulares %1$s, também: Configurações → Apps → Verbapp → Uso da bateria → Permitir atividade em segundo plano.</string>
+
+    <string name="news_title">Novidades e versões</string>
+    <string name="news_using">Você está usando a versão %1$s.</string>
+    <string name="news_missing">Não foi possível encontrar o histórico de versões.</string>
+    <string name="news_close">Fechar</string>
+    <string name="news_see_all">Ver todas as versões</string>
+    <string name="news_of_version">Novidades da %1$s</string>
+    <string name="news_current">Atual</string>
+    <string name="news_version">Versão %1$s</string>
+    <string name="news_in_use">a que você usa</string>
+    <string name="news_open">%1$s, aberta. Toque para recolher</string>
+    <string name="news_closed">%1$s, recolhida. Toque para ver as novidades</string>
+</resources>

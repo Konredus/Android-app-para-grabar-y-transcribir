@@ -59,6 +59,8 @@ final class Battery {
      * leer desde la app: por eso cada guía dice la ruta más probable para la versión de Android, nombra la opción por lo
      * que hace («permitir en segundo plano») y la bienvenida agrega el atajo que sirve en todos: buscar «segundo plano»
      * en Ajustes. Nada de esto se confirmó en cada teléfono; vivo con Android 16 es el caso real del diagnóstico.
+     * En inglés y portugués (0.9.0) los menús se nombran como los muestran esos teléfonos en ese idioma cuando se conocen;
+     * si no, la opción se describe por lo que hace, igual que en español (strings_onboarding.xml, bat_*).
      */
     /** Nombre de la marca para los textos («vivo», «Xiaomi»…); "" si no se reconoce. manufacturer: Build.MANUFACTURER. */
     static String makerName(String manufacturer){
@@ -71,8 +73,11 @@ final class Battery {
         return "";
     }
     static String makerName(){return makerName(Build.MANUFACTURER);}
-    /** El botón de la guía que abre la ficha de la app (appSettings); el primer paso lo nombra igual, letra por letra. */
-    static final String OPEN_SETTINGS="Abrir ajustes de Verbapp";
+    /**
+     * El botón de la guía que abre la ficha de la app (appSettings); el primer paso lo nombra igual, letra por letra. Es un
+     * método y no una constante: una constante quedaría en el idioma de cuando se cargó la clase.
+     */
+    static String openSettings(){return Lang.str(R.string.bat_open_settings);}
     /**
      * Pasos para el ahorro PROPIO del fabricante, el que sigue activo aunque Android ya no optimice la app; vacío si la
      * marca no lo tiene. Samsung no está: su «Sin restricciones» es el mismo ajuste que cambia el diálogo de Android.
@@ -81,19 +86,19 @@ final class Battery {
      */
     static String[] makerSteps(String manufacturer,int sdk){
         String m=manufacturer==null?"":manufacturer.toLowerCase(Locale.ROOT);
-        String open="Toca «"+OPEN_SETTINGS+"», aquí abajo.";
+        String open=Lang.str(R.string.bat_step_open,openSettings());
         if(m.contains("vivo")||m.contains("iqoo")){
             // vivo (Funtouch OS 13–15, OriginOS en Android 16): en la ficha de la app, «Batería» lleva al consumo en
             // segundo plano. En las versiones anteriores estaba en Ajustes → Batería → Control de energía en segundo plano.
-            if(sdk>=33)return new String[]{open,"Entra a «Batería» (o «Consumo de energía»).","Elige la opción que permite el consumo de energía en segundo plano.","Si ves «Inicio automático», actívalo también."};
-            return new String[]{"Abre Ajustes → Batería → «Control de energía en segundo plano».","Busca Verbapp.","Activa «Permitir uso de energía en segundo plano»."};
+            if(sdk>=33)return new String[]{open,Lang.str(R.string.bat_vivo_battery),Lang.str(R.string.bat_vivo_allow),Lang.str(R.string.bat_vivo_autostart)};
+            return new String[]{Lang.str(R.string.bat_vivo_old_path),Lang.str(R.string.bat_find_app),Lang.str(R.string.bat_vivo_old_allow)};
         }
         if(m.contains("xiaomi")||m.contains("redmi")||m.contains("poco"))
-            return new String[]{open,"Entra a «Ahorro de batería» y elige «Sin restricciones».","Activa «Inicio automático»."};
+            return new String[]{open,Lang.str(R.string.bat_xiaomi_saver),Lang.str(R.string.bat_xiaomi_autostart)};
         if(m.contains("huawei")||m.contains("honor"))
-            return new String[]{"Abre Ajustes → Batería → «Inicio de aplicaciones».","Busca Verbapp y desactiva «Gestionar automáticamente».","Deja activado «Ejecutar en segundo plano»."};
+            return new String[]{Lang.str(R.string.bat_huawei_path),Lang.str(R.string.bat_huawei_manual),Lang.str(R.string.bat_huawei_background)};
         if(m.contains("oppo")||m.contains("realme")||m.contains("oneplus"))
-            return new String[]{open,"Entra a «Uso de la batería».","Activa «Permitir actividad en segundo plano» y «Permitir inicio automático»."};
+            return new String[]{open,Lang.str(R.string.bat_oppo_usage),Lang.str(R.string.bat_oppo_allow)};
         return new String[0];
     }
     static String[] makerSteps(){return makerSteps(Build.MANUFACTURER,Build.VERSION.SDK_INT);}
@@ -103,13 +108,12 @@ final class Battery {
      */
     static String makerHint(String manufacturer,int sdk){
         String m=manufacturer==null?"":manufacturer.toLowerCase(Locale.ROOT),name=makerName(manufacturer);
-        if(m.contains("vivo")||m.contains("iqoo"))return sdk>=33
-            ?"En "+name+", además: Ajustes → Apps → Verbapp → Batería → permite el consumo de energía en segundo plano. Si no lo ves, busca «segundo plano» en Ajustes."
-            :"En "+name+", además: Ajustes → Batería → Control de energía en segundo plano → Verbapp → Permitir uso de energía en segundo plano.";
-        if(m.contains("xiaomi")||m.contains("redmi")||m.contains("poco"))return "En Xiaomi, además: Ajustes → Apps → Verbapp → Ahorro de batería → Sin restricciones, y activa «Inicio automático».";
-        if(m.contains("samsung"))return "En Samsung, además: Ajustes → Apps → Verbapp → Batería → Sin restricciones.";
-        if(m.contains("huawei")||m.contains("honor"))return "En "+name+", además: Ajustes → Batería → Inicio de aplicaciones → Verbapp → Gestionar manualmente y activa «Ejecutar en segundo plano».";
-        if(m.contains("oppo")||m.contains("realme")||m.contains("oneplus"))return "En "+name+", además: Ajustes → Apps → Verbapp → Uso de la batería → Permitir actividad en segundo plano.";
+        if(m.contains("vivo")||m.contains("iqoo"))return Lang.str(sdk>=33?R.string.bat_hint_vivo:R.string.bat_hint_vivo_old,name);
+        // name es «Xiaomi» también en Redmi y POCO.
+        if(m.contains("xiaomi")||m.contains("redmi")||m.contains("poco"))return Lang.str(R.string.bat_hint_xiaomi,name);
+        if(m.contains("samsung"))return Lang.str(R.string.bat_hint_samsung,name);
+        if(m.contains("huawei")||m.contains("honor"))return Lang.str(R.string.bat_hint_huawei,name);
+        if(m.contains("oppo")||m.contains("realme")||m.contains("oneplus"))return Lang.str(R.string.bat_hint_oppo,name);
         return "";
     }
     /** Instrucción extra según la marca de este teléfono, para el control de energía propio del fabricante. */

@@ -23,6 +23,8 @@ import static cl.vozlocal.app.AppTheme.*;
  * - showAll: historial (la más nueva arriba), cada versión con su fecha y plegable.
  * Convención de cada punto: «Titular: detalle.» El titular va destacado y el detalle debajo.
  * 0.7.0 (Verbapp): titulares en Outfit, viñeta ✦ verde (el destello del logo) y la versión en una píldora.
+ * 0.9.0: un archivo por idioma, con las mismas versiones y puntos: novedades.json (español, el original),
+ * novedades-en.json y novedades-pt.json. Cada versión nueva se agrega en los tres.
  */
 final class Novedades {
     private Novedades(){}
@@ -32,10 +34,21 @@ final class Novedades {
         Entry(String version,String date,String title,List<String> items){this.version=version;this.date=date;this.title=title;this.items=items;}
     }
 
-    /** Todas las versiones del archivo, la más nueva primero. Lista vacía si el archivo falta o está dañado. */
+    /** El archivo de un idioma: el español es el original, sin sufijo. */
+    static String file(String lang){return Lang.ES.equals(lang)?"novedades.json":"novedades-"+lang+".json";}
+    /** Idiomas a probar, en orden: el de la app, inglés (el respaldo de la app) y español (el original). */
+    private static List<String> languages(Context c){
+        List<String> out=new ArrayList<>();for(String l:new String[]{Lang.current(c),Lang.EN,Lang.ES})if(!out.contains(l))out.add(l);return out;
+    }
+    /** Las versiones en el idioma de la app, la más nueva primero; si su archivo falta o está dañado, en inglés y luego en español. */
     static List<Entry> all(Context c){
+        for(String lang:languages(c)){List<Entry> list=all(c,lang);if(!list.isEmpty())return list;}
+        return new ArrayList<>();
+    }
+    /** Las versiones del archivo de ese idioma, la más nueva primero. Lista vacía si el archivo falta o está dañado. */
+    static List<Entry> all(Context c,String lang){
         List<Entry> out=new ArrayList<>();
-        try(InputStream in=c.getAssets().open("novedades.json")){out.addAll(parse(read(in)));}catch(Exception ignored){}
+        try(InputStream in=c.getAssets().open(file(lang))){out.addAll(parse(read(in)));}catch(Exception ignored){}
         return out;
     }
     /** Lógica pura (sin Android): JSON → entradas válidas, ordenadas de la más nueva a la más antigua. */
@@ -68,7 +81,8 @@ final class Novedades {
     }
     private static PackageInfo info(Context c)throws Exception{return c.getPackageManager().getPackageInfo(c.getPackageName(),0);}
 
-    static Entry entry(Context c,String version){for(Entry e:all(c))if(e.version.equals(version))return e;return null;}
+    /** Una versión en el idioma de la app; si ese archivo aún no la trae, en inglés o en español antes que no mostrarla. */
+    static Entry entry(Context c,String version){for(String lang:languages(c))for(Entry e:all(c,lang))if(e.version.equals(version))return e;return null;}
     /** Puntos de la versión instalada (vacío si esa versión no trae novedades). */
     static List<String> current(Context c){Entry e=entry(c,versionName(c));return e==null?new ArrayList<>():new ArrayList<>(e.items);}
 
@@ -88,7 +102,7 @@ final class Novedades {
             // 0.7.0: sin título de hoja; arriba va la píldora menta «Novedades de la X» y el titular grande en Outfit.
             Sheet sheet=s.sheet(null,null);sheet.add(hero(s,e));
             for(String item:e.items)sheet.add(bullet(s,item));
-            sheet.primary("Entendido",()->{}).secondary("Ver todas las versiones",()->showAll(s)).show();
+            sheet.primary(s.getString(R.string.common_ok),()->{}).secondary(s.getString(R.string.news_see_all),()->showAll(s)).show();
             Diagnostics.event("ui_action",null,"screen","Novedades","action","shown","result",code);
         }catch(Exception ignored){}
     }
@@ -98,8 +112,8 @@ final class Novedades {
     /** Historial de versiones: la más nueva arriba; la instalada viene abierta y el resto plegado. */
     static void showAll(Screen s){
         List<Entry> list=all(s);String current=versionName(s);
-        Sheet sheet=s.sheet("Novedades y versiones",current.isEmpty()?null:"Estás usando la "+current+".");
-        if(list.isEmpty())sheet.add(s.ui.text("No se encontró el historial de versiones.",Type.BODY_MEDIUM,s.p.onSurfaceVariant));
+        Sheet sheet=s.sheet(s.getString(R.string.news_title),current.isEmpty()?null:s.getString(R.string.news_using,current));
+        if(list.isEmpty())sheet.add(s.ui.text(s.getString(R.string.news_missing),Type.BODY_MEDIUM,s.p.onSurfaceVariant));
         boolean found=false;for(Entry e:list)if(e.version.equals(current))found=true;
         for(int i=0;i<list.size();i++){
             Entry e=list.get(i);boolean isCurrent=e.version.equals(current);
@@ -107,7 +121,7 @@ final class Novedades {
             LinearLayout.LayoutParams lp=Ui.fill();lp.setMargins(-s.ui.dp(S6),0,-s.ui.dp(S6),0);
             sheet.body.addView(versionBlock(s,e,isCurrent,isCurrent||(!found&&i==0)),lp);
         }
-        sheet.secondary("Cerrar",null).show();
+        sheet.secondary(s.getString(R.string.news_close),null).show();
     }
 
     /**
@@ -117,7 +131,7 @@ final class Novedades {
     private static View hero(Screen s,Entry e){
         Ui ui=s.ui;Palette p=s.p;
         LinearLayout box=ui.column();box.setPadding(0,0,0,ui.dp(S2));
-        TextView pill=ui.chip("Novedades de la "+e.version,p.onPrimaryContainer,p.primaryContainer);Ui.tabular(pill);pill.setPadding(ui.dp(S3),ui.dp(6),ui.dp(S4),ui.dp(6));
+        TextView pill=ui.chip(s.getString(R.string.news_of_version,e.version),p.onPrimaryContainer,p.primaryContainer);Ui.tabular(pill);pill.setPadding(ui.dp(S3),ui.dp(6),ui.dp(S4),ui.dp(6));
         Drawable spark=s.getDrawable(R.drawable.ic_sparkle).mutate();spark.setTint(p.primary);spark.setBounds(0,0,ui.dp(16),ui.dp(16));pill.setCompoundDrawablesRelative(spark,null,null,null);pill.setCompoundDrawablePadding(ui.dp(6));
         if(e.title.isEmpty()){if(Build.VERSION.SDK_INT>=28)pill.setAccessibilityHeading(true);}
         box.addView(pill,Ui.wrap());
@@ -137,7 +151,7 @@ final class Novedades {
         LinearLayout line=ui.row();
         TextView version=Ui.tabular(ui.text(e.version,Type.LABEL_LARGE,isCurrent?p.onInk:p.onSurface));version.setPadding(ui.dp(S3),ui.dp(S1),ui.dp(S3),ui.dp(S1));
         version.setBackground(isCurrent?shape(s,p.ink,R_FULL):outline(s,p.dark?p.surfaceContainerHigh:p.surfaceContainerLow,p.outlineVariant,R_FULL,false));line.addView(version,Ui.wrap());
-        if(isCurrent){TextView chip=ui.chip("Actual",p.onPrimaryContainer,p.primaryContainer);AppTheme.type(chip,Type.LABEL_MEDIUM);chip.setPadding(ui.dp(S2),ui.dp(S1),ui.dp(S2),ui.dp(S1));LinearLayout.LayoutParams cp=Ui.wrap();cp.setMarginStart(ui.dp(S2));line.addView(chip,cp);}
+        if(isCurrent){TextView chip=ui.chip(s.getString(R.string.news_current),p.onPrimaryContainer,p.primaryContainer);AppTheme.type(chip,Type.LABEL_MEDIUM);chip.setPadding(ui.dp(S2),ui.dp(S1),ui.dp(S2),ui.dp(S1));LinearLayout.LayoutParams cp=Ui.wrap();cp.setMarginStart(ui.dp(S2));line.addView(chip,cp);}
         texts.addView(line,Ui.wrap());
         if(!e.title.isEmpty()){TextView t=ui.text(e.title,Type.TITLE_MEDIUM,p.onSurface);t.setPadding(0,ui.dp(S2),0,0);texts.addView(t);}
         String date=date(e.date);
@@ -151,10 +165,10 @@ final class Novedades {
         for(String item:e.items)body.addView(bullet(s,item),Ui.fill());
         block.addView(body,Ui.fill());
 
-        String label="Versión "+e.version+(e.title.isEmpty()?"":", "+e.title)+(date.isEmpty()?"":", "+date)+(isCurrent?", la que usas":"");
+        String label=s.getString(R.string.news_version,e.version)+(e.title.isEmpty()?"":", "+e.title)+(date.isEmpty()?"":", "+date)+(isCurrent?", "+s.getString(R.string.news_in_use):"");
         head.setBackground(ui.ripple(null,0));head.setClickable(true);head.setFocusable(true);head.setAccessibilityDelegate(Ui.buttonRole());
         // Flecha ▾ plegada y ▴ abierta; al tocar gira (sin animaciones del sistema, cambia de golpe).
-        Runnable apply=()->{boolean shown=body.getVisibility()==View.VISIBLE;head.setContentDescription(label+(shown?", abierta. Toca para plegar":", plegada. Toca para ver sus novedades"));};
+        Runnable apply=()->{boolean shown=body.getVisibility()==View.VISIBLE;head.setContentDescription(s.getString(shown?R.string.news_open:R.string.news_closed,label));};
         body.setVisibility(open?View.VISIBLE:View.GONE);arrow.setRotation(open?180:0);apply.run();
         head.setOnClickListener(v->{boolean show=body.getVisibility()!=View.VISIBLE;body.setVisibility(show?View.VISIBLE:View.GONE);if(show)ui.fadeIn(body);
             arrow.animate().cancel();if(AppTheme.motion())arrow.animate().rotation(show?180:0).setStartDelay(0).setDuration(MOTION_BASE).setInterpolator(EMPHASIZED).start();else arrow.setRotation(show?180:0);
@@ -174,7 +188,7 @@ final class Novedades {
         LinearLayout texts=ui.column();int cut=headline(item);
         if(cut>0){
             texts.addView(ui.text(item.substring(0,cut).trim(),Type.TITLE_MEDIUM,p.onSurface));
-            TextView d=ui.text(capitalize(item.substring(cut+1).trim()),Type.BODY_MEDIUM,p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);texts.addView(d);
+            TextView d=ui.text(capitalize(item.substring(cut+1).trim(),Lang.locale(s)),Type.BODY_MEDIUM,p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);texts.addView(d);
         }else texts.addView(ui.text(item,Type.BODY_LARGE,p.onSurface));
         row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
         return row;
@@ -187,11 +201,15 @@ final class Novedades {
     }
     /** Posición de los «:» que cierran el titular, o -1 si el punto no tiene titular corto. */
     static int headline(String item){int i=item.indexOf(": ");return i>0&&i<=48?i:-1;}
-    private static String capitalize(String v){return v.isEmpty()?v:v.substring(0,1).toUpperCase(new Locale("es","CL"))+v.substring(1);}
-    /** «2026-09-29» → «29 de septiembre de 2026». */
+    private static String capitalize(String v,Locale l){return v.isEmpty()?v:v.substring(0,1).toUpperCase(l)+v.substring(1);}
+    /**
+     * «2026-09-29» → «29 de septiembre de 2026» (español), «September 29, 2026» (inglés de EE. UU.), «29 de setembro de
+     * 2026» (portugués): el día, el mes con su nombre y el año, en el orden de Lang.locale().
+     */
     static String date(String iso){
         if(iso==null||iso.isEmpty())return "";
-        try{SimpleDateFormat in=new SimpleDateFormat("yyyy-MM-dd",Locale.ROOT);in.setLenient(false);return new SimpleDateFormat("d 'de' MMMM 'de' yyyy",new Locale("es","CL")).format(in.parse(iso));}catch(Exception e){return iso;}
+        try{SimpleDateFormat in=new SimpleDateFormat("yyyy-MM-dd",Locale.ROOT);in.setLenient(false);Locale l=Lang.locale();
+            return new SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(l,"dMMMMy"),l).format(in.parse(iso));}catch(Exception e){return iso;}
     }
     private static String read(InputStream in)throws IOException{ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);return out.toString(StandardCharsets.UTF_8.name());}
 }
