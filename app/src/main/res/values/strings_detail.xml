@@ -1,0 +1,462 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Detalle de una grabación (0.9.0): RecordingActivity (detail_), voces y «Nombrar voces» (voices_), volver a transcribir
+  (retr_), el .txt exportado (export_) y los momentos ★ (marks_). Inglés aquí; español en values-es; portugués de Brasil
+  en values-pt. Los formatos de fecha y hora (detail_date_*, detail_time_12h) son patrones de SimpleDateFormat.
+-->
+<resources>
+    <!-- ========== RecordingActivity ========== -->
+    <string name="detail_demo_title">Sample conversation</string>
+    <string name="detail_missing_title">Not available</string>
+    <string name="detail_missing_body">This recording no longer exists or couldn\'t be opened.</string>
+    <string name="detail_more_options">More options</string>
+    <string name="detail_follow">Back to what\'s playing</string>
+
+    <!-- Cabecera: título, fecha y título sugerido -->
+    <string name="detail_rename_title">Edit title</string>
+    <string name="detail_demo_chip">Sample</string>
+    <string name="detail_use_suggested">Use “%1$s”</string>
+    <string name="detail_suggested_desc">Suggested title: %1$s. Tap to use it</string>
+    <string name="detail_date_day">MMM d</string>
+    <string name="detail_date_day_year">MMM d, yyyy</string>
+    <!-- Hora con el reloj de 12 horas del teléfono (con el de 24 horas siempre va HH:mm). -->
+    <string name="detail_time_12h">h:mm a</string>
+    <string name="detail_title_changed">Title changed</string>
+    <string name="detail_undo">Undo</string>
+    <string name="detail_title">Title</string>
+    <string name="detail_undo_change_failed">Couldn\'t undo the change.</string>
+    <string name="detail_title_failed">Couldn\'t change the title.</string>
+
+    <!-- Reproductor y botón principal -->
+    <string name="detail_play">Play</string>
+    <string name="detail_pause">Pause</string>
+    <string name="detail_forward_15">Skip forward 15 seconds</string>
+    <string name="detail_back_15">Skip back 15 seconds</string>
+    <string name="detail_speed_desc">Speed %1$s</string>
+    <string name="detail_transcribe">Transcribe</string>
+    <string name="detail_saving">Saving…</string>
+    <string name="detail_save_or_share">Save or share</string>
+    <string name="detail_copy_text">Copy text</string>
+    <string name="detail_share">Share</string>
+    <string name="detail_txt_file">.txt file</string>
+    <string name="detail_share_note_md">Share .md note</string>
+    <string name="detail_save_in">Save to %1$s</string>
+    <string name="detail_save_again_in">Save again to %1$s</string>
+    <string name="detail_quick_folder">quick folder</string>
+    <string name="detail_save_elsewhere">Save to another folder…</string>
+    <string name="detail_retranscribe">Transcribe again…</string>
+    <string name="detail_saved_title">Already in %1$s</string>
+    <string name="detail_saved_body_at">Saved at %1$s. If you changed anything, save it again: the same file is replaced, with no copies.</string>
+    <string name="detail_saved_body">If you changed anything, save it again: the same file is replaced, with no copies.</string>
+    <string name="detail_save_again">Save again</string>
+    <string name="detail_recording_now">Recording in progress</string>
+    <string name="detail_recording_now_body">Save the current recording before playing.</string>
+    <string name="detail_play_failed">Couldn\'t play</string>
+    <string name="detail_play_failed_cut">The audio may have been cut off while recording.</string>
+    <string name="detail_play_failed_open">The audio file couldn\'t be opened.</string>
+    <string name="detail_turn_playing">%1$s · playing</string>
+    <string name="detail_scrubber_desc">Audio position: %1$s of %2$s</string>
+
+    <!-- Sin transcribir -->
+    <string name="detail_new_title">Transcribe this audio</string>
+    <string name="detail_new_body">Tap “Transcribe” below. When you transcribe, you choose whether to separate voices. Provider: %1$s.</string>
+    <string name="detail_new_body_nokey">Add your OpenRouter key to transcribe: tap “Transcribe” below. The audio is sent to OpenRouter and you pay only for what you use.</string>
+    <string name="detail_cost_voices">≈ %1$s separating voices</string>
+    <string name="detail_cost_text">≈ %1$s text only</string>
+
+    <!-- En curso: avance, etapas y condiciones del teléfono -->
+    <string name="detail_again_note">Transcribing again · your previous version is kept</string>
+    <string name="detail_start_now">Start now</string>
+    <string name="detail_start_now_ok">Transcribing in the foreground</string>
+    <string name="detail_start_now_denied">Android didn\'t allow it to start yet. It will start automatically.</string>
+    <string name="detail_percent">%1$d%%</string>
+    <string name="detail_percent_less">&lt;%1$d%%</string>
+    <string name="detail_parts_done">%1$d of %2$d parts done</string>
+    <string name="detail_sending_mb">Sending %1$.1f of %2$.1f MB</string>
+    <string name="detail_preparing_pct">Preparing audio · %1$d%%</string>
+    <string name="detail_stage_prepare">Prepare audio</string>
+    <string name="detail_stage_prepare_pct">Prepare audio %1$d%%</string>
+    <string name="detail_stage_uploaded">Uploaded</string>
+    <string name="detail_stage_parts">Parts %1$d/%2$d</string>
+    <string name="detail_stage_text">Text</string>
+    <string name="detail_stage_join">Join voices</string>
+    <string name="detail_stage_note">Note</string>
+    <string name="detail_stage_done">Done</string>
+    <string name="detail_stage_state_done">%1$s: done</string>
+    <string name="detail_stage_state_now">%1$s: in progress</string>
+    <string name="detail_stage_state_pending">%1$s: pending</string>
+    <string name="detail_almost_ready">almost ready</string>
+    <string name="detail_cond_mobile_this">Mobile data, for this recording only</string>
+    <string name="detail_cond_mobile">Mobile data</string>
+    <string name="detail_cond_all_ok">%1$s · battery %2$d%% · keeps going with the screen locked</string>
+    <string name="detail_cond_offline">No internet connection</string>
+    <string name="detail_cond_wifi_on">Wi-Fi connected</string>
+    <string name="detail_cond_wifi_needed">Wi-Fi required · you\'re on mobile data now</string>
+    <string name="detail_cond_via_wifi">Connected via Wi-Fi</string>
+    <string name="detail_cond_via_mobile">Connected via mobile data</string>
+    <string name="detail_use_mobile">Use mobile data now (%1$s)</string>
+    <string name="detail_use_mobile_desc">Use mobile data now for this recording, %1$s</string>
+    <string name="detail_about">about %1$s</string>
+    <string name="detail_use_mobile_why">Only for this recording. The others keep waiting for Wi-Fi.</string>
+    <string name="detail_cond_charging">Charging</string>
+    <string name="detail_cond_charger_needed">The charger needs to be plugged in</string>
+    <string name="detail_cond_charger_optional">Charger not required</string>
+    <string name="detail_cond_battery">Battery %1$d%%</string>
+    <string name="detail_cond_battery_low">Battery %1$d%% · Android waits until you charge</string>
+    <string name="detail_cond_background_ok">Can work with the screen locked</string>
+    <string name="detail_cond_background_limited">Android optimizes Verbapp\'s battery · it may cut off the transcription when locked</string>
+    <string name="detail_allow_background">Allow in background</string>
+    <string name="detail_using_mobile">Using mobile data for this recording</string>
+    <string name="detail_phase_elapsed">On this step for %1$s</string>
+
+    <!-- Métricas y bitácora -->
+    <string name="detail_stat_total">Total time</string>
+    <string name="detail_stat_left">Remaining (approx.)</string>
+    <string name="detail_stat_audio">Audio processed</string>
+    <string name="detail_of">%1$s of %2$s</string>
+    <string name="detail_stat_speed">Speed</string>
+    <string name="detail_stat_speed_value">%1$.1f× real time</string>
+    <string name="detail_stat_prep">Audio preparation</string>
+    <string name="detail_stat_prep_parts">%1$s (%2$d parts)</string>
+    <string name="detail_stat_cost_so_far">Cost so far</string>
+    <string name="detail_stat_cost">Cost</string>
+    <string name="detail_stat_cost_estimated">Estimated cost</string>
+    <string name="detail_stat_cost_total">%1$s · total ≈%2$s</string>
+    <string name="detail_stat_tokens">Tokens</string>
+    <string name="detail_stat_tokens_value">%1$,d (%2$,d input)</string>
+    <string name="detail_stat_billed">Billed audio</string>
+    <string name="detail_stat_sent">Data sent</string>
+    <string name="detail_stat_received">Text received</string>
+    <plurals name="detail_stat_chars">
+        <item quantity="one">%1$,d character</item>
+        <item quantity="other">%1$,d characters</item>
+    </plurals>
+    <string name="detail_stat_retries">Retries</string>
+    <string name="detail_stat_retries_phone">%1$d · %2$d by the phone</string>
+    <string name="detail_cost_reported">cost reported by %1$s</string>
+    <string name="detail_cost_catalog">OpenRouter catalog price, the actual charge may vary</string>
+    <string name="detail_cost_public">public rate as of %1$s, the actual charge may vary</string>
+    <string name="detail_model">Model: %1$s</string>
+    <string name="detail_model_voices">separates voices</string>
+    <string name="detail_waiting">waiting</string>
+    <string name="detail_calculating">calculating…</string>
+    <string name="detail_almost_done">almost done</string>
+    <string name="detail_log">Log</string>
+    <string name="detail_hide_details">Hide details</string>
+    <string name="detail_show_details">Show process details</string>
+
+    <!-- No se pudo transcribir -->
+    <string name="detail_failed_title">Couldn\'t transcribe</string>
+    <string name="detail_failed_hint">Once you\'ve checked it, tap “Retry” below.</string>
+    <string name="detail_restore_previous">Back to the previous version</string>
+    <string name="detail_check_settings">Check settings</string>
+    <string name="detail_previous_title">Previous version</string>
+    <string name="detail_previous_failed">Couldn\'t restore the previous version.</string>
+
+    <!-- Transcripción -->
+    <string name="detail_demo_note">Sample text: it doesn\'t come from the API. Try naming the voices.</string>
+    <string name="detail_auto_voices_note">Voices separated automatically: there may be mistakes. Tap a speaker\'s name to listen and fix who\'s talking.</string>
+    <string name="detail_parts_note">Audio processed in parts: times show the start of each part.</string>
+    <string name="detail_transcript">Transcript</string>
+    <string name="detail_only_showing">Showing only %1$s</string>
+    <string name="detail_show_all">Show all</string>
+    <string name="detail_transcript_unreadable">Couldn\'t read the transcript.</string>
+    <string name="detail_footer_transcribed">Transcribed %1$s</string>
+    <string name="detail_footer_took">took %1$s</string>
+    <string name="detail_people">People</string>
+    <string name="detail_voices_unreviewed">Voices not reviewed</string>
+    <string name="detail_voices_status_desc">%1$s. Name voices</string>
+    <string name="detail_person_desc">%1$s. Options</string>
+    <string name="detail_person_desc_share">%1$s, %2$s of the time. Options</string>
+
+    <!-- Momentos ★ -->
+    <string name="detail_marks">Moments</string>
+    <string name="detail_marks_hint">Tap to listen · hold to name</string>
+    <string name="detail_mark_desc">Moment %1$s. Tap to listen; touch and hold to edit</string>
+    <string name="detail_mark_desc_label">Moment %1$s, %2$s. Tap to listen; touch and hold to edit</string>
+    <string name="detail_mark_title">Moment %1$s</string>
+    <string name="detail_mark_body">Give it a name so you can find it later (“price”, “idea”…).</string>
+    <string name="detail_mark_name">Moment name</string>
+    <string name="detail_save">Save</string>
+    <string name="detail_mark">Moment</string>
+    <string name="detail_mark_name_failed">Couldn\'t save the name.</string>
+    <string name="detail_mark_delete">Delete moment</string>
+    <string name="detail_mark_deleted">Moment deleted</string>
+    <string name="detail_undo_failed">Couldn\'t undo.</string>
+    <string name="detail_mark_delete_failed">Couldn\'t delete the moment.</string>
+
+    <!-- Nota para tu segundo cerebro (la tarjeta del detalle) -->
+    <string name="detail_note_interrupted_short">it was interrupted before finishing</string>
+    <string name="detail_note_failed_title">Couldn\'t write the note</string>
+    <string name="detail_note_interrupted">It was interrupted before finishing (for example, if the app was closed). Try again.</string>
+    <string name="detail_retry">Retry</string>
+    <string name="detail_try_again_soon">Try again in a moment.</string>
+    <string name="detail_note_title">Note for your second brain</string>
+    <string name="detail_note_pitch">Summary, decisions, tasks and key quotes from this recording, ready to save.</string>
+    <string name="detail_note_make">Write note</string>
+    <string name="detail_note_setup">Set up the note\'s AI in Settings</string>
+    <string name="detail_note_working">Writing the note…</string>
+    <string name="detail_note_ai">AI-generated · review it</string>
+    <string name="detail_note_options">Note options</string>
+    <string name="detail_note_collapse">Collapse the note</string>
+    <string name="detail_note_expand">Expand the note</string>
+    <string name="detail_note_decisions">Decisions</string>
+    <string name="detail_note_rewrite_failed">Couldn\'t rewrite it: %1$s</string>
+    <string name="detail_note_tap">Tap to see the note</string>
+    <string name="detail_note_tasks">Tasks</string>
+    <string name="detail_note">Note</string>
+    <string name="detail_task_failed">Couldn\'t save the task.</string>
+    <string name="detail_note_quotes">Key quotes</string>
+    <string name="detail_quoted">“%1$s”</string>
+    <string name="detail_listen_from">Listen from %1$s</string>
+    <string name="detail_note_rewrite">Rewrite the note</string>
+    <string name="detail_note_rewrite_q">Rewrite the note?</string>
+    <string name="detail_note_rewrite_body">The current note is replaced, including checked tasks. The text is sent to the AI again.</string>
+    <string name="detail_note_rewrite_action">Rewrite</string>
+    <string name="detail_note_copy">Copy note</string>
+    <string name="detail_note_nokey_title">Your OpenRouter key is missing</string>
+    <string name="detail_note_nokey_body">The note is written with OpenRouter, using the same key you transcribe with. Add it in Settings.</string>
+    <string name="detail_go_settings">Go to Settings</string>
+    <string name="detail_not_now">Not now</string>
+    <string name="detail_note_unavailable">The note isn\'t available in this version yet.</string>
+    <string name="detail_note_failed_net">Couldn\'t write the note. Check your connection and try again.</string>
+    <string name="detail_note_copied">Note copied</string>
+    <string name="detail_note_copy_failed">Couldn\'t copy the note.</string>
+    <string name="detail_note_share">Share note</string>
+    <string name="detail_note_share_failed">Couldn\'t share the note.</string>
+
+    <!-- Exportar y guardar -->
+    <string name="detail_text_copied">Text copied</string>
+    <string name="detail_copy">Copy</string>
+    <string name="detail_copy_failed">Couldn\'t copy the text.</string>
+    <string name="detail_share_transcript">Share transcript</string>
+    <string name="detail_share_failed">Couldn\'t share the text.</string>
+    <string name="detail_share_txt">Share .txt file</string>
+    <string name="detail_file">File</string>
+    <string name="detail_file_failed">Couldn\'t create the file.</string>
+    <string name="detail_saved_in">Saved to %1$s</string>
+    <string name="detail_save_failed_in">Couldn\'t save to %1$s</string>
+    <string name="detail_save_failed_body">Android may have revoked access to that folder. Choose it again or use “Another folder”.</string>
+    <string name="detail_choose_folder_again">Choose the folder again</string>
+    <string name="detail_other_folder">Another folder</string>
+    <string name="detail_save_to">Save to…</string>
+    <string name="detail_no_picker">This phone doesn\'t have a file picker available.</string>
+    <string name="detail_note_saved">Note saved</string>
+    <string name="detail_transcript_saved">Transcript saved</string>
+    <string name="detail_write_failed">Couldn\'t write the file in that location. Try another folder.</string>
+
+    <!-- Intervenciones y corrección de voces -->
+    <string name="detail_turn_desc">%1$s, %2$s. Change who\'s speaking</string>
+    <string name="detail_marked">Marked moment</string>
+    <string name="detail_part_from">Part %1$d · from %2$s</string>
+    <string name="detail_stop">Stop</string>
+    <string name="detail_who_title">Who\'s speaking here?</string>
+    <string name="detail_who_body">%1$s – %2$s · “%3$s”</string>
+    <string name="detail_listen_clip">Listen to this clip</string>
+    <string name="detail_who_current">Current</string>
+    <string name="detail_now_says">Now said by %1$s</string>
+    <string name="detail_other_person">Someone else</string>
+    <string name="detail_other_person_detail">A voice that\'s not on the list</string>
+    <string name="detail_now_new_person">Now said by a new person</string>
+    <string name="detail_swap_here">Swap voices from here</string>
+    <string name="detail_swap_pair_here">Swap %1$s and %2$s from here</string>
+    <string name="detail_swap_other_here">Swap %1$s with another voice from here</string>
+    <string name="detail_fix_one">Fix just one sentence</string>
+    <string name="detail_turn_open_failed">Couldn\'t open this passage.</string>
+    <string name="detail_which_sentence">Which sentence?</string>
+    <string name="detail_which_sentence_body">Choose the sentence someone else said.</string>
+    <string name="detail_sentences_failed">Couldn\'t load the sentences.</string>
+    <string name="detail_swap_with_title">Who got mixed up with %1$s?</string>
+    <string name="detail_swap_with_body">Choose the other voice that got mixed up.</string>
+    <string name="detail_swap_title">Swap %1$s and %2$s</string>
+    <string name="detail_swap_body">From %1$s on, what %2$s says goes to %3$s and vice versa. If they get mixed up again later, repeat from that point.</string>
+    <string name="detail_swap_to_end">To the end</string>
+    <string name="detail_until">Until %1$s</string>
+    <string name="detail_swapped_from">Swapped from %1$s on</string>
+    <string name="detail_swap_in_part">Only in part %1$d</string>
+    <string name="detail_swapped_in_part">Swapped in part %1$d</string>
+    <string name="detail_swap_failed">Couldn\'t prepare the swap.</string>
+    <!-- Hoja de una persona: cuántas frases dijo, cuánto habla y desde cuándo. -->
+    <plurals name="detail_person_summary">
+        <item quantity="one">%1$d sentence · %2$s in total · from %3$s</item>
+        <item quantity="other">%1$d sentences · %2$s in total · from %3$s</item>
+    </plurals>
+    <string name="detail_listen_sample">Listen to a sample</string>
+    <string name="detail_rename">Rename</string>
+    <string name="detail_same_person">Same person as…</string>
+    <string name="detail_show_everyone">Show everyone</string>
+    <string name="detail_show_only">Show only this person</string>
+    <string name="detail_name_all">Name all voices</string>
+    <string name="detail_save_voice">Save the voice</string>
+    <string name="detail_save_voice_of">Save %1$s\'s voice</string>
+    <string name="detail_voice_open_failed">Couldn\'t open this voice.</string>
+    <string name="detail_replace_voice_q">Replace %1$s\'s saved voice?</string>
+    <string name="detail_replace_voice_body">This %1$d s clip will be used instead of the previous sample.</string>
+    <string name="detail_replace">Replace</string>
+    <string name="detail_voice_saved">%1$s\'s voice saved · it\'ll be recognized in your next recordings</string>
+    <string name="detail_voice_cut_failed">Couldn\'t clip %1$s\'s voice from this audio. Try again.</string>
+    <string name="detail_merge_title">Who should %1$s merge with?</string>
+    <string name="detail_merge_body">What they said moves to that person. You can undo it.</string>
+    <string name="detail_merged">%1$s merged with %2$s</string>
+    <string name="detail_rename_body">If you give it another voice\'s name, they become one person.</string>
+    <string name="detail_name">Name</string>
+    <string name="detail_name_load_failed">Couldn\'t load the name.</string>
+    <string name="detail_change_failed">Couldn\'t save the change. Try again.</string>
+    <string name="detail_merged_two">2 voices with the same name were merged</string>
+    <string name="detail_merged_many">Voices with the same name were merged</string>
+    <string name="detail_name_voices_body">The name applies everywhere that voice speaks. If two voices are the same person, give them the same name and they\'ll merge.</string>
+    <string name="detail_save_names">Save names</string>
+    <!-- Conversación de ejemplo (Ajustes → ver un ejemplo). -->
+    <string name="detail_demo_line1">I\'d like us to save the ideas from this conversation.</string>
+    <string name="detail_demo_line2">Yes, and then we can go over what we said together.</string>
+    <string name="detail_demo_line3">I can help organize the next steps.</string>
+    <string name="detail_demo_line4">Perfect. That way we won\'t lose a single idea.</string>
+
+    <!-- ========== Voces y «Nombrar voces» ========== -->
+    <string name="voices_title">Name voices</string>
+    <string name="voices_open_failed">Couldn\'t open the transcript.</string>
+    <string name="voices_load_failed">Couldn\'t load the voices.</string>
+    <string name="voices_none">This transcript has no speakers to name.</string>
+    <string name="voices_not_diarized">This transcript was made without separating voices. To get %1$s, %2$s…, transcribe again separating voices.</string>
+    <string name="voices_body_listen">Listen to each voice and give it a name. If two voices are the same person, give them the same name and they\'ll merge.</string>
+    <string name="voices_body">Give each voice a name. If two voices are the same person, give them the same name and they\'ll merge.</string>
+    <string name="voices_restore">Restore original voices</string>
+    <string name="voices_restore_q">Restore original voices?</string>
+    <string name="voices_restore_body">All corrections to who\'s speaking are undone. Names are kept.</string>
+    <string name="voices_restore_action">Restore</string>
+    <string name="voices_done">Done</string>
+    <string name="voices_share">%1$s of the time</string>
+    <string name="voices_listen_to">Listen to %1$s</string>
+    <string name="voices_no_sample_for">No sample available for %1$s</string>
+    <string name="voices_no_sample">No sample available</string>
+    <string name="voices_no_sample_after">no sample available</string>
+    <string name="voices_name_for">Name for %1$s</string>
+    <string name="voices_joins">Merges with %1$s</string>
+    <string name="voices_stop_sample">Stop %1$s\'s sample</string>
+    <string name="voices_chip_on">%1$s, selected. Tap to remove the name</string>
+    <string name="voices_chip_off">Name %2$s “%1$s”</string>
+    <string name="voices_is">It\'s %1$s</string>
+    <string name="voices_merge_on">Merges with %1$s, selected. Tap to keep them separate</string>
+    <string name="voices_merge_off">Same person as %1$s</string>
+    <string name="voices_percent_less">&lt;%1$d%%</string>
+    <string name="voices_reviewed">Voices reviewed</string>
+    <string name="voices_names_saved">Names saved</string>
+    <string name="voices_saved_merged_one">Names saved · 2 voices became one</string>
+    <string name="voices_saved_merged_many">Names saved · %1$d voices merged into others</string>
+    <string name="voices_names_failed">Names weren\'t saved</string>
+    <string name="voices_try_again">Try again.</string>
+    <string name="voices_changed_meanwhile">The transcript changed while this sheet was open (for example, you went back to the other version), so nothing was applied. Open it again to name these voices.</string>
+    <string name="voices_restored">Original voices restored</string>
+    <string name="voices_restore_failed">Couldn\'t restore the voices. Try again.</string>
+    <string name="voices_undo_stale">The transcript changed afterwards (for example, you went back to the other version), so this change can\'t be undone anymore.</string>
+    <string name="voices_recording_now">Save the current recording before listening</string>
+    <string name="voices_sample_failed">Couldn\'t play the sample</string>
+    <!-- Voces guardadas: «Konrad (you)» y la lista «you, Fran and Ana» (Voices.people). -->
+    <string name="voices_me_label">%1$s (you)</string>
+    <string name="voices_people_you">you</string>
+    <string name="voices_people_item">%1$s</string>
+    <string name="voices_people_last">%1$s and %2$s</string>
+    <string name="voices_saved_default">Saved voice</string>
+
+    <!-- ========== Volver a transcribir ========== -->
+    <string name="retr_mode_corrections">Second pass with your corrections</string>
+    <string name="retr_mode_single">Separate voices without cutting the audio</string>
+    <string name="retr_mode_speakers">Separate voices again</string>
+    <string name="retr_mode_speakers_me">Separate voices again, with My voice</string>
+    <string name="retr_mode_text">Text only</string>
+    <string name="retr_detail_corrections">Recognizes the people you named or corrected from the start. The biggest improvement.</string>
+    <string name="retr_detail_single">The whole audio in a single upload: no seams where voices get mixed up. Slower.</string>
+    <string name="retr_detail_speakers">Another full pass.</string>
+    <string name="retr_detail_speakers_me">Another full pass, recognizing you as %1$s.</string>
+    <string name="retr_detail_speakers_you">Another full pass, recognizing %1$s.</string>
+    <string name="retr_detail_speakers_people">Another full pass, recognizing %1$s.</string>
+    <string name="retr_detail_text">Without separating voices. Useful if the words were what went wrong.</string>
+    <string name="retr_no_audio">The audio for this recording wasn\'t found.</string>
+    <string name="retr_demo">The sample isn\'t transcribed again.</string>
+    <string name="retr_busy">It\'s already being transcribed. Wait for it to finish.</string>
+    <string name="retr_unfinished">The new version didn\'t finish. Retry or go back to the previous one.</string>
+    <string name="retr_untranscribed">It doesn\'t have a transcript yet. Use “Transcribe”.</string>
+    <string name="retr_note_working">The note is being written. Wait for it to finish.</string>
+    <string name="retr_no_key">Add your OpenRouter key in Settings to transcribe again.</string>
+    <string name="retr_needs_samples">Only works with OpenRouter or OpenAI: your transcription service doesn\'t accept voice samples.</string>
+    <string name="retr_model_no_voices">The chosen model doesn\'t separate voices. Choose one that does in Settings.</string>
+    <string name="retr_not_diarized">This version doesn\'t have separate voices.</string>
+    <string name="retr_not_confirmed">First name or fix the voices: the second pass learns from that.</string>
+    <string name="retr_slots_full">%1$d known voices already go with each upload: there\'s no room left for samples from this recording.</string>
+    <string name="retr_no_samples">There are no clear clips of each person to use as a sample.</string>
+    <string name="retr_service_no_voices">Your transcription service doesn\'t separate voices.</string>
+    <string name="retr_too_long">Only for audio up to %1$d min. This one is %2$s long.</string>
+    <string name="retr_too_big">The file is too large to send in one go (over 24 MB).</string>
+    <string name="retr_already_single">The current version already separated voices without cutting the audio.</string>
+    <string name="retr_check_failed">Couldn\'t check this recording.</string>
+    <!-- Líneas de la bitácora de la grabación. -->
+    <string name="retr_log_queue_failed">Couldn\'t queue it · the previous version is kept</string>
+    <string name="retr_kept_new">You kept the new version</string>
+    <string name="retr_restored">You went back to the previous version</string>
+    <string name="retr_no_transcript">It doesn\'t have a transcript yet.</string>
+    <string name="retr_explain_corrections">Uses the voices you already fixed or named as samples across the whole audio, from the start. It\'s the best at getting who\'s speaking right.</string>
+    <string name="retr_explain_router_new">With OpenRouter this is a new feature: check the names when it\'s done.</string>
+    <string name="retr_explain_single">The whole audio at once, with no seams where voices get mixed up. More consistent, but slower. Up to %1$d min.</string>
+    <string name="retr_explain_speakers_find">Looks for your voice to label you as %1$s; the rest, %2$s…</string>
+    <string name="retr_explain_speakers_me">Recognizes you as %1$s from the start; the rest, %2$s…</string>
+    <string name="retr_explain_speakers">Another pass separating voices: %1$s, %2$s…</string>
+    <string name="retr_explain_text">For when the words went wrong, not the voices. Faster, but without separating voices.</string>
+    <string name="retr_unavailable">Not available for this audio</string>
+    <string name="retr_again">Transcribe again</string>
+    <string name="retr_busy_body">This recording is already being transcribed. When it finishes, you can choose another option.</string>
+    <string name="retr_sheet_title">How do you want to transcribe again?</string>
+    <string name="retr_audio_of">%1$s of audio.</string>
+    <string name="retr_charged_again">The full audio is charged again.</string>
+    <string name="retr_charged_again_cost">The full audio is charged again (%1$s).</string>
+    <string name="retr_sent_again">The full audio is sent again.</string>
+    <string name="retr_kept">Your current version is kept in case you want to go back.</string>
+    <string name="retr_corrections_lost">Your voice and name corrections don\'t carry over to the new version.</string>
+    <string name="retr_spoken_recommended">%1$s, recommended</string>
+    <string name="retr_spoken_unavailable">%1$s. Not available: %2$s</string>
+    <string name="retr_record_voice_first">Record my voice first</string>
+    <string name="retr_doing">Transcribing again</string>
+    <string name="retr_option_unavailable">This option isn\'t available in this version yet.</string>
+    <string name="retr_failed_title">Couldn\'t transcribe again</string>
+    <string name="retr_failed_body">%1$s Your current version is still intact.</string>
+    <string name="retr_keep_before_body">Before transcribing again, choose which one to keep: only one previous version can be saved at a time.</string>
+    <string name="retr_keep_body">Check the new one and choose which to keep. Until you choose, the previous one stays saved.</string>
+    <string name="retr_keep_before_title">First, choose a version</string>
+    <string name="retr_keep_title">New version ready</string>
+    <string name="retr_keep_new">Keep the new one</string>
+    <string name="retr_new_version">New version</string>
+    <string name="retr_keep_failed">Couldn\'t delete the previous version. The new one is already in use.</string>
+    <string name="retr_back_previous">Back to the previous one</string>
+    <string name="retr_new">New</string>
+    <string name="retr_previous">Previous</string>
+    <string name="retr_new_desc">New: %1$s</string>
+    <string name="retr_previous_desc">Previous: %1$s</string>
+    <plurals name="retr_words">
+        <item quantity="one">%1$,d word</item>
+        <item quantity="other">%1$,d words</item>
+    </plurals>
+    <string name="retr_text_only">Text only</string>
+    <string name="retr_text_only_summary">text only · %1$s</string>
+    <string name="retr_names_more">%1$s and %2$d more</string>
+    <plurals name="retr_voices">
+        <item quantity="one">%1$d voice</item>
+        <item quantity="other">%1$d voices</item>
+    </plurals>
+    <string name="retr_compare">New: %1$s\nPrevious: %2$s</string>
+
+    <!-- ========== El .txt exportado (Transcript.text) y su nombre ========== -->
+    <string name="export_demo">DEMO SAMPLE · Not from a real transcription.</string>
+    <string name="export_auto_voices">Voices separated automatically: there may be mistakes.</string>
+    <string name="export_blocks">Audio processed in blocks. Times show the start of each block, not of each sentence.</string>
+    <string name="export_no_speech">No speech was detected in this audio.</string>
+    <string name="export_err_segments">The provider didn\'t return the expected speaker segments.</string>
+    <string name="export_err_incomplete">The transcript received is incomplete.</string>
+    <!-- Nombre del archivo cuando el título no sirve («Transcript.txt», «Transcript CON.txt») y etiqueta al compartir. -->
+    <string name="export_transcript">Transcript</string>
+
+    <!-- ========== Momentos ★ ========== -->
+    <plurals name="marks_count">
+        <item quantity="one">%1$d marked moment</item>
+        <item quantity="other">%1$d marked moments</item>
+    </plurals>
+    <string name="marks_range_desc">Selected clip from %1$s to %2$s. Use the seconds fields to fine-tune it.</string>
+</resources>

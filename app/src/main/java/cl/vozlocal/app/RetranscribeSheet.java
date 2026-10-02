@@ -21,26 +21,23 @@ final class RetranscribeSheet {
 
     /** «Mi voz» solo cuenta si el servicio la recibe: OpenAI (muestras) u OpenRouter (anclas); un servidor propio no. */
     private static boolean myVoice(Context c){return TranscribeClient.knowsVoices(new Settings(c).provider())&&Voices.has(c);}
-    /** Texto de cada alternativa: título y para qué sirve (sin jerga). */
+    /** Texto de cada alternativa: título y para qué sirve (sin jerga), en el idioma de la app. */
     static String title(Context c,Retranscribe.Mode mode){
-        switch(mode){
-            case CORRECTIONS:return "Segunda pasada con tus correcciones";
-            case SINGLE:return "Separar voces sin cortar el audio";
-            case SPEAKERS:return myVoice(c)?"Separar voces de nuevo, con Mi voz":"Separar voces de nuevo";
-            default:return "Solo el texto";
-        }
+        if(mode==Retranscribe.Mode.SPEAKERS&&myVoice(c))return Lang.str(c,R.string.retr_mode_speakers_me);
+        return Lang.str(c,Retranscribe.labelId(mode));
     }
     static String explain(Context c,Retranscribe.Mode mode){
         boolean router=new Settings(c).openRouter();
         switch(mode){
             // Con OpenRouter las muestras van delante del audio («anclas»): es nuevo, así que se pide revisar el resultado.
-            case CORRECTIONS:return "Usa las voces que ya corregiste o nombraste como muestra en todo el audio, desde el inicio. Es la que más mejora quién habla."+(router?" Con OpenRouter es una función nueva: revisa los nombres al terminar.":"");
+            case CORRECTIONS:{String base=Lang.str(c,R.string.retr_explain_corrections);return router?base+" "+Lang.str(c,R.string.retr_explain_router_new):base;}
             // El tope lo da el motor (Retranscribe.singleMaxMs): 23 min con OpenAI; con OpenRouter, lo que acepta el modelo
             // elegido (20 min como máximo). Es el mismo número que usa el motivo cuando el audio no cabe.
-            case SINGLE:return "Todo el audio de una vez, sin uniones donde las voces se crucen. Más parejo, pero más lento. Hasta "+(Retranscribe.singleMaxMs(c)/60_000)+" min.";
+            case SINGLE:return Lang.str(c,R.string.retr_explain_single,Retranscribe.singleMaxMs(c)/60_000);
             // Con OpenRouter el reconocimiento usa «anclas», una técnica nueva: se promete el intento, no el resultado.
-            case SPEAKERS:return myVoice(c)?(router?"Busca tu voz para ponerte como "+Voices.name(c):"Te reconoce como "+Voices.name(c)+" desde el inicio")+"; las demás, Persona 2…":"Otra pasada separando voces: Persona 1, Persona 2…";
-            default:return "Para cuando fallaron las palabras, no las voces. Más rápido, pero sin separar voces.";
+            case SPEAKERS:return myVoice(c)?Lang.str(c,router?R.string.retr_explain_speakers_find:R.string.retr_explain_speakers_me,Voices.name(c),Lang.str(c,R.string.speaker_n,2))
+                :Lang.str(c,R.string.retr_explain_speakers,Lang.str(c,R.string.speaker_n,1),Lang.str(c,R.string.speaker_n,2));
+            default:return Lang.str(c,R.string.retr_explain_text);
         }
     }
     static int icon(Retranscribe.Mode mode){
@@ -79,20 +76,20 @@ final class RetranscribeSheet {
     }
     private static boolean available(Context c,Recording r,Retranscribe.Mode mode){try{return Retranscribe.available(c,r,mode);}catch(Exception e){return false;}}
     private static String reason(Context c,Recording r,Retranscribe.Mode mode){
-        try{String why=Retranscribe.reason(c,r,mode);return why==null||why.trim().isEmpty()?"No disponible para este audio":why.trim();}catch(Exception e){return "No disponible para este audio";}
+        try{String why=Retranscribe.reason(c,r,mode);return why==null||why.trim().isEmpty()?Lang.str(c,R.string.retr_unavailable):why.trim();}catch(Exception e){return Lang.str(c,R.string.retr_unavailable);}
     }
 
     static void show(Screen s,Recording r,Runnable changed){
         if(r==null)return;
         if(!new Settings(s).hasKey()){RecordingActions.missingKey(s);return;}
-        if(RecState.of(s,r.id).kind==RecState.Kind.QUEUED){s.message("Volver a transcribir","Esta grabación ya se está transcribiendo. Cuando termine, podrás elegir otra alternativa.");return;}
+        if(RecState.of(s,r.id).kind==RecState.Kind.QUEUED){s.message(s.getString(R.string.retr_again),s.getString(R.string.retr_busy_body));return;}
         if(!Transcript.exists(s,r.id)){RecordingActions.transcribe(s,r,changed);return;}
         // Con una versión anterior sin elegir, otra transcripción la reemplazaría sin preguntar (solo se guarda una):
         // primero se elige con cuál quedarse y después se ofrecen las alternativas.
         if(Retranscribe.hasPrevious(s,r.id)){offerKeep(s,r,changed,true,kept->show(s,r,changed));return;}
         // OpenAI y OpenRouter cobran cada envío; un servidor propio puede no cobrar (ahí se dice «se envía»).
         Settings settings=new Settings(s);boolean paid=RecordingActions.paid(settings);
-        Sheet sheet=s.sheet("¿Cómo quieres volver a transcribir?","Audio de "+Ui.humanDuration(r.duration)+". "+(paid?"Se cobra de nuevo el audio completo.":"Se envía de nuevo el audio completo.")+" Tu versión actual se guarda por si prefieres volver.");
+        Sheet sheet=s.sheet(s.getString(R.string.retr_sheet_title),s.getString(R.string.retr_audio_of,Ui.humanDuration(r.duration))+" "+s.getString(paid?R.string.retr_charged_again:R.string.retr_sent_again)+" "+s.getString(R.string.retr_kept));
         // Las 4 alternativas con su círculo menta (0.7.0): la recomendada lleva «✦ Recomendada» y el costo va en su
         // píldora con cifras fijas, así se comparan de un vistazo. La que no se puede usar se ve atenuada con su motivo.
         LinearLayout list=SheetParts.list(sheet);
@@ -103,12 +100,12 @@ final class RetranscribeSheet {
             boolean recommended=ok&&mode==Retranscribe.Mode.CORRECTIONS;String label=title(s,mode),cost=cost(s,r,mode);
             List<SheetParts.Fact> facts=new ArrayList<>();if(recommended)facts.add(SheetParts.recommended());if(!cost.isEmpty())facts.add(SheetParts.cost(cost));
             String detail=ok?explain(s,mode):reason(s,r,mode);
-            String spoken=ok?label+(recommended?", recomendada":"")+". "+detail+(cost.isEmpty()?"":" · "+cost):label+". No disponible: "+detail;
+            String spoken=ok?(recommended?s.getString(R.string.retr_spoken_recommended,label):label)+". "+detail+(cost.isEmpty()?"":" · "+cost):s.getString(R.string.retr_spoken_unavailable,label,detail);
             list.addView(SheetParts.option(s,icon(mode),label,detail,facts,ok,spoken,()->{sheet.dismiss();confirm(s,r,mode,changed);}),Ui.fill());
         }
         // Sin «Mi voz», la separación se equivoca más al inicio: conviene grabarla antes de repetir (una sola vez).
-        if(TranscribeClient.knowsVoices(settings.provider())&&settings.canSeparate()&&!Voices.has(s))list.addView(SheetParts.item(s,sheet,R.drawable.ic_mic_fill,"Grabar mi voz antes de repetir",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true))));
-        sheet.secondary("Cancelar",null).show();
+        if(TranscribeClient.knowsVoices(settings.provider())&&settings.canSeparate()&&!Voices.has(s))list.addView(SheetParts.item(s,sheet,R.drawable.ic_mic_fill,s.getString(R.string.retr_record_voice_first),false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true))));
+        sheet.secondary(s.getString(R.string.common_cancel),null).show();
         Diagnostics.event("retranscribe_sheet",r.id,"modes",log.toString());
     }
 
@@ -118,12 +115,12 @@ final class RetranscribeSheet {
         try{Transcript t=Transcript.load(s,r.id);corrected=t.edited()||t.reviewed();}catch(Exception ignored){}
         StringBuilder m=new StringBuilder(explain(s,mode)).append("\n\n");
         // Sin tarifa conocida igual se avisa que se cobra, si el proveedor cobra (OpenRouter con un modelo sin precio por minuto).
-        m.append(!cost.isEmpty()?"Se cobra de nuevo el audio completo ("+cost+").":RecordingActions.paid(new Settings(s))?"Se cobra de nuevo el audio completo.":"Se envía de nuevo el audio completo.");
-        m.append(" Tu versión actual se guarda por si prefieres volver.");
-        if(corrected&&mode!=Retranscribe.Mode.CORRECTIONS)m.append(" Tus correcciones de voces y nombres no pasan a la nueva versión.");
+        m.append(!cost.isEmpty()?s.getString(R.string.retr_charged_again_cost,cost):s.getString(RecordingActions.paid(new Settings(s))?R.string.retr_charged_again:R.string.retr_sent_again));
+        m.append(' ').append(s.getString(R.string.retr_kept));
+        if(corrected&&mode!=Retranscribe.Mode.CORRECTIONS)m.append(' ').append(s.getString(R.string.retr_corrections_lost));
         Sheet sheet=s.sheet(title(s,mode),m.toString());SheetParts.hero(sheet,icon(mode),false);
-        sheet.primary("Volver a transcribir",()->start(s,r,mode,changed))
-            .secondary("Cancelar",null).show();
+        sheet.primary(s.getString(R.string.retr_again),()->start(s,r,mode,changed))
+            .secondary(s.getString(R.string.common_cancel),null).show();
     }
     private static void start(Screen s,Recording r,Retranscribe.Mode mode,Runnable changed){
         RecordingActions.askNotifications(s);Context app=s.getApplicationContext();
@@ -137,14 +134,14 @@ final class RetranscribeSheet {
                 if(failed==null){
                     // Lo que espera ESTA grabación (Pipeline.blocker con su id), no el de todas: «Volver a transcribir» le
                     // quita el permiso de datos móviles, aunque otra pedida lo tenga.
-                    Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);s.toast(RecordingActions.queuedToast(s,r,"Volviendo a transcribir"));
+                    Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);s.toast(RecordingActions.queuedToast(s,r,s.getString(R.string.retr_doing)));
                     if(changed!=null)changed.run();return;
                 }
                 Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.REJECT);
                 String why=failed instanceof HttpApi.UserAction?failed.getMessage()
-                    :failed instanceof UnsupportedOperationException?"Esta alternativa aún no está disponible en esta versión."
-                    :"Vuelve a intentarlo en un momento.";
-                s.message("No se pudo volver a transcribir",why+" Tu versión actual sigue intacta.");
+                    :failed instanceof UnsupportedOperationException?s.getString(R.string.retr_option_unavailable)
+                    :s.getString(R.string.detail_try_again_soon);
+                s.message(s.getString(R.string.retr_failed_title),s.getString(R.string.retr_failed_body,why));
                 if(changed!=null)changed.run();
             });
         }).start();
@@ -160,20 +157,19 @@ final class RetranscribeSheet {
     static Sheet offerKeep(Screen s,Recording r,Runnable changed,boolean beforeAgain,java.util.function.Consumer<Boolean> then){
         if(r==null||!Retranscribe.hasPrevious(s,r.id)||!Transcript.exists(s,r.id))return null;
         Version[] both=versions(s,r.id);
-        String why=beforeAgain?"Antes de volver a transcribir, elige con cuál te quedas: solo se puede guardar una versión anterior a la vez."
-            :"Revisa la nueva y elige con cuál te quedas. Mientras no elijas, la anterior sigue guardada.";
-        Sheet sheet=s.sheet(beforeAgain?"Antes, elige una versión":"Nueva versión lista",why);
+        String why=s.getString(beforeAgain?R.string.retr_keep_before_body:R.string.retr_keep_body);
+        Sheet sheet=s.sheet(s.getString(beforeAgain?R.string.retr_keep_before_title:R.string.retr_keep_title),why);
         // La comparación va en dos tarjetas lado a lado (0.7.0): la nueva en menta, la anterior en gris suave.
         if(both!=null)sheet.add(comparison(s,both[0],both[1]));
-        sheet.primary("Quedarme con la nueva",()->{
+        sheet.primary(s.getString(R.string.retr_keep_new),()->{
             boolean chosen=false;
-            try{Retranscribe.keepNew(s,r.id);chosen=!Retranscribe.hasPrevious(s,r.id);Diagnostics.event("retranscribe_kept",r.id,"choice","new");Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);s.toast("Te quedaste con la nueva versión");}
-            catch(Exception e){s.message("Nueva versión","No se pudo borrar la versión anterior. La nueva ya está en uso.");}
+            try{Retranscribe.keepNew(s,r.id);chosen=!Retranscribe.hasPrevious(s,r.id);Diagnostics.event("retranscribe_kept",r.id,"choice","new");Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);s.toast(s.getString(R.string.retr_kept_new));}
+            catch(Exception e){s.message(s.getString(R.string.retr_new_version),s.getString(R.string.retr_keep_failed));}
             if(changed!=null)changed.run();
             if(chosen&&then!=null)then.accept(true);
         });
-        sheet.secondary("Volver a la anterior",()->{RecordingActions.restorePrevious(s,r,changed);if(then!=null&&!Retranscribe.hasPrevious(s,r.id))then.accept(false);});
-        if(beforeAgain)sheet.secondary("Cancelar",null);
+        sheet.secondary(s.getString(R.string.retr_back_previous),()->{RecordingActions.restorePrevious(s,r,changed);if(then!=null&&!Retranscribe.hasPrevious(s,r.id))then.accept(false);});
+        if(beforeAgain)sheet.secondary(s.getString(R.string.common_cancel),null);
         sheet.show();
         Diagnostics.event("retranscribe_offer",r.id,"source",beforeAgain?"retranscribe":"ready");
         return sheet;
@@ -190,14 +186,14 @@ final class RetranscribeSheet {
         LinearLayout c=ui.column();c.setPadding(ui.dp(S4),ui.dp(S3),ui.dp(S4),ui.dp(S4));
         c.setBackground(isNew?shape(s,p.highlight,R_CARD-4):SheetParts.card(s,p,R_CARD-4));
         LinearLayout head=ui.row();head.addView(ui.icon(isNew?R.drawable.ic_sparkle:R.drawable.ic_history,accent,16));head.addView(ui.space(6));
-        head.addView(ui.text(isNew?"Nueva":"Anterior",Type.LABEL_LARGE,accent));c.addView(head);
+        head.addView(ui.text(s.getString(isNew?R.string.retr_new:R.string.retr_previous),Type.LABEL_LARGE,accent));c.addView(head);
         // Nada se corta (en 0.6.0 la comparación iba en el mensaje de la hoja, completa): con nombres largos o letra
         // grande, el dato y los nombres bajan de línea y la tarjeta crece. Las dos siguen del mismo alto (comparison) y la
         // hoja se desplaza si hace falta.
         TextView big=Ui.tabular(ui.text(v.headline,Type.TITLE_LARGE,p.onSurface));big.setPadding(0,ui.dp(S2),0,0);c.addView(big);
         if(!v.detail.isEmpty()){TextView d=ui.text(v.detail,Type.BODY_SMALL,p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);c.addView(d);}
         // Para el lector de pantalla, cada tarjeta se lee de una vez: «Nueva: 3 voces (Konrad, Fran, Persona 3)».
-        c.setContentDescription((isNew?"Nueva: ":"Anterior: ")+v.summary);c.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);c.setFocusable(true);
+        c.setContentDescription(s.getString(isNew?R.string.retr_new_desc:R.string.retr_previous_desc,v.summary));c.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);c.setFocusable(true);
         for(int i=0;i<c.getChildCount();i++)c.getChildAt(i).setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         return c;
     }
@@ -209,10 +205,10 @@ final class RetranscribeSheet {
     }
     private static Version version(Transcript t)throws Exception{
         if(!t.diarized()){int words=0;org.json.JSONArray s=t.segments();for(int i=0;i<s.length();i++){String x=s.getJSONObject(i).optString("text").trim();if(!x.isEmpty())words+=x.split("\\s+").length;}
-            String w=String.format(Locale.ROOT,"%,d",words).replace(',','.')+" palabras";return new Version("Solo texto",w,"solo texto · "+w);}
+            String w=Lang.plural(R.plurals.retr_words,words);return new Version(Lang.str(R.string.retr_text_only),w,Lang.str(R.string.retr_text_only_summary,w));}
         List<String> names=new ArrayList<>(t.speakers().values());int n=names.size();
-        String list=n<=3?String.join(", ",names):String.join(", ",names.subList(0,3))+" y "+(n-3)+" más";
-        String count=n+(n==1?" voz":" voces");
+        String list=n<=3?String.join(", ",names):Lang.str(R.string.retr_names_more,String.join(", ",names.subList(0,3)),n-3);
+        String count=Lang.plural(R.plurals.retr_voices,n);
         return new Version(count,n==0?"":list,count+(n==0?"":" ("+list+")"));
     }
     /** La versión en uso y la anterior, o null si alguna no se puede leer (entonces no se muestra la comparación). */
@@ -225,6 +221,6 @@ final class RetranscribeSheet {
         }catch(Exception e){return null;}
     }
     /** «Nueva: 3 voces (Konrad, Fran, Persona 3)\nAnterior: 2 voces (…)», si ambas versiones se pueden leer. */
-    static String compare(Context c,String id){Version[] v=versions(c,id);return v==null?"":"Nueva: "+v[0].summary+"\nAnterior: "+v[1].summary;}
+    static String compare(Context c,String id){Version[] v=versions(c,id);return v==null?"":Lang.str(c,R.string.retr_compare,v[0].summary,v[1].summary);}
     static String summary(Transcript t)throws Exception{return version(t).summary;}
 }

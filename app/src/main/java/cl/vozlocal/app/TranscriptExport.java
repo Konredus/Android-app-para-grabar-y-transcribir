@@ -33,7 +33,7 @@ final class TranscriptExport {
         Intent intent = new Intent(Intent.ACTION_SEND).setType("text/plain")
             .putExtra(Intent.EXTRA_STREAM, uri)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        intent.setClipData(ClipData.newRawUri("Transcripción", uri));
+        intent.setClipData(ClipData.newRawUri(Lang.str(R.string.export_transcript), uri));
         return intent;
     }
 
@@ -58,13 +58,14 @@ final class TranscriptExport {
         String value = safe.toString().replaceAll("[\\s\\p{Z}]+", " ").trim();
         if (value.toLowerCase(java.util.Locale.ROOT).endsWith(extension)) value = value.substring(0, value.length() - extension.length());
         value = value.replaceAll("^[. ]+|[. ]+$", "");
-        if (value.matches("(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\\..*)?")) value = "Transcripción " + value;
+        // «Transcripción» va en el idioma de la app (export_transcript), también como nombre de respaldo.
+        if (value.matches("(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\\..*)?")) value = Lang.str(R.string.export_transcript) + " " + value;
         // Leave room for the extension on providers that enforce a byte-based filename limit.
         while (value.getBytes(StandardCharsets.UTF_8).length > 180) {
             value = value.substring(0, value.offsetByCodePoints(value.length(), -1));
         }
         value = value.replaceAll("[. ]+$", "");
-        if (value.isEmpty()) value = "Transcripción";
+        if (value.isEmpty()) value = Lang.str(R.string.export_transcript);
         return value;
     }
 }
