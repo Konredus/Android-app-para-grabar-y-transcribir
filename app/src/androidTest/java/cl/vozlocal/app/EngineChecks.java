@@ -144,7 +144,7 @@ final class EngineChecks {
         // La ronda se detiene por el cargador, la batería o internet (sin gastar un intento); no por el Wi-Fi, que es de cada
         // grabación, ni en la tarea de fondo, a la que Android ya retiene por eso mismo.
         check(Transcriber.holds("esperando que conectes el cargador",0)&&Transcriber.holds("esperando conexión a internet",0)&&Transcriber.holds("batería baja: Android espera a que cargues",0),"Round not held for the charger, the battery or the network");
-        check(!Transcriber.holds(Pipeline.WIFI_WAIT,0)&&!Transcriber.holds(null,0)&&!Transcriber.holds("esperando que conectes el cargador",Transcriber.JOB_BUDGET_MS),"Round held for Wi-Fi, for nothing, or in the background job");
+        check(!Transcriber.holds(Pipeline.wifiWait(),0)&&!Transcriber.holds(null,0)&&!Transcriber.holds("esperando que conectes el cargador",Transcriber.JOB_BUDGET_MS),"Round held for Wi-Fi, for nothing, or in the background job");
         // Una espera no se titula «Transcribiendo» ni lleva la barra ocupada; un envío sí.
         Notification wait=Transcriber.build(c,Transcriber.WIFI_WAIT_TEXT,true,-1),send=Transcriber.build(c,"Enviando parte 1 de 3",true,40);
         check("En pausa".equals(title(wait))&&wait.extras.getInt(Notification.EXTRA_PROGRESS_MAX)==0&&!wait.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE),"Waiting notification titled as working or with a busy bar");
@@ -167,7 +167,7 @@ final class EngineChecks {
         f=ready();f.transcribed=false;check(has(Retranscribe.reason(f,SPEAKERS),"«Transcribir»"),"Untranscribed recording not sent to Transcribir");
         f.previous=true;check(has(Retranscribe.reason(f,SPEAKERS),"vuelve a la anterior"),"Unfinished new version not explained");
         // Nueva versión lista y la anterior sin elegir: otra repetición borraría la anterior (solo se guarda una).
-        f=ready();f.previous=true;for(Retranscribe.Mode m:Retranscribe.Mode.values())check(Retranscribe.CHOOSE_FIRST.equals(Retranscribe.reason(f,m)),"Retranscribe offered before choosing a version: "+m);
+        f=ready();f.previous=true;for(Retranscribe.Mode m:Retranscribe.Mode.values())check(Retranscribe.chooseFirst().equals(Retranscribe.reason(f,m)),"Retranscribe offered before choosing a version: "+m);
         f=ready();f.noteWorking=true;check(has(Retranscribe.reason(f,TEXT),"nota"),"Retranscribe offered while the note is being made");
         f=ready();f.hasKey=false;check(has(Retranscribe.reason(f,TEXT),"clave"),"Missing key not explained");
         // Segunda pasada con tus correcciones: necesita voces separadas, corregidas o nombradas, OpenAI y tramos limpios.
@@ -205,7 +205,7 @@ final class EngineChecks {
         try{
             s.prefs.edit().putString("provider","custom").remove("customBase").commit();
             String why=null;try{s.config(false);}catch(HttpApi.UserAction e){why=e.getMessage();}
-            check(Settings.NO_SERVER.equals(why)&&s.needsServer(),"Custom provider without a server address would send the key somewhere");
+            check(Settings.noServer().equals(why)&&s.needsServer(),"Custom provider without a server address would send the key somewhere");
             s.prefs.edit().putString("customBase","https://transcribe.test/v1").commit();
             check(!s.needsServer()&&s.config(false).base.equals("https://transcribe.test/v1"),"Custom server address not used");
         }finally{

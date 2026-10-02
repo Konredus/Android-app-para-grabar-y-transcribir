@@ -86,7 +86,7 @@ final class IntegrationChecks {
             java.io.File prev=FilesStore.file(c,d.id,".transcript.prev.json");
             check(Retranscribe.hasPrevious(c,d.id)&&Transcript.exists(c,d.id),"Test versions not set up");
             for(Retranscribe.Mode m:Retranscribe.Mode.values()){
-                check(Retranscribe.CHOOSE_FIRST.equals(Retranscribe.reason(c,d,m))&&!Retranscribe.available(c,d,m),"Retranscribe offered while a previous version is pending: "+m);
+                check(Retranscribe.chooseFirst().equals(Retranscribe.reason(c,d,m))&&!Retranscribe.available(c,d,m),"Retranscribe offered while a previous version is pending: "+m);
             }
             boolean refused=false;try{Retranscribe.start(c,d,Retranscribe.Mode.TEXT);}catch(HttpApi.UserAction e){refused=true;}
             check(refused&&!FilesStore.state(c,d.id).optBoolean("requested"),"A second retranscription was queued");

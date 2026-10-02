@@ -54,20 +54,8 @@ final class Next {
         if(Inbox.outdated(c,r.id))return new Next(Step.UPDATE,"Actualizar en "+folder,R.drawable.ic_refresh);
         return new Next(Step.SAVED,"En "+folder+" · "+when(at),R.drawable.ic_check);
     }
-    /**
-     * El botón de una grabación pedida (0.8.0, tercera ronda): «Transcribiendo…» solo si es ESTA la que se procesa ahora
-     * (mine: Pipeline.processing, que cuenta también la espera entre intentos); si no, por qué espera (blocker:
-     * Pipeline.blocker con su id) o «En cola…». Antes decía «Transcribiendo…» con la grabación en cola, esperando Wi-Fi o
-     * el cargador; y en cada espera para reintentar pasaba a «En cola…» (Transcriber.currentId queda en null entre intentos).
-     */
-    static String working(boolean again,boolean mine,String blocker){
-        if(mine)return again?"Volviendo a transcribir…":"Transcribiendo…";
-        if(blocker==null)return "En cola…";
-        if(blocker.contains("Wi-Fi"))return "Esperando Wi-Fi…";
-        if(blocker.contains("cargador"))return "Esperando el cargador…";
-        if(blocker.contains("internet"))return "Esperando conexión…";
-        return blocker.startsWith("batería baja")?"Batería baja · en espera…":"En cola…";
-    }
+    /** El botón de una grabación pedida: «Transcribiendo…» o por qué espera. Lee textos del motor: vive en StatusText. */
+    static String working(boolean again,boolean mine,String blocker){return StatusText.working(again,mine,blocker);}
     /** «16:09» si fue hoy; si no, «28 sept». */
     static String when(long at){
         Calendar now=Calendar.getInstance(),then=Calendar.getInstance();then.setTimeInMillis(at);
@@ -251,7 +239,7 @@ final class RecordingActions {
         input.requestFocus();sheet.dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }
     static void shareAudio(Screen s,Recording r){
-        Uri uri=Uri.parse("content://cl.vozlocal.app.audio/"+r.id+".m4a");
+        Uri uri=AudioProvider.uri(s,r.id+".m4a");
         Intent share=new Intent(Intent.ACTION_SEND).setType("audio/mp4").putExtra(Intent.EXTRA_STREAM,uri).putExtra(Intent.EXTRA_SUBJECT,r.title).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         share.setClipData(ClipData.newRawUri(r.title,uri));s.startActivity(Intent.createChooser(share,"Compartir audio"));
     }
@@ -353,15 +341,8 @@ final class RecordingActions {
     static boolean behind(String id){return behind(Pipeline.working(),Pipeline.processing(id),Transcriber.currentId,Transcriber.retryingId);}
     /** Lo mismo con lo ya leído (separado del teléfono para poder probarlo). mine: Pipeline.processing de esta grabación. */
     static boolean behind(boolean working,boolean mine,String current,String retrying){return working&&!mine&&(current!=null||retrying!=null);}
-    /**
-     * Lo mismo con lo ya sabido. behind: el trabajo andando está con OTRA grabación (Pipeline.start no arranca otro: esta
-     * espera su turno), y entonces dice «En cola», como el botón, la nota del detalle y la Biblioteca; antes decía
-     * «Transcribiendo». detail: el aviso sale en el detalle.
-     */
-    static String queuedToast(String doing,String blocker,boolean behind,boolean detail){
-        if(blocker!=null)return "En cola · "+(detail?RecordingActivity.inDetail(blocker):blocker);
-        return behind?"En cola · empieza cuando termine la transcripción en curso":doing+" · sigue aunque bloquees el teléfono";
-    }
+    /** El aviso breve al pedir una transcripción (ver StatusText.queuedToast). */
+    static String queuedToast(String doing,String blocker,boolean behind,boolean detail){return StatusText.queuedToast(doing,blocker,behind,detail);}
     /** Android 13+: el aviso de «lista» necesita permiso de notificaciones; se pide al encolar. */
     static void askNotifications(Screen s){
         if(Build.VERSION.SDK_INT>=33&&s.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)s.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},12);

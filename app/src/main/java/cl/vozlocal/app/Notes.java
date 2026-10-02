@@ -240,9 +240,9 @@ final class Notes {
     // ---------- Título sugerido ----------
     /** ¿El título sigue siendo el automático («Grabación 29 sept. · 16:05», con o sin la fecha ISO delante)? */
     static boolean isDefaultTitle(String title,long created){
-        String t=title==null?"":title.trim();if(t.isEmpty()||t.equals("Audio recuperado · revisar"))return true;
+        String t=title==null?"":title.trim();if(t.isEmpty()||Lang.isAny(R.string.rec_recovered,t))return true;
         String auto=Recording.defaultTitle(created);if(t.equals(auto)||t.equals(Recording.withDate(auto,created)))return true;
-        return t.matches("^(\\d{4}-\\d{2}-\\d{2} )?Grabación (\\d{1,2} \\S{2,6} · )?\\d{1,2}:\\d{2}$");
+        return Recording.automaticTitle(t);
     }
     /** Pone el título sugerido solo si el actual es el automático; nunca pisa uno que escribió la persona. */
     private static boolean applyTitle(Context c,Recording r,String suggested){

@@ -25,7 +25,7 @@ final class TranscriptExport {
             file.delete();
             throw error;
         }
-        return new Uri.Builder().scheme("content").authority("cl.vozlocal.app.audio")
+        return new Uri.Builder().scheme("content").authority(AudioProvider.authority(context))
             .appendPath(file.getName()).appendQueryParameter(DISPLAY_NAME, name).build();
     }
 

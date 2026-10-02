@@ -67,7 +67,11 @@ final class Voices {
     /** ¿Grabaste tu voz? (aunque esté apagada para transcribir). */
     static boolean has(Context c){return get(c,ME_ID)!=null;}
     /** Tu nombre: el de tu voz guardada, el de Ajustes o «Yo». */
-    static String name(Context c){Voice me=get(c,ME_ID);if(me!=null&&!me.name.isEmpty())return me.name;String n=prefsName(c);return n.isEmpty()?"Yo":n;}
+    static String name(Context c){Voice me=get(c,ME_ID);if(me!=null&&!me.name.isEmpty())return me.name;String n=prefsName(c);return n.isEmpty()?defaultMeName():n;}
+    /** «Yo», el nombre de tu voz cuando no le pusiste uno (en el idioma de la app). */
+    static String defaultMeName(){return Lang.str(R.string.voice_me_default);}
+    /** ¿Es el «Yo» por defecto (en cualquiera de los tres idiomas: queda guardado en el de cuando se grabó tu voz)? */
+    static boolean isDefaultMeName(String name){return name!=null&&Lang.isAny(R.string.voice_me_default,name.trim());}
     static void setName(Context c,String name){String n=clean(name);new Settings(c).prefs.edit().putString("myVoiceName",n).apply();if(!n.isEmpty())rename(c,ME_ID,n);}
     static void delete(Context c){remove(c,ME_ID);}
     /** {nombre enviado, data URL, voz destino, descripción} de tu voz, o null si no la grabaste. */
@@ -98,7 +102,7 @@ final class Voices {
      */
     static Voice add(Context c,String name,File clip,boolean me)throws IOException{
         String n=clean(name);
-        if(n.isEmpty()){if(!me)throw new IllegalArgumentException("Falta el nombre");n=prefsName(c).isEmpty()?"Yo":prefsName(c);}
+        if(n.isEmpty()){if(!me)throw new IllegalArgumentException("Falta el nombre");n=prefsName(c).isEmpty()?defaultMeName():prefsName(c);}
         if(clip==null||!valid(clip))throw new IOException("La muestra está vacía");
         Voice v;
         synchronized(LOCK){
@@ -183,14 +187,14 @@ final class Voices {
             JSONArray a=new JSONArray(new String(index.readFully(),StandardCharsets.UTF_8));
             for(int i=0;i<a.length();i++){
                 JSONObject o=a.optJSONObject(i);if(o==null)continue;String id=o.optString("id");if(!validId(id)||find(out,id)!=null)continue;
-                String name=clean(o.optString("name"));boolean me=ME_ID.equals(id);if(name.isEmpty())name=me?"Yo":"Voz guardada";
+                String name=clean(o.optString("name"));boolean me=ME_ID.equals(id);if(name.isEmpty())name=me?defaultMeName():"Voz guardada";
                 out.add(new Voice(id,name,me,o.optLong("createdAt",0),o.optBoolean("use",true)));
             }
         }catch(FileNotFoundException none){/* primera vez */}catch(Exception ignored){}
         // Migración: en la 0.5, «Mi voz» era solo voices/me.m4a con el nombre en Ajustes.
         File mine=file(c,ME_ID);
         if(find(out,ME_ID)==null&&valid(mine)){
-            String n=prefsName(c);out.add(0,new Voice(ME_ID,n.isEmpty()?"Yo":clean(n),true,mine.lastModified(),true));
+            String n=prefsName(c);out.add(0,new Voice(ME_ID,n.isEmpty()?defaultMeName():clean(n),true,mine.lastModified(),true));
             if(trySave(c,out))Diagnostics.event("setting_changed",null,"action","my_voice","result","migrated");
         }
         return out;

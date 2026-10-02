@@ -713,7 +713,7 @@ public class SettingsActivity extends Screen {
     private void verifyError(String reason){
         String why=reason==null||reason.isEmpty()?"Revisa tu conexión y vuelve a intentarlo.":reason;
         // Un motivo que habla de la clave es un rechazo (la regla de OnboardingActivity.saved): se titula como tal.
-        boolean key=why.toLowerCase(CL).contains("clave");
+        boolean key=StatusText.aboutKey(why);
         Sheet s=sheet(key?"Revisa tu clave de OpenRouter":"No se pudo conectar",why);
         if(key)s.primary("Revisar la clave",this::keySheet);else s.primary("Reintentar",this::verify);
         s.secondary("Cerrar",null).show();

@@ -322,7 +322,7 @@ final class ModelsChecks {
         check(SettingsActivity.modelSummary(s).startsWith("OpenAI · "),"Resumen del modelo con OpenAI");
         s.prefs.edit().putString("provider","custom").commit();
         check(s.custom()&&s.prefix().equals("custom_")&&s.apiKey().equals(server)&&s.needsServer()&&s.providerName().equals("Tu servidor")&&SettingsActivity.modelSummary(s).startsWith("Tu servidor · "),"El servidor propio cambió");
-        boolean noServer=false;try{s.config(false);}catch(HttpApi.UserAction e){noServer=Settings.NO_SERVER.equals(e.getMessage());}check(noServer,"Sin dirección, el servidor propio no debe enviar nada");
+        boolean noServer=false;try{s.config(false);}catch(HttpApi.UserAction e){noServer=Settings.noServer().equals(e.getMessage());}check(noServer,"Sin dirección, el servidor propio no debe enviar nada");
         s.prefs.edit().putString("customBase","https://example.com/v1").putString("customModel","mi-modelo").commit();
         check(!s.needsServer()&&s.config(false).provider.equals("custom")&&s.config(false).base.equals("https://example.com/v1")&&s.config(false).model.equals("mi-modelo")&&s.config(false).key.equals(server),"config() del servidor propio cambió");
         check(s.hasOpenRouterKey()&&s.openRouterKey().equals(router),"La clave de OpenRouter sigue disponible para la nota aunque se transcriba con otro proveedor");

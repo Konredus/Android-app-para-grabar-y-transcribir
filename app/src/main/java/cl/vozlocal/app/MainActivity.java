@@ -148,7 +148,7 @@ public class MainActivity extends Screen {
          */
         String progressText(){
             boolean mine=Pipeline.processing(r.id);
-            String wait=mine?null:blocker!=null?"En cola · "+blocker.replaceFirst(" \\(.*$",""):"En cola";
+            String wait=mine?null:StatusText.queuedLine(blocker);
             int b=blocks();if(b>1)return (wait!=null?wait:"Transcribiendo")+" · "+blocksDone()+" de "+b+" partes";
             return wait!=null?wait:"Transcribiendo…";
         }
@@ -437,7 +437,7 @@ public class MainActivity extends Screen {
     private void renderGreeting(){
         int hour=Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
         setText(hello,hour>=5&&hour<12?"Buenos días,":hour>=12&&hour<20?"Buenas tardes,":"Buenas noches,");
-        String n=myName==null?"":myName.trim();boolean named=!n.isEmpty()&&!n.equals("Yo");String shown=named?n:"¿Qué grabamos hoy?";
+        String n=myName==null?"":myName.trim();boolean named=!n.isEmpty()&&!Voices.isDefaultMeName(n);String shown=named?n:"¿Qué grabamos hoy?";
         if(shown.equals(shownName))return;shownName=shown;nameView.setContentDescription(null);
         if(named)nameView.setText(n);else ui.highlightLast(nameView,shown);
         // Un nombre de dos líneas ocupa más: se vuelve a medir si todo cabe.

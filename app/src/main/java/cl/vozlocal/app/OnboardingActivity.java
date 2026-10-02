@@ -172,9 +172,9 @@ public class OnboardingActivity extends Screen {
     /** Lo mismo desde GET /key y el saldo de la cuenta (GET /credits; NaN si no se supo). */
     static Valid valid(Models.KeyInfo info,double account){return valid(Models.balance(info,account));}
     /** El motivo del rechazo tal como lo dice el cliente, sin mandar a Ajustes: aquí la clave se corrige en el paso anterior. */
-    static String rejected(String message){String m=message==null?"":message.replace(" Revísala en Ajustes.","").trim();return m.isEmpty()?"La clave no funcionó.":m;}
+    static String rejected(String message){String m=StatusText.withoutSettingsHint(message);return m.isEmpty()?"La clave no funcionó.":m;}
     /** Primer nombre para saludar («Konrad Peschka» → «Konrad»); vacío si no hay nombre o es el «Yo» por defecto. */
-    static String firstName(String raw){String n=Voices.clean(raw);if(n.isEmpty()||n.equals("Yo"))return "";int cut=n.indexOf(' ');return cut>0?n.substring(0,cut):n;}
+    static String firstName(String raw){String n=Voices.clean(raw);if(n.isEmpty()||Voices.isDefaultMeName(n))return "";int cut=n.indexOf(' ');return cut>0?n.substring(0,cut):n;}
     static String readyTitle(String name){String first=firstName(name);return first.isEmpty()?"¡Todo listo!":"Todo listo, "+first;}
 
     /** Resultado de comprobar una clave. valid: lo que se supo de ella si es válida (null si no). */
@@ -213,7 +213,7 @@ public class OnboardingActivity extends Screen {
     static Verdict saved(SharedPreferences prefs,String target){
         if(prefs.getLong("verifyAt",0)<=0||target==null||!target.equals(prefs.getString("verifyFor","")))return null;
         String why=prefs.getString("verifyMsg","");
-        if(!prefs.getBoolean("verifyOk",false))return why.toLowerCase(java.util.Locale.ROOT).contains("clave")?new Verdict(Check.REJECTED,rejected(why),null):new Verdict(Check.UNKNOWN,UNCHECKED,null);
+        if(!prefs.getBoolean("verifyOk",false))return StatusText.aboutKey(why)?new Verdict(Check.REJECTED,rejected(why),null):new Verdict(Check.UNKNOWN,UNCHECKED,null);
         double left;try{left=Double.parseDouble(prefs.getString("verifyBalance",""));}catch(NumberFormatException e){left=Double.NaN;}
         Valid v=validOf(left,prefs.getBoolean("verifyFree",false));return new Verdict(Check.VALID,v.text,v);
     }
@@ -260,7 +260,7 @@ public class OnboardingActivity extends Screen {
         Object last=getLastNonConfigurationInstance();kept=last instanceof Kept?(Kept)last:new Kept();if(kept.check!=null)kept.check.screen=this;
         if(state!=null){step=Math.max(0,Math.min(STEPS-1,state.getInt("ob_step")));name=state.getString("ob_name","");askedMic=state.getBoolean("ob_asked");askedBattery=state.getBoolean("ob_battery");guideShown=state.getBoolean("ob_guide");}
         else{
-            String saved=settings.prefs.getString("myVoiceName","").trim();name=saved.equals("Yo")?"":saved;
+            String saved=settings.prefs.getString("myVoiceName","").trim();name=Voices.isDefaultMeName(saved)?"":saved;
             Diagnostics.event("ui_action",null,"screen","Onboarding","action",replay?"replay":"start");
         }
         shell(null,-1,true);

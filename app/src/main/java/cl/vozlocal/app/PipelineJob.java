@@ -16,6 +16,8 @@ import android.os.*;
  * plano (mismas rondas con reintentos, TranscribeService.rounds), con su notificación obligatoria.
  */
 public class PipelineJob extends JobService {
+    /** Idioma de la app (Lang): textos y notificaciones en el idioma elegido, aunque el teléfono esté en otro. */
+    @Override protected void attachBaseContext(android.content.Context base){super.attachBaseContext(Lang.wrap(base));}
     static final int OPEN_APP_NOTIFICATION=11;
     /** Una transferencia iniciada por el usuario está trabajando (las demás vías le ceden el turno). */
     static volatile boolean userRunning;

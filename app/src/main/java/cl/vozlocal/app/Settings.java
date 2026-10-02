@@ -45,14 +45,14 @@ final class Settings {
     String customBase(){return prefs.getString("customBase","").trim();}
     /** Con «Servidor compatible» sin dirección no se puede transcribir (ni comprobar la clave). */
     boolean needsServer(){return custom()&&customBase().isEmpty();}
-    static final String NO_SERVER="Configura la dirección de tu servidor en Ajustes.";
+    static String noServer(){return Lang.str(R.string.settings_no_server);}
     ProviderConfig config(boolean speakers)throws Exception{
         boolean openai=provider().equals("openai");
         if(openai)return new ProviderConfig("openai","https://api.openai.com/v1",speakers?"gpt-4o-transcribe-diarize":textModel(),apiKey(),speakers);
         // OpenRouter (0.8.0): el modelo sale de la elección del usuario o de «Automático»; solo separa voces si su receta sabe pedirlo.
         if(openRouter()){String model=Models.chosen(this,speakers);return new ProviderConfig("openrouter",Models.BASE,model,apiKey(),speakers&&Models.recipe(model).diarizes);}
         // Sin dirección no hay a dónde enviar: nunca una por defecto (la clave y el audio irían a un tercero).
-        if(customBase().isEmpty())throw new HttpApi.UserAction(NO_SERVER);
+        if(customBase().isEmpty())throw new HttpApi.UserAction(noServer());
         return new ProviderConfig(provider(),customBase(),prefs.getString("customModel","whisper-1"),apiKey(),speakers&&prefs.getBoolean("customSpeakers",false));
     }
     // ---------- 0.8.0: OpenRouter ----------

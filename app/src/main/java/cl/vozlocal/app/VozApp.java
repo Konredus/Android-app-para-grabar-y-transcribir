@@ -4,6 +4,8 @@ import android.app.*;
 import android.os.Bundle;
 
 public class VozApp extends Application {
+    /** Idioma de la app (Lang): textos y notificaciones en el idioma elegido, aunque el teléfono esté en otro. */
+    @Override protected void attachBaseContext(android.content.Context base){Lang.init(base);super.attachBaseContext(Lang.wrap(base));}
     @Override public void onCreate(){super.onCreate();Diagnostics.init(this);Diagnostics.event("app_start",null);Settings settings=new Settings(this);if(settings.prefs.getInt("schema",0)<3){getSystemService(android.app.job.JobScheduler.class).cancel(Pipeline.JOB_ID);for(Recording r:Recording.list(this))if(Transcript.exists(this,r.id))try{FilesStore.update(this,r.id,state->state.put("requested",false).put("status","Transcripción lista"));}catch(Exception ignored){}settings.prefs.edit().putInt("schema",3).remove("driveConnected").remove("driveEmail").remove("folderId").apply();}
         if(settings.prefs.getInt("schema",0)<4){
             // 0.4.2: el modelo se elige por transcripción (con o sin voces). Se respeta la elección previa de un modelo sin voces.

@@ -59,7 +59,7 @@ import static cl.vozlocal.app.AppTheme.*;
  */
 public class MetricsActivity extends Screen {
     /** Abre «Tus métricas». El botón ← dice a dónde vuelve: Grabar («Tu semana») o Ajustes. */
-    static void open(Context c){c.startActivity(new Intent(c,MetricsActivity.class).putExtra("from",c instanceof MainActivity?"Grabar":"Ajustes"));}
+    static void open(Context c){boolean record=c instanceof MainActivity;c.startActivity(new Intent(c,MetricsActivity.class).putExtra("from",Lang.str(c,record?R.string.nav_record:R.string.nav_settings)).putExtra("fromRecord",record));}
 
     private static final String[] DAYS={"L","M","M","J","V","S","D"};
     private static final String[] DAY_NAMES={"Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"};
@@ -80,11 +80,11 @@ public class MetricsActivity extends Screen {
         super.onCreate(state);prefs=getSharedPreferences("metrics",MODE_PRIVATE);
         try{period=Metrics.Period.valueOf(prefs.getString("period",period.name()));}catch(RuntimeException ignored){}
         // Desde la tarjeta «Tu semana» de Grabar se abre en «7 días», lo mismo que esa tarjeta resume (sin cambiar lo guardado).
-        if(state==null&&getIntent().getStringExtra("from")!=null&&getIntent().getStringExtra("from").equals("Grabar"))period=Metrics.Period.WEEK;
+        if(state==null&&getIntent().getBooleanExtra("fromRecord",false))period=Metrics.Period.WEEK;
         if(state!=null){try{period=Metrics.Period.valueOf(state.getString("period",period.name()));}catch(RuntimeException ignored){}
             week=Math.max(0,Math.min(Metrics.WEEKS-1,state.getInt("week",week)));restoreScroll=state.getInt("screen_scroll",0);}
         ground=blend(p.softMid,0xFFFFFFFF,(p.glass>>>24)/255f);
-        String from=getIntent().getStringExtra("from");shell(from==null||from.isEmpty()?"Ajustes":from,-1);
+        String from=getIntent().getStringExtra("from");shell(from==null||from.isEmpty()?getString(R.string.nav_settings):from,-1);
         TextView title=largeTitle(page,"Tus métricas","Calculadas en tu teléfono con tus grabaciones. Nada se envía.");ui.highlightLast(title,"Tus métricas");
         content=ui.column();page.addView(content,Ui.fill());
         content.addView(loadingView(),Ui.fill());

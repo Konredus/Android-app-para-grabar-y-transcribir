@@ -296,7 +296,7 @@ final class NameVoices {
     static List<String> mergeRecent(List<String> previous,Collection<String> used){
         List<String> out=new ArrayList<>();
         List<String> all=new ArrayList<>(used);all.addAll(previous);
-        for(String n:all){String t=n==null?"":n.trim();if(t.isEmpty()||t.matches("(?i)^persona \\d+$")||t.equalsIgnoreCase("Texto"))continue;
+        for(String n:all){String t=n==null?"":n.trim();if(t.isEmpty()||Transcript.isDefaultLabel(t))continue;
             boolean dup=false;for(String o:out)if(o.equalsIgnoreCase(t))dup=true;if(!dup)out.add(t);if(out.size()>=RECENT_MAX)break;}
         return out;
     }

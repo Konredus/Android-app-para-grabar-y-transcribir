@@ -24,6 +24,8 @@ import java.util.concurrent.TimeUnit;
  * la tarea de fondo lo retoma. Si el Wi-Fi se va a mitad, se espera aquí (hasta 15 min) con el aviso «Esperando Wi-Fi».
  */
 public class TranscribeService extends Service {
+    /** Idioma de la app (Lang): textos y notificaciones en el idioma elegido, aunque el teléfono esté en otro. */
+    @Override protected void attachBaseContext(android.content.Context base){super.attachBaseContext(Lang.wrap(base));}
     static volatile boolean running;
     /** Conexión en curso, para poder cancelar un envío al instante desde la pantalla de detalle. */
     static volatile HttpApi current;
@@ -119,7 +121,7 @@ public class TranscribeService extends Service {
             // enviado (una que esperaba su turno, o el Wi-Fi). La que espera su turno conserva su «En cola · …».
             if(blocker!=null){if(id!=null)Pipeline.log(c,id,"En pausa: "+blocker+" · se retoma sola al cumplirse");}
             else if(again!=null)Pipeline.log(c,again,"Reintento en "+(delay/1000)+" s · sigue trabajando");
-            if(Pipeline.WIFI_WAIT.equals(blocker))wifiWait(c,http,id);else if(blocker!=null)hold(c,http,blocker);
+            if(Pipeline.isWifiWait(blocker))wifiWait(c,http,id);else if(blocker!=null)hold(c,http,blocker);
             boolean wifiOnly=new Settings(c).wifiOnly(),wasMetered=metered(c,wifiOnly);
             // elapsedRealtime sigue contando si Android congela la app: así se detecta (y se anota) una espera que se alargó.
             // due: cuándo toca reintentar según la escala de esperas, aunque el Wi-Fi se vaya y vuelva antes.
@@ -139,12 +141,12 @@ public class TranscribeService extends Service {
                     // La que se iba a reintentar ahora espera Wi-Fi: ya no se procesa, espera (y se le ofrece «Usar datos móviles»).
                     // Su titular lo dice: el aviso de abajo es de la primera pedida, que puede ser otra, y la que se reintentaba
                     // seguía con «Reintento en 20 s» hasta 15 min.
-                    if(again!=null&&Pipeline.waitsForWifi(c,again)){Transcriber.retryingId=null;Pipeline.log(c,again,"En pausa: "+Pipeline.WIFI_WAIT+" · se retoma sola al cumplirse");again=null;}
-                    if(Pipeline.WIFI_WAIT.equals(Pipeline.blocker(c))){
+                    if(again!=null&&Pipeline.waitsForWifi(c,again)){Transcriber.retryingId=null;Pipeline.log(c,again,"En pausa: "+Pipeline.wifiWait()+" · se retoma sola al cumplirse");again=null;}
+                    if(Pipeline.isWifiWait(Pipeline.blocker(c))){
                         Transcriber.retryingId=null;again=null;
-                        String waiting=pendingId(c);if(waiting!=null)Pipeline.log(c,waiting,"En pausa: "+Pipeline.WIFI_WAIT+" · se retoma sola al cumplirse");
+                        String waiting=pendingId(c);if(waiting!=null)Pipeline.log(c,waiting,"En pausa: "+Pipeline.wifiWait()+" · se retoma sola al cumplirse");
                         wifiWait(c,http,waiting);
-                        if(blocker==null){blocker=Pipeline.WIFI_WAIT;until=now+15*60_000;}
+                        if(blocker==null){blocker=Pipeline.wifiWait();until=now+15*60_000;}
                     }
                 }
                 wasMetered=onMobile;

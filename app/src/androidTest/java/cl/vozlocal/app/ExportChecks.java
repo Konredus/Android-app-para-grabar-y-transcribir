@@ -57,7 +57,7 @@ final class ExportChecks {
                 catch (FileNotFoundException expected) { rejected = true; }
                 check(rejected, "Export provider accepted write mode " + mode);
             }
-            Uri traversal = Uri.parse("content://cl.vozlocal.app.audio/../" + first.getLastPathSegment());
+            Uri traversal = Uri.parse("content://" + AudioProvider.authority(context) + "/../" + first.getLastPathSegment());
             boolean rejected = false;
             try (InputStream ignored = context.getContentResolver().openInputStream(traversal)) { }
             catch (FileNotFoundException expected) { rejected = true; }

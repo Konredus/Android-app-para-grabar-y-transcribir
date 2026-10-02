@@ -560,7 +560,7 @@ public class RecordingActivity extends Screen {
         liveState=st;phaseSince=st.optLong("since",System.currentTimeMillis());
         // «Preparando el audio» con su avance en % (0.8.0, tercera ronda): la conversión ya no parece detenida.
         int prep=prepPercent(st);String head=human(st.optString("status",""));
-        progHeadline.setText(prep>=0&&head.startsWith("Preparando")?head+" · "+prep+" %":head);
+        progHeadline.setText(prep>=0&&StatusText.preparing(head)?head+" · "+prep+" %":head);
         int blocks=st.optInt("blocks"),done=st.optInt("blocksDone");boolean parts=blocks>1;
         progParts.setVisibility(parts?View.VISIBLE:View.GONE);progBar.setVisibility(parts?View.VISIBLE:View.GONE);
         if(parts){progParts.setText(done+" de "+blocks+" partes listas");progBar.set(done/(float)blocks);}
@@ -581,8 +581,8 @@ public class RecordingActivity extends Screen {
     private void renderStages(JSONObject st){
         if(progStages==null)return;progStages.removeAllViews();
         int blocks=st.optInt("blocks"),done=st.optInt("blocksDone");long sent=st.optLong("upSent"),total=st.optLong("upTotal");
-        boolean uploaded=done>0||(total>0&&sent>=total)||logHas(st,"enviado"),partsDone=blocks>0&&done>=blocks;
-        boolean preparing=st.optInt("prepping")>0||st.optString("status").startsWith("Preparando");int prep=prepPercent(st);
+        boolean uploaded=done>0||(total>0&&sent>=total)||StatusText.uploadedInLog(st),partsDone=blocks>0&&done>=blocks;
+        boolean preparing=st.optInt("prepping")>0||StatusText.preparing(st.optString("status"));int prep=prepPercent(st);
         if("openrouter".equals(st.optString("provider")))stage(preparing&&prep>=0?"Preparar audio "+prep+" %":"Preparar audio",preparing?1:(uploaded||st.optInt("prepCount")>0)?2:0);
         // «Subido» en curso solo si se está enviando ESTA (con otra en curso, esta sigue en cola).
         stage("Subido",uploaded?2:mine()&&!preparing?1:0);
@@ -604,7 +604,6 @@ public class RecordingActivity extends Screen {
     }
     /** Avance de «Preparando el audio» (0–100) si alguna parte se está convirtiendo ahora; -1 si no. */
     private static int prepPercent(JSONObject st){return st.optInt("prepping")>0&&st.has("prepPct")?Math.max(0,Math.min(100,st.optInt("prepPct"))):-1;}
-    private static boolean logHas(JSONObject st,String word){JSONArray log=st.optJSONArray("log");if(log!=null)for(int i=0;i<log.length();i++){JSONObject e=log.optJSONObject(i);if(e!=null&&e.optString("m").contains(word))return true;}return false;}
     /** Qué pasa ahora: tranquilidad si trabaja, o por qué espera; «Empezar ahora» solo si Android la está demorando. */
     private void refreshWaiting(String blocker){
         if(progNote==null)return;boolean running=Pipeline.working(),mine=mine();
@@ -621,20 +620,8 @@ public class RecordingActivity extends Screen {
      * pasaba el botón a «En cola…» y escondía la estimación.
      */
     private boolean mine(){return Pipeline.processing(id);}
-    /**
-     * La nota de la tarjeta según qué pasa con ESTA grabación (0.8.0, tercera ronda). mine: es la que se procesa ahora;
-     * running: hay un trabajo andando; other: ese trabajo está con otra grabación (RecordingActions.behind: la transcribe o
-     * espera para reintentarla); slow: lleva más de 15 min en el mismo
-     * paso; blocker: por qué espera esta grabación (Pipeline.blocker con su id) o null. Antes bastaba un trabajo andando
-     * con cualquiera: una grabación en cola o esperando Wi-Fi decía «Puedes cerrar la app» y, a los 15 min, «Este paso
-     * tarda más de lo normal… se corta y se reintenta solo», sin estar en ningún paso.
-     */
-    static String waitingNote(boolean mine,boolean running,boolean other,boolean slow,String blocker){
-        if(mine)return slow?"Este paso tarda más de lo normal. Si no avanza, se corta y se reintenta solo; si no resulta, te aviso.":"Puedes cerrar la app: te aviso cuando esté lista.";
-        if(blocker!=null)return "Esperando: "+blocker.replaceFirst("^esperando ","").replaceFirst(" \\(.*$","")+". Empieza sola cuando se cumpla; puedes cerrar la app.";
-        if(other)return "En cola: empieza cuando termine la transcripción en curso. Puedes cerrar la app.";
-        return running?"Puedes cerrar la app: te aviso cuando esté lista.":"Android aún no la empieza. Se hará sola, o toca «Empezar ahora».";
-    }
+    /** La nota de la tarjeta según qué pasa con ESTA grabación (ver StatusText.waitingNote). */
+    static String waitingNote(boolean mine,boolean running,boolean other,boolean slow,String blocker){return StatusText.waitingNote(mine,running,other,slow,blocker);}
     /** La estimación solo para la grabación que se procesa: una en cola no tiene un «≈ 2–4 min» que cumplir. */
     private void refreshEstimate(){if(progEstimate==null)return;String est=mine()&&liveState!=null?estimate(liveState):"";progEstimate.setText(est);progEstimate.setVisibility(est.isEmpty()?View.GONE:View.VISIBLE);lastEstimateAt=System.currentTimeMillis();}
     /**
@@ -656,30 +643,11 @@ public class RecordingActivity extends Screen {
         return hi>=60?"≈ "+Ui.humanDuration(left):"≈ "+lo+"–"+hi+" min";
     }
     /** Cuándo empezó a trabajar de verdad (no el tiempo esperando Wi-Fi o el cargador). */
-    private static long startedAt(JSONObject st){
-        JSONArray log=st.optJSONArray("log");
-        if(log!=null)for(int i=0;i<log.length();i++){JSONObject e=log.optJSONObject(i);if(e==null)continue;String m=e.optString("m");if(!m.startsWith("En cola")&&!m.startsWith("En espera")&&!m.contains("esperando"))return e.optLong("t");}
-        return st.optLong("queuedAt",System.currentTimeMillis());
-    }
+    private static long startedAt(JSONObject st){return StatusText.startedAt(st);}
     /** La última línea de la bitácora en palabras simples («parte» en vez de «bloque», sin tiempos técnicos). */
-    static String human(String m){
-        if(m==null||m.trim().isEmpty())return "En cola";
-        String s=inDetail(m).replaceAll("Bloque (\\d+) de (\\d+) listo","Parte $1 de $2 lista").replaceAll("Bloque (\\d+) enviado","Parte $1 enviada")
-            .replace("El bloque","La parte").replace("del bloque","de la parte").replace("el bloque","la parte").replace("los bloques","las partes").replace("bloques","partes").replace("Bloque","Parte").replace("bloque","parte");
-        String[] parts=s.split(" · ");StringBuilder b=new StringBuilder(parts[0].trim());
-        for(int i=1;i<parts.length;i++){String x=parts[i].trim();if(x.isEmpty()||x.startsWith("tardó")||x.startsWith("se envían")||x.startsWith("tiempo total"))continue;if(b.length()+x.length()>110)break;b.append(" · ").append(x);}
-        return b.toString();
-    }
-    /**
-     * Un texto de espera de Wi-Fi tal como se ve en el detalle: sin «(ahora usas datos móviles; puedes usarlos igual desde
-     * el detalle de la grabación)» de Pipeline.WIFI_WAIT ni el «: puedes usarlos … desde su detalle» de la bitácora del
-     * motor. Aquí sobran: el botón «Usar datos móviles ahora» está a la vista. Lo demás queda igual (MainActivity corta el
-     * paréntesis a su manera). Lo usan el titular, la bitácora y los avisos breves del detalle.
-     */
-    static String inDetail(String m){
-        if(m==null)return "";
-        return m.replaceAll("(esperando Wi-Fi) \\([^)]*\\)","$1").replaceAll(": puedes usarlos [^·]*desde su detalle","");
-    }
+    static String human(String m){return StatusText.human(m);}
+    /** Un texto de espera de Wi-Fi tal como se ve en el detalle (ver StatusText.inDetail). */
+    static String inDetail(String m){return StatusText.inDetail(m);}
     /** Condiciones reales del teléfono. Si todo está bien, una sola línea tranquila; si algo falta, cada condición con su salida. */
     private void renderConditions(){
         if(conditions==null)return;
@@ -902,7 +870,7 @@ public class RecordingActivity extends Screen {
         return TextUtils.join(" · ",parts);
     }
     private long transcribedAt(JSONObject st){
-        JSONArray log=st.optJSONArray("log");if(log!=null)for(int i=log.length()-1;i>=0;i--){JSONObject e=log.optJSONObject(i);if(e!=null&&e.optString("m").startsWith("Transcripción lista"))return e.optLong("t");}
+        JSONArray log=st.optJSONArray("log");if(log!=null)for(int i=log.length()-1;i>=0;i--){JSONObject e=log.optJSONObject(i);if(e!=null&&StatusText.transcriptionDone(e.optString("m")))return e.optLong("t");}
         long q=st.optLong("queuedAt"),d=st.optLong("doneIn");if(q>0&&d>0)return q+d;
         java.io.File f=FilesStore.file(this,id,".transcript.json");return f.isFile()?f.lastModified():0;
     }

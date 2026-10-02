@@ -111,14 +111,14 @@ final class Retranscribe {
      * Hay una versión anterior esperando que el usuario elija: otra repetición la borraría (solo se guarda una), así que
      * primero se elige («Quedarme con la nueva» o «Volver a la anterior»).
      */
-    static final String CHOOSE_FIRST="Primero elige con qué versión te quedas.";
+    static String chooseFirst(){return Lang.str(R.string.retranscribe_choose_first);}
     /** Motivo en palabras simples por el que la alternativa no se puede usar, o null si se puede. */
     static String reason(Facts f,Mode mode){
         if(!f.exists)return "No se encontró el audio de esta grabación.";
         if(f.demo)return "El ejemplo no se vuelve a transcribir.";
         if(f.busy)return "Ya se está transcribiendo. Espera a que termine.";
         if(!f.transcribed)return f.previous?"La nueva versión no terminó. Reintenta o vuelve a la anterior.":"Todavía no tiene transcripción. Usa «Transcribir».";
-        if(f.previous)return CHOOSE_FIRST;
+        if(f.previous)return chooseFirst();
         // La nota que se está armando es de esta versión: si cambiara ahora, se perdería.
         if(f.noteWorking)return "Se está armando la nota. Espera a que termine.";
         if(!f.hasKey)return "Agrega tu clave de OpenRouter en Ajustes para volver a transcribir.";
@@ -228,7 +228,7 @@ final class Retranscribe {
         synchronized(FilesStore.LOCK){
             File current=FilesStore.file(c,id,".transcript.json");if(!current.isFile())throw new HttpApi.UserAction("Todavía no tiene transcripción.");
             // Solo se guarda una versión anterior: con una esperando la elección, repetir la borraría sin aviso.
-            File prev=FilesStore.file(c,id,".transcript.prev.json");if(prev.isFile())throw new HttpApi.UserAction(CHOOSE_FIRST);
+            File prev=FilesStore.file(c,id,".transcript.prev.json");if(prev.isFile())throw new HttpApi.UserAction(chooseFirst());
             move(current,prev);
             File note=FilesStore.file(c,id,".note.json"),notePrev=FilesStore.file(c,id,".note.prev.json");
             if(note.isFile())move(note,notePrev);else new AtomicFile(notePrev).delete();

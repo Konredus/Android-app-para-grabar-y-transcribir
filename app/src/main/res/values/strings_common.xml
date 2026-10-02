@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Textos comunes (0.9.0). values/ es inglés, el respaldo; values-es/ español; values-pt/ portugués de Brasil.
+     Cada parte de la app tiene su archivo strings_<parte>.xml. Ver Lang.java para cómo se usan. -->
+<resources>
+    <string name="app_name" translatable="false">Verbapp</string>
+    <string name="lang_en" translatable="false">English</string>
+    <string name="lang_es" translatable="false">Español</string>
+    <string name="lang_pt" translatable="false">Português (Brasil)</string>
+
+    <string name="common_ok">Got it</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_back_to">Back to %1$s</string>
+    <string name="common_action_available">%1$s available</string>
+    <string name="common_language">Language</string>
+    <string name="common_language_hint">You can change it anytime in Settings.</string>
+</resources>

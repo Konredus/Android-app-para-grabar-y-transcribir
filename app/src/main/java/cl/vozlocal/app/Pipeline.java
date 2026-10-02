@@ -246,8 +246,10 @@ final class Pipeline {
         cancelUserJob(c);
         return true;
     }
-    /** Mensaje de espera de Wi-Fi (MainActivity corta lo que va entre paréntesis). */
-    static final String WIFI_WAIT="esperando Wi-Fi (ahora usas datos móviles; puedes usarlos igual desde el detalle de la grabación)";
+    /** Mensaje de espera de Wi-Fi, en el idioma de la app (la Biblioteca corta lo que va entre paréntesis: StatusText.queuedLine). */
+    static String wifiWait(){return Lang.str(R.string.wait_wifi);}
+    /** ¿Este motivo de espera es el del Wi-Fi? (en cualquiera de los tres idiomas: puede venir de antes de cambiar el idioma). */
+    static boolean isWifiWait(String blocker){return Lang.isAny(R.string.wait_wifi,blocker);}
     /** Motivo por el que aún no puede empezar ningún trabajo (según tus ajustes), o null si alguno puede empezar ya. */
     static String blocker(Context c){return blocker(c,anyMobileOk(c));}
     /** Lo mismo para una grabación: con «Usar datos móviles ahora» no espera Wi-Fi. */
@@ -255,7 +257,7 @@ final class Pipeline {
     private static String blocker(Context c,boolean mobileOk){
         Settings settings=new Settings(c);Network network=network(c);
         if(network==null)return "esperando conexión a internet";
-        if(settings.wifiOnly()&&!mobileOk&&!unmetered(c))return WIFI_WAIT;
+        if(settings.wifiOnly()&&!mobileOk&&!unmetered(c))return wifiWait();
         BatteryManager battery=c.getSystemService(BatteryManager.class);
         if(settings.charging()&&!battery.isCharging())return "esperando que conectes el cargador";
         if(!battery.isCharging()&&battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)<=15)return "batería baja: Android espera a que cargues";

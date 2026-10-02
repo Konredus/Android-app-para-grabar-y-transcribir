@@ -11,6 +11,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** User-started foreground work keeps conversion running with the display off. */
 public class ImportService extends Service {
+    /** Idioma de la app (Lang): textos y notificaciones en el idioma elegido, aunque el teléfono esté en otro. */
+    @Override protected void attachBaseContext(android.content.Context base){super.attachBaseContext(Lang.wrap(base));}
     private static final int NOTIFICATION=14;private static ImportSession current;private static boolean loaded;
     private final AtomicBoolean running=new AtomicBoolean();private PowerManager.WakeLock wake;private long notified;
     static synchronized ImportSession session(Context c){if(!loaded){current=ImportSession.restore(c);loaded=true;}return current;}

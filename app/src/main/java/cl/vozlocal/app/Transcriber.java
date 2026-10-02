@@ -138,7 +138,7 @@ final class Transcriber {
      * (waitsForWifi). La tarea de fondo (budgetMs>0) no: Android ya la retiene con esas mismas condiciones, y si las mide
      * distinto que blocker (p. ej. otro umbral de batería baja) se reprogramaría en bucle.
      */
-    static boolean holds(String blocker,long budgetMs){return budgetMs<=0&&blocker!=null&&!Pipeline.WIFI_WAIT.equals(blocker);}
+    static boolean holds(String blocker,long budgetMs){return budgetMs<=0&&blocker!=null&&!Pipeline.isWifiWait(blocker);}
     /**
      * «Solo con Wi-Fi» y ahora hay datos móviles, visto justo antes de enviar una parte (0.8.0, tercera ronda): antes se
      * miraba solo al empezar cada grabación, y lo que quedaba se subía por datos móviles. No gasta un intento y las partes

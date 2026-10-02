@@ -19,7 +19,11 @@ import static cl.vozlocal.app.AppTheme.*;
  */
 final class BottomNav extends LinearLayout {
     interface Listener{void select(int destination);}
-    static final String[] TITLES={"Grabar","Biblioteca","Ajustes"};
+    /** Nombre de cada destino, en el idioma de la app. */
+    static final int[] TITLES={R.string.nav_record,R.string.nav_library,R.string.nav_settings};
+    /** Nombres fijos para el registro técnico (Diagnostics), iguales en cualquier idioma. */
+    private static final String[] SCREENS={"Grabar","Biblioteca","Ajustes"};
+    static String title(int destination){return Lang.str(TITLES[destination]);}
     private static final int[] ICONS={R.drawable.ic_tab_record,R.drawable.ic_tab_library,R.drawable.ic_tab_settings};
     /** Destino activo: ícono relleno; inactivos: contorno. */
     private static final int[] ICONS_ON={R.drawable.ic_tab_record_fill,R.drawable.ic_tab_library_fill,R.drawable.ic_tab_settings_fill};
@@ -38,16 +42,16 @@ final class BottomNav extends LinearLayout {
         LayoutTransition t=new LayoutTransition();t.enableTransitionType(LayoutTransition.CHANGING);t.setDuration(MOTION_BASE);t.setInterpolator(LayoutTransition.CHANGING,EMPHASIZED);capsule.setLayoutTransition(t);
         for(int i=0;i<3;i++){
             int index=i;LinearLayout item=new LinearLayout(c);items[i]=item;item.setOrientation(HORIZONTAL);item.setGravity(Gravity.CENTER);item.setMinimumWidth(dp(52));item.setMinimumHeight(dp(52));
-            item.setContentDescription(TITLES[i]);item.setFocusable(true);item.setClickable(true);
+            item.setContentDescription(title(i));item.setFocusable(true);item.setClickable(true);
             item.setAccessibilityDelegate(new View.AccessibilityDelegate(){@Override public void onInitializeAccessibilityNodeInfo(View host,AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(host,info);info.setClassName(Button.class.getName());info.setSelected(index==BottomNav.this.selected);}});
             FrameLayout box=new FrameLayout(c);box.setClipChildren(false);
             ImageView icon=new ImageView(c);icons[i]=icon;icon.setImageResource(ICONS[i]);icon.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);box.addView(icon,new FrameLayout.LayoutParams(dp(24),dp(24),Gravity.CENTER));
             View badge=new View(c);GradientDrawable dot=oval(palette.record);dot.setStroke(dp(1.5f),palette.dark?0xFF182420:0xFFFFFFFF);badge.setBackground(dot);badge.setVisibility(GONE);badges[i]=badge;
             FrameLayout.LayoutParams bp=new FrameLayout.LayoutParams(dp(10),dp(10),Gravity.TOP|Gravity.END);bp.setMargins(0,-dp(2),-dp(3),0);box.addView(badge,bp);
             item.addView(box,new LayoutParams(dp(24),dp(24)));
-            TextView label=new TextView(c);labels[i]=label;label.setText(TITLES[i]);AppTheme.type(label,Type.LABEL_LARGE);label.setSingleLine(true);label.setPadding(dp(S2),0,0,0);label.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);label.setVisibility(GONE);item.addView(label,new LayoutParams(-2,-2));
+            TextView label=new TextView(c);labels[i]=label;label.setText(title(i));AppTheme.type(label,Type.LABEL_LARGE);label.setSingleLine(true);label.setPadding(dp(S2),0,0,0);label.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);label.setVisibility(GONE);item.addView(label,new LayoutParams(-2,-2));
             LayoutParams lp=new LayoutParams(-2,dp(52));if(i>0)lp.setMarginStart(dp(4));capsule.addView(item,lp);
-            item.setOnClickListener(v->{Diagnostics.event("navigation",null,"screen",TITLES[index]);Ui.haptic(v);listener.select(index);});
+            item.setOnClickListener(v->{Diagnostics.event("navigation",null,"screen",SCREENS[index]);Ui.haptic(v);listener.select(index);});
             Ui.pressable(item);
         }
         addView(capsule,new LayoutParams(-2,-2));
@@ -63,6 +67,6 @@ final class BottomNav extends LinearLayout {
             items[i].setBackground(new RippleDrawable(ColorStateList.valueOf(active?Ui.stateLayer(palette.onInk):palette.ripple),active?shape(getContext(),palette.ink,R_FULL):null,shape(getContext(),0xFF000000,R_FULL)));
         }
     }
-    void badge(int index,boolean visible){badges[index].setVisibility(visible?VISIBLE:GONE);items[index].setContentDescription(TITLES[index]+(visible?", trabajo en curso":""));}
+    void badge(int index,boolean visible){badges[index].setVisibility(visible?VISIBLE:GONE);items[index].setContentDescription(visible?Lang.str(R.string.nav_busy,title(index)):title(index));}
     private int dp(float n){return AppTheme.dp(getContext(),n);}
 }

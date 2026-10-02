@@ -72,7 +72,16 @@ final class Transcript {
         return out;
     }
     /** Etiqueta por defecto de una voz ("Persona N"), estable gracias a order(). */
-    String defaultLabel(String id) throws JSONException {return "Persona "+(order().indexOf(id)+1);}
+    String defaultLabel(String id) throws JSONException {return Lang.str(R.string.speaker_n,order().indexOf(id)+1);}
+    /**
+     * ¿Es una etiqueta por defecto («Persona 2», «Texto»), y no un nombre que puso la persona? En cualquiera de los tres
+     * idiomas: los nombres recientes y las notas se guardan en el idioma de cuando se escribieron.
+     */
+    static boolean isDefaultLabel(String name){
+        String t=name==null?"":name.trim();if(t.isEmpty())return false;
+        for(String s:Lang.all(R.string.speaker_text))if(s.equalsIgnoreCase(t))return true;
+        return t.matches("(?i)^"+Lang.anyRegex(R.string.speaker_n)+" \\d+$");
+    }
     /**
      * ¿El usuario ya revisó las voces? Las transcripciones nuevas lo dicen explícitamente ("reviewed");
      * en las anteriores a 0.5.0 cuenta como revisada si alguna voz tiene nombre.
@@ -87,7 +96,7 @@ final class Transcript {
     /** Voces presentes → nombre visible ("Persona N" o el nombre que le puso el usuario). */
     LinkedHashMap<String,String> speakers() throws Exception {
         LinkedHashMap<String,String> speakers=new LinkedHashMap<>();List<String> order=order();Set<String> present=present();
-        for(String id:order)if(present.contains(id))speakers.put(id,diarized()?"Persona "+(order.indexOf(id)+1):"Texto");
+        for(String id:order)if(present.contains(id))speakers.put(id,diarized()?Lang.str(R.string.speaker_n,order.indexOf(id)+1):Lang.str(R.string.speaker_text));
         JSONObject names=data.optJSONObject("names");
         if(names!=null)for(String id:speakers.keySet()){String name=names.optString(id,"").trim();if(!name.isEmpty())speakers.put(id,name);}
         return speakers;

@@ -1,0 +1,33 @@
+Verbapp convierte lo que hablas en texto que puedes guardar. Graba reuniones, ideas y conversaciones sin internet y, cuando quieras, transcríbelas con inteligencia artificial: cada persona con su nombre y una nota lista para tu segundo cerebro.
+
+GRABA CON UN TOQUE
+• Funciona sin internet: tus grabaciones quedan en tu teléfono.
+• Sigue grabando con la pantalla bloqueada.
+• Marca los momentos clave con ★ mientras grabas, también desde la notificación.
+• Importa audios de WhatsApp, de grabadoras y de otras apps (M4A, MP3, WAV y más).
+
+TRANSCRIBE Y SEPARA VOCES
+• Transcribe con los modelos de voz a texto más recientes, a través de OpenRouter. La lista se actualiza sola y «Automático» elige el recomendado.
+• Separa a cada persona que habla y reconoce las voces que ya conoces: la tuya y las de quienes más hablan contigo.
+• Corrige quién dijo qué con un toque, siempre con Deshacer.
+• Los audios largos se dividen en partes que se envían en paralelo.
+
+TU SEGUNDO CEREBRO
+• Una nota con IA: resumen, decisiones, tareas y frases clave.
+• Guarda la nota (.md) o el texto (.txt) con un toque en la carpeta que elijas, por ejemplo tu 0-Inbox de Obsidian o Google Drive.
+• Copia, comparte o exporta lo que necesites.
+
+TUS MÉTRICAS
+• Cuánto hablas, tus rachas, a qué hora grabas y con quién conversas.
+• Cuánto has gastado en transcripciones, con el costo real que informa OpenRouter.
+• Todo se calcula en tu teléfono.
+
+TÚ CONTROLAS TUS DATOS
+• Sin cuenta, sin publicidad y sin rastreo.
+• El audio sale de tu teléfono solo cuando pides transcribir (o activas la transcripción automática) y va a OpenRouter con tu propia clave.
+• Envía «Solo con Wi-Fi», o usa datos móviles solo para una grabación cuando lo necesites.
+
+CÓMO EMPEZAR
+Grabar es gratis y no necesita configuración. Para transcribir necesitas una clave de OpenRouter (openrouter.ai): con una sola clave transcribes y armas tus notas, y le pagas a OpenRouter solo lo que usas, sin suscripción. Según el modelo que elijas, una hora de audio cuesta desde unos US$0,10.
+
+Hecha para quienes hablan mucho y quieren guardar sus ideas: reuniones, clases, entrevistas, notas de voz y conversaciones.
