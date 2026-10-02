@@ -31,7 +31,7 @@ final class MetricsChecks {
     private static long at(int month,int day,int hour,int minute){return LocalDateTime.of(2026,month,day,hour,minute).atZone(ZONE).toInstant().toEpochMilli();}
 
     static void run(Context c,Recording r)throws Exception{
-        words();formats();
+        words();formats();languages();
         File dir=new File(c.getCacheDir(),"metrics-check-"+UUID.randomUUID());
         if(!dir.mkdirs())throw new AssertionError("No se pudo crear la carpeta temporal de métricas");
         try{
@@ -66,6 +66,18 @@ final class MetricsChecks {
         check(Metrics.count(1,"grabación","grabaciones").equals("1 grabación")&&Metrics.count(2,"grabación","grabaciones").equals("2 grabaciones"),"count singular y plural");
         check(MetricsActivity.niceMinutes(72)==90&&MetricsActivity.niceMinutes(5)==5&&MetricsActivity.niceMinutes(4000)==4200,"niceMinutes redondea al tope siguiente");
         check(near(MetricsActivity.niceUsd(0.23),0.5)&&near(MetricsActivity.niceUsd(0.052),0.1)&&near(MetricsActivity.niceUsd(1.0),1)&&near(MetricsActivity.niceUsd(3),5),"niceUsd usa 1, 2 o 5 por potencia de 10");
+    }
+    /** 0.9.0: las cifras y los plurales siguen el idioma de la app (el resto de estas pruebas corre en español). */
+    private static void languages(){
+        check(Metrics.count(R.plurals.met_recordings,1).equals("1 grabación")&&Metrics.count(R.plurals.met_recordings,1_000_000).equals("1.000.000 grabaciones"),"Plural en español (one y many): "+Metrics.count(R.plurals.met_recordings,1_000_000));
+        try{
+            Lang.override(Lang.EN);
+            check(Metrics.hours(90*60_000L).equals("1.5 h")&&Metrics.hours(60*60_000L).equals("1 h")&&Metrics.number(128450).equals("128,450"),"English numbers: "+Metrics.hours(90*60_000L)+" · "+Metrics.number(128450));
+            check(Metrics.count(R.plurals.met_recordings,1).equals("1 recording")&&Metrics.count(R.plurals.met_recordings,2).equals("2 recordings"),"English plural: "+Metrics.count(R.plurals.met_recordings,2));
+            check(Metrics.summary(new Metrics.Data()).line().equals("0 recordings · your voice in numbers will show up here"),"English empty summary: "+Metrics.summary(new Metrics.Data()).line());
+            Lang.override(Lang.PT);
+            check(Metrics.hours(90*60_000L).equals("1,5 h")&&Metrics.number(1234).equals("1.234")&&Metrics.count(R.plurals.met_recordings,2).equals("2 gravações"),"Portuguese: "+Metrics.hours(90*60_000L)+" · "+Metrics.count(R.plurals.met_recordings,2));
+        }finally{Lang.override(Lang.ES);}
     }
 
     /** Sin grabaciones: todo en cero y una línea amable para Ajustes. */
