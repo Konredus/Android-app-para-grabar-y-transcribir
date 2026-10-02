@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  «Nota para tu segundo cerebro» (Notes.java, 0.9.0): bitácora, errores, pie de la nota y Markdown para Obsidian.
+  Inglés aquí; español en values-es (los textos de siempre, letra por letra); portugués de Brasil en values-pt.
+  Lo que se envía a la IA (instrucciones y cabecera del pedido) no está aquí: vive en Notes.java, junto al formato JSON
+  que la app lee (Notes.system y Notes.prompt).
+  Solo note_err_no_key y note_err_key nombran la clave: StatusText.aboutKey toma como problema de clave cualquier
+  mensaje que traiga key_word («key», «clave», «chave»), así que los demás errores no la mencionan en ningún idioma.
+-->
+<resources>
+    <!-- Respaldos: una marca {S9} sin voz, una voz sin nombre en la transcripción, una grabación sin título. -->
+    <string name="note_someone">someone</string>
+    <string name="note_person">Person</string>
+    <string name="note_untitled">Recording</string>
+
+    <!-- Pie de la nota: «Created with OpenRouter · anthropic/claude-sonnet-5.5 · cost US$0.004».
+         note_credit: %1$s el servicio, %2$s el modelo. note_cost_real: %1$s el monto. -->
+    <string name="note_credit">Created with %1$s · %2$s</string>
+    <string name="note_cost_real">cost %1$s</string>
+
+    <!-- Bitácora de la grabación. note_log_ready, note_log_took y note_log_titled se unen con « · ». -->
+    <string name="note_log_started">Creating the note with %1$s</string>
+    <string name="note_log_retry_simple">OpenRouter didn\'t accept an option in the request · retrying in simple mode</string>
+    <string name="note_log_ready">Note ready</string>
+    <string name="note_log_took">took %1$s</string>
+    <string name="note_log_titled">title added</string>
+    <string name="note_log_title_applied">Title set from the note (you can change it)</string>
+    <string name="note_log_discarded">Note discarded: the transcript changed while it was being created</string>
+    <string name="note_log_failed">Couldn\'t create the note: %1$s</string>
+
+    <!-- Errores: se guardan en la grabación y se ven en la tarjeta de la nota. %1$s es el servicio (OpenRouter). -->
+    <!-- «Your AI (OpenRouter)» es la sección de Ajustes donde va la clave. -->
+    <string name="note_err_no_key">The note uses your OpenRouter key. Add it in Settings → “Your AI (OpenRouter)”.</string>
+    <!-- Clave rechazada (401). %2$s es key_fix_in_settings: el mensaje termina con él. -->
+    <string name="note_err_key">Your %1$s key is invalid or has been revoked. %2$s</string>
+    <string name="note_err_no_transcript">This recording doesn\'t have a transcript yet.</string>
+    <string name="note_err_demo">The sample recording isn\'t sent to the AI.</string>
+    <string name="note_err_no_speech">No speech was detected in this recording, so there\'s nothing to summarize.</string>
+    <string name="note_err_discarded">The transcript changed while the note was being created. Create it again once the new version is ready.</string>
+    <string name="note_err_timeout">%1$s took too long to respond. Try again.</string>
+    <string name="note_err_offline">No connection to %1$s. Try again when you\'re online.</string>
+    <string name="note_err_generic">Couldn\'t create the note. Try again.</string>
+    <string name="note_err_format">%1$s replied in an unexpected format. Try again.</string>
+    <string name="note_err_format_ai">The AI replied in an unexpected format. Try again.</string>
+    <string name="note_err_empty">%1$s didn\'t return the note. Try again.</string>
+    <string name="note_err_cut">The response from %1$s was cut off before it finished. Try again.</string>
+    <string name="note_err_refused">%1$s declined to summarize this recording.</string>
+    <string name="note_err_no_credits_router">You\'re out of OpenRouter credits. Add credits at openrouter.ai and create the note again.</string>
+    <string name="note_err_no_credits">Your %1$s account is out of credit. Check your API billing.</string>
+    <string name="note_err_overloaded">%1$s is overloaded right now. Try again in a few minutes.</string>
+    <string name="note_err_too_long">The transcript is too long for the note model. Try another model.</string>
+    <!-- «Settings → Privacy» es el menú de openrouter.ai, que está en inglés. -->
+    <string name="note_err_data_policy">No OpenRouter provider offers the note model with your account\'s privacy settings. Review them at openrouter.ai (Settings → Privacy) or choose another model in Settings.</string>
+    <!-- %1$s es el id del modelo. -->
+    <string name="note_err_model_gone">The note model (“%1$s”) is no longer available on OpenRouter. Choose another one in Settings.</string>
+    <string name="note_err_model_unavailable">The note model (“%1$s”) isn\'t available in your %2$s account.</string>
+    <!-- %2$d es el código HTTP. -->
+    <string name="note_err_rejected">%1$s rejected the note request (HTTP %2$d). Try again or use another model.</string>
+
+    <!-- Markdown (Obsidian): nombres de las propiedades del frontmatter, en minúsculas y sin tildes. "tags" no se traduce. -->
+    <string name="note_md_date">date</string>
+    <string name="note_md_time">time</string>
+    <string name="note_md_duration">duration</string>
+    <string name="note_md_people">people</string>
+    <string name="note_md_source">source</string>
+    <string name="note_md_recording">recording</string>
+    <string name="note_md_ai">ai_note</string>
+    <!-- Secciones de la nota. -->
+    <string name="note_summary">Summary</string>
+    <string name="note_decisions">Decisions</string>
+    <string name="note_tasks">Tasks</string>
+    <string name="note_marks">Marked moments</string>
+    <string name="note_quotes">Key quotes</string>
+    <string name="note_transcript">Transcript</string>
+    <!-- Una frase clave entre las comillas del idioma. -->
+    <string name="note_md_quote">“%1$s”</string>
+    <!-- Avisos sobre la transcripción (van en cursiva). -->
+    <string name="note_md_demo">Demo sample: not from a real transcript.</string>
+    <string name="note_md_auto_voices">Voices separated automatically: they may contain errors.</string>
+    <string name="note_md_no_speech">No speech was detected in this audio.</string>
+</resources>

@@ -8,7 +8,9 @@ import java.util.*;
 
 /**
  * Pruebas de la parte «notes» de la 0.6.0 (ver docs/diseno/SPEC-0.6.md) y de la nota por OpenRouter de la 0.8.0
- * (docs/diseno/SPEC-0.8.md). Sin llamadas reales a APIs: HttpApi falso y claves de mentira.
+ * (docs/diseno/SPEC-0.8.md). Sin llamadas reales a APIs: HttpApi falso y claves de mentira. Corren en español
+ * (Lang.override, como toda la prueba); los idiomas de la 0.9.0 (inglés y portugués) se prueban en languages() y en
+ * router() (un pedido completo en inglés), y siempre vuelven a español.
  */
 final class NotesChecks {
     static void check(boolean ok,String text){if(!ok)throw new AssertionError(text);}
@@ -71,6 +73,12 @@ final class NotesChecks {
         Transcript plain=new Transcript(new JSONObject().put("diarized",false).put("segments",new JSONArray().put(seg("text",0,0,"Hola mundo, esto es un dictado."))));
         Notes.Prompt pp=Notes.prompt(plain,r,new JSONArray());
         expect(pp.tokens.isEmpty()&&!pp.text.contains("{S")&&pp.text.contains("[00:00] Hola mundo, esto es un dictado.")&&pp.text.contains("no se separaron las voces"),"Plain transcript prompt wrong:\n"+pp.text);
+        // 0.9.0: el pedido va en el idioma de la app (aquí, español) y las instrucciones en español son las de siempre,
+        // letra por letra: largo y hash de String (Java lo define igual en todas partes). Si se cambian a propósito, se
+        // actualizan estos dos números.
+        String instructions=Notes.system(Lang.ES);
+        expect(p.lang.equals(Lang.ES)&&pp.lang.equals(Lang.ES)&&instructions.length()==1887&&instructions.hashCode()==-2044384809
+            &&instructions.startsWith("Tomas notas de las grabaciones de una persona en Chile")&&instructions.contains("1. Escribe en español neutro, claro y cercano, como lo leería alguien de Chile."),"Spanish note instructions changed");
 
         // Respuesta: JSON entre ``` o con texto alrededor; basura → error legible.
         expect(Notes.parseAnswer("Aquí va:\n```json\n{\"title\":\"Hola\"}\n```\n").optString("title").equals("Hola"),"Fenced JSON not parsed");
@@ -130,7 +138,7 @@ final class NotesChecks {
         expect(messages.getJSONObject(0).getString("role").equals("system")&&messages.getJSONObject(0).getString("content").contains("JSON")&&messages.getJSONObject(1).getString("role").equals("user")&&messages.getJSONObject(1).getString("content").equals(p.text),"OpenAI messages wrong");
         expect(!Notes.openaiBody("gpt-4.1-mini",p).has("reasoning_effort"),"reasoning_effort sent to a non-reasoning model");
         JSONObject claude=Notes.anthropicBody(Notes.ANTHROPIC_MODEL,p);
-        expect(claude.getString("model").equals("claude-sonnet-5-5")&&claude.getInt("max_tokens")>=4000&&claude.getString("system").equals(Notes.SYSTEM)&&claude.getJSONArray("messages").length()==1&&claude.getJSONArray("messages").getJSONObject(0).getString("role").equals("user")&&claude.getJSONObject("output_config").getString("effort").equals("medium"),"Anthropic body wrong: "+claude);
+        expect(claude.getString("model").equals("claude-sonnet-5-5")&&claude.getInt("max_tokens")>=4000&&claude.getString("system").equals(Notes.system(Lang.ES))&&claude.getJSONArray("messages").length()==1&&claude.getJSONArray("messages").getJSONObject(0).getString("role").equals("user")&&claude.getJSONObject("output_config").getString("effort").equals("medium"),"Anthropic body wrong: "+claude);
         expect(!Notes.anthropicBody("claude-haiku-4-5-20251001",p).has("output_config"),"Effort sent to Haiku");
         Map<String,String> headers=Notes.anthropicHeaders("ak-test");
         expect(headers.get("x-api-key").equals("ak-test")&&headers.get("anthropic-version").equals("2023-06-01")&&!headers.containsKey("Authorization"),"Anthropic headers wrong");
@@ -142,7 +150,7 @@ final class NotesChecks {
         expect(routerBody.getString("model").equals("~anthropic/claude-sonnet-latest")&&routerBody.getJSONObject("response_format").getString("type").equals("json_object")&&routerBody.getInt("max_tokens")>=4000
             &&!routerBody.has("reasoning")&&!routerBody.has("reasoning_effort")&&!routerBody.has("max_completion_tokens"),"OpenRouter body wrong: "+routerBody.names());
         JSONArray routerMessages=routerBody.getJSONArray("messages");
-        expect(routerMessages.length()==2&&routerMessages.getJSONObject(0).getString("role").equals("system")&&routerMessages.getJSONObject(0).getString("content").equals(Notes.SYSTEM)
+        expect(routerMessages.length()==2&&routerMessages.getJSONObject(0).getString("role").equals("system")&&routerMessages.getJSONObject(0).getString("content").equals(Notes.system(Lang.ES))
             &&routerMessages.getJSONObject(1).getString("role").equals("user")&&routerMessages.getJSONObject(1).getString("content").equals(p.text),"OpenRouter messages wrong");
         expect(Notes.openrouterBody("~openai/gpt-luna-latest",p,false).getJSONObject("reasoning").getString("effort").equals("low")&&Notes.openrouterBody("~google/gemini-flash-latest",p,false).has("reasoning"),"Reasoning effort not lowered for models that reason by default");
         // El modo simple conserva el tope de salida (0.8.0, segunda ronda): sin max_tokens OpenRouter reserva el máximo del
@@ -177,7 +185,98 @@ final class NotesChecks {
         expect(Notes.working(new JSONObject().put("noteState","working").put("noteStartedAt",now-60_000)),"Recent note not reported as working");
         expect(!Notes.working(new JSONObject().put("noteState","working").put("noteStartedAt",now-Notes.WORKING_MAX_MS-1000))&&!Notes.working(new JSONObject().put("noteState","working")),"Stale «working» note would stick forever");
         expect(!Notes.working(new JSONObject().put("noteState","ready").put("noteStartedAt",now))&&!Notes.working(null),"Ready note reported as working");
+        languages();
     }
+
+    /**
+     * Idiomas (0.9.0): con la app en inglés o en portugués, la IA recibe el pedido entero en ese idioma (instrucciones y
+     * cabecera, nada en español) con el mismo formato JSON, y lo que la app muestra de la nota (pie, errores, bitácora,
+     * Markdown) sale en ese idioma. Lo que devuelve la IA se lee igual en los tres. Al terminar, la app vuelve a español
+     * pase lo que pase.
+     */
+    static void languages()throws Exception{
+        long created=new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.ROOT).parse("2026-09-29 16:05").getTime();
+        Recording r=new Recording(UUID.randomUUID().toString(),"2026-09-29 Reunión de presupuesto",created,60_000);
+        Transcript t=conversation();
+        // Lo que escribe la IA cuando no se sabe quién o el plazo, en cualquiera de los tres idiomas (puede mezclarlos).
+        Map<String,String> known=new HashMap<>();known.put("S1","B");
+        for(String none:new String[]{"nadie","Desconocido","no se sabe","—","nobody","No one","unknown","N/A","not stated","ninguém","Nenhuma","desconhecido","NÃO SE SABE","não informado"})
+            expect(Notes.who(none,known).isEmpty(),"«"+none+"» not read as nobody");
+        expect(Notes.who("Pedro",known).equals("Pedro")&&Notes.who("Nadia",known).equals("Nadia")&&Notes.who("{s1}",known).equals("S1"),"A real name or a marker was dropped");
+        JSONObject raw=new JSONObject().put("tasks",new JSONArray()
+            .put(new JSONObject().put("text","Send the budget").put("who","nobody").put("when","unknown"))
+            .put(new JSONObject().put("text","Enviar o orçamento").put("who","ninguém").put("when","não informado"))
+            .put(new JSONObject().put("text","Llamar a Juan").put("who","Pedro").put("when","no se sabe"))
+            .put(new JSONObject().put("text","Revisar las cifras").put("who","{S1}").put("when","el viernes")));
+        JSONArray tasks=Notes.normalize(raw,known,60_000).getJSONArray("tasks");
+        expect(tasks.getJSONObject(0).getString("who").isEmpty()&&tasks.getJSONObject(0).getString("when").isEmpty()&&tasks.getJSONObject(1).getString("who").isEmpty()&&tasks.getJSONObject(1).getString("when").isEmpty(),"English or Portuguese «nobody/unknown» kept: "+tasks);
+        expect(tasks.getJSONObject(2).getString("who").equals("Pedro")&&tasks.getJSONObject(2).getString("when").isEmpty()&&tasks.getJSONObject(3).getString("who").equals("S1")&&tasks.getJSONObject(3).getString("when").equals("el viernes"),"Spanish owners or deadlines changed: "+tasks);
+
+        Notes.Prompt es=Notes.prompt(t,r,marks());
+        JSONObject note=Notes.normalize(answer(),es.tokens,r.duration).put("provider","openai").put("model",Notes.OPENAI_MODEL).put("speakers",new JSONObject(es.tokens));
+        JSONObject routed=new JSONObject(note.toString()).put("provider","openrouter").put("model",Models.NOTE_DEFAULT).put("modelUsed","anthropic/claude-sonnet-5.5").put("costUsd",0.0042).put("costReal",true);
+        Transcript unreviewed=new Transcript(new JSONObject(conversation().data.toString()).put("reviewed",false));
+        Transcript plain=new Transcript(new JSONObject().put("diarized",false).put("segments",new JSONArray().put(seg("text",0,0,"Hola mundo, esto es un dictado."))));
+        // Mismo formato JSON y mismos límites en los tres idiomas (normalize lee igual lo que vuelva).
+        String shape="{\"title\":\"…\",\"summary\":\"…\",\"decisions\":[\"…\"],\"tasks\":[{\"text\":\"…\",\"who\":\"{S1}\",\"when\":\"…\"}],\"quotes\":[{\"t\":192,\"text\":\"…\",\"who\":\"{S2}\"}],\"tags\":[\"…\"]}\n";
+        String[] spanish={"Reglas","Escribe","español","Responde","Usa solo","transcripción","Transcripción","Título actual","Fecha:","Duración:","Personas que hablan","Momentos que la persona","lo escribió","Chile","Grabación","Vuelve a"};
+        try{
+            for(String lang:new String[]{Lang.EN,Lang.PT}){
+                Lang.override(lang);boolean en=Lang.EN.equals(lang);
+                // Pedido: instrucciones y cabecera en el idioma de la app, sin nada en español (la transcripción va tal cual se dijo).
+                Notes.Prompt p=Notes.prompt(t,r,marks());String system=Notes.system(p.lang);
+                int cut=p.text.indexOf(en?"\nTranscript:\n":"\nTranscrição:\n");
+                expect(p.lang.equals(lang)&&cut>0&&p.text.contains("[00:00] {S1}: Hola, partamos. con el presupuesto\n"),"Prompt not built in "+lang+":\n"+p.text);
+                String head=p.text.substring(0,cut);
+                expect(system.contains(en?"1. Write in natural, clear and friendly English.":"1. Escreva em português do Brasil natural, claro e próximo.")&&system.contains(shape)&&!system.equals(Notes.system(Lang.ES)),"The "+lang+" instructions do not ask for "+lang+" or lost the JSON shape");
+                for(String field:new String[]{"- title: ","- summary: ","- decisions: ","- tasks: ","- quotes: ","- tags: "," 60 "," 5 "})expect(system.contains(field),"The "+lang+" instructions lost «"+field+"»");
+                for(String word:spanish)expect(!system.contains(word)&&!head.contains(word),"The "+lang+" prompt has Spanish instructions («"+word+"»):\n"+head);
+                expect(head.contains(en?"Current title: “2026-09-29 Reunión de presupuesto” (written by the person)":"Título atual: “2026-09-29 Reunión de presupuesto” (escrito pela pessoa)")
+                    &&head.contains(en?"Date: Tuesday, September 29, 2026, 16:05":"Data: terça-feira, 29 de setembro de 2026, 16:05")&&head.contains((en?"Duration: ":"Duração: ")+Ui.humanDuration(60_000))
+                    &&head.contains(en?"Speakers: {S1}, {S2}, {S3}":"Pessoas que falam: {S1}, {S2}, {S3}")&&head.contains("★ 00:07 precio\n")&&head.contains(en?"marked with ★ while recording":"marcou com ★ durante a gravação"),"The "+lang+" prompt header is wrong:\n"+head);
+                expect(Notes.prompt(t,new Recording(r.id,Recording.defaultTitle(created),created,60_000),null).text.contains(en?" (automatic)\n":" (automático)\n")&&Notes.prompt(plain,r,new JSONArray()).text.contains(en?"Voices were not separated":"as vozes não foram separadas"),"Automatic title or plain transcript not explained in "+lang);
+                // Las instrucciones van en el idioma del pedido aunque la app cambie de idioma antes de enviarlo.
+                Lang.override(Lang.ES);
+                expect(Notes.openrouterBody(Models.NOTE_DEFAULT,p,false).getJSONArray("messages").getJSONObject(0).getString("content").equals(system)&&Notes.anthropicBody(Notes.ANTHROPIC_MODEL,p).getString("system").equals(system)
+                    &&Notes.openaiBody(Notes.OPENAI_MODEL,p).getJSONArray("messages").getJSONObject(0).getString("content").equals(system),"Instructions and request sent in different languages ("+lang+")");
+                Lang.override(lang);
+
+                // Lo que muestra la app: pie de la nota, nombres de respaldo y Markdown.
+                expect(Notes.credit(routed).equals((en?"Created with OpenRouter · anthropic/claude-sonnet-5.5 · cost ":"Criada com OpenRouter · anthropic/claude-sonnet-5.5 · custou ")+Pricing.usd(0.0042)),"Note credit not translated: "+Notes.credit(routed));
+                note.getJSONObject("speakers").put("S4","Z");Map<String,String> names=Notes.names(note,t);note.getJSONObject("speakers").remove("S4");
+                expect(names.get("S3").equals(en?"Person 3":"Pessoa 3")&&names.get("S4").equals(en?"Person 4":"Pessoa 4")&&Notes.resolve("{S1} y {S9}",names).equals(en?"Fran y someone":"Fran y alguém")&&Notes.heading("").equals(en?"Recording":"Gravação"),"Fallback names not translated: "+names);
+                String md=Notes.markdown(r,note,t,marks());
+                expect(md.startsWith(en?"---\ndate: 2026-09-29\ntime: \"16:05\"\nduration: ":"---\ndata: 2026-09-29\nhora: \"16:05\"\nduracao: ")
+                    &&md.contains(en?"\npeople:\n  - \"Fran\"\n  - \"Konrad\"\n  - \"Person 3\"\ntags:\n  - \"presupuesto\"\n":"\npessoas:\n  - \"Fran\"\n  - \"Konrad\"\n  - \"Pessoa 3\"\ntags:\n  - \"presupuesto\"\n")
+                    &&md.contains(en?"\nsource: \"Verbapp\"\nrecording: \"2026-09-29 Reunión de presupuesto\"\nai_note: \"OpenAI · gpt-6-luna\"\n---\n":"\nfonte: \"Verbapp\"\ngravacao: \"2026-09-29 Reunión de presupuesto\"\nnota_ia: \"OpenAI · gpt-6-luna\"\n---\n"),"Markdown properties not translated:\n"+md);
+                int at=0;
+                for(String section:en?new String[]{"## Summary\n","## Decisions\n","## Tasks\n","## Marked moments\n","## Key quotes\n","## Transcript\n"}:new String[]{"## Resumo\n","## Decisões\n","## Tarefas\n","## Momentos marcados\n","## Frases-chave\n","## Transcrição\n"}){
+                    int i=md.indexOf(section);expect(i>at,"Markdown section missing or out of order in "+lang+": "+section+"\n"+md);at=i;}
+                expect(md.contains("\n> “Yo envío la planilla” — Konrad (00:05)\n")&&md.contains(en?"\n**Person 3** (00:13): Anoto.\n":"\n**Pessoa 3** (00:13): Anoto.\n")&&!md.contains("## Resumen")&&!md.contains("fecha:")&&!md.contains("«"),"Markdown body not translated:\n"+md);
+                expect(Notes.markdown(r,null,unreviewed,null).contains(en?"\n_Voices separated automatically: they may contain errors._\n":"\n_Vozes separadas automaticamente: podem ter erros._\n"),"Automatic voices notice not translated in "+lang);
+
+                // Errores: solo el de la clave habla de la clave (y termina con key_fix_in_settings, que la bienvenida quita).
+                String fix=Lang.str(R.string.key_fix_in_settings),key=rejected(401,"{\"error\":{\"code\":401,\"message\":\"No auth credentials found\"}}");
+                expect(key.equals(en?"Your OpenRouter key is invalid or has been revoked. Check it in Settings.":"Sua chave do OpenRouter não é válida ou foi revogada. Confira em Ajustes.")
+                    &&key.endsWith(" "+fix)&&StatusText.aboutKey(key)&&StatusText.withoutSettingsHint(key).equals(key.substring(0,key.length()-fix.length()-1)),"401 not explained as a key problem in "+lang+": "+key);
+                String broke=rejected(402,"{\"error\":{\"code\":402,\"message\":\"Insufficient credits\"}}"),policy=rejected(404,"{\"error\":{\"code\":404,\"message\":\"No endpoints found matching your data policy\"}}"),
+                    gone=rejected(404,"{\"error\":{\"code\":404,\"message\":\"No endpoints found for anthropic/claude-sonnet-latest.\"}}"),tooLong=rejected(400,"{\"error\":{\"code\":400,\"message\":\"This endpoint's maximum context length is 200000 tokens.\"}}"),
+                    other=rejected(422,"{\"error\":{\"code\":422,\"message\":\"Unprocessable\"}}");
+                expect(broke.contains("openrouter.ai")&&broke.contains(en?"credits":"créditos")&&policy.contains("Settings → Privacy")&&policy.contains(en?"privacy":"privacidade")
+                    &&gone.contains(en?"is no longer available on OpenRouter":"não está mais disponível no OpenRouter")&&gone.contains("~anthropic/claude-sonnet-latest")&&tooLong.contains(en?"too long":"longa demais")&&other.contains("(HTTP 422)"),"API errors not translated in "+lang+": "+Arrays.asList(broke,policy,gone,tooLong,other));
+                for(String m:new String[]{broke,policy,gone,tooLong,other})
+                    for(String word:new String[]{"Vuelve","Elige","Prueba","Revísala","demasiado","pedido de la nota","saldo en"})expect(!StatusText.aboutKey(m)&&!m.contains(word),"Error in Spanish or mistaken for a key problem in "+lang+": "+m);
+                expect(Notes.friendly(new java.net.SocketTimeoutException(),"OpenRouter").equals(en?"OpenRouter took too long to respond. Try again.":"OpenRouter demorou demais para responder. Tente novamente.")
+                    &&Notes.friendly(new IOException("x"),"OpenRouter").equals(en?"Couldn't create the note. Try again.":"Não foi possível criar a nota. Tente novamente.")
+                    &&Notes.friendly(new IOException("O OpenRouter está temporariamente indisponível (503)."),"OpenRouter").startsWith("O OpenRouter"),"friendly() not translated in "+lang);
+                boolean unreadable=false;try{Notes.parseAnswer("nope");}catch(Notes.BadAnswer e){unreadable=e.getMessage().startsWith(en?"The AI replied":"A IA respondeu");}
+                expect(unreadable&&new Notes.Discarded().getMessage().startsWith(en?"The transcript changed":"A transcrição mudou"),"Unreadable or discarded note messages not translated in "+lang);
+            }
+        }finally{Lang.override(Lang.ES);}
+        expect(Lang.ES.equals(Lang.current())&&Notes.prompt(t,r,marks()).lang.equals(Lang.ES),"The language was not restored to Spanish");
+    }
+    /** El mensaje con que Notes.require rechaza esta respuesta de OpenRouter ("" si la deja pasar). */
+    private static String rejected(int code,String body){try{Notes.require(new HttpApi.Response(code,body,null),HttpApi.OPENROUTER,Models.NOTE_DEFAULT);return "";}catch(Exception e){return e.getMessage();}}
     /** Respuesta de Chat Completions con la nota de prueba. */
     private static String openAiReply(String title)throws JSONException{
         JSONObject content=answer().put("title",title);
@@ -246,7 +345,7 @@ final class NotesChecks {
             expect(method.equals("POST")&&url.equals("https://api.anthropic.com/v1/messages")&&token!=null&&token.isEmpty()&&"application/json".equals(type),"Anthropic request line wrong (token must be empty: no Authorization)");
             expect(extra!=null&&"ak-test-notes".equals(extra.get("x-api-key"))&&"2023-06-01".equals(extra.get("anthropic-version"))&&!extra.containsKey("Authorization"),"Anthropic headers wrong: "+extra);
             ByteArrayOutputStream out=new ByteArrayOutputStream();body.write(out);JSONObject sent=new JSONObject(out.toString(StandardCharsets.UTF_8.name()));
-            expect(sent.getString("model").equals("claude-sonnet-5-5")&&sent.getString("system").equals(Notes.SYSTEM)&&sent.getInt("max_tokens")>0&&sent.getJSONArray("messages").getJSONObject(0).getString("content").contains("(lo escribió la persona)"),"Anthropic body wrong");
+            expect(sent.getString("model").equals("claude-sonnet-5-5")&&sent.getString("system").equals(Notes.system(Lang.ES))&&sent.getInt("max_tokens")>0&&sent.getJSONArray("messages").getJSONObject(0).getString("content").contains("(lo escribió la persona)"),"Anthropic body wrong");
             JSONObject reply=new JSONObject().put("type","message").put("stop_reason","end_turn")
                 .put("content",new JSONArray().put(new JSONObject().put("type","thinking").put("thinking","…")).put(new JSONObject().put("type","text").put("text","```json\n"+answer().put("title","Metas del trimestre")+"\n```")))
                 .put("usage",new JSONObject().put("input_tokens",900).put("output_tokens",300));
@@ -354,7 +453,7 @@ final class NotesChecks {
             String raw=out.toString(StandardCharsets.UTF_8.name());JSONObject sent=new JSONObject(raw);
             expect(sent.getString("model").equals("~anthropic/claude-sonnet-latest")&&sent.getJSONObject("response_format").getString("type").equals("json_object")&&!sent.has("reasoning"),"OpenRouter body fields wrong");
             JSONArray messages=sent.getJSONArray("messages");
-            expect(messages.getJSONObject(0).getString("content").equals(Notes.SYSTEM)&&messages.getJSONObject(1).getString("content").contains("{S1}: Hola, partamos.")&&messages.getJSONObject(1).getString("content").contains("(lo escribió la persona)"),"OpenRouter prompt wrong");
+            expect(messages.getJSONObject(0).getString("content").equals(Notes.system(Lang.ES))&&messages.getJSONObject(1).getString("content").contains("{S1}: Hola, partamos.")&&messages.getJSONObject(1).getString("content").contains("(lo escribió la persona)"),"OpenRouter prompt wrong");
             expect(!raw.contains(ROUTER_KEY)&&!raw.contains("Fran")&&!raw.contains("Konrad"),"The key or the speakers' names travelled in the note request");
             return new Response(200,routerReply("Metas del trimestre","anthropic/claude-sonnet-5.5",0.0123),null);
         }};
@@ -449,6 +548,22 @@ final class NotesChecks {
         Notes.generate(c,z,free,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);
         JSONObject noteZ=Notes.load(c,z.id);
         expect(noteZ!=null&&!noteZ.optBoolean("costReal")&&!Notes.credit(noteZ).contains("costó"),"A zero usage.cost was shown as the real cost: "+Notes.credit(noteZ));
+
+        // 0.9.0: con la app en inglés, el pedido real va entero en inglés (instrucciones y cabecera), la nota guarda su
+        // idioma y la bitácora sale en inglés. La app vuelve a español pase lo que pase.
+        Recording eng=fixture(c,source,"Budget meeting",now,fixtures);
+        HttpApi english=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra)throws Exception{
+            ByteArrayOutputStream out=new ByteArrayOutputStream();body.write(out);JSONArray messages=new JSONObject(out.toString(StandardCharsets.UTF_8.name())).getJSONArray("messages");
+            String system=messages.getJSONObject(0).getString("content"),user=messages.getJSONObject(1).getString("content");
+            expect(system.equals(Notes.system(Lang.EN))&&system.contains("English")&&!system.contains("español")&&user.startsWith("Current title: “")&&user.contains("” (written by the person)\nDate: ")
+                &&user.contains("\nTranscript:\n[00:00] {S1}: Hola, partamos.")&&!user.contains("Transcripción")&&!user.contains("Fecha:"),"English note request not in English:\n"+user);
+            return new Response(200,routerReply("Budget review","anthropic/claude-sonnet-5.5",0.002),null);
+        }};
+        try{Lang.override(Lang.EN);Notes.generate(c,eng,english,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);}
+        finally{Lang.override(Lang.ES);}
+        JSONObject noteEng=Notes.load(c,eng.id);
+        expect(noteEng!=null&&Lang.EN.equals(noteEng.optString("lang"))&&Lang.ES.equals(Notes.load(c,a.id).optString("lang")),"The note does not record the language it was asked in: "+noteEng);
+        expect(logged(c,eng.id,"Creating the note with OpenRouter")&&logged(c,eng.id,"Note ready · took ")&&!logged(c,eng.id,"Armando la nota"),"The note log is not in English");
 
         // OpenRouter puede responder 200 con el error del proveedor adentro: se trata como ese error (aquí, pasajero).
         HttpApi inside=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra){
