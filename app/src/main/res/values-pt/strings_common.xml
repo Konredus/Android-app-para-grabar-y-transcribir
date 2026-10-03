@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="common_ok">Entendi</string>
+    <string name="common_cancel">Cancelar</string>
+    <string name="common_back_to">Voltar para %1$s</string>
+    <string name="common_action_available">%1$s disponível</string>
+    <string name="common_language">Idioma</string>
+    <string name="common_language_hint">Você pode mudar quando quiser em Ajustes.</string>
+</resources>

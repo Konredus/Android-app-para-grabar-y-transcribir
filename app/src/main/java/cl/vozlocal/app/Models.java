@@ -193,10 +193,10 @@ final class Models {
      */
     static List<Model> refresh(Context c,HttpApi http)throws Exception{
         HttpApi.Response res=http.request("GET",CATALOG,"",null,null,null);
-        if(res.code<200||res.code>=300)throw new IOException("OpenRouter no entregó la lista de modelos ("+res.code+").");
+        if(res.code<200||res.code>=300)throw new IOException(Lang.str(c,R.string.eng_err_catalog_http,res.code));
         long now=System.currentTimeMillis();JSONArray rows=trim(res.json());List<Model> list=build(rows,now);
         // Una lista vacía es una respuesta rara (cambió el formato o el filtro), no «ya no hay modelos»: no se guarda.
-        if(list.isEmpty())throw new IOException("La lista de modelos de OpenRouter llegó vacía.");
+        if(list.isEmpty())throw new IOException(Lang.str(c,R.string.eng_err_catalog_empty));
         synchronized(LOCK){File f=file(c);FilesStore.write(f,new JSONObject().put("v",1).put("fetchedAt",now).put("models",rows));memo=list;memoAt=now;memoStamp=f.lastModified();memoSize=f.length();}
         Settings s=new Settings(c);SharedPreferences.Editor e=s.prefs.edit();String voices=auto(list,true,now),text=auto(list,false,now);
         // Si «Automático» cambia de modelo, se recuerda el anterior: un trabajo a medias lo termina con él (ver resume()).
@@ -395,15 +395,17 @@ final class Models {
         // El nombre del servicio es el mismo de todos los errores de OpenRouter (HttpApi.OPENROUTER), y la app se identifica
         // con los mismos encabezados que al transcribir y al armar la nota (OpenRouterClient.headers()).
         String service=HttpApi.OPENROUTER;
-        if(k.isEmpty())throw new HttpApi.UserAction("Falta la clave de "+service+". Agrégala en Ajustes.");
+        if(k.isEmpty())throw new HttpApi.UserAction(Lang.str(R.string.eng_err_key_missing,service));
         HttpApi.Response res=http.request("GET",BASE+"/key",k,null,null,OpenRouterClient.headers());
         // HttpApi.UserAction solo cuando OpenRouter rechaza la clave: la bienvenida y Ajustes muestran ese mensaje como
-        // «clave mala». Dice «clave»: con esa palabra Ajustes ofrece «Revisar la clave» en vez de «Reintentar».
-        if(res.code==401||res.code==403)throw new HttpApi.UserAction("La clave de "+service+" no es válida o fue revocada. Revísala en Ajustes.");
+        // «clave mala». Dice «clave» (key_word, en cada idioma): con esa palabra Ajustes ofrece «Revisar la clave» en vez de
+        // «Reintentar»; y termina con key_fix_in_settings, que la bienvenida quita (StatusText.withoutSettingsHint).
+        if(res.code==401||res.code==403)throw new HttpApi.UserAction(Lang.str(R.string.eng_err_key_invalid,service,Lang.str(R.string.key_fix_in_settings)));
         // Todo lo demás (servicio caído, límite de pedidos, una respuesta que no se esperaba) no dice nada de la clave: sale
-        // como IOException, igual que un corte de red, y quien llama lo muestra como «no se pudo comprobar ahora».
-        if(res.code==408||res.code==429||res.code>=500)throw new IOException(service+" no está disponible temporalmente ("+res.code+").");
-        if(res.code<200||res.code>=300)throw new IOException(service+" respondió algo inesperado (HTTP "+res.code+"). Vuelve a intentarlo en un momento.");
+        // como IOException, igual que un corte de red, y quien llama lo muestra como «no se pudo comprobar ahora». Empieza
+        // con el nombre del servicio en los tres idiomas: así Ajustes sabe que respondió OpenRouter.
+        if(res.code==408||res.code==429||res.code>=500)throw new IOException(Lang.str(R.string.eng_err_unavailable,service,res.code));
+        if(res.code<200||res.code>=300)throw new IOException(Lang.str(R.string.eng_err_unexpected,service,res.code));
         JSONObject root;try{root=res.json();}catch(Exception e){root=new JSONObject();}
         JSONObject d=root.optJSONObject("data");if(d==null)d=root;
         double usage=number(d,"usage"),limit=number(d,"limit"),left=number(d,"limit_remaining");
@@ -477,7 +479,12 @@ final class Models {
     // ---------- Notas (chat completions de OpenRouter) ----------
     /** Alias que OpenRouter resuelve siempre a la última versión de cada familia. El primero es el recomendado. */
     static final String[] NOTE_MODELS={"~anthropic/claude-sonnet-latest","~openai/gpt-luna-latest","~google/gemini-flash-latest"};
-    static final String[] NOTE_NAMES={"Claude Sonnet (el más nuevo)","GPT Luna (el más nuevo)","Gemini Flash (el más nuevo)"};
+    /** Nombre de cada familia (el mismo en todos los idiomas), en el orden de NOTE_MODELS. */
+    static final String[] NOTE_FAMILIES={"Claude Sonnet","GPT Luna","Gemini Flash"};
+    /** Nombre para mostrar del alias i de NOTE_MODELS, en el idioma de la app: «Claude Sonnet (el más nuevo)». */
+    static String noteName(int i){return Lang.str(R.string.eng_note_model_latest,NOTE_FAMILIES[i]);}
+    /** Los nombres de todos los alias de NOTE_MODELS, en el idioma de la app y en el mismo orden. */
+    static String[] noteNames(){String[] out=new String[NOTE_MODELS.length];for(int i=0;i<out.length;i++)out[i]=noteName(i);return out;}
     static final String NOTE_DEFAULT=NOTE_MODELS[0];
     private Models(){}
 }

@@ -17,14 +17,26 @@ final class Recording {
     }
     static File directory(Context c) { File d = new File(c.getFilesDir(), "recordings"); d.mkdirs(); return d; }
     File audio(Context c) { return new File(directory(c), id + ".m4a"); }
-    static String defaultTitle(long time) { return "Grabación " + new SimpleDateFormat("dd MMM · HH:mm", new Locale("es", "CL")).format(new Date(time)); }
+    /** «Grabación 02 oct · 16:05», en el idioma de la app (la fecha con su formato). */
+    static String defaultTitle(long time) { return Lang.str(R.string.rec_default_title, new SimpleDateFormat("dd MMM · HH:mm", Lang.locale()).format(new Date(time))); }
+    /** «Audio recuperado · revisar»: el audio está, pero se perdió su archivo de datos. */
+    static String recoveredTitle() { return Lang.str(R.string.rec_recovered); }
+    /**
+     * ¿Sigue siendo un título automático? («Grabación 29 sept. · 16:05», con o sin la fecha ISO delante, o «Audio recuperado ·
+     * revisar»), en cualquiera de los tres idiomas: el título se guarda en el idioma de cuando se grabó.
+     */
+    static boolean automaticTitle(String title) {
+        String t = title == null ? "" : title.trim();
+        if (t.isEmpty() || Lang.isAny(R.string.rec_recovered, t)) return true;
+        return t.matches("^(\\d{4}-\\d{2}-\\d{2} )?" + Lang.anyRegex(R.string.rec_default_title) + " (\\d{1,2} \\S{2,6} · )?\\d{1,2}:\\d{2}$");
+    }
     /** Fecha ISO de la grabación (año-mes-día): ordena solos los archivos en cualquier carpeta. */
     static String isoDate(long time) { return new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(new Date(time)); }
     /** "2026-09-27 Nombre". No duplica si el nombre ya empieza con una fecha; el título por defecto queda "2026-09-27 Grabación 16:00". */
     static String withDate(String title, long created) {
         String t = title == null ? "" : title.trim();
         if (t.matches("^\\d{4}-\\d{2}-\\d{2}( .*)?$")) return t;
-        if (t.isEmpty() || t.equals(defaultTitle(created))) return isoDate(created) + " Grabación " + new SimpleDateFormat("HH:mm", Locale.ROOT).format(new Date(created));
+        if (t.isEmpty() || t.equals(defaultTitle(created))) return isoDate(created) + " " + Lang.str(R.string.rec_default_title, new SimpleDateFormat("HH:mm", Locale.ROOT).format(new Date(created)));
         return isoDate(created) + " " + t;
     }
     void save(Context c) throws Exception {
@@ -51,7 +63,7 @@ final class Recording {
                 // Keep audio visible even if metadata was lost during interruption.
                 try (MediaMetadataRetriever m = new MediaMetadataRetriever()) {
                     m.setDataSource(file.getPath()); r.duration = Long.parseLong(m.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION));
-                } catch (Exception unavailable) { r.title = "Audio recuperado · revisar"; }
+                } catch (Exception unavailable) { r.title = recoveredTitle(); }
             }
             all.add(r);
         }

@@ -58,12 +58,17 @@ import static cl.vozlocal.app.AppTheme.*;
  * va a mostrar más grabaciones que las del período.
  */
 public class MetricsActivity extends Screen {
-    /** Abre «Tus métricas». El botón ← dice a dónde vuelve: Grabar («Tu semana») o Ajustes. */
-    static void open(Context c){c.startActivity(new Intent(c,MetricsActivity.class).putExtra("from",c instanceof MainActivity?"Grabar":"Ajustes"));}
+    /**
+     * Abre «Tus métricas». El botón ← dice a dónde vuelve: Grabar («Tu semana») o Ajustes. Su texto se arma al mostrar la
+     * pantalla (no viaja en el Intent): si el sistema la rehace tras cambiar el idioma, sale en el nuevo.
+     */
+    static void open(Context c){c.startActivity(new Intent(c,MetricsActivity.class).putExtra("fromRecord",c instanceof MainActivity));}
 
-    private static final String[] DAYS={"L","M","M","J","V","S","D"};
-    private static final String[] DAY_NAMES={"Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"};
-    private static final String[] DAY_PLURAL={"los lunes","los martes","los miércoles","los jueves","los viernes","los sábados","los domingos"};
+    /**
+     * «Hablas más los martes…»: el día en plural con su artículo o preposición en cada idioma (de lunes a domingo). Los
+     * nombres de los días salen del idioma (dayNames); estos plurales no, por eso son textos.
+     */
+    private static final int[] ON_DAY={R.string.met_on_monday,R.string.met_on_tuesday,R.string.met_on_wednesday,R.string.met_on_thursday,R.string.met_on_friday,R.string.met_on_saturday,R.string.met_on_sunday};
     /** Filtros de la Biblioteca (MainActivity): 1 por guardar o transcritas, 2 en proceso, 3 sin transcribir, 4 con error. */
     private static final int LIB_SAVE=1,LIB_WORKING=2,LIB_NEW=3,LIB_FAILED=4;
 
@@ -80,12 +85,12 @@ public class MetricsActivity extends Screen {
         super.onCreate(state);prefs=getSharedPreferences("metrics",MODE_PRIVATE);
         try{period=Metrics.Period.valueOf(prefs.getString("period",period.name()));}catch(RuntimeException ignored){}
         // Desde la tarjeta «Tu semana» de Grabar se abre en «7 días», lo mismo que esa tarjeta resume (sin cambiar lo guardado).
-        if(state==null&&getIntent().getStringExtra("from")!=null&&getIntent().getStringExtra("from").equals("Grabar"))period=Metrics.Period.WEEK;
+        if(state==null&&getIntent().getBooleanExtra("fromRecord",false))period=Metrics.Period.WEEK;
         if(state!=null){try{period=Metrics.Period.valueOf(state.getString("period",period.name()));}catch(RuntimeException ignored){}
             week=Math.max(0,Math.min(Metrics.WEEKS-1,state.getInt("week",week)));restoreScroll=state.getInt("screen_scroll",0);}
         ground=blend(p.softMid,0xFFFFFFFF,(p.glass>>>24)/255f);
-        String from=getIntent().getStringExtra("from");shell(from==null||from.isEmpty()?"Ajustes":from,-1);
-        TextView title=largeTitle(page,"Tus métricas","Calculadas en tu teléfono con tus grabaciones. Nada se envía.");ui.highlightLast(title,"Tus métricas");
+        shell(getString(getIntent().getBooleanExtra("fromRecord",false)?R.string.nav_record:R.string.nav_settings),-1);
+        String name=getString(R.string.metrics_title);TextView title=largeTitle(page,name,getString(R.string.met_subtitle));ui.highlightLast(title,name);
         content=ui.column();page.addView(content,Ui.fill());
         content.addView(loadingView(),Ui.fill());
     }
@@ -135,7 +140,7 @@ public class MetricsActivity extends Screen {
         content.addView(hero(motion),Ui.fill());
         content.addView(weeks(motion),ui.top(S3));
         // Una sola fila de filtros, arriba de todo lo que filtra (guía dataviz): lo de arriba es de siempre.
-        TextView h=ui.section("Por período");h.setPadding(ui.dp(S1),ui.dp(S8),ui.dp(S1),ui.dp(S2));content.addView(h);
+        TextView h=ui.section(getString(R.string.met_by_period));h.setPadding(ui.dp(S1),ui.dp(S8),ui.dp(S1),ui.dp(S2));content.addView(h);
         HorizontalScrollView strip=new HorizontalScrollView(this);strip.setHorizontalScrollBarEnabled(false);strip.setClipToPadding(false);
         chips=ui.row();strip.addView(chips);content.addView(strip,Ui.fill());
         periodBox=ui.column();content.addView(periodBox,Ui.fill());renderPeriod(motion);
@@ -164,7 +169,7 @@ public class MetricsActivity extends Screen {
      */
     private View hero(boolean motion){
         Metrics.Totals all=data.all;boolean words=all.words>0;
-        LinearLayout card=card(R.drawable.ic_sparkle,"Tu voz en Verbapp",null);
+        LinearLayout card=card(R.drawable.ic_sparkle,getString(R.string.met_hero_title),null);
         if(data.streak>0){LinearLayout head=(LinearLayout)card.getChildAt(0);head.addView(streakPill());}
         String figure=words?Metrics.number(all.words):Metrics.hours(all.audioMs);
         TextView big=Ui.tabular(ui.text(figure,Type.DISPLAY_MEDIUM,p.onSurface));big.setMaxLines(1);big.setIncludeFontPadding(false);
@@ -174,20 +179,20 @@ public class MetricsActivity extends Screen {
         // sistema: con la letra al 200 % esos 24 sp ya miden 48 dp y en 60 dp la cifra quedaba recortada abajo.
         int bigH=Math.max(ui.dp(60),Math.round(sp(big,24)*1.35f));
         LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(-1,bigH);bp.topMargin=ui.dp(S2);card.addView(big,bp);
-        card.addView(ui.text(words?(all.words==1?"palabra transcrita":"palabras transcritas"):"grabadas, todavía sin transcribir",Type.TITLE_MEDIUM,p.onSurfaceVariant));
-        String saved=words?"≈ "+span(all.savedMs())+" que no tuviste que escribir a mano":"Transcribe tus audios y aquí verás cuántas palabras llevas.";
+        card.addView(ui.text(words?label(R.plurals.met_hero_words,all.words):getString(R.string.met_hero_untranscribed),Type.TITLE_MEDIUM,p.onSurfaceVariant));
+        String saved=words?getString(R.string.met_hero_saved,span(all.savedMs())):getString(R.string.met_hero_saved_none);
         card.addView(line(words?R.drawable.ic_hourglass:R.drawable.ic_info,saved,Type.BODY_MEDIUM,p.onSurface),ui.top(S4));
-        if(data.streak>0&&!data.today)card.addView(line(R.drawable.metrics_flame,"Graba hoy para seguir tu racha de "+Metrics.count(data.streak,"día","días")+".",Type.BODY_MEDIUM,p.onSurfaceVariant),ui.top(S2));
+        if(data.streak>0&&!data.today)card.addView(line(R.drawable.metrics_flame,count(R.plurals.met_keep_streak,data.streak),Type.BODY_MEDIUM,p.onSurfaceVariant),ui.top(S2));
         LinearLayout stats=ui.row();stats.setGravity(Gravity.TOP);
-        addStat(stats,R.drawable.ic_waveform,Metrics.number(data.total),data.total==1?"Grabación":"Grabaciones");
-        if(words)addStat(stats,R.drawable.ic_clock,Metrics.hours(all.audioMs),"Grabado");else addStat(stats,R.drawable.ic_calendar,Metrics.number(all.days.size()),all.days.size()==1?"Día grabando":"Días grabando");
-        addStat(stats,R.drawable.metrics_flame,Metrics.count(data.best,"día","días"),"Mejor racha");
+        addStat(stats,R.drawable.ic_waveform,Metrics.number(data.total),label(R.plurals.met_stat_recordings,data.total));
+        if(words)addStat(stats,R.drawable.ic_clock,Metrics.hours(all.audioMs),getString(R.string.met_stat_recorded));else addStat(stats,R.drawable.ic_calendar,Metrics.number(all.days.size()),label(R.plurals.met_stat_days,all.days.size()));
+        addStat(stats,R.drawable.metrics_flame,count(R.plurals.met_days,data.best),getString(R.string.met_stat_best_streak));
         card.addView(stats,ui.top(S5));
         // TalkBack: la tarjeta se lee de una vez, en una frase.
-        StringBuilder say=new StringBuilder(words?Metrics.number(all.words)+" palabras transcritas. "+saved+". ":figure+" grabadas. ");
-        say.append(Metrics.count(data.total,"grabación","grabaciones")).append(". ");
-        if(data.streak>0)say.append("Racha actual: ").append(Metrics.count(data.streak,"día","días")).append(data.today?". ":", graba hoy para seguirla. ");
-        say.append("Mejor racha: ").append(Metrics.count(data.best,"día","días")).append('.');
+        StringBuilder say=new StringBuilder(words?count(R.plurals.met_say_words,all.words,saved):getString(R.string.met_say_recorded,figure));
+        say.append(' ').append(count(R.plurals.met_recordings,data.total)).append('.');
+        if(data.streak>0)say.append(' ').append(getString(data.today?R.string.met_say_streak:R.string.met_say_streak_keep,count(R.plurals.met_days,data.streak)));
+        say.append(' ').append(getString(R.string.met_say_best,count(R.plurals.met_days,data.best)));
         hideChildren(card,say.toString());
         if(motion&&words)countUp(big,all.words);
         return card;
@@ -209,7 +214,7 @@ public class MetricsActivity extends Screen {
         }});
     }
     private TextView streakPill(){
-        String text=data.streak==1?(data.today?"Grabaste hoy":"1 día seguido"):data.streak+" días seguidos";
+        String text=data.streak==1&&data.today?getString(R.string.met_streak_today):getResources().getQuantityString(R.plurals.met_streak_days,data.streak,data.streak);
         TextView t=ui.chip(text,p.onPrimaryContainer,p.primaryContainer);AppTheme.type(t,Type.LABEL_MEDIUM);Ui.tabular(t);
         Drawable d=getDrawable(R.drawable.metrics_flame);
         if(d!=null){d=d.mutate();d.setTint(p.onPrimaryContainer);d.setBounds(0,0,ui.dp(16),ui.dp(16));t.setCompoundDrawablesRelative(d,null,null,null);t.setCompoundDrawablePadding(ui.dp(6));}
@@ -223,7 +228,7 @@ public class MetricsActivity extends Screen {
      * con 2 dp de aire) y lleva leyenda. Arriba, la lectura de la semana elegida (por defecto, esta).
      */
     private View weeks(boolean motion){
-        LinearLayout card=card(R.drawable.ic_calendar,"Últimas 8 semanas","Toca una semana");
+        LinearLayout card=card(R.drawable.ic_calendar,getString(R.string.met_weeks_title),getString(R.string.met_weeks_hint));
         LinearLayout read=ui.row();read.setGravity(Gravity.BOTTOM);
         LinearLayout left=ui.column();weekValue=Ui.tabular(ui.text("",Type.TITLE_LARGE,p.onSurface));weekTitle=ui.text("",Type.BODY_SMALL,p.onSurfaceVariant);left.addView(weekValue);left.addView(weekTitle);
         read.addView(left,new LinearLayout.LayoutParams(0,-2,1));
@@ -240,19 +245,19 @@ public class MetricsActivity extends Screen {
             uValues[i]=real[i]+est[i]>0?(est[i]>0?"≈":"")+Pricing.usd(real[i]+est[i]):"";
         }
         String[][] labels=weekLabels();boolean money=maxUsd>0;
-        card.addView(caption("Minutos grabados",null,null),ui.top(S4));
+        card.addView(caption(getString(R.string.met_chart_minutes),null,null),ui.top(S4));
         double mMax=niceMinutes(maxMin);
         minutesBars=new Bars(this,p,88);minutesBars.set(minutes,null,labels[0],labels[1],mValues,mMax,maxMin>0?Metrics.hours(Math.round(mMax*60_000)):"",!money);
         minutesBars.colors(p.primary,p.primary,p.highlight);minutesBars.setContentDescription(describeMinutes(labels[2]));
         card.addView(minutesBars,Ui.fill());
         if(money){
-            card.addView(caption("Gasto",anyReal?"Cobrado":null,anyEst?"Estimado":null),ui.top(S4));
+            card.addView(caption(getString(R.string.met_chart_spend),anyReal?getString(R.string.met_billed):null,anyEst?getString(R.string.met_estimated):null),ui.top(S4));
             double uMax=niceUsd(maxUsd);
             usdBars=new Bars(this,p,64);usdBars.set(real,est,labels[0],labels[1],uValues,uMax,Pricing.usd(uMax),true);
             usdBars.colors(p.primary,estColor(),p.highlight);usdBars.setContentDescription(describeUsd(labels[2]));
             card.addView(usdBars,Ui.fill());
         }else{
-            usdBars=null;TextView none=ui.text("Sin gastos en estas 8 semanas.",Type.BODY_SMALL,p.onSurfaceVariant);none.setPadding(ui.dp(S1),ui.dp(S2),0,0);card.addView(none);
+            usdBars=null;TextView none=ui.text(getString(R.string.met_weeks_no_spend),Type.BODY_SMALL,p.onSurfaceVariant);none.setPadding(ui.dp(S1),ui.dp(S2),0,0);card.addView(none);
         }
         Bars.Pick pick=i->{week=i;if(minutesBars!=null)minutesBars.select(i);if(usdBars!=null)usdBars.select(i);paintWeek();};
         minutesBars.onPick(pick);if(usdBars!=null)usdBars.onPick(pick);
@@ -262,42 +267,50 @@ public class MetricsActivity extends Screen {
     }
     /** La lectura de la semana elegida: cuánto grabaste, cuántas grabaciones y cuánto gastaste. */
     private void paintWeek(){
-        int i=week;long ms=data.weekMs[i];int count=data.weekCount[i];double real=data.weekReal[i],est=data.weekEst[i];
-        weekValue.setText(ms>0?Ui.humanDuration(ms):"0 min");
-        weekTitle.setText(weekName(i)+" · "+(count==0?"sin grabaciones":Metrics.count(count,"grabación","grabaciones")));
-        weekUsd.setText(real+est>0?(est>0?"≈ ":"")+Pricing.usd(real+est):"US$0");
-        weekUsdLabel.setText(real+est>0?(est>0&&real>0?"cobrado y estimado":est>0?"estimado":"cobrado"):"sin gasto");
+        int i=week;long ms=data.weekMs[i];int recs=data.weekCount[i];double real=data.weekReal[i],est=data.weekEst[i];
+        weekValue.setText(ms>0?Ui.humanDuration(ms):getString(R.string.met_unit_min,"0"));
+        weekTitle.setText(weekName(i)+" · "+(recs==0?getString(R.string.met_no_recordings):count(R.plurals.met_recordings,recs)));
+        weekUsd.setText(real+est>0?(est>0?"≈ ":"")+Pricing.usd(real+est):getString(R.string.met_usd_zero));
+        weekUsdLabel.setText(getString(real+est>0?(est>0&&real>0?R.string.met_billed_and_est_lc:est>0?R.string.met_est_lc:R.string.met_billed_lc):R.string.met_no_spend_lc));
         // Con TalkBack, cada gráfico se maneja como un deslizador (Bars): su «valor» es la semana elegida, dicha completa.
         if(android.os.Build.VERSION.SDK_INT>=30){
-            String state=weekName(i)+": "+(ms>0?Ui.humanDuration(ms):"sin grabaciones");
+            String state=weekName(i)+": "+(ms>0?Ui.humanDuration(ms):getString(R.string.met_no_recordings));
             if(minutesBars!=null)minutesBars.setStateDescription(state);
-            if(usdBars!=null)usdBars.setStateDescription(weekName(i)+": "+(real+est>0?(est>0?"unos ":"")+Pricing.usd(real+est):"sin gasto"));
+            if(usdBars!=null)usdBars.setStateDescription(weekName(i)+": "+(real+est<=0?getString(R.string.met_no_spend_lc):est>0?getString(R.string.met_say_about,Pricing.usd(real+est)):Pricing.usd(real+est)));
         }
     }
     private String weekName(int i){
-        if(i==Metrics.WEEKS-1)return "Esta semana";if(i==Metrics.WEEKS-2)return "Semana pasada";
-        return "Semana del "+new SimpleDateFormat("d 'de' MMMM",Metrics.CL).format(new Date(data.weekStarts[i]));
+        if(i==Metrics.WEEKS-1)return getString(R.string.met_this_week);if(i==Metrics.WEEKS-2)return getString(R.string.met_last_week);
+        Date at=new Date(data.weekStarts[i]);return getString(R.string.met_week_of,day(at),month(at,"MMMM"));
     }
     /** Rótulos de las semanas: [con mes cuando cambia, solo el día, completo para TalkBack]. */
     private String[][] weekLabels(){
         int n=Metrics.WEEKS;String[] full=new String[n],shortL=new String[n],spoken=new String[n];
-        SimpleDateFormat dm=new SimpleDateFormat("d MMM",Metrics.CL),d=new SimpleDateFormat("d",Metrics.CL),long_=new SimpleDateFormat("d 'de' MMMM",Metrics.CL),m=new SimpleDateFormat("M",Locale.ROOT);
+        SimpleDateFormat m=new SimpleDateFormat("M",Locale.ROOT);
         for(int i=0;i<n;i++){
-            Date at=new Date(data.weekStarts[i]);boolean month=i==0||!m.format(at).equals(m.format(new Date(data.weekStarts[i-1])));
-            shortL[i]=d.format(at);full[i]=month?dm.format(at).replace(".",""):shortL[i];
-            spoken[i]=i==n-1?"esta semana":i==n-2?"la semana pasada":"la semana del "+long_.format(at);
+            Date at=new Date(data.weekStarts[i]);boolean newMonth=i==0||!m.format(at).equals(m.format(new Date(data.weekStarts[i-1])));
+            shortL[i]=day(at);full[i]=newMonth?dayMonth(at):shortL[i];
+            spoken[i]=i==n-1?getString(R.string.met_say_this_week):i==n-2?getString(R.string.met_say_last_week):getString(R.string.met_say_week_of,day(at),month(at,"MMMM"));
         }
         return new String[][]{full,shortL,spoken};
     }
+    /**
+     * Fechas con los nombres del idioma (Lang.locale): el día del mes y el mes («21», «septiembre» o «sept.»). El orden lo
+     * pone cada texto: «21 de septiembre», «September 21».
+     */
+    private static String day(Date at){return new SimpleDateFormat("d",Lang.locale()).format(at);}
+    private static String month(Date at,String pattern){return new SimpleDateFormat(pattern,Lang.locale()).format(at);}
+    /** «21 sept» / «Sep 21»: el día y el mes abreviado, sin el punto de la abreviatura (rótulos del eje y del saldo). */
+    private String dayMonth(Date at){return getString(R.string.met_day_month,day(at),month(at,"MMM").replace(".",""));}
     private String describeMinutes(String[] spoken){
-        StringBuilder b=new StringBuilder("Gráfico de minutos grabados por semana. ");
-        for(int i=0;i<spoken.length;i++)b.append(capital(spoken[i])).append(": ").append(data.weekMs[i]>0?Ui.humanDuration(data.weekMs[i]):"nada").append(". ");
-        return b.append("Ajústalo como un deslizador, usa las flechas o toca una semana para elegirla.").toString();
+        StringBuilder b=new StringBuilder(getString(R.string.met_say_minutes_chart)).append(' ');
+        for(int i=0;i<spoken.length;i++)b.append(capital(spoken[i])).append(": ").append(data.weekMs[i]>0?Ui.humanDuration(data.weekMs[i]):getString(R.string.met_say_nothing)).append(". ");
+        return b.append(getString(R.string.met_say_bars_how)).toString();
     }
     private String describeUsd(String[] spoken){
-        StringBuilder b=new StringBuilder("Gráfico de gasto por semana. ");
+        StringBuilder b=new StringBuilder(getString(R.string.met_say_spend_chart)).append(' ');
         for(int i=0;i<spoken.length;i++){double r=data.weekReal[i],e=data.weekEst[i];b.append(capital(spoken[i])).append(": ");
-            if(r+e<=0)b.append("sin gasto");else{if(r>0)b.append(Pricing.usd(r)).append(" cobrado");if(r>0&&e>0)b.append(" y ");if(e>0)b.append("unos ").append(Pricing.usd(e)).append(" estimado");}
+            b.append(r+e<=0?getString(R.string.met_no_spend_lc):r>0&&e>0?getString(R.string.met_say_billed_est,Pricing.usd(r),Pricing.usd(e)):r>0?getString(R.string.met_say_billed,Pricing.usd(r)):getString(R.string.met_say_est,Pricing.usd(e)));
             b.append(". ");}
         return b.toString();
     }
@@ -306,7 +319,7 @@ public class MetricsActivity extends Screen {
         LinearLayout r=ui.row();r.setPadding(ui.dp(S1),0,ui.dp(S1),ui.dp(S2));
         r.addView(ui.text(title,Type.LABEL_MEDIUM,p.onSurfaceVariant),new LinearLayout.LayoutParams(0,-2,1));
         if(a!=null&&b!=null){r.addView(swatch(p.primary,a));r.addView(ui.space(S3));r.addView(swatch(estColor(),b));}
-        else if(b!=null)r.addView(ui.text("≈ estimado",Type.LABEL_MEDIUM,p.onSurfaceVariant));
+        else if(b!=null)r.addView(ui.text(getString(R.string.met_legend_est),Type.LABEL_MEDIUM,p.onSurfaceVariant));
         return r;
     }
     private View swatch(int color,String label){
@@ -317,26 +330,27 @@ public class MetricsActivity extends Screen {
     private int estColor(){return blend(p.primary,ground,0.5f);}
 
     // ---------- 3. Por período ----------
-    private static String chipName(Metrics.Period pe){return pe==Metrics.Period.WEEK?"7 días":pe==Metrics.Period.MONTH?"Este mes":"Todo";}
-    private String periodName(){return period==Metrics.Period.WEEK?"Últimos 7 días":period==Metrics.Period.MONTH?capital(new SimpleDateFormat("MMMM",Metrics.CL).format(new Date(data.now))):"Desde el comienzo";}
+    private String chipName(Metrics.Period pe){return getString(pe==Metrics.Period.WEEK?R.string.met_chip_week:pe==Metrics.Period.MONTH?R.string.met_chip_month:R.string.met_chip_all);}
+    /** Rótulo del período en cada tarjeta: «Últimos 7 días», el mes en curso con su nombre del idioma, o «Desde el comienzo». */
+    private String periodName(){return period==Metrics.Period.WEEK?getString(R.string.met_period_week):period==Metrics.Period.MONTH?capital(month(new Date(data.now),"MMMM")):getString(R.string.met_period_all);}
     /** Período sin grabaciones: una línea amable, en vez de tarjetas con ceros. */
     private View quietPeriod(){
         LinearLayout card=ui.card();card.setPadding(ui.dp(S5),ui.dp(S5),ui.dp(S5),ui.dp(S5));
-        card.addView(ui.heading(period==Metrics.Period.WEEK?"No grabaste en los últimos 7 días":"Aún no grabas este mes",Type.TITLE_MEDIUM));
-        TextView t=ui.text("Toca «Todo» para ver tu historial, o graba algo y aquí aparece al tiro.",Type.BODY_MEDIUM,p.onSurfaceVariant);t.setPadding(0,ui.dp(S1),0,0);card.addView(t);
+        card.addView(ui.heading(getString(period==Metrics.Period.WEEK?R.string.met_quiet_week:R.string.met_quiet_month),Type.TITLE_MEDIUM));
+        TextView t=ui.text(getString(R.string.met_quiet_body,chipName(Metrics.Period.ALL)),Type.BODY_MEDIUM,p.onSurfaceVariant);t.setPadding(0,ui.dp(S1),0,0);card.addView(t);
         return card;
     }
 
     /** Tu voz en números: grabado, palabras, ritmo y tiempo ahorrado del período, en cuatro datos de vidrio. */
     private View voice(Metrics.Totals t){
-        LinearLayout card=card(R.drawable.ic_waveform,"Tu voz en números",periodName());
+        LinearLayout card=card(R.drawable.ic_waveform,getString(R.string.met_voice_title),periodName());
         int wpm=t.wpm();
-        LinearLayout a=ui.row();a.setGravity(Gravity.TOP);addStat(a,R.drawable.ic_clock,Metrics.hours(t.audioMs),"Grabado");addStat(a,R.drawable.ic_doc,t.words>0?Metrics.number(t.words):"—","Palabras");card.addView(a,Ui.fill());
-        LinearLayout b=ui.row();b.setGravity(Gravity.TOP);addStat(b,R.drawable.ic_speed,wpm>0?String.valueOf(wpm):"—","Palabras por minuto");addStat(b,R.drawable.ic_hourglass,t.words>0?"≈ "+Metrics.hours(t.savedMs()):"—","Ahorrado al no teclear");card.addView(b,ui.top(S2));
-        StringBuilder more=new StringBuilder(Metrics.count(t.recordings,"grabación","grabaciones")).append(" · ").append(Metrics.count(t.days.size(),"día con grabaciones","días con grabaciones"));
-        if(t.marks>0)more.append(" · ").append(Metrics.count(t.marks,"momento ★","momentos ★"));
+        LinearLayout a=ui.row();a.setGravity(Gravity.TOP);addStat(a,R.drawable.ic_clock,Metrics.hours(t.audioMs),getString(R.string.met_stat_recorded));addStat(a,R.drawable.ic_doc,t.words>0?Metrics.number(t.words):"—",getString(R.string.met_stat_words));card.addView(a,Ui.fill());
+        LinearLayout b=ui.row();b.setGravity(Gravity.TOP);addStat(b,R.drawable.ic_speed,wpm>0?String.valueOf(wpm):"—",getString(R.string.met_stat_wpm));addStat(b,R.drawable.ic_hourglass,t.words>0?"≈ "+Metrics.hours(t.savedMs()):"—",getString(R.string.met_stat_saved));card.addView(b,ui.top(S2));
+        StringBuilder more=new StringBuilder(count(R.plurals.met_recordings,t.recordings)).append(" · ").append(count(R.plurals.met_days_with_recordings,t.days.size()));
+        if(t.marks>0)more.append(" · ").append(count(R.plurals.met_marks,t.marks));
         TextView m=ui.text(more.toString(),Type.BODY_SMALL,p.onSurfaceVariant);m.setPadding(ui.dp(S1),ui.dp(S3),ui.dp(S1),0);card.addView(m);
-        if(t.transcribed<t.recordings&&t.words>0){TextView n=ui.text("Palabras y ritmo cuentan solo lo transcrito.",Type.BODY_SMALL,p.onSurfaceVariant);n.setPadding(ui.dp(S1),ui.dp(S1),ui.dp(S1),0);card.addView(n);}
+        if(t.transcribed<t.recordings&&t.words>0){TextView n=ui.text(getString(R.string.met_voice_note),Type.BODY_SMALL,p.onSurfaceVariant);n.setPadding(ui.dp(S1),ui.dp(S1),ui.dp(S1),0);card.addView(n);}
         return card;
     }
 
@@ -346,34 +360,34 @@ public class MetricsActivity extends Screen {
      * acceso directo: la Biblioteca con su filtro, o la grabación si es una sola.
      */
     private View funnel(Metrics.Totals t,boolean motion){
-        LinearLayout card=card(R.drawable.ic_filter,"Hacia tu segundo cerebro",periodName());
-        String[] names={"Grabadas","Transcritas","Con nota","En 0-Inbox"};int[] counts={t.recordings,t.transcribed,t.withNote,t.inInbox};int[] ramp=ramp();int track=blend(ground,p.primary,0.10f);
+        LinearLayout card=card(R.drawable.ic_filter,getString(R.string.met_funnel_title),periodName());
+        String[] names={getString(R.string.met_funnel_recorded),getString(R.string.met_funnel_transcribed),getString(R.string.met_funnel_note),getString(R.string.met_funnel_inbox)};int[] counts={t.recordings,t.transcribed,t.withNote,t.inInbox};int[] ramp=ramp();int track=blend(ground,p.primary,0.10f);
         for(int i=0;i<4;i++){
             LinearLayout step=ui.column();
             LinearLayout r=ui.row();r.addView(ui.text(names[i],Type.LABEL_LARGE,p.onSurface),new LinearLayout.LayoutParams(0,-2,1));
             int pct=(int)Math.round(100d*counts[i]/Math.max(1,t.recordings));
-            r.addView(Ui.tabular(ui.text(Metrics.number(counts[i])+(i==0?"":" · "+pct+" %"),Type.LABEL_LARGE,p.onSurfaceVariant)));step.addView(r,Ui.fill());
+            r.addView(Ui.tabular(ui.text(Metrics.number(counts[i])+(i==0?"":" · "+getString(R.string.met_percent,pct)),Type.LABEL_LARGE,p.onSurfaceVariant)));step.addView(r,Ui.fill());
             Meter meter=new Meter(this,ramp[i],track,(float)counts[i]/Math.max(1,t.recordings));LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-1,ui.dp(10));mp.topMargin=ui.dp(6);step.addView(meter,mp);
             if(motion)meter.grow(i*60L);
-            step.setContentDescription(names[i]+": "+Metrics.number(counts[i])+(i==0?"":" de "+Metrics.number(t.recordings)+", "+pct+" por ciento"));hideChildren(step,null);
+            step.setContentDescription(i==0?names[i]+": "+Metrics.number(counts[i]):getString(R.string.met_say_funnel_step,names[i],Metrics.number(counts[i]),Metrics.number(t.recordings),pct));hideChildren(step,null);
             card.addView(step,i==0?Ui.fill():ui.top(S3));
         }
         // A medio camino: solo lo que existe. Cada fila lleva a esas grabaciones.
         LinearLayout stalls=ui.column();
-        stall(stalls,R.drawable.ic_alert,"Con error","Revisa qué pasó y reintenta",t.failed,data.all.failed.size(),LIB_FAILED);
+        stall(stalls,R.drawable.ic_alert,getString(R.string.met_stall_failed),getString(R.string.met_stall_failed_hint),t.failed,data.all.failed.size(),LIB_FAILED);
         // Las pedidas: solo una se transcribe a la vez; las demás esperan su turno, el Wi-Fi o el cargador.
-        stall(stalls,R.drawable.ic_hourglass,"En proceso","En cola o transcribiéndose",t.queued,data.all.queued.size(),LIB_WORKING);
-        stall(stalls,R.drawable.ic_transcribe,"Sin transcribir","Solo audio, por ahora",t.pending,data.all.pending.size(),LIB_NEW);
-        stall(stalls,R.drawable.ic_note,"Transcritas sin nota",t.noNote.size()>1?"Abre la más reciente":"Ábrela para armar la nota",t.noNote,-1,-1);
+        stall(stalls,R.drawable.ic_hourglass,getString(R.string.met_stall_queued),getString(R.string.met_stall_queued_hint),t.queued,data.all.queued.size(),LIB_WORKING);
+        stall(stalls,R.drawable.ic_transcribe,getString(R.string.met_stall_new),getString(R.string.met_stall_new_hint),t.pending,data.all.pending.size(),LIB_NEW);
+        stall(stalls,R.drawable.ic_note,getString(R.string.met_stall_no_note),getString(t.noNote.size()>1?R.string.met_stall_no_note_many:R.string.met_stall_no_note_one),t.noNote,-1,-1);
         // «Por guardar» de la Biblioteca también cuenta las que cambiaron después de guardarse: no se promete un total.
-        if(data.inboxOn)stall(stalls,R.drawable.ic_inbox,"Por guardar en 0-Inbox","Guárdalas con un toque",t.notSaved,-1,LIB_SAVE);
-        else if(t.transcribed>0){Ui.Row r=ui.listRow(R.drawable.ic_inbox,"Elige tu carpeta 0-Inbox","Para guardar cada nota con un toque",null);
+        if(data.inboxOn)stall(stalls,R.drawable.ic_inbox,getString(R.string.met_stall_inbox),getString(R.string.met_stall_inbox_hint),t.notSaved,-1,LIB_SAVE);
+        else if(t.transcribed>0){Ui.Row r=ui.listRow(R.drawable.ic_inbox,getString(R.string.met_choose_inbox),getString(R.string.met_choose_inbox_hint),null);
             r.onClick(v->startActivity(new Intent(this,SettingsActivity.class).putExtra("inbox",true)));addRow(stalls,r);}
         if(stalls.getChildCount()>0){
-            TextView h=ui.text("A medio camino",Type.LABEL_MEDIUM,p.onSurfaceVariant);h.setPadding(ui.dp(S1),ui.dp(S5),0,ui.dp(S1));card.addView(h);
+            TextView h=ui.text(getString(R.string.met_halfway),Type.LABEL_MEDIUM,p.onSurfaceVariant);h.setPadding(ui.dp(S1),ui.dp(S5),0,ui.dp(S1));card.addView(h);
             LinearLayout group=ui.group();group.addView(stalls,Ui.fill());card.addView(group,Ui.fill());
         }else{
-            TextView ok=ui.chip("Todo lo grabado llegó a tu segundo cerebro",p.onPrimaryContainer,p.primaryContainer);ok.setSingleLine(false);ok.setMaxLines(3);
+            TextView ok=ui.chip(getString(R.string.met_all_arrived),p.onPrimaryContainer,p.primaryContainer);ok.setSingleLine(false);ok.setMaxLines(3);
             Drawable d=getDrawable(R.drawable.ic_check);if(d!=null){d=d.mutate();d.setTint(p.onPrimaryContainer);d.setBounds(0,0,ui.dp(16),ui.dp(16));ok.setCompoundDrawablesRelative(d,null,null,null);ok.setCompoundDrawablePadding(ui.dp(6));}
             LinearLayout.LayoutParams lp=Ui.wrap();lp.topMargin=ui.dp(S4);card.addView(ok,lp);
         }
@@ -387,7 +401,7 @@ public class MetricsActivity extends Screen {
     private void stall(LinearLayout list,int icon,String title,String hint,List<String> ids,int total,int filter){
         if(ids.isEmpty())return;
         boolean more=filter>=0&&ids.size()>1&&total>ids.size();
-        String sub=more?hint+" · "+Metrics.number(total)+" en total en la Biblioteca":hint;
+        String sub=more?getString(R.string.met_stall_total,hint,Metrics.number(total)):hint;
         Ui.Row r=ui.listRow(icon,title,sub,Metrics.number(ids.size()));Ui.tabular(r.value);r.value.setTextColor(p.onSurface);
         r.onClick(v->openStage(ids,filter));addRow(list,r);
         r.setContentDescription(title+": "+Metrics.number(ids.size())+". "+sub);
@@ -413,38 +427,38 @@ public class MetricsActivity extends Screen {
      * al final. Lo cobrado y lo estimado siempre van rotulados.
      */
     private View costs(Metrics.Totals t){
-        LinearLayout card=card(R.drawable.metrics_cash,"Costos",periodName());double usd=t.usd();
-        TextView big=Ui.tabular(ui.text(usd>0?(t.estimated()>0?"≈ ":"")+Pricing.usd(usd):"US$0",Type.HEADLINE_LARGE,p.onSurface));big.setPadding(ui.dp(S1),0,0,0);card.addView(big);
-        String when=period==Metrics.Period.WEEK?"en los últimos 7 días":period==Metrics.Period.MONTH?"este mes":"desde el comienzo";
-        TextView cap=ui.text(usd>0?"gastado "+when+(t.notes>0?", contando las notas":""):"Sin gastos "+when+".",Type.BODY_MEDIUM,p.onSurfaceVariant);cap.setPadding(ui.dp(S1),0,0,0);card.addView(cap);
+        LinearLayout card=card(R.drawable.metrics_cash,getString(R.string.met_costs_title),periodName());double usd=t.usd();
+        TextView big=Ui.tabular(ui.text(usd>0?(t.estimated()>0?"≈ ":"")+Pricing.usd(usd):getString(R.string.met_usd_zero),Type.HEADLINE_LARGE,p.onSurface));big.setPadding(ui.dp(S1),0,0,0);card.addView(big);
+        String when=getString(period==Metrics.Period.WEEK?R.string.met_when_week:period==Metrics.Period.MONTH?R.string.met_when_month:R.string.met_when_all);
+        TextView cap=ui.text(usd>0?getString(t.notes>0?R.string.met_spent_notes:R.string.met_spent,when):getString(R.string.met_no_spend_in,when),Type.BODY_MEDIUM,p.onSurfaceVariant);cap.setPadding(ui.dp(S1),0,0,0);card.addView(cap);
         if(usd>0){
             double hour=t.usdPerHour();
             LinearLayout row=ui.row();row.setGravity(Gravity.TOP);
-            addStat(row,R.drawable.ic_check_circle,t.real()>0?Pricing.usd(t.real()):"—","Cobrado");
-            addStat(row,R.drawable.ic_info,t.estimated()>0?"≈ "+Pricing.usd(t.estimated()):"—","Estimado");
-            addStat(row,R.drawable.ic_clock,hour>0?(t.estUsd>0?"≈ ":"")+Pricing.usd(hour):"—","Por hora de audio");
+            addStat(row,R.drawable.ic_check_circle,t.real()>0?Pricing.usd(t.real()):"—",getString(R.string.met_billed));
+            addStat(row,R.drawable.ic_info,t.estimated()>0?"≈ "+Pricing.usd(t.estimated()):"—",getString(R.string.met_estimated));
+            addStat(row,R.drawable.ic_clock,hour>0?(t.estUsd>0?"≈ ":"")+Pricing.usd(hour):"—",getString(R.string.met_per_audio_hour));
             card.addView(row,ui.top(S4));
         }
         List<Metrics.ModelUse> models=t.models();
         if(!models.isEmpty()){
-            card.addView(subhead("Por modelo"));LinearLayout list=ui.group();
+            card.addView(subhead(getString(R.string.met_by_model)));LinearLayout list=ui.group();
             for(Metrics.ModelUse u:models){
-                String value=u.usd()>0?(u.estUsd>0?"≈ ":"")+Pricing.usd(u.usd()):u.unknown>=u.count?"Sin tarifa":"US$0";
-                String sub=Metrics.service(u.provider)+" · "+Ui.humanDuration(u.audioMs)+" · "+Metrics.count(u.count,"transcripción","transcripciones");
+                String value=u.usd()>0?(u.estUsd>0?"≈ ":"")+Pricing.usd(u.usd()):getString(u.unknown>=u.count?R.string.met_no_rate:R.string.met_usd_zero);
+                String sub=Metrics.service(u.provider)+" · "+Ui.humanDuration(u.audioMs)+" · "+count(R.plurals.met_transcriptions,u.count);
                 addRow(list,costRow(u.name,sub,value));
             }
             card.addView(list,Ui.fill());
         }
         if(t.notes>0){
-            card.addView(subhead("Notas para tu segundo cerebro"));LinearLayout list=ui.group();
+            card.addView(subhead(getString(R.string.met_notes_title)));LinearLayout list=ui.group();
             double n=t.noteReal+t.noteEst;String value=n>0?(t.noteEst>0?"≈ ":"")+Pricing.usd(n):"—";
-            String sub=t.noteIn+t.noteOut>0?Metrics.number(t.noteIn)+" tokens de entrada · "+Metrics.number(t.noteOut)+" de salida":"Sin datos de tokens";
-            addRow(list,costRow(Metrics.count(t.notes,"nota","notas"),sub,value));card.addView(list,Ui.fill());
+            String sub=t.noteIn+t.noteOut>0?getString(R.string.met_note_tokens,Metrics.number(t.noteIn),Metrics.number(t.noteOut)):getString(R.string.met_no_tokens);
+            addRow(list,costRow(count(R.plurals.met_notes,t.notes),sub,value));card.addView(list,Ui.fill());
         }
         StringBuilder foot=new StringBuilder();
         if(t.unknown>0)foot.append(unknownNote(t));
-        if(!Double.isNaN(data.balance))foot.append("Saldo en OpenRouter: ").append(Pricing.usd(data.balance)).append(" (al comprobar tu clave el ").append(new SimpleDateFormat("d MMM",Metrics.CL).format(new Date(data.balanceAt)).replace(".","")).append(").\n");
-        foot.append("Cobrado: lo que informó OpenRouter. ≈ Estimado: duración × tarifa pública del modelo; el cobro final lo ves en tu cuenta.");
+        if(!Double.isNaN(data.balance))foot.append(getString(R.string.met_balance,Pricing.usd(data.balance),dayMonth(new Date(data.balanceAt)))).append('\n');
+        foot.append(getString(R.string.met_costs_foot));
         TextView f=ui.text(foot.toString(),Type.BODY_SMALL,p.onSurfaceVariant);f.setPadding(ui.dp(S1),ui.dp(S4),ui.dp(S1),0);card.addView(f);
         return card;
     }
@@ -458,9 +472,9 @@ public class MetricsActivity extends Screen {
         int router=0,openai=0,server=0;
         for(Metrics.ModelUse u:t.models.values()){if(u.unknown<=0)continue;if("openrouter".equals(u.provider))router+=u.unknown;else if("openai".equals(u.provider))openai+=u.unknown;else server+=u.unknown;}
         StringBuilder s=new StringBuilder();
-        if(router>0)s.append(Metrics.count(router,"transcripción","transcripciones")).append(" de OpenRouter sin precio conocido: no informó el costo y el modelo no tiene tarifa por minuto.\n");
-        if(openai>0)s.append(Metrics.count(openai,"transcripción","transcripciones")).append(" de OpenAI sin tarifa conocida para su modelo.\n");
-        if(server>0)s.append(Metrics.count(server,"transcripción","transcripciones")).append(" con tu servidor: sin tarifa conocida.\n");
+        if(router>0)s.append(Metrics.count(R.plurals.met_unknown_router,router)).append('\n');
+        if(openai>0)s.append(Metrics.count(R.plurals.met_unknown_openai,openai)).append('\n');
+        if(server>0)s.append(Metrics.count(R.plurals.met_unknown_server,server)).append('\n');
         return s.toString();
     }
     /** Fila de costo: nombre y detalle a la izquierda, monto (cifras fijas) a la derecha. No se toca: nada se registra. */
@@ -478,18 +492,18 @@ public class MetricsActivity extends Screen {
      * frase con el momento en que más hablas.
      */
     private View heat(Metrics.Totals t,boolean motion){
-        LinearLayout card=card(R.drawable.ic_clock,"Cuándo grabas",periodName());
+        LinearLayout card=card(R.drawable.ic_clock,getString(R.string.met_heat_title),periodName());String[] days=dayNames();
         TextView read=ui.text(insight(t),Type.BODY_MEDIUM,p.onSurface);read.setPadding(ui.dp(S1),0,ui.dp(S1),ui.dp(S3));read.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);card.addView(read);
         int[] ramp=ramp();int empty=blend(ground,p.outlineVariant,p.dark?0.7f:0.55f);
-        Heat map=new Heat(this,p,t.heatMs,ramp,empty);
+        Heat map=new Heat(this,p,t.heatMs,ramp,empty,days);
         map.onPick((day,hour)->{long ms=t.heatMs[day][hour];int n=t.heatCount[day][hour];
-            read.setText(DAY_NAMES[day]+" de "+clock(hour)+" a "+clock(hour+1)+" · "+(n==0?"sin grabaciones":Ui.humanDuration(ms)+" en "+Metrics.count(n,"grabación","grabaciones")));});
-        map.setContentDescription(describeHeat(t));card.addView(map,Ui.fill());if(motion)map.grow();
+            read.setText(getString(R.string.met_heat_cell,days[day],clock(hour),clock(hour+1),n==0?getString(R.string.met_no_recordings):getString(R.string.met_duration_in,Ui.humanDuration(ms),count(R.plurals.met_recordings,n))));});
+        map.setContentDescription(describeHeat(t,days));card.addView(map,Ui.fill());if(motion)map.grow();
         // Leyenda de la escala: Menos ▢▢▢▢▢ Más
-        LinearLayout legend=ui.row();legend.setPadding(ui.dp(S1),ui.dp(S3),0,0);legend.addView(ui.text("Menos",Type.LABEL_SMALL,p.onSurfaceVariant));legend.addView(ui.space(6));
+        LinearLayout legend=ui.row();legend.setPadding(ui.dp(S1),ui.dp(S3),0,0);legend.addView(ui.text(getString(R.string.met_less),Type.LABEL_SMALL,p.onSurfaceVariant));legend.addView(ui.space(6));
         int[] all={empty,ramp[0],ramp[1],ramp[2],ramp[3]};
         for(int c:all){View box=new View(this);box.setBackground(shape(this,c,3));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(ui.dp(12),ui.dp(12));lp.setMarginEnd(ui.dp(3));legend.addView(box,lp);}
-        legend.addView(ui.space(3));legend.addView(ui.text("Más",Type.LABEL_SMALL,p.onSurfaceVariant));legend.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        legend.addView(ui.space(3));legend.addView(ui.text(getString(R.string.met_more),Type.LABEL_SMALL,p.onSurfaceVariant));legend.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         card.addView(legend);
         return card;
     }
@@ -498,14 +512,22 @@ public class MetricsActivity extends Screen {
         long[] perDay=new long[7];int bd=0,bh=0;long best=-1;
         for(int d=0;d<7;d++)for(int h=0;h<24;h++){perDay[d]+=t.heatMs[d][h];if(t.heatMs[d][h]>best){best=t.heatMs[d][h];bd=d;bh=h;}}
         int top=0;for(int d=1;d<7;d++)if(perDay[d]>perDay[top])top=d;
-        if(perDay[top]<=0)return "Toca una casilla para ver su detalle.";
-        return "Hablas más "+DAY_PLURAL[top]+(bd==top?", sobre todo entre "+clock(bh)+" y "+clock(bh+1):"; tu hora con más voz: "+DAY_PLURAL[bd]+" a las "+clock(bh))+".";
+        if(perDay[top]<=0)return getString(R.string.met_heat_hint);
+        return bd==top?getString(R.string.met_insight_same,getString(ON_DAY[top]),clock(bh),clock(bh+1)):getString(R.string.met_insight_other,getString(ON_DAY[top]),getString(ON_DAY[bd]),clock(bh));
     }
-    private String describeHeat(Metrics.Totals t){
-        StringBuilder b=new StringBuilder("Mapa de días y horas en que grabas. ");
+    private String describeHeat(Metrics.Totals t,String[] days){
+        StringBuilder b=new StringBuilder(getString(R.string.met_say_heat_title)).append(' ');
         for(int d=0;d<7;d++){long sum=0;int topH=-1;long topMs=0;for(int h=0;h<24;h++){sum+=t.heatMs[d][h];if(t.heatMs[d][h]>topMs){topMs=t.heatMs[d][h];topH=h;}}
-            b.append(DAY_NAMES[d]).append(": ").append(sum>0?Ui.humanDuration(sum)+", más a las "+clock(topH):"nada").append(". ");}
-        return b.append("Toca o usa las flechas para recorrer las horas.").toString();
+            b.append(days[d]).append(": ").append(sum>0?getString(R.string.met_say_heat_day,Ui.humanDuration(sum),clock(topH)):getString(R.string.met_say_nothing)).append(". ");}
+        return b.append(getString(R.string.met_say_heat_how)).toString();
+    }
+    /**
+     * Los días de lunes a domingo con su nombre del idioma y mayúscula inicial («Lunes», «Monday», «Segunda-feira»). Antes
+     * eran listas fijas en español; las iniciales del mapa (L, M, M…) salen de aquí mismo.
+     */
+    private static String[] dayNames(){
+        String[] w=java.text.DateFormatSymbols.getInstance(Lang.locale()).getWeekdays(),out=new String[7];
+        for(int d=0;d<7;d++)out[d]=capital(w[d==6?Calendar.SUNDAY:Calendar.MONDAY+d]);return out;
     }
     private static String clock(int hour){return String.format(Locale.ROOT,"%02d:00",hour%24==0&&hour>0?24:hour);}
 
@@ -514,56 +536,47 @@ public class MetricsActivity extends Screen {
      * nombres solo se muestran aquí: estas filas no se tocan y nada de esto se registra.
      */
     private View people(Metrics.Totals t,boolean motion){
-        LinearLayout card=card(R.drawable.ic_people,"Con quién más conversas",periodName());List<Metrics.Person> list=t.people();
+        LinearLayout card=card(R.drawable.ic_people,getString(R.string.met_people_title),periodName());List<Metrics.Person> list=t.people();
         if(list.isEmpty()){
-            TextView hint=ui.text("Ponle nombre a las voces de tus transcripciones y aquí verás con quién más conversas.",Type.BODY_MEDIUM,p.onSurfaceVariant);hint.setPadding(ui.dp(S1),0,ui.dp(S1),0);card.addView(hint);
+            TextView hint=ui.text(getString(R.string.met_people_empty),Type.BODY_MEDIUM,p.onSurfaceVariant);hint.setPadding(ui.dp(S1),0,ui.dp(S1),0);card.addView(hint);
         }else{
             long max=Math.max(1,list.get(0).ms);int track=blend(ground,p.primary,0.10f);
             for(int i=0;i<Math.min(5,list.size());i++){
                 Metrics.Person person=list.get(i);LinearLayout item=ui.column();
                 LinearLayout r=ui.row();TextView name=ui.oneLine(ui.text(person.name,Type.ITEM,p.onSurface));r.addView(name,new LinearLayout.LayoutParams(0,-2,1));
-                String value=(person.ms>=60_000?Ui.humanDuration(person.ms):"< 1 min")+" · "+Metrics.count(person.recordings,"audio","audios");
+                String value=(person.ms>=60_000?Ui.humanDuration(person.ms):getString(R.string.met_under_min))+" · "+count(R.plurals.met_audios,person.recordings);
                 TextView v=Ui.tabular(ui.text(value,Type.LABEL_MEDIUM,p.onSurfaceVariant));v.setPadding(ui.dp(S2),0,0,0);r.addView(v);item.addView(r,Ui.fill());
                 Meter m=new Meter(this,p.primary,track,(float)person.ms/max);LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-1,ui.dp(8));mp.topMargin=ui.dp(6);item.addView(m,mp);if(motion)m.grow(i*60L);
                 item.setContentDescription(person.name+": "+value);hideChildren(item,null);
                 card.addView(item,i==0?Ui.fill():ui.top(S3));
             }
         }
-        String voices=data.knownVoices>0?Metrics.count(data.knownVoices,"voz conocida guardada","voces conocidas guardadas")+". ":"";
-        TextView f=ui.text(voices+"Según cuánto habla cada persona con nombre. Los nombres solo se ven aquí.",Type.BODY_SMALL,p.onSurfaceVariant);f.setPadding(ui.dp(S1),ui.dp(S4),ui.dp(S1),0);card.addView(f);
+        String voices=data.knownVoices>0?count(R.plurals.met_known_voices,data.knownVoices)+" ":"";
+        TextView f=ui.text(voices+getString(R.string.met_people_foot),Type.BODY_SMALL,p.onSurfaceVariant);f.setPadding(ui.dp(S1),ui.dp(S4),ui.dp(S1),0);card.addView(f);
         return card;
     }
 
     // ---------- Pie, vacío, carga y error ----------
     private View footer(){
         LinearLayout box=ui.column();box.setPadding(0,ui.dp(S5),0,0);
-        box.addView(ui.footnote("Todo se calcula en este teléfono con lo que Verbapp guarda de cada grabación. Nada de esto se envía."));
-        Ui.Btn b=ui.button("¿Cómo se calcula?",0,Ui.Style.PLAIN,v->message("Cómo se calculan tus métricas",HOW));b.setMinimumHeight(ui.dp(48));
+        box.addView(ui.footnote(getString(R.string.met_footer)));
+        // «¿Cómo se calcula?»: la explicación completa (met_how_body), con las palabras por minuto al teclear de Metrics.
+        Ui.Btn b=ui.button(getString(R.string.met_how_button),0,Ui.Style.PLAIN,v->message(getString(R.string.met_how_title),getString(R.string.met_how_body,Metrics.TYPING_WPM)));b.setMinimumHeight(ui.dp(48));
         LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginStart(ui.dp(S1));box.addView(b,lp);return box;
     }
-    private static final String HOW=
-        "Todo se calcula en este teléfono con lo que Verbapp ya guarda de cada grabación. Nada se envía.\n\n"
-        +"Grabado: la duración de tus grabaciones, en el día en que grabaste.\n"
-        +"Palabras: las de tus transcripciones (la versión vigente).\n"
-        +"Palabras por minuto: palabras ÷ minutos de audio transcrito.\n"
-        +"Ahorrado al no teclear: lo que tardarías en escribir esas palabras a mano, a "+Metrics.TYPING_WPM+" palabras por minuto.\n"
-        +"Racha: días seguidos con al menos una grabación. Si hoy aún no grabas, sigue viva hasta medianoche.\n\n"
-        +"Hacia tu segundo cerebro: de lo grabado en el período, cuánto se transcribió, cuánto tiene nota y cuánto guardaste en tu carpeta 0-Inbox.\n\n"
-        +"Costos: van en el día en que se transcribió o se armó la nota. «Cobrado» es lo que informó OpenRouter. «≈ Estimado» es la duración por la tarifa pública del modelo y puede diferir de lo que te cobran. Si volviste a transcribir, mientras guardes la versión anterior también se cuenta lo que costó.\n\n"
-        +"Personas: el tiempo que habla cada voz a la que le pusiste nombre, sin contarte a ti. Los nombres solo se ven en esta pantalla.";
 
     /** Sin grabaciones: qué verá aquí y un solo botón para empezar. Unas barras tenues anticipan el gráfico. */
     private View emptyView(boolean motion){
         LinearLayout card=ui.card();card.setGravity(Gravity.CENTER_HORIZONTAL);card.setPadding(ui.dp(S6),ui.dp(S6),ui.dp(S6),ui.dp(S6));
         Bars ghost=new Bars(this,p,72);ghost.set(new double[]{3,5,2,6,4,7,5,8},null,null,null,null,8,"",false);int faint=blend(ground,p.primary,0.28f);ghost.colors(faint,faint,0);
         ghost.setFocusable(false);ghost.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);card.addView(ghost,new LinearLayout.LayoutParams(ui.dp(220),-2));if(motion)ghost.grow();
-        TextView title=ui.heading("Aquí verás tu voz en números",Type.HEADLINE_SMALL);title.setGravity(Gravity.CENTER);title.setPadding(0,ui.dp(S5),0,0);card.addView(title,Ui.fill());ui.highlightLast(title,"Aquí verás tu voz en números");
-        TextView body=ui.text("Cuando grabes, verás cuánto hablas, cuántas palabras escribe Verbapp por ti, cuánto llega a tu segundo cerebro y cuánto gastas al transcribir.",Type.BODY_MEDIUM,p.onSurfaceVariant);
+        String head=getString(R.string.met_empty_title);TextView title=ui.heading(head,Type.HEADLINE_SMALL);title.setGravity(Gravity.CENTER);title.setPadding(0,ui.dp(S5),0,0);card.addView(title,Ui.fill());ui.highlightLast(title,head);
+        TextView body=ui.text(getString(R.string.met_empty_body),Type.BODY_MEDIUM,p.onSurfaceVariant);
         body.setGravity(Gravity.CENTER);body.setPadding(0,ui.dp(S2),0,ui.dp(S5));card.addView(body,Ui.fill());
-        card.addView(line(R.drawable.ic_doc,"Palabras transcritas y tiempo ahorrado",Type.BODY_MEDIUM,p.onSurface),Ui.fill());
-        card.addView(line(R.drawable.metrics_flame,"Tu racha de días grabando",Type.BODY_MEDIUM,p.onSurface),ui.top(S2));
-        card.addView(line(R.drawable.metrics_cash,"Tu gasto, mes a mes y por modelo",Type.BODY_MEDIUM,p.onSurface),ui.top(S2));
-        Ui.Btn go=ui.button("Hacer mi primera grabación",R.drawable.ic_mic,Ui.Style.PRIMARY,v->{navigate(0);finish();});
+        card.addView(line(R.drawable.ic_doc,getString(R.string.met_empty_words),Type.BODY_MEDIUM,p.onSurface),Ui.fill());
+        card.addView(line(R.drawable.metrics_flame,getString(R.string.met_empty_streak),Type.BODY_MEDIUM,p.onSurface),ui.top(S2));
+        card.addView(line(R.drawable.metrics_cash,getString(R.string.met_empty_spend),Type.BODY_MEDIUM,p.onSurface),ui.top(S2));
+        Ui.Btn go=ui.button(getString(R.string.met_empty_button),R.drawable.ic_mic,Ui.Style.PRIMARY,v->{navigate(0);finish();});
         LinearLayout.LayoutParams lp=Ui.fill();lp.topMargin=ui.dp(S6);card.addView(go,lp);
         if(motion)ui.fadeIn(card);
         return card;
@@ -571,14 +584,14 @@ public class MetricsActivity extends Screen {
     private View loadingView(){
         LinearLayout box=ui.row();box.setGravity(Gravity.CENTER);box.setPadding(0,ui.dp(S10),0,ui.dp(S10));
         ProgressBar spin=new ProgressBar(this,null,android.R.attr.progressBarStyleSmall);spin.setIndeterminateTintList(ColorStateList.valueOf(p.primary));box.addView(spin,new LinearLayout.LayoutParams(ui.dp(20),ui.dp(20)));
-        box.addView(ui.space(S3));box.addView(ui.text("Contando tus palabras…",Type.BODY_MEDIUM,p.onSurfaceVariant));
+        box.addView(ui.space(S3));box.addView(ui.text(getString(R.string.met_loading),Type.BODY_MEDIUM,p.onSurfaceVariant));
         box.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);return box;
     }
     private View errorView(){
         LinearLayout card=ui.card();card.setPadding(ui.dp(S5),ui.dp(S5),ui.dp(S5),ui.dp(S5));
-        card.addView(ui.heading("No se pudieron calcular tus métricas",Type.TITLE_MEDIUM));
-        TextView t=ui.text("Tus grabaciones están bien. Vuelve a intentarlo en un momento.",Type.BODY_MEDIUM,p.onSurfaceVariant);t.setPadding(0,ui.dp(S1),0,ui.dp(S4));card.addView(t);
-        card.addView(ui.button("Reintentar",R.drawable.ic_refresh,Ui.Style.SECONDARY,v->{content.removeAllViews();content.addView(loadingView(),Ui.fill());load();}),Ui.wrap());
+        card.addView(ui.heading(getString(R.string.met_error_title),Type.TITLE_MEDIUM));
+        TextView t=ui.text(getString(R.string.met_error_body),Type.BODY_MEDIUM,p.onSurfaceVariant);t.setPadding(0,ui.dp(S1),0,ui.dp(S4));card.addView(t);
+        card.addView(ui.button(getString(R.string.met_retry),R.drawable.ic_refresh,Ui.Style.SECONDARY,v->{content.removeAllViews();content.addView(loadingView(),Ui.fill());load();}),Ui.wrap());
         return card;
     }
 
@@ -624,7 +637,15 @@ public class MetricsActivity extends Screen {
     }
     /** Duración larga legible: «53 h» desde 10 h; si no, «1 h 04 min». */
     private static String span(long ms){return ms>=36_000_000L?Metrics.hours(ms):Ui.humanDuration(ms);}
-    private static String capital(String s){return s==null||s.isEmpty()?"":s.substring(0,1).toUpperCase(Metrics.CL)+s.substring(1);}
+    private static String capital(String s){return s==null||s.isEmpty()?"":s.substring(0,1).toUpperCase(Lang.locale())+s.substring(1);}
+    /** Cantidad con su plural del idioma («3 grabaciones»): la cifra (con separador de miles) va como %1$s; el resto, desde %2$s. */
+    private String count(int plural,long n,Object... more){
+        Object[] args=new Object[1+more.length];args[0]=Metrics.number(n);System.arraycopy(more,0,args,1,more.length);
+        return getResources().getQuantityString(plural,quantity(n),args);
+    }
+    /** Solo la palabra según la cantidad («Grabaciones»), para el rótulo bajo una cifra que se muestra aparte. */
+    private String label(int plural,long n){return getResources().getQuantityString(plural,quantity(n));}
+    private static int quantity(long n){return (int)Math.min(n,Integer.MAX_VALUE);}
     /** Tope «redondo» del eje de minutos (una línea guía): 5, 10, 15, 30 min, 1 h, 1,5 h, 2 h… */
     static double niceMinutes(double v){
         double[] steps={5,10,15,20,30,45,60,90,120,180,240,300,360,480,600,720,900,1200,1500,1800,2400,3000,3600};
@@ -786,17 +807,23 @@ public class MetricsActivity extends Screen {
         interface Pick{void pick(int day,int hour);}
         private final AppTheme.Palette p;private final long[][] ms;private final int[] ramp;private final int empty;private long max;
         private final Paint fill=new Paint(Paint.ANTI_ALIAS_FLAG),label=new Paint(Paint.ANTI_ALIAS_FLAG),ring=new Paint(Paint.ANTI_ALIAS_FLAG);private final RectF rect=new RectF();
+        /** Inicial de cada día (L, M, M… / M, T, W…) y rótulos del eje de horas («0 h», «6 h»…), en el idioma de la app. */
+        private final String[] initials=new String[7],hours=new String[4];
         private int day=-1,hour=-1;private Pick pick;private float grow=1f;private ValueAnimator anim;
-        Heat(Context c,AppTheme.Palette p,long[][] ms,int[] ramp,int empty){
+        /** days: los nombres de lunes a domingo (dayNames); cada fila lleva su primera letra. */
+        Heat(Context c,AppTheme.Palette p,long[][] ms,int[] ramp,int empty,String[] days){
             super(c);this.p=p;this.ms=ms;this.ramp=ramp;this.empty=empty;setFocusable(true);
             for(long[] row:ms)for(long v:row)max=Math.max(max,v);
+            for(int d=0;d<7;d++)initials[d]=days[d].isEmpty()?"":days[d].substring(0,1);
+            for(int k=0;k<hours.length;k++)hours[k]=c.getString(R.string.met_axis_hour,k*6);
             label.setTypeface(AppTheme.outfit(c,Weight.MEDIUM));label.setTextSize(sp(this,11));label.setColor(p.onSurfaceVariant);label.setFontFeatureSettings("tnum");
             ring.setStyle(Paint.Style.STROKE);ring.setStrokeWidth(AppTheme.dp(c,2));ring.setColor(p.onSurface);
         }
         void onPick(Pick pick){this.pick=pick;}
         void grow(){if(!AppTheme.motion(getContext()))return;if(anim!=null)anim.cancel();grow=0f;anim=ValueAnimator.ofFloat(0f,1f);anim.setDuration(600);anim.setInterpolator(EMPHASIZED_DECELERATE);anim.addUpdateListener(a->{grow=(float)a.getAnimatedValue();invalidate();});anim.start();}
         @Override protected void onDetachedFromWindow(){if(anim!=null){anim.cancel();grow=1f;}super.onDetachedFromWindow();}
-        private float left(){return Math.max(label.measureText("M"),label.measureText("D"))+AppTheme.dp(getContext(),8);}
+        /** Ancho de la columna de iniciales: la más ancha del idioma (antes, «M» o «D»). */
+        private float left(){float w=0;for(String s:initials)w=Math.max(w,label.measureText(s));return w+AppTheme.dp(getContext(),8);}
         private float cell(float w){float d=AppTheme.dp(getContext(),1);return Math.max(10*d,Math.min(18*d,(w-left())/24f));}
         /**
          * Alto de cada fila: el de la casilla, pero nunca menos que la inicial del día. La letra va en sp y las casillas en
@@ -810,7 +837,7 @@ public class MetricsActivity extends Screen {
         @Override protected void onDraw(Canvas canvas){
             float lw=left(),cw=(getWidth()-lw)/24f,ch=row(getWidth()),gap=1f,r=AppTheme.dp(getContext(),3);
             for(int d=0;d<7;d++){
-                float cy=d*ch+ch/2f;label.setTextAlign(Paint.Align.LEFT);canvas.drawText(DAYS[d],0,cy-(label.ascent()+label.descent())/2f,label);
+                float cy=d*ch+ch/2f;label.setTextAlign(Paint.Align.LEFT);canvas.drawText(initials[d],0,cy-(label.ascent()+label.descent())/2f,label);
                 for(int h=0;h<24;h++){
                     int lv=level(ms[d][h]);fill.setColor(lv==0?empty:ramp[lv-1]);
                     // Aparecen de izquierda a derecha, como una ola (solo con animaciones).
@@ -820,7 +847,7 @@ public class MetricsActivity extends Screen {
             }
             if(day>=0&&hour>=0){float i=ring.getStrokeWidth()/2f;rect.set(lw+hour*cw+i,day*ch+i,lw+(hour+1)*cw-i,(day+1)*ch-i);canvas.drawRoundRect(rect,r,r,ring);}
             float y=7*ch-label.ascent()+AppTheme.dp(getContext(),4);label.setTextAlign(Paint.Align.LEFT);
-            for(int h=0;h<24;h+=6)canvas.drawText(h+" h",lw+h*cw+gap,y,label);
+            for(int h=0;h<24;h+=6)canvas.drawText(hours[h/6],lw+h*cw+gap,y,label);
         }
         private final Swipe swipe=new Swipe();
         @Override public boolean onTouchEvent(MotionEvent e){

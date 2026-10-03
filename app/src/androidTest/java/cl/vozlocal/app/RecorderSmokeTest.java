@@ -29,11 +29,16 @@ public class RecorderSmokeTest extends Instrumentation {
     @Override public void onStart() {
         Bundle report = new Bundle();
         Context c = getTargetContext();
+        // 0.9.0: la app tiene tres idiomas. Las comprobaciones de texto están escritas en español: se fuerza ese idioma
+        // para toda la corrida (I18nChecks prueba los tres por separado).
+        Lang.override(Lang.ES);
         Settings prefixSettings = new Settings(c); boolean prefix = prefixSettings.datePrefix();
         prefixSettings.prefs.edit().putBoolean("datePrefix", false).commit();
         try {
             // La bienvenida (0.8.0) solo aparece en la primera instalación: aquí se da por vista para probar Grabar.
             new Settings(c).prefs.edit().putBoolean("welcomed", true).commit();
+            // 0.9.0: el aviso de envío a OpenRouter (Consent) se da por aceptado; OnboardingChecks prueba el aviso en sí.
+            Consent.accept(c);
             Activity activity = startActivitySync(new Intent(c, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             waitForIdleSync(); Thread.sleep(700);
             command(c, "START"); Thread.sleep(3000);
@@ -63,7 +68,7 @@ public class RecorderSmokeTest extends Instrumentation {
             }
             r.title = "Prueba de voz local"; r.save(c);
             check(Recording.list(c).stream().anyMatch(item -> item.id.equals(id) && item.title.equals(r.title)), "Title did not persist");
-            Uri uri = Uri.parse("content://cl.vozlocal.app.audio/" + id + ".m4a");
+            Uri uri = AudioProvider.uri(c, id + ".m4a");
             try (ParcelFileDescriptor file = c.getContentResolver().openFileDescriptor(uri,"r")) { check(file.getStatSize() > 100, "Sharing provider cannot read audio"); }
             boolean rejected = false;
             try { c.getContentResolver().openFileDescriptor(uri,"w"); } catch (java.io.FileNotFoundException expected) { rejected = true; }
@@ -94,6 +99,7 @@ public class RecorderSmokeTest extends Instrumentation {
             ModelsChecks.run(c,r);
             OnboardingChecks.run(c,r);
             MetricsChecks.run(c,r);
+            I18nChecks.run(c);
             long longStarted = SystemClock.elapsedRealtime();
             if (longChecks) LongImportChecks.run(c,r);
             String longResult = longChecks ? "one-hour AAC import/crop/cancel, WAV import, interrupted-import recovery (" + (SystemClock.elapsedRealtime() - longStarted) / 1000 + " s)" : "one-hour import checks SKIPPED (-e long false)";

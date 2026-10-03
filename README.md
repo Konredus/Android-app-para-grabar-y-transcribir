@@ -68,7 +68,7 @@ La importación acepta hasta 1 GB y requiere espacio libre para preparar la copi
 
 ## Desarrollo
 
-Java 17, Android SDK 35, minSdk 26, AGP 8.9.2, Gradle 8.11.1. Sin dependencias de ejecución externas. Abre el proyecto en Android Studio o configura `ANDROID_HOME` y ejecuta:
+Java 17, Android SDK 36 (targetSdk 36), minSdk 26, AGP 8.9.2, Gradle 8.11.1. Sin dependencias de ejecución externas. Abre el proyecto en Android Studio o configura `ANDROID_HOME` y ejecuta:
 
 ```powershell
 .\gradlew.bat assembleDebug assembleDebugAndroidTest lintDebug
@@ -83,9 +83,19 @@ Para ejecutar la regresión **solo en un emulador de prueba** con la app instala
 ```text
 adb install -r -g app/build/outputs/apk/debug/app-debug.apk
 adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-adb shell am instrument -w cl.vozlocal.app.test/cl.vozlocal.app.RecorderSmokeTest
+adb shell am instrument -w -e long false cl.verbapp.app.test/cl.vozlocal.app.RecorderSmokeTest
 ```
 
 Busca `PASS` en el resultado; el código de salida de adb no basta. La prueba crea una grabación de demostración y usa APIs simuladas. Comprueba grabación/pausa/bloqueo, credenciales cifradas, contratos API, voces, división, conversión/recorte y diagnóstico. Prueba además micrófono, batería, carpetas y compartir con apps reales en tu teléfono.
 
 Los APK de Releases son compilaciones de desarrollo para pruebas. Conserva la firma local para futuras actualizaciones. Los APK generados por GitHub tienen otra firma de desarrollo; no sustituyen una instalación de Releases. Para distribución estable, configura una firma de lanzamiento privada y respáldala fuera del repositorio.
+
+### Publicar en Google Play (0.9.0)
+
+El paquete publicado es `cl.verbapp.app` (el código sigue en `cl.vozlocal.app`). La clave de subida vive solo en el computador de desarrollo, en `.tools/signing/` (fuera de git): `upload-keystore.jks` y `keystore.properties` con `storeFile`, `storePassword`, `keyAlias` y `keyPassword`. **Respáldala** (por ejemplo, en un gestor de contraseñas): sin ella no se pueden publicar actualizaciones hasta pedir a Google que la cambie. Con ese archivo presente:
+
+```powershell
+.\gradlew.bat bundleRelease
+```
+
+deja el AAB firmado en `app/build/outputs/bundle/release/app-release.aab`, listo para subir a Play Console (Google firma la versión final con Play App Signing). `-e long false` salta la prueba de importación de una hora.

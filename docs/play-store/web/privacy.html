@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy policy · Verbapp</title>
+<meta name="description" content="What data Verbapp handles, where it goes and what control you have.">
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<main class="doc">
+  <p class="eyebrow"><a href="./">Verbapp</a> · <a href="privacidad.html" hreflang="es">Español</a> · <a href="privacidade.html" hreflang="pt-BR">Português</a></p>
+  <h1>Privacy policy</h1>
+  <p class="meta">Last updated: October 2, 2026</p>
+
+  <p>Verbapp is a voice recorder and transcriber for Android, developed by Konredus. This policy explains what data the app handles, where it goes and what control you have over it.</p>
+
+  <div class="summary">
+    <p><strong>In short:</strong> you record offline and your recordings stay on your phone. Only when you ask for a transcription (or turn on automatic transcription) is the audio sent to OpenRouter, using your own API key, to turn it into text. We run no servers that receive your audio or your text, we use no ads or analytics, and we do not sell data.</p>
+  </div>
+
+  <h2>1. Who is responsible</h2>
+  <p>Konredus, the developer of Verbapp on Google Play. Contact: <a href="mailto:latribumaker@gmail.com">latribumaker@gmail.com</a>.</p>
+
+  <h2>2. Data the app keeps on your phone</h2>
+  <ul>
+    <li><strong>Audio recordings</strong> you make with the microphone or import. They are stored in the app's private storage.</li>
+    <li><strong>Transcripts, notes, titles, marked moments and the names of people</strong> in your recordings.</li>
+    <li><strong>Voice samples</strong> ("My voice" and "Known voices"): clips of up to 10 seconds that you record or pick, used to recognize who is speaking.</li>
+    <li><strong>Your OpenRouter API key</strong>, stored encrypted with the Android Keystore.</li>
+    <li><strong>Technical diagnostic log</strong>: operational events (timings, sizes, error codes) without keys, titles, audio or text. At most about 4 MB and 30 days are kept.</li>
+    <li><strong>Your metrics</strong> (time recorded, streaks, spending), computed on the phone from your recordings.</li>
+  </ul>
+  <p>None of this is sent to us.</p>
+
+  <h2>3. What leaves your phone, and to whom</h2>
+  <ul>
+    <li><strong>When you transcribe</strong>: the recording's audio and, if you separate speakers with known voices, up to 4 of your voice samples are sent over an encrypted connection (HTTPS) to OpenRouter (openrouter.ai). OpenRouter passes them to the speech-to-text model you chose (for example from Microsoft, Deepgram, Google or OpenAI) and returns the text. Before anything is sent for the first time, the app explains this and asks you to accept.</li>
+    <li><strong>When you create a note</strong>: the transcript text (not the audio) is sent to OpenRouter and to the language model you chose (for example Claude, GPT or Gemini).</li>
+    <li><strong>When you check your key</strong>: the key is sent to OpenRouter to confirm it works and to show your balance.</li>
+    <li><strong>When the model list is refreshed</strong>: the app reads OpenRouter's model catalog without sending your recordings or text.</li>
+  </ul>
+  <p>These requests use your own OpenRouter account and API key. What OpenRouter and each provider then do with that data is governed by their own policies; OpenRouter's is at <a href="https://openrouter.ai/privacy">openrouter.ai/privacy</a>. We recommend reviewing them.</p>
+  <p>In addition, only if you choose to:</p>
+  <ul>
+    <li><strong>Copies and exports</strong>: the app saves copies (text, notes or audio) to a folder you pick, which may belong to a cloud service such as Google Drive, or shares a file with another app through the Android share menu.</li>
+    <li><strong>Support report</strong>: if you tap "Share support report", the app creates a text file with the technical log (without keys, titles, audio or text) and you decide whom to send it to.</li>
+  </ul>
+
+  <h2>4. What we do not do</h2>
+  <ul>
+    <li>We do not require an account or sign-up.</li>
+    <li>We run no servers that receive your audio, your text or your key.</li>
+    <li>There are no ads, analytics or tracking.</li>
+    <li>We do not sell your data or share it for advertising.</li>
+  </ul>
+
+  <h2>5. Permissions the app uses</h2>
+  <ul>
+    <li><strong>Microphone</strong>: to record, only when you start a recording.</li>
+    <li><strong>Notifications</strong>: to show the status of recording and transcription.</li>
+    <li><strong>Foreground services</strong>: to keep recording, importing or transcribing with the screen locked, always with a visible notification.</li>
+    <li><strong>Internet and network state</strong>: to transcribe and to respect your "Wi-Fi only" setting.</li>
+    <li><strong>User-initiated jobs</strong> (Android 14 or later): so a transcription you asked for continues even if you close the app.</li>
+  </ul>
+
+  <h2>6. How long data is kept and how to delete it</h2>
+  <p>Your data stays on your phone until you delete the recording or uninstall the app. The diagnostic log deletes itself after 30 days, and you can delete it sooner in Settings → Help and support. Data sent to OpenRouter and the providers is governed by their policies and can be managed from your OpenRouter account.</p>
+
+  <h2>7. Security</h2>
+  <p>Requests use encrypted connections (HTTPS). Your key is stored encrypted and Android isolates the app's data from other apps.</p>
+
+  <h2>8. Children</h2>
+  <p>Verbapp is meant for adults and is not directed at children.</p>
+
+  <h2>9. Changes to this policy</h2>
+  <p>If we change this policy, we will publish the new version on this page with its date.</p>
+
+  <h2>10. Contact</h2>
+  <p>For any privacy question, write to <a href="mailto:latribumaker@gmail.com">latribumaker@gmail.com</a>.</p>
+</main>
+</body>
+</html>

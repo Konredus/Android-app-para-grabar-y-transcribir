@@ -21,6 +21,25 @@ final class MediaChecks {
         notificationBuilder(c);
         wave(c,r);
         recorder(c);
+        importTexts(c);
+    }
+
+    // ---------- Importar: etapas y textos según el idioma (0.9.0) ----------
+    private static void importTexts(Context c){
+        // Las etapas del conversor son códigos (no textos en un idioma): solo la verificación final se muestra como «Casi listo».
+        check(ImportService.friendlyStage(AudioConvert.VERIFY)==R.string.imp_stage_almost&&ImportService.friendlyStage(AudioConvert.REMUX)==R.string.imp_stage_saving&&ImportService.friendlyStage(AudioConvert.CONVERT)==R.string.imp_stage_saving,"Import stage codes mapped wrong");
+        ImportSession s=new ImportSession(c);s.bytesProgress=true;s.position=12_500_000;s.total=100_000_000;
+        check("12,5 MB de 100,0 MB".equals(ImportService.progressText(s)),"Import progress (es): "+ImportService.progressText(s));
+        s.bytesProgress=false;s.position=5_000;s.total=60_000;
+        check("00:05 de 01:00".equals(ImportService.progressText(s)),"Import time progress (es): "+ImportService.progressText(s));
+        s.total=0;check("Tu archivo original se conserva".equals(ImportService.progressText(s)),"Import progress without total (es)");
+        try{
+            Lang.override(Lang.EN);s.bytesProgress=true;s.position=12_500_000;s.total=100_000_000;
+            check("12.5 MB of 100.0 MB".equals(ImportService.progressText(s)),"Import progress (en): "+ImportService.progressText(s));
+            check(ImportSession.titleFrom("PTT-20260929-WA0003.opus").startsWith("WhatsApp audio Sep")&&ImportSession.titleFrom("").equals("Imported audio"),"Import titles (en): "+ImportSession.titleFrom("PTT-20260929-WA0003.opus"));
+            Lang.override(Lang.PT);
+            check(ImportSession.titleFrom("PTT-20260929-WA0003.opus").startsWith("Áudio do WhatsApp 29 ")&&ImportSession.titleFrom("Reunião.m4a").equals("Reunião"),"Import titles (pt): "+ImportSession.titleFrom("PTT-20260929-WA0003.opus"));
+        }finally{Lang.override(Lang.ES);}
     }
 
     // ---------- Marks ----------

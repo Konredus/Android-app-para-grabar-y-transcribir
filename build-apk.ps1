@@ -8,10 +8,10 @@ try {
     $env:ANDROID_USER_HOME = Join-Path $projectPath '.tools/android-user'
     New-Item -ItemType Directory -Force $env:ANDROID_USER_HOME | Out-Null
     $gradle = Join-Path $projectPath '.tools/gradle-8.11.1/bin/gradle.bat'
-    if (-not (Test-Path $gradle)) { throw 'Abre el proyecto en Android Studio o prepara Java 17, Gradle 8.11.1 y Android SDK 35. Consulta README.md.' }
+    if (-not (Test-Path $gradle)) { throw 'Abre el proyecto en Android Studio o prepara Java 17, Gradle 8.11.1 y Android SDK 36. Consulta README.md.' }
     & $gradle --no-daemon assembleDebug lintDebug
     if ($LASTEXITCODE -ne 0) { throw 'La compilación o la revisión de Android falló.' }
     New-Item -ItemType Directory -Force (Join-Path $projectPath 'entrega') | Out-Null
-    Copy-Item -LiteralPath (Join-Path $projectPath 'app/build/outputs/apk/debug/app-debug.apk') -Destination (Join-Path $projectPath 'entrega/Verbapp-0.8.0.apk') -Force
-    Get-FileHash -LiteralPath (Join-Path $projectPath 'entrega/Verbapp-0.8.0.apk') -Algorithm SHA256
+    Copy-Item -LiteralPath (Join-Path $projectPath 'app/build/outputs/apk/debug/app-debug.apk') -Destination (Join-Path $projectPath 'entrega/Verbapp-0.9.0.apk') -Force
+    Get-FileHash -LiteralPath (Join-Path $projectPath 'entrega/Verbapp-0.9.0.apk') -Algorithm SHA256
 } finally { Pop-Location }

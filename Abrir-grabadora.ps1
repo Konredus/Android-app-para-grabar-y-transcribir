@@ -23,6 +23,6 @@ for ($attempt = 0; $attempt -lt 180; $attempt++) {
 if (-not $ready) { throw 'Android aún no termina de iniciar. Espera un momento y vuelve a abrir este archivo.' }
 & $adb -s emulator-5554 shell input keyevent KEYCODE_WAKEUP
 & $adb -s emulator-5554 shell wm dismiss-keyguard
-& $adb -s emulator-5554 shell am start -n cl.vozlocal.app/.MainActivity
-if ($LASTEXITCODE -ne 0) { throw 'No se pudo abrir Voz local en el emulador.' }
-Write-Host 'Voz local está abierta en la ventana de Android.'
+& $adb -s emulator-5554 shell am start -n cl.verbapp.app/cl.vozlocal.app.MainActivity
+if ($LASTEXITCODE -ne 0) { throw 'No se pudo abrir Verbapp en el emulador.' }
+Write-Host 'Verbapp está abierta en la ventana de Android.'

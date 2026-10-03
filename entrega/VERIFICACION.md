@@ -23,7 +23,7 @@ APK SHA-256:
 Construir `assembleDebugAndroidTest`, instalar el APK principal con permisos (`adb install -g`), instalar `app-debug-androidTest.apk` y ejecutar:
 
 ```text
-adb shell am instrument -w cl.vozlocal.app.test/cl.vozlocal.app.RecorderSmokeTest
+adb shell am instrument -w cl.verbapp.app.test/cl.vozlocal.app.RecorderSmokeTest
 ```
 
 La prueba crea una grabación de muestra. No ejecutarla como prueba sobre datos personales en un teléfono de uso diario.

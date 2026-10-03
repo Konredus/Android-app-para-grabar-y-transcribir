@@ -261,7 +261,7 @@ Los números que cambian usan **cifras de ancho fijo** (`Ui.tabular`, «tnum» d
 - [ ] ¿Los errores ofrecen una salida?
 - [ ] ¿Las áreas táctiles miden al menos 48 dp? ¿Los íconos tienen `contentDescription`?
 - [ ] ¿Algún elemento cambia de lugar entre estados? (No debería.)
-- [ ] ¿Pasa la regresión? `adb shell am instrument -w cl.vozlocal.app.test/cl.vozlocal.app.RecorderSmokeTest`
+- [ ] ¿Pasa la regresión? `adb shell am instrument -w cl.verbapp.app.test/cl.vozlocal.app.RecorderSmokeTest`
 - [ ] ¿Actualizaste las capturas y este documento?
 - [ ] ¿Agregaste la entrada de la versión en `app/src/main/assets/novedades.json`? Van de 3 a 6 puntos en lenguaje simple, con formato «Titular: detalle».
 

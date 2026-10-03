@@ -44,39 +44,27 @@ final class Next {
         if(st.optBoolean("requested")){boolean mine=Pipeline.processing(r.id);
             return new Next(Step.WORKING,working(st.has("retranscribe"),mine,mine?null:Pipeline.blocker(c,r.id)),R.drawable.ic_clock);}
         if(!Transcript.exists(c,r.id)){
-            if(st.optBoolean("failed"))return new Next(Step.RETRY,"Reintentar",R.drawable.ic_refresh);
-            return new Next(Step.TRANSCRIBE,"Transcribir",R.drawable.ic_sparkle);
+            if(st.optBoolean("failed"))return new Next(Step.RETRY,Lang.str(c,R.string.act_retry),R.drawable.ic_refresh);
+            return new Next(Step.TRANSCRIBE,Lang.str(c,R.string.act_transcribe),R.drawable.ic_sparkle);
         }
-        if(needsReview(c,r.id))return new Next(Step.REVIEW,"Revisar voces",R.drawable.ic_people);
-        if(!Inbox.configured(c))return new Next(Step.CHOOSE_FOLDER,"Elegir carpeta rápida",R.drawable.ic_folder);
+        if(needsReview(c,r.id))return new Next(Step.REVIEW,Lang.str(c,R.string.act_review_voices),R.drawable.ic_people);
+        if(!Inbox.configured(c))return new Next(Step.CHOOSE_FOLDER,Lang.str(c,R.string.act_choose_folder),R.drawable.ic_folder);
         String folder=shortName(Inbox.folderName(c));long at=Inbox.savedAt(c,r.id);
-        if(at==0)return new Next(Step.SAVE,"Guardar en "+folder,R.drawable.ic_inbox);
-        if(Inbox.outdated(c,r.id))return new Next(Step.UPDATE,"Actualizar en "+folder,R.drawable.ic_refresh);
-        return new Next(Step.SAVED,"En "+folder+" · "+when(at),R.drawable.ic_check);
+        if(at==0)return new Next(Step.SAVE,Lang.str(c,R.string.act_save_to,folder),R.drawable.ic_inbox);
+        if(Inbox.outdated(c,r.id))return new Next(Step.UPDATE,Lang.str(c,R.string.act_update_in,folder),R.drawable.ic_refresh);
+        return new Next(Step.SAVED,Lang.str(c,R.string.act_saved_in,folder,when(at)),R.drawable.ic_check);
     }
-    /**
-     * El botón de una grabación pedida (0.8.0, tercera ronda): «Transcribiendo…» solo si es ESTA la que se procesa ahora
-     * (mine: Pipeline.processing, que cuenta también la espera entre intentos); si no, por qué espera (blocker:
-     * Pipeline.blocker con su id) o «En cola…». Antes decía «Transcribiendo…» con la grabación en cola, esperando Wi-Fi o
-     * el cargador; y en cada espera para reintentar pasaba a «En cola…» (Transcriber.currentId queda en null entre intentos).
-     */
-    static String working(boolean again,boolean mine,String blocker){
-        if(mine)return again?"Volviendo a transcribir…":"Transcribiendo…";
-        if(blocker==null)return "En cola…";
-        if(blocker.contains("Wi-Fi"))return "Esperando Wi-Fi…";
-        if(blocker.contains("cargador"))return "Esperando el cargador…";
-        if(blocker.contains("internet"))return "Esperando conexión…";
-        return blocker.startsWith("batería baja")?"Batería baja · en espera…":"En cola…";
-    }
-    /** «16:09» si fue hoy; si no, «28 sept». */
+    /** El botón de una grabación pedida: «Transcribiendo…» o por qué espera. Lee textos del motor: vive en StatusText. */
+    static String working(boolean again,boolean mine,String blocker){return StatusText.working(again,mine,blocker);}
+    /** «16:09» si fue hoy; si no, la fecha corta en el idioma de la app: «28 sept», «Sep 28», «28 set». */
     static String when(long at){
         Calendar now=Calendar.getInstance(),then=Calendar.getInstance();then.setTimeInMillis(at);
         boolean today=now.get(Calendar.YEAR)==then.get(Calendar.YEAR)&&now.get(Calendar.DAY_OF_YEAR)==then.get(Calendar.DAY_OF_YEAR);
-        String s=new SimpleDateFormat(today?"HH:mm":"d MMM",new Locale("es","CL")).format(new Date(at));
+        String s=new SimpleDateFormat(today?"HH:mm":Lang.str(R.string.act_date_pattern),Lang.locale()).format(new Date(at));
         return s.endsWith(".")?s.substring(0,s.length()-1):s;
     }
-    /** Un nombre de carpeta largo no debe romper el botón. */
-    static String shortName(String name){String n=name==null||name.trim().isEmpty()?"la carpeta":name.trim();return n.length()>18?n.substring(0,17).trim()+"…":n;}
+    /** Un nombre de carpeta largo no debe romper el botón. Sin nombre: «la carpeta» (en el idioma de la app). */
+    static String shortName(String name){String n=name==null||name.trim().isEmpty()?Lang.str(R.string.act_folder_fallback):name.trim();return n.length()>18?n.substring(0,17).trim()+"…":n;}
 
     /** Voces separadas y sin revisar. Se cachea por archivo: la Biblioteca lo pregunta por cada fila y una transcripción larga pesa. */
     private static final Map<String,Object[]> reviewCache=new HashMap<>();
@@ -101,10 +89,11 @@ final class RecState {
     private RecState(Kind kind,String label,String detail){this.kind=kind;this.label=label;this.detail=detail;}
     static RecState of(JSONObject state,boolean transcribed){
         // "requested" primero: al volver a transcribir puede quedar una versión mientras se hace la nueva.
-        if(state.optBoolean("requested"))return new RecState(Kind.QUEUED,"En proceso",state.optString("status","En cola"));
-        if(transcribed)return new RecState(Kind.DONE,"Transcrito","Transcripción lista");
-        if(state.optBoolean("failed"))return new RecState(Kind.FAILED,"Necesita atención",state.optString("status","No se pudo transcribir"));
-        return new RecState(Kind.NEW,"Sin transcribir","Solo audio");
+        // Los textos van en el idioma de la app; el estado ("status") es el que escribió el motor.
+        if(state.optBoolean("requested"))return new RecState(Kind.QUEUED,Lang.str(R.string.act_state_queued),state.optString("status",StatusText.queuedLine(null)));
+        if(transcribed)return new RecState(Kind.DONE,Lang.str(R.string.act_state_done),Lang.str(R.string.home_transcript_ready));
+        if(state.optBoolean("failed"))return new RecState(Kind.FAILED,Lang.str(R.string.act_state_failed),state.optString("status",Lang.str(R.string.home_failed)));
+        return new RecState(Kind.NEW,Lang.str(R.string.act_not_transcribed),Lang.str(R.string.act_state_audio_only));
     }
     static RecState of(Context c,String id){return of(FilesStore.state(c,id),Transcript.exists(c,id));}
     /** Color del texto de estado sobre el fondo de la pantalla. */
@@ -128,28 +117,28 @@ final class RecordingActions {
         sheet.add(header(s,r,state));
         // Siempre disponibles: a un toque, sin leer la lista. Las tres miden lo mismo aunque un nombre ocupe dos líneas.
         LinearLayout quick=ui.row();quick.setGravity(Gravity.TOP);
-        quick.addView(SheetParts.quick(s,sheet,R.drawable.ic_edit,"Cambiar título",()->rename(s,r,changed)),new LinearLayout.LayoutParams(0,-1,1));
+        quick.addView(SheetParts.quick(s,sheet,R.drawable.ic_edit,Lang.str(s,R.string.act_rename),()->rename(s,r,changed)),new LinearLayout.LayoutParams(0,-1,1));
         LinearLayout.LayoutParams gap=new LinearLayout.LayoutParams(0,-1,1);gap.setMarginStart(ui.dp(S2));
-        quick.addView(SheetParts.quick(s,sheet,R.drawable.ic_share,"Compartir audio",()->shareAudio(s,r)),gap);
+        quick.addView(SheetParts.quick(s,sheet,R.drawable.ic_share,Lang.str(s,R.string.act_share_audio),()->shareAudio(s,r)),gap);
         gap=new LinearLayout.LayoutParams(0,-1,1);gap.setMarginStart(ui.dp(S2));
-        quick.addView(SheetParts.quick(s,sheet,R.drawable.ic_cut,"Recortar una copia",()->{if(beforeRelease!=null)beforeRelease.run();s.startActivity(new Intent(s,ImportActivity.class).putExtra("sourceId",r.id));}),gap);
+        quick.addView(SheetParts.quick(s,sheet,R.drawable.ic_cut,Lang.str(s,R.string.act_trim_copy),()->{if(beforeRelease!=null)beforeRelease.run();s.startActivity(new Intent(s,ImportActivity.class).putExtra("sourceId",r.id));}),gap);
         LinearLayout.LayoutParams qlp=ui.top(S5);qlp.bottomMargin=ui.dp(S2);sheet.body.addView(quick,qlp);
         LinearLayout list=SheetParts.list(sheet);
-        if(state.kind==RecState.Kind.NEW)list.addView(SheetParts.item(s,sheet,R.drawable.ic_sparkle,"Transcribir",false,()->transcribe(s,r,changed)));
+        if(state.kind==RecState.Kind.NEW)list.addView(SheetParts.item(s,sheet,R.drawable.ic_sparkle,Lang.str(s,R.string.act_transcribe),false,()->transcribe(s,r,changed)));
         if(state.kind==RecState.Kind.FAILED){
-            list.addView(SheetParts.item(s,sheet,R.drawable.ic_refresh,"Reintentar transcripción",false,()->transcribe(s,r,changed)));
+            list.addView(SheetParts.item(s,sheet,R.drawable.ic_refresh,Lang.str(s,R.string.act_retry_transcription),false,()->transcribe(s,r,changed)));
             // Si falló al volver a transcribir, la versión anterior sigue guardada: siempre hay una salida.
-            if(!transcribed&&Retranscribe.hasPrevious(s,r.id))list.addView(SheetParts.item(s,sheet,R.drawable.ic_replay,"Volver a la versión anterior",false,()->restorePrevious(s,r,changed)));
+            if(!transcribed&&Retranscribe.hasPrevious(s,r.id))list.addView(SheetParts.item(s,sheet,R.drawable.ic_replay,Lang.str(s,R.string.act_back_to_previous),false,()->restorePrevious(s,r,changed)));
         }
         if(transcribed&&!queued){
             if(Inbox.configured(s)){String folder=Next.shortName(Inbox.folderName(s));long at=Inbox.savedAt(s,r.id);
-                list.addView(SheetParts.item(s,sheet,R.drawable.ic_inbox,(at==0?"Guardar en ":Inbox.outdated(s,r.id)?"Actualizar en ":"Guardar de nuevo en ")+folder,false,()->saveToInbox(s,r,changed)));}
-            list.addView(SheetParts.item(s,sheet,R.drawable.ic_refresh,"Volver a transcribir…",false,()->RetranscribeSheet.show(s,r,changed)));
-            if(Retranscribe.hasPrevious(s,r.id))list.addView(SheetParts.item(s,sheet,R.drawable.ic_replay,"Elegir versión: nueva o anterior…",false,()->RetranscribeSheet.offerKeep(s,r,changed)));
+                list.addView(SheetParts.item(s,sheet,R.drawable.ic_inbox,Lang.str(s,at==0?R.string.act_save_to:Inbox.outdated(s,r.id)?R.string.act_update_in:R.string.act_save_again_to,folder),false,()->saveToInbox(s,r,changed)));}
+            list.addView(SheetParts.item(s,sheet,R.drawable.ic_refresh,Lang.str(s,R.string.act_retranscribe),false,()->RetranscribeSheet.show(s,r,changed)));
+            if(Retranscribe.hasPrevious(s,r.id))list.addView(SheetParts.item(s,sheet,R.drawable.ic_replay,Lang.str(s,R.string.act_choose_version),false,()->RetranscribeSheet.offerKeep(s,r,changed)));
         }
         // «Cancelar transcripción» queda lejos del resto (antes de Eliminar) y siempre se confirma.
-        if(queued)list.addView(SheetParts.item(s,sheet,R.drawable.ic_close,"Cancelar transcripción",false,()->cancel(s,r,changed)));
-        list.addView(SheetParts.item(s,sheet,R.drawable.ic_trash,"Eliminar",true,()->delete(s,r,beforeRelease,changed)));
+        if(queued)list.addView(SheetParts.item(s,sheet,R.drawable.ic_close,Lang.str(s,R.string.act_cancel_transcription),false,()->cancel(s,r,changed)));
+        list.addView(SheetParts.item(s,sheet,R.drawable.ic_trash,Lang.str(s,R.string.act_delete),true,()->delete(s,r,beforeRelease,changed)));
         sheet.show();Diagnostics.event("recording_menu",r.id);
     }
     /** Cabecera del menú: el estado en su círculo tonal (el mismo de la Biblioteca), el título y «duración · estado». */
@@ -174,11 +163,11 @@ final class RecordingActions {
         switch(next.step){
             case TRANSCRIBE:case RETRY:transcribe(s,r,changed);break;
             case WORKING:
-                if(s instanceof RecordingActivity){JSONObject st=FilesStore.state(s,r.id);s.toast(RecordingActivity.inDetail(st.optString("status","Transcribiendo")));}
+                if(s instanceof RecordingActivity){JSONObject st=FilesStore.state(s,r.id);s.toast(RecordingActivity.inDetail(st.optString("status",Lang.str(s,R.string.act_doing_transcribe))));}
                 else s.startActivity(new Intent(s,RecordingActivity.class).putExtra("id",r.id));
                 break;
             case REVIEW:
-                if(s instanceof RecordingActivity){try{NameVoices.show(s,r.id,false,Transcript.load(s,r.id),changed);}catch(Exception e){s.message("Revisar voces","No se pudo abrir la transcripción.");}}
+                if(s instanceof RecordingActivity){try{NameVoices.show(s,r.id,false,Transcript.load(s,r.id),changed);}catch(Exception e){s.message(Lang.str(s,R.string.act_review_voices),Lang.str(s,R.string.act_open_failed));}}
                 else s.startActivity(new Intent(s,RecordingActivity.class).putExtra("id",r.id).putExtra("names",true));
                 break;
             case SAVE:case UPDATE:saveToInbox(s,r,changed);break;
@@ -188,10 +177,11 @@ final class RecordingActions {
     }
     /** Ya está en la carpeta rápida: explica cuándo se guardó y permite guardar de nuevo (reemplaza el mismo archivo). */
     private static void savedSheet(Screen s,Recording r,Runnable changed){
-        String folder=Inbox.folderName(s);long at=Inbox.savedAt(s,r.id);
-        Sheet sheet=s.sheet("Ya está en "+folder,"Se guardó "+(Next.when(at).contains(":")?"hoy a las ":"el ")+Next.when(at)+". Si cambias algo, se reemplaza el mismo archivo, sin crear una copia.");
+        String folder=Inbox.folderName(s);long at=Inbox.savedAt(s,r.id);String when=Next.when(at);
+        // Hoy va con la hora («hoy a las 16:09»); otro día, con la fecha («el 28 sept»).
+        Sheet sheet=s.sheet(Lang.str(s,R.string.act_already_in,folder),Lang.str(s,when.contains(":")?R.string.act_saved_today_body:R.string.act_saved_day_body,when));
         SheetParts.hero(sheet,R.drawable.ic_check_circle,false);
-        sheet.primary("Guardar de nuevo",()->saveToInbox(s,r,changed)).secondary("Cerrar",null).show();
+        sheet.primary(Lang.str(s,R.string.act_save_again),()->saveToInbox(s,r,changed)).secondary(Lang.str(s,R.string.ui_close),null).show();
     }
     /** Lleva a Ajustes para elegir la carpeta rápida (p. ej. Drive/0-Inbox). */
     static void chooseFolder(Screen s){
@@ -216,11 +206,11 @@ final class RecordingActions {
             s.runOnUiThread(()->{
                 if(s.isFinishing()||s.isDestroyed())return;
                 if(finished!=null)finished.accept(done);
-                if(done){Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);s.toast("Guardado en "+folder);if(changed!=null)changed.run();return;}
+                if(done){Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);s.toast(Lang.str(s,R.string.act_saved_to,folder));if(changed!=null)changed.run();return;}
                 Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.REJECT);
-                Sheet sheet=s.sheet("No se pudo guardar en "+folder,reason!=null?reason:"Puede que Android haya retirado el permiso a esa carpeta. Elígela de nuevo y vuelve a intentarlo.");
+                Sheet sheet=s.sheet(Lang.str(s,R.string.act_save_failed_title,folder),reason!=null?reason:Lang.str(s,R.string.act_save_failed_body));
                 SheetParts.hero(sheet,R.drawable.ic_alert,true);
-                sheet.primary("Elegir la carpeta de nuevo",()->chooseFolder(s)).secondary("Cerrar",null).show();
+                sheet.primary(Lang.str(s,R.string.act_choose_folder_again),()->chooseFolder(s)).secondary(Lang.str(s,R.string.ui_close),null).show();
             });
         }).start();
     }
@@ -240,24 +230,24 @@ final class RecordingActions {
      * esta grabación» (PROPUESTA-0.7 §3.3), que ya la tenía en 0.6.0.
      */
     static void rename(Screen s,Recording r,Runnable changed){
-        EditText input=s.ui.field("Título","Título de la grabación");input.setText(r.title);input.setSelectAllOnFocus(true);input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(120)});
-        Sheet sheet=s.sheet("Cambiar título",null).add(input);
-        sheet.primary("Guardar",Ui.Style.PRIMARY,()->{
-            String title=input.getText().toString().trim();if(title.isEmpty()){input.setError("Escribe un título");return false;}
+        EditText input=s.ui.field(Lang.str(s,R.string.act_title_hint),Lang.str(s,R.string.home_recording_title));input.setText(r.title);input.setSelectAllOnFocus(true);input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(120)});
+        Sheet sheet=s.sheet(Lang.str(s,R.string.act_rename),null).add(input);
+        sheet.primary(Lang.str(s,R.string.act_save),Ui.Style.PRIMARY,()->{
+            String title=input.getText().toString().trim();if(title.isEmpty()){input.setError(Lang.str(s,R.string.act_title_required));return false;}
             String previous=r.title;r.title=title;
             try{r.save(s);Pipeline.edited(s,r.id);Diagnostics.event("title_edited",r.id);if(changed!=null)changed.run();return true;}
-            catch(Exception e){r.title=previous;input.setError("No se pudo guardar el título");return false;}
-        }).secondary("Cancelar",null).show();
+            catch(Exception e){r.title=previous;input.setError(Lang.str(s,R.string.act_title_save_failed));return false;}
+        }).secondary(Lang.str(s,R.string.common_cancel),null).show();
         input.requestFocus();sheet.dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }
     static void shareAudio(Screen s,Recording r){
-        Uri uri=Uri.parse("content://cl.vozlocal.app.audio/"+r.id+".m4a");
+        Uri uri=AudioProvider.uri(s,r.id+".m4a");
         Intent share=new Intent(Intent.ACTION_SEND).setType("audio/mp4").putExtra(Intent.EXTRA_STREAM,uri).putExtra(Intent.EXTRA_SUBJECT,r.title).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        share.setClipData(ClipData.newRawUri(r.title,uri));s.startActivity(Intent.createChooser(share,"Compartir audio"));
+        share.setClipData(ClipData.newRawUri(r.title,uri));s.startActivity(Intent.createChooser(share,Lang.str(s,R.string.act_share_audio)));
     }
     // ---------- Proveedor (0.8.0): lo que cambia en las pantallas según con quién se transcribe ----------
-    /** Nombre para los textos: «OpenAI», «OpenRouter» o «tu servidor» (cualquier otro valor es un servidor propio). */
-    static String providerName(String provider){return "openrouter".equals(provider)?"OpenRouter":"openai".equals(provider)?"OpenAI":"tu servidor";}
+    /** Nombre para los textos: «OpenAI», «OpenRouter» o «tu servidor» (cualquier otro valor es un servidor propio; en el idioma de la app). */
+    static String providerName(String provider){return "openrouter".equals(provider)?"OpenRouter":"openai".equals(provider)?"OpenAI":Lang.str(R.string.act_your_server);}
     static String providerName(Settings s){return providerName(s.provider());}
     // ¿Las voces conocidas viajan con el audio? Lo decide el motor, en un solo lugar: TranscribeClient.knowsVoices(provider).
     /** ¿El proveedor cobra cada audio? Con un servidor propio no se sabe: ahí se dice «se envía», no «se cobra». */
@@ -275,13 +265,20 @@ final class RecordingActions {
         return Pricing.billedMs(provider,model,durationMs,anchors,single);
     }
 
-    /** Encola la transcripción. Si falta la clave, lleva directo a configurarla; si ya está transcrita, ofrece volver a transcribir. */
+    /**
+     * Encola la transcripción. Si falta la clave, lleva directo a configurarla; si ya está transcrita, ofrece volver a transcribir.
+     * 0.9.0 (Google Play): antes del primer envío se muestra el aviso de qué se envía y a quién (Consent), una sola vez;
+     * aceptado, sigue sin preguntar nada más. Lo usan «Transcribir» y «Reintentar» de Grabar, la Biblioteca, el menú y el
+     * botón que avanza (advance).
+     */
     static void transcribe(Screen s,Recording r,Runnable changed){
         if(Transcript.exists(s,r.id)){RetranscribeSheet.show(s,r,changed);return;}
         if(!new Settings(s).hasKey()){missingKey(s);return;}
-        Settings settings=new Settings(s);
-        if(settings.canSeparate()&&settings.speakersMode().equals("ask")){askSpeakers(s,r,changed,settings);return;}
-        start(s,r,changed,settings.defaultSpeakers());
+        Consent.ensure(s,()->{
+            Settings settings=new Settings(s);
+            if(settings.canSeparate()&&settings.speakersMode().equals("ask")){askSpeakers(s,r,changed,settings);return;}
+            start(s,r,changed,settings.defaultSpeakers());
+        });
     }
     /**
      * Falta la clave de OpenRouter: el error trae su salida («Configurar ahora», que abre directo el campo de la clave).
@@ -290,11 +287,11 @@ final class RecordingActions {
      */
     static void missingKey(Screen s){
         String old=new Settings(s).oldService();
-        Sheet sheet=s.sheet(old!=null?"Verbapp ahora usa OpenRouter":"Falta tu clave de OpenRouter",old!=null
-            ?"Para transcribir y armar tus notas, Verbapp ahora usa OpenRouter: una sola clave para elegir entre varios modelos. La clave de "+old+" que tenías queda guardada, pero ya no se usa. Pega una de OpenRouter para seguir transcribiendo."
-            :"Para transcribir, Verbapp usa tu propia cuenta de OpenRouter: una sola clave para varios modelos y para tus notas. Solo pagas lo que usas.");
+        Sheet sheet=s.sheet(Lang.str(s,old!=null?R.string.act_now_openrouter_title:R.string.act_missing_key_title),old!=null
+            ?Lang.str(s,R.string.act_now_openrouter_body,old)
+            :Lang.str(s,R.string.act_missing_key_body));
         SheetParts.hero(sheet,R.drawable.ic_key,false);
-        sheet.primary("Configurar ahora",()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("focusKey",true))).secondary("Más tarde",null).show();
+        sheet.primary(Lang.str(s,R.string.act_setup_now),()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("focusKey",true))).secondary(Lang.str(s,R.string.act_later),null).show();
     }
     /**
      * Pregunta si separar voces, con el costo y la velocidad de cada opción para este audio. La velocidad y el costo van
@@ -314,27 +311,29 @@ final class RecordingActions {
             boolean onlyMe=known.size()==1&&known.get(0).me;
             // Con OpenRouter el reconocimiento usa «anclas», una técnica nueva: se promete el intento, no el resultado.
             boolean sure=!settings.openRouter();
-            String who=known.isEmpty()?"Para reuniones y conversaciones: Persona 1, Persona 2…"
-                :onlyMe?(sure?"Te reconoce como "+known.get(0).name+" desde el inicio":"Busca tu voz para ponerte como "+known.get(0).name)+"; las demás, Persona 2…"
-                :(known.get(0).me?(sure?"Te reconoce ":"Busca reconocerte "):(sure?"Reconoce ":"Busca reconocer "))+Voices.people(known)+"; las demás, Persona "+(known.size()+1)+"…";
-            Sheet sheet=s.sheet("¿Separar voces?","Audio de "+Ui.humanDuration(r.duration)+". Puedes cambiar esta pregunta en Ajustes.");
+            // Las voces sin reconocer se llaman «Persona 2…» (el mismo texto que la transcripción, en el idioma de la app).
+            String others=Lang.str(s,R.string.speaker_n,known.size()+1);
+            String who=known.isEmpty()?Lang.str(s,R.string.act_who_new,Lang.str(s,R.string.speaker_n,1),Lang.str(s,R.string.speaker_n,2))
+                :onlyMe?Lang.str(s,sure?R.string.act_who_me_sure:R.string.act_who_me_try,known.get(0).name,others)
+                :Lang.str(s,known.get(0).me?(sure?R.string.act_who_with_me_sure:R.string.act_who_with_me_try):(sure?R.string.act_who_known_sure:R.string.act_who_known_try),Voices.people(known),others);
+            Sheet sheet=s.sheet(Lang.str(s,R.string.act_speakers_title),Lang.str(s,R.string.act_speakers_body,Ui.humanDuration(r.duration)));
             LinearLayout list=SheetParts.list(sheet);
-            String yes=known.isEmpty()?"Sí, separar voces":onlyMe?"Sí, separar voces · con Mi voz":"Sí, separar voces · con voces conocidas";
-            String yesDetail=who+" · más lento"+(costVoices.equals("—")?"":" · ≈ "+costVoices);
-            List<SheetParts.Fact> yesFacts=new ArrayList<>();yesFacts.add(SheetParts.fact(R.drawable.ic_hourglass,"Más lento"));if(!costVoices.equals("—"))yesFacts.add(SheetParts.cost("≈ "+costVoices));
+            String yes=Lang.str(s,known.isEmpty()?R.string.act_speakers_yes:onlyMe?R.string.act_speakers_yes_me:R.string.act_speakers_yes_known);
+            String yesDetail=who+" · "+Lang.str(s,R.string.act_slower_inline)+(costVoices.equals("—")?"":" · ≈ "+costVoices);
+            List<SheetParts.Fact> yesFacts=new ArrayList<>();yesFacts.add(SheetParts.fact(R.drawable.ic_hourglass,Lang.str(s,R.string.act_slower)));if(!costVoices.equals("—"))yesFacts.add(SheetParts.cost("≈ "+costVoices));
             list.addView(SheetParts.option(s,R.drawable.ic_people,yes,who,yesFacts,true,yes+". "+yesDetail,()->{sheet.dismiss();start(s,r,changed,true);}));
-            String noDetail="Para dictados y notas · más rápido"+(live?", el texto aparece en vivo":"")+(costText.equals("—")?"":" · ≈ "+costText);
-            List<SheetParts.Fact> noFacts=new ArrayList<>();noFacts.add(SheetParts.fact(R.drawable.ic_bolt,"Más rápido"));if(live)noFacts.add(SheetParts.fact(R.drawable.ic_transcribe,"Texto en vivo"));if(!costText.equals("—"))noFacts.add(SheetParts.cost("≈ "+costText));
-            list.addView(SheetParts.option(s,R.drawable.ic_doc,"No, solo el texto","Para dictados y notas",noFacts,true,"No, solo el texto. "+noDetail,()->{sheet.dismiss();start(s,r,changed,false);}));
+            String no=Lang.str(s,R.string.act_speakers_no),noDetail=Lang.str(s,live?R.string.act_speakers_no_detail_live:R.string.act_speakers_no_detail)+(costText.equals("—")?"":" · ≈ "+costText);
+            List<SheetParts.Fact> noFacts=new ArrayList<>();noFacts.add(SheetParts.fact(R.drawable.ic_bolt,Lang.str(s,R.string.act_faster)));if(live)noFacts.add(SheetParts.fact(R.drawable.ic_transcribe,Lang.str(s,R.string.act_live_text)));if(!costText.equals("—"))noFacts.add(SheetParts.cost("≈ "+costText));
+            list.addView(SheetParts.option(s,R.drawable.ic_doc,no,Lang.str(s,R.string.act_speakers_no_for),noFacts,true,no+". "+noDetail,()->{sheet.dismiss();start(s,r,changed,false);}));
             // Sin "Mi voz", la separación se equivoca más al inicio: se sugiere grabarla (una sola vez).
-            if(TranscribeClient.knowsVoices(provider)&&!Voices.has(s))list.addView(SheetParts.item(s,sheet,R.drawable.ic_mic_fill,"Grabar mi voz para que me reconozca",false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true))));
+            if(TranscribeClient.knowsVoices(provider)&&!Voices.has(s))list.addView(SheetParts.item(s,sheet,R.drawable.ic_mic_fill,Lang.str(s,R.string.act_record_my_voice),false,()->s.startActivity(new Intent(s,SettingsActivity.class).putExtra("voice",true))));
             sheet.show();
         }catch(Exception e){start(s,r,changed,settings.defaultSpeakers());}
     }
     static void start(Screen s,Recording r,Runnable changed,boolean speakers){
         askNotifications(s);
-        try{Pipeline.request(s,r.id,speakers);Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);if(changed!=null)changed.run();s.toast(queuedToast(s,r,"Transcribiendo"));}
-        catch(Exception e){s.message("No se pudo poner en cola",e instanceof HttpApi.UserAction?e.getMessage():"Vuelve a intentarlo.");}
+        try{Pipeline.request(s,r.id,speakers);Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);if(changed!=null)changed.run();s.toast(queuedToast(s,r,Lang.str(s,R.string.act_doing_transcribe)));}
+        catch(Exception e){s.message(Lang.str(s,R.string.act_queue_failed),e instanceof HttpApi.UserAction?e.getMessage():Lang.str(s,R.string.act_try_again));}
     }
     /**
      * Aviso breve al pedir una transcripción («Transcribir», «Volver a transcribir»), con lo que espera ESTA grabación
@@ -353,15 +352,8 @@ final class RecordingActions {
     static boolean behind(String id){return behind(Pipeline.working(),Pipeline.processing(id),Transcriber.currentId,Transcriber.retryingId);}
     /** Lo mismo con lo ya leído (separado del teléfono para poder probarlo). mine: Pipeline.processing de esta grabación. */
     static boolean behind(boolean working,boolean mine,String current,String retrying){return working&&!mine&&(current!=null||retrying!=null);}
-    /**
-     * Lo mismo con lo ya sabido. behind: el trabajo andando está con OTRA grabación (Pipeline.start no arranca otro: esta
-     * espera su turno), y entonces dice «En cola», como el botón, la nota del detalle y la Biblioteca; antes decía
-     * «Transcribiendo». detail: el aviso sale en el detalle.
-     */
-    static String queuedToast(String doing,String blocker,boolean behind,boolean detail){
-        if(blocker!=null)return "En cola · "+(detail?RecordingActivity.inDetail(blocker):blocker);
-        return behind?"En cola · empieza cuando termine la transcripción en curso":doing+" · sigue aunque bloquees el teléfono";
-    }
+    /** El aviso breve al pedir una transcripción (ver StatusText.queuedToast). */
+    static String queuedToast(String doing,String blocker,boolean behind,boolean detail){return StatusText.queuedToast(doing,blocker,behind,detail);}
     /** Android 13+: el aviso de «lista» necesita permiso de notificaciones; se pide al encolar. */
     static void askNotifications(Screen s){
         if(Build.VERSION.SDK_INT>=33&&s.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)s.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},12);
@@ -369,11 +361,11 @@ final class RecordingActions {
     /** Explica por qué conviene quitar la optimización de batería y abre el permiso del sistema. */
     static void allowBackground(Screen s){
         String hint=Battery.makerHint();
-        Sheet sheet=s.sheet("Trabajar con la pantalla bloqueada","Con la optimización de batería activa, Android puede congelar Verbapp al bloquear el teléfono y cortar el envío a "+providerName(new Settings(s))+". Solo gasta batería mientras transcribe."+(hint.isEmpty()?"":"\n\n"+hint));
+        Sheet sheet=s.sheet(Lang.str(s,R.string.act_background_title),Lang.str(s,R.string.act_background_body,providerName(new Settings(s)))+(hint.isEmpty()?"":"\n\n"+hint));
         SheetParts.hero(sheet,R.drawable.ic_battery,false);
-        sheet.primary("Permitir",()->{Diagnostics.event("ui_action",null,"action","battery_request");Battery.request(s);});
-        if(!hint.isEmpty())sheet.secondary("Abrir ajustes de la app",()->Battery.appSettings(s));
-        sheet.secondary("Ahora no",null).show();
+        sheet.primary(Lang.str(s,R.string.act_allow),()->{Diagnostics.event("ui_action",null,"action","battery_request");Battery.request(s);});
+        if(!hint.isEmpty())sheet.secondary(Lang.str(s,R.string.act_open_app_settings),()->Battery.appSettings(s));
+        sheet.secondary(Lang.str(s,R.string.act_not_now),null).show();
     }
     /**
      * Cancelar pierde el trabajo en curso: siempre se confirma (pedido del usuario, 0.4.3).
@@ -381,29 +373,28 @@ final class RecordingActions {
      */
     static void cancel(Screen s,Recording r,Runnable changed){
         boolean again=!Transcript.exists(s,r.id)&&Retranscribe.hasPrevious(s,r.id);
-        Sheet sheet=s.sheet("¿Cancelar la transcripción?",again?"Se detiene el envío y vuelves a tu versión anterior, tal como estaba."
-                :"Se detiene el envío. Las partes ya listas no se vuelven a cobrar si la reanudas más tarde con la misma opción de voces.");
+        Sheet sheet=s.sheet(Lang.str(s,R.string.act_cancel_title),Lang.str(s,again?R.string.act_cancel_body_again:R.string.act_cancel_body));
         SheetParts.hero(sheet,R.drawable.ic_close,true);
-        sheet.primary("Cancelar transcripción",Ui.Style.DESTRUCTIVE,()->{
+        sheet.primary(Lang.str(s,R.string.act_cancel_transcription),Ui.Style.DESTRUCTIVE,()->{
                 try{Pipeline.cancel(s,r.id);
                     if(again&&Retranscribe.hasPrevious(s,r.id)&&!Transcript.exists(s,r.id)){try{Retranscribe.restorePrevious(s,r.id);}catch(Exception e){Diagnostics.event("retranscribe_restore_failed",r.id,"error_class",e.getClass().getSimpleName());}}
                     if(changed!=null)changed.run();}
-                catch(Exception e){s.message("Transcripción","No se pudo cancelar el trabajo.");}return true;})
-            .secondary("Seguir transcribiendo",null).show();
+                catch(Exception e){s.message(Lang.str(s,R.string.act_transcription),Lang.str(s,R.string.act_cancel_failed));}return true;})
+            .secondary(Lang.str(s,R.string.act_keep_transcribing),null).show();
     }
     /** Vuelve a la versión anterior sin preguntar de nuevo (se llega aquí desde un menú que ya lo nombra). */
     static void restorePrevious(Screen s,Recording r,Runnable changed){
-        try{Retranscribe.restorePrevious(s,r.id);Diagnostics.event("retranscribe_restored",r.id);Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);s.toast("Volviste a la versión anterior");if(changed!=null)changed.run();}
-        catch(Exception e){s.message("Versión anterior","No se pudo recuperar la versión anterior. Tu audio sigue intacto.");}
+        try{Retranscribe.restorePrevious(s,r.id);Diagnostics.event("retranscribe_restored",r.id);Ui.haptic(s.getWindow().getDecorView(),Ui.Haptic.CONFIRM);s.toast(Lang.str(s,R.string.act_restored));if(changed!=null)changed.run();}
+        catch(Exception e){s.message(Lang.str(s,R.string.act_previous_version),Lang.str(s,R.string.act_restore_failed));}
     }
     /** Siempre se confirma, nombrando la grabación. Es lo mismo que Screen.confirm, más el ícono de aviso en rojo. */
     static void delete(Screen s,Recording r,Runnable before,Runnable after){
-        Sheet sheet=s.sheet("¿Eliminar «"+r.title+"»?","Se borrarán el audio y la transcripción de este teléfono. Las copias en tu carpeta elegida se conservan. No se puede deshacer.");
+        Sheet sheet=s.sheet(Lang.str(s,R.string.act_delete_title,r.title),Lang.str(s,R.string.act_delete_body));
         SheetParts.hero(sheet,R.drawable.ic_trash,true);
-        sheet.primary("Eliminar",Ui.Style.DESTRUCTIVE,()->{
-            if(before!=null)before.run();if(!r.delete(s))s.message("Eliminar","No se pudo eliminar el audio.");else{Diagnostics.event("recording_deleted",r.id);if(after!=null)after.run();}
+        sheet.primary(Lang.str(s,R.string.act_delete),Ui.Style.DESTRUCTIVE,()->{
+            if(before!=null)before.run();if(!r.delete(s))s.message(Lang.str(s,R.string.act_delete),Lang.str(s,R.string.act_delete_failed));else{Diagnostics.event("recording_deleted",r.id);if(after!=null)after.run();}
             return true;
-        }).secondary("Cancelar",null).show();
+        }).secondary(Lang.str(s,R.string.common_cancel),null).show();
     }
     private RecordingActions(){}
 }
@@ -477,7 +468,7 @@ final class SheetParts {
     /** Costo estimado: cifras de ancho fijo. */
     static Fact cost(String text){return new Fact(0,text,false,true);}
     /** La alternativa recomendada: píldora en el verde de marca con ✦ (se distingue de los círculos menta). */
-    static Fact recommended(){return new Fact(R.drawable.ic_sparkle,"Recomendada",true,false);}
+    static Fact recommended(){return new Fact(R.drawable.ic_sparkle,Lang.str(R.string.act_recommended),true,false);}
 
     /**
      * Opción grande de dos líneas, como Sheet.option (círculo menta de 44 dp, título y explicación), con sus datos en

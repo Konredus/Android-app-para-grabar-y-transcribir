@@ -41,7 +41,6 @@ final class Metrics {
     static final int TYPING_WPM=40;
     /** Semanas del gráfico de barras (la actual es la última). */
     static final int WEEKS=8;
-    static final Locale CL=new Locale("es","CL");
     /** Los tres cortes de la pantalla: los últimos 7 días (como «Tu semana» en Grabar), el mes calendario y todo. */
     enum Period{WEEK,MONTH,ALL}
 
@@ -129,14 +128,15 @@ final class Metrics {
     /**
      * Último resumen y la «huella» con que se calculó. La huella cambia con cualquier escritura de la app en las
      * grabaciones (FilesStore.version y la fecha de la carpeta, que se toca con cada archivo nuevo, borrado o reescrito),
-     * con el día (el mes y «este mes» cambian a medianoche) y con la lista de modelos (los estimados salen de sus precios).
+     * con el día (el mes y «este mes» cambian a medianoche), con la lista de modelos (los estimados salen de sus precios)
+     * y con el idioma de la app (la línea va en ese idioma).
      * Vive mientras dure el proceso: al reiniciar la app se recalcula una vez.
      */
     private static String lastKey,lastLine="";
     private static String summaryKey(Context c){
         try{
             File dir=Recording.directory(c);
-            return FilesStore.version.get()+"|"+(dir==null?0:dir.lastModified())+"|"+LocalDate.now().toEpochDay()+"|"+Models.fetchedAt(c)+"|"+RecorderService.activeId;
+            return FilesStore.version.get()+"|"+(dir==null?0:dir.lastModified())+"|"+LocalDate.now().toEpochDay()+"|"+Models.fetchedAt(c)+"|"+RecorderService.activeId+"|"+Lang.tag(c);
         }catch(RuntimeException e){return null;}
     }
     /**
@@ -145,10 +145,10 @@ final class Metrics {
      */
     static Summary summary(Context c){try{return summary(compute(c,false));}catch(RuntimeException e){return null;}}
     static Summary summary(Data d){
-        if(d.total==0)return new Summary("0","grabaciones","aquí verás tu voz en números");
+        if(d.total==0)return new Summary("0",Lang.str(R.string.met_summary_zero_label),Lang.str(R.string.met_summary_empty));
         Totals m=d.month;double usd=m.usd();
-        String detail=usd>0?(m.estimated()>0?"≈ ":"")+Pricing.usd(usd)+" este mes":count(d.total,"grabación","grabaciones");
-        return new Summary(hours(d.all.audioMs),"grabadas",detail);
+        String detail=usd>0?Lang.str(R.string.met_summary_month,(m.estimated()>0?"≈ ":"")+Pricing.usd(usd)):count(R.plurals.met_recordings,d.total);
+        return new Summary(hours(d.all.audioMs),Lang.str(R.string.met_summary_recorded),detail);
     }
 
     // ---------- Cálculo ----------
@@ -179,7 +179,7 @@ final class Metrics {
         for(int i=0;i<WEEKS;i++)d.weekStarts[i]=monday.minusWeeks(WEEKS-1-i).atStartOfDay(zone).toInstant().toEpochMilli();
         long weeksEnd=monday.plusWeeks(1).atStartOfDay(zone).toInstant().toEpochMilli();
         long monthStart=today.withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli(),weekStart=now-7L*86_400_000L;
-        String mine=me==null?"":me.trim().toLowerCase(CL);
+        String mine=me==null?"":me.trim().toLowerCase(Locale.ROOT);
         File[] files=dir==null?null:dir.listFiles((x,name)->name.endsWith(".m4a"));
         // Primero lo liviano (fecha y duración) para recorrer de la más nueva a la más vieja: así las listas de «a medio
         // camino» quedan en el orden de la Biblioteca y «abrir la más reciente» es la primera.
@@ -213,7 +213,7 @@ final class Metrics {
                     if(note)t.withNote++;else t.noNote.add(id);
                     if(inboxAt>0)t.inInbox++;else t.notSaved.add(id);
                     if(sp!=null)for(Map.Entry<String,Long> e:sp.named.entrySet()){
-                        String key=e.getKey().toLowerCase(CL);if(key.equals(mine))continue;
+                        String key=e.getKey().toLowerCase(Locale.ROOT);if(key.equals(mine))continue;
                         Person p=t.people.get(key);if(p==null){p=new Person(e.getKey());t.people.put(key,p);}
                         p.ms+=e.getValue();p.recordings++;
                     }
@@ -289,7 +289,7 @@ final class Metrics {
     }
     /** Nombre corto del modelo para el desglose de costos («MAI Transcribe 2», «GPT-4o Transcribe»). */
     static String modelName(Context c,String provider,String model){
-        if(model==null||model.isEmpty())return "Modelo sin nombre";
+        if(model==null||model.isEmpty())return Lang.str(R.string.met_model_unnamed);
         if("openrouter".equals(provider)){try{String n=Models.name(c,model);if(n!=null&&!n.isEmpty())return n;}catch(RuntimeException ignored){}return model;}
         switch(model){
             case "gpt-transcribe":return "GPT Transcribe";
@@ -301,7 +301,7 @@ final class Metrics {
         }
     }
     /** Nombre del servicio para mostrar bajo cada modelo. */
-    static String service(String provider){return "openrouter".equals(provider)?"OpenRouter":"openai".equals(provider)?"OpenAI":"Tu servidor";}
+    static String service(String provider){return "openrouter".equals(provider)?"OpenRouter":"openai".equals(provider)?"OpenAI":Lang.str(R.string.met_your_server);}
 
     /**
      * Saldo de OpenRouter guardado por «Comprobar conexión» (Ajustes) o por la bienvenida, solo si esa comprobación es de
@@ -342,7 +342,7 @@ final class Metrics {
                 String sp=seg.optString("speaker");if(Voices.ME.equals(sp))continue;
                 String name=names==null?"":Voices.clean(names.optString(sp,""));if(name.isEmpty())continue;
                 double start=seg.optDouble("start",0),end=seg.optDouble("end",start);long ms=Math.round(Math.max(0,end-start)*1000);
-                String k=name.toLowerCase(CL);String shown=first.get(k);if(shown==null){shown=name;first.put(k,name);}
+                String k=name.toLowerCase(Locale.ROOT);String shown=first.get(k);if(shown==null){shown=name;first.put(k,name);}
                 named.merge(shown,ms,Long::sum);
             }
             s=new Spoken(modified,length,words,data.optBoolean("demo"),data.optString("provider",""),data.optString("model",""),named);
@@ -403,15 +403,19 @@ final class Metrics {
         synchronized(FilesStore.LOCK){try{return FilesStore.read(f);}catch(Exception e){return null;}}
     }
 
-    // ---------- Formatos (cifras chilenas: 12.480 palabras, 1,5 h) ----------
-    /** Entero con punto de miles: 128.450. */
-    static String number(long n){return String.format(CL,"%,d",n);}
-    /** «1 grabación» / «12 grabaciones». */
+    // ---------- Formatos (cifras del idioma de la app: 12.480 palabras y 1,5 h en español; 12,480 y 1.5 h en inglés) ----------
+    /** Entero con el separador de miles del idioma: 128.450 (español, portugués) o 128,450 (inglés). */
+    static String number(long n){return String.format(Lang.locale(),"%,d",n);}
+    /** «1 grabación» / «12 grabaciones» con las dos palabras dadas (lo usan las pruebas; las pantallas, el de abajo). */
     static String count(long n,String one,String many){return number(n)+" "+(n==1?one:many);}
+    /** Cantidad con el plural del idioma (R.plurals.met_*, la cifra va como %1$s): «1 grabación», «12 grabaciones». */
+    static String count(int plural,long n){return Lang.plural(plural,(int)Math.min(n,Integer.MAX_VALUE),number(n));}
     /** Horas para una cifra grande: «45 min», «1,5 h», «12 h». Menos de un minuto (pero algo): «< 1 min». */
     static String hours(long ms){
-        if(ms<=0)return "0 h";long min=Math.round(ms/60_000d);if(min<1)return "< 1 min";if(min<60)return min+" min";
-        double h=ms/3_600_000d;if(h>=10)return number(Math.round(h))+" h";
-        String s=String.format(Locale.ROOT,"%.1f",h);if(s.endsWith(".0"))s=s.substring(0,s.length()-2);return s.replace('.',',')+" h";
+        if(ms<=0)return Lang.str(R.string.met_unit_h,"0");long min=Math.round(ms/60_000d);if(min<1)return Lang.str(R.string.met_under_min);if(min<60)return Lang.str(R.string.met_unit_min,number(min));
+        double h=ms/3_600_000d;if(h>=10)return Lang.str(R.string.met_unit_h,number(Math.round(h)));
+        // Un decimal con la coma o el punto del idioma, sin «,0» al final («1 h», no «1,0 h»).
+        Locale l=Lang.locale();String s=String.format(l,"%.1f",h),zero=java.text.DecimalFormatSymbols.getInstance(l).getDecimalSeparator()+"0";
+        if(s.endsWith(zero))s=s.substring(0,s.length()-zero.length());return Lang.str(R.string.met_unit_h,s);
     }
 }

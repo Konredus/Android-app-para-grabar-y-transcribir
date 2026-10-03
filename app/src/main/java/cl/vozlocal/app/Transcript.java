@@ -72,7 +72,20 @@ final class Transcript {
         return out;
     }
     /** Etiqueta por defecto de una voz ("Persona N"), estable gracias a order(). */
-    String defaultLabel(String id) throws JSONException {return "Persona "+(order().indexOf(id)+1);}
+    String defaultLabel(String id) throws JSONException {return Lang.str(R.string.speaker_n,order().indexOf(id)+1);}
+    /** ¿text es la etiqueta por defecto de esa voz («Persona 2», «Person 2», «Pessoa 2»), sin distinguir mayúsculas? */
+    private boolean isLabel(String text,String id) throws JSONException {
+        int n=order().indexOf(id)+1;for(String s:Lang.all(R.string.speaker_n))if(text.equalsIgnoreCase(String.format(Locale.ROOT,s,n)))return true;return false;
+    }
+    /**
+     * ¿Es una etiqueta por defecto («Persona 2», «Texto»), y no un nombre que puso la persona? En cualquiera de los tres
+     * idiomas: los nombres recientes y las notas se guardan en el idioma de cuando se escribieron.
+     */
+    static boolean isDefaultLabel(String name){
+        String t=name==null?"":name.trim();if(t.isEmpty())return false;
+        for(String s:Lang.all(R.string.speaker_text))if(s.equalsIgnoreCase(t))return true;
+        return t.matches("(?i)^"+Lang.anyRegex(R.string.speaker_n)+" \\d+$");
+    }
     /**
      * ¿El usuario ya revisó las voces? Las transcripciones nuevas lo dicen explícitamente ("reviewed");
      * en las anteriores a 0.5.0 cuenta como revisada si alguna voz tiene nombre.
@@ -87,7 +100,7 @@ final class Transcript {
     /** Voces presentes → nombre visible ("Persona N" o el nombre que le puso el usuario). */
     LinkedHashMap<String,String> speakers() throws Exception {
         LinkedHashMap<String,String> speakers=new LinkedHashMap<>();List<String> order=order();Set<String> present=present();
-        for(String id:order)if(present.contains(id))speakers.put(id,diarized()?"Persona "+(order.indexOf(id)+1):"Texto");
+        for(String id:order)if(present.contains(id))speakers.put(id,diarized()?Lang.str(R.string.speaker_n,order.indexOf(id)+1):Lang.str(R.string.speaker_text));
         JSONObject names=data.optJSONObject("names");
         if(names!=null)for(String id:speakers.keySet()){String name=names.optString(id,"").trim();if(!name.isEmpty())speakers.put(id,name);}
         return speakers;
@@ -171,8 +184,9 @@ final class Transcript {
         Set<String> present=present();Map<String,String> typedLabel=new HashMap<>();
         for(Map.Entry<String,String> name:names.entrySet()){String id=name.getKey(),v=name.getValue().trim();
             // Escribir la etiqueta propia es no ponerle nombre; escribir la de OTRA voz ("Persona 1") es decir que es esa persona.
-            boolean own=v.equalsIgnoreCase(defaultLabel(id)),other=false;for(String o:present)if(!o.equals(id)&&v.equalsIgnoreCase(defaultLabel(o)))other=true;
-            if(v.isEmpty()||own)mapping.remove(id);else if(other){mapping.remove(id);typedLabel.put(id,v.toLowerCase(Locale.ROOT));}else mapping.put(id,v);}
+            // Vale en cualquiera de los tres idiomas («Person 1» es «Persona 1»): se agrupa con la etiqueta del idioma vigente.
+            boolean own=isLabel(v,id);String other=null;for(String o:present)if(!o.equals(id)&&isLabel(v,o))other=o;
+            if(v.isEmpty()||own)mapping.remove(id);else if(other!=null){mapping.remove(id);typedLabel.put(id,defaultLabel(other).toLowerCase(Locale.ROOT));}else mapping.put(id,v);}
         data.put("names",mapping);data.put("reviewed",true);
         // Mismo nombre = misma persona. Una voz sin nombre se agrupa por su etiqueta ("Persona 2").
         Map<String,String> first=new HashMap<>();int merged=0;
@@ -198,12 +212,13 @@ final class Transcript {
     }
 
     // ---------- Texto exportado ----------
+    /** El .txt: título, fecha (ISO, igual en los tres idiomas), avisos y cada intervención, en el idioma de la app. */
     String text(Recording r) throws Exception {
         StringBuilder text=new StringBuilder(r.title).append("\n")
-            .append(new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm",new Locale("es","CL")).format(new Date(r.created))).append("\n\n");
-        if(data.optBoolean("demo"))text.append("EJEMPLO DE DEMOSTRACIÓN · No proviene de una transcripción real.\n\n");
-        if(diarized()){if(!reviewed()&&segments().length()>0)text.append("Voces separadas automáticamente: pueden tener errores.\n\n");}
-        else if(data.optInt("parts",1)>1&&!phraseTimes())text.append("Audio procesado en bloques. Los tiempos indican el inicio de cada bloque, no de cada frase.\n\n");
+            .append(new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.ROOT).format(new Date(r.created))).append("\n\n");
+        if(data.optBoolean("demo"))text.append(Lang.str(R.string.export_demo)).append("\n\n");
+        if(diarized()){if(!reviewed()&&segments().length()>0)text.append(Lang.str(R.string.export_auto_voices)).append("\n\n");}
+        else if(data.optInt("parts",1)>1&&!phraseTimes())text.append(Lang.str(R.string.export_blocks)).append("\n\n");
         Map<String,String> names=speakers(); JSONArray segments=segments();
         // Los tramos seguidos de la misma persona van en un solo párrafo (con la hora del primero).
         for(int i=0;i<segments.length();){
@@ -212,7 +227,7 @@ final class Transcript {
             text.append("[").append(Recording.time((long)(segment.getDouble("start")*1000))).append("] ").append(names.get(speaker)).append(": ").append(turn).append("\n\n");
             i=j;
         }
-        if(segments.length()==0)text.append("No se detectó habla en este audio.\n");
+        if(segments.length()==0)text.append(Lang.str(R.string.export_no_speech)).append("\n");
         return text.toString();
     }
 
@@ -233,10 +248,11 @@ final class Transcript {
             Map<String,String> map=new HashMap<>();Set<String> legacy=new HashSet<>();Object known=response.opt("_known");
             if(known instanceof JSONObject){JSONObject k=(JSONObject)known;for(Iterator<String> it=k.keys();it.hasNext();){String name=it.next();map.put(name,k.getString(name));}}
             else if(known instanceof JSONArray){JSONArray k=(JSONArray)known;for(int i=0;i<k.length();i++)legacy.add(k.optString(i));}
-            if(source==null)throw new java.io.IOException("El proveedor no devolvió los segmentos de hablantes esperados.");
+            // Estos errores llegan a la bitácora y al aviso de la grabación (Transcriber.describe): van en el idioma de la app.
+            if(source==null)throw new java.io.IOException(Lang.str(R.string.export_err_segments));
             for(int i=0;i<source.length();i++){
                 JSONObject segment=source.getJSONObject(i);
-                if(!segment.has("speaker") || !segment.has("start") || !segment.has("end") || !segment.has("text"))throw new java.io.IOException("La transcripción recibida está incompleta.");
+                if(!segment.has("speaker") || !segment.has("start") || !segment.has("end") || !segment.has("text"))throw new java.io.IOException(Lang.str(R.string.export_err_incomplete));
                 if(segment.optString("text").trim().isEmpty())continue;
                 String speaker=segment.isNull("speaker")?"unknown":segment.getString("speaker");
                 String id=map.containsKey(speaker)?map.get(speaker):prefix+(parts.size()<=1?speaker:(p>0&&legacy.contains(speaker)?"block0:"+speaker:"block"+p+":"+speaker));

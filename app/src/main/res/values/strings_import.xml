@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Importar audio (ImportActivity, ImportService, ImportSession), 0.9.0. Inglés aquí (el respaldo); español en values-es;
+  portugués de Brasil en values-pt.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Pantalla: elegir el archivo -->
+    <string name="imp_title">Import audio</string>
+    <string name="imp_subtitle">WhatsApp audio, voice recorders and voice notes.</string>
+    <string name="imp_pick">Choose an audio file</string>
+    <string name="imp_pick_hint">Up to 1 GB · your original file isn\'t changed</string>
+    <string name="imp_whatsapp">From WhatsApp</string>
+    <string name="imp_step_open">Open the chat and press and hold the audio.</string>
+    <string name="imp_step_share">Tap Share (or ⋮ → Share).</string>
+    <string name="imp_step_choose">Choose Verbapp from the list of apps.</string>
+    <!-- %1$s: el botón imp_save. -->
+    <string name="imp_step_save">Check the title and tap %1$s.</string>
+    <string name="imp_step_say">Step %1$d: %2$s</string>
+    <string name="imp_also">Also works with voice recorders, Telegram and any app that shares audio.</string>
+
+    <!-- Pantalla: avance, título y tramo -->
+    <string name="imp_progress_note">You can leave this screen or lock your phone: the import keeps going and we\'ll let you know when it\'s done.</string>
+    <string name="imp_cancel">Cancel import</string>
+    <string name="imp_change">Change</string>
+    <string name="imp_title_label">Title</string>
+    <string name="imp_title_hint">Recording name</string>
+    <string name="imp_range">Segment (optional)</string>
+    <string name="imp_from">From (sec)</string>
+    <string name="imp_to">To (sec)</string>
+    <string name="imp_end_hint">End</string>
+    <string name="imp_listen">Play the segment</string>
+    <string name="imp_original_kept">Your original file isn\'t changed.</string>
+    <string name="imp_save">Save audio</string>
+    <string name="imp_auto">It\'ll be transcribed automatically when you save it.</string>
+    <string name="imp_retry">Try again</string>
+    <string name="imp_percent">%1$d%%</string>
+    <string name="imp_duration">Duration %1$s</string>
+    <!-- TalkBack del tramo elegido: desde, hasta y cuánto dura. -->
+    <string name="imp_range_say">Segment from %1$s to %2$s, %3$s long</string>
+    <!-- Para RangeView (la regla del tramo, fuera de esta área): desde y hasta. Aún no se usa: falta cambiar RangeView.describe. -->
+    <string name="imp_range_desc" tools:ignore="UnusedResources">Selected segment from %1$s to %2$s. Use the seconds fields to adjust it precisely.</string>
+    <string name="imp_cancelling">Canceling…</string>
+
+    <!-- Pantalla: mensajes -->
+    <string name="imp_busy">Finish the current import before bringing in another audio file.</string>
+    <string name="imp_check_range">Check the segment</string>
+    <string name="imp_check_range_body">The end must be at least half a second after the start and can\'t go past the file\'s length.</string>
+    <string name="imp_playing">Playing the segment…</string>
+    <string name="imp_listen_title">Play</string>
+    <string name="imp_listen_error">Check the segment and try again.</string>
+    <string name="imp_import">Import</string>
+    <string name="imp_no_picker">This phone doesn\'t have a file picker available.</string>
+    <string name="imp_cancel_title">Cancel the import?</string>
+    <string name="imp_cancel_body">Only the temporary copy is deleted. Your original file is kept.</string>
+    <string name="imp_continues">The import keeps going in the background. We\'ll let you know when it\'s done.</string>
+
+    <!-- Etapas (pantalla y notificación) -->
+    <string name="imp_stage_reading">Reading file</string>
+    <string name="imp_stage_copying">Copying the file to your phone</string>
+    <string name="imp_stage_checking">Checking the audio</string>
+    <string name="imp_stage_ready">Audio ready</string>
+    <string name="imp_stage_resume">Audio ready to continue</string>
+    <string name="imp_stage_preparing">Preparing audio</string>
+    <string name="imp_stage_saving">Saving audio</string>
+    <string name="imp_stage_almost">Almost done</string>
+    <string name="imp_stage_library">Saving to Library</string>
+    <string name="imp_original_safe">Your original file is kept</string>
+    <!-- Avance: megabytes copiados (con un decimal) o tiempo convertido. -->
+    <string name="imp_progress_mb">%1$.1f MB of %2$.1f MB</string>
+    <string name="imp_progress_time">%1$s of %2$s</string>
+
+    <!-- Notificación -->
+    <string name="imp_channel">Audio imports</string>
+    <string name="imp_saved">Audio saved</string>
+    <string name="imp_pending">Import pending</string>
+    <string name="imp_ready_to_save">Audio ready to save</string>
+    <string name="imp_in_library">Available in Library</string>
+    <string name="imp_tap_to_save">Tap to give it a title and save it</string>
+
+    <!-- Errores que ve la persona -->
+    <string name="imp_err_start">Android couldn\'t start preparing the audio. Open the app and try again.</string>
+    <string name="imp_err_background">Couldn\'t prepare the audio in the background. Try again with the app open.</string>
+    <string name="imp_err_cancelled">Import canceled. The original is kept.</string>
+    <string name="imp_err_convert">Couldn\'t prepare the audio. You can try again or pick a shorter segment.</string>
+    <string name="imp_err_read">Couldn\'t read the file. Check its format, your free space, and that it\'s at least one second long.</string>
+    <string name="imp_err_interrupted">Preparing was interrupted. Your copy is safe; you can save it again.</string>
+
+    <!-- Títulos por defecto (quedan como título de la grabación) -->
+    <string name="imp_default_name">Imported audio</string>
+    <!-- «Recortar una copia»: el título de la grabación original + esto. -->
+    <string name="imp_crop_name">%1$s · clip</string>
+    <!-- Nota de voz de WhatsApp: %1$s día, %2$s mes abreviado («WhatsApp audio Sep 29»). -->
+    <string name="imp_whatsapp_title">WhatsApp audio %2$s %1$s</string>
+    <string name="imp_whatsapp_audio">WhatsApp audio</string>
+</resources>

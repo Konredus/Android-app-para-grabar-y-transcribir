@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Política de privacidad · Verbapp</title>
+<meta name="description" content="Qué datos maneja Verbapp, adónde van y qué control tienes.">
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<main class="doc">
+  <p class="eyebrow"><a href="./">Verbapp</a> · <a href="privacy.html" hreflang="en">English</a> · <a href="privacidade.html" hreflang="pt-BR">Português</a></p>
+  <h1>Política de privacidad</h1>
+  <p class="meta">Última actualización: 2 de octubre de 2026</p>
+
+  <p>Verbapp es una grabadora y transcriptor para Android, desarrollada por Konredus. Esta política explica qué datos maneja la app, adónde van y qué control tienes sobre ellos.</p>
+
+  <div class="summary">
+    <p><strong>En resumen:</strong> grabas sin internet y tus grabaciones quedan en tu teléfono. Solo cuando tú pides transcribir (o activas la transcripción automática), el audio se envía a OpenRouter, con tu propia clave, para convertirlo en texto. No tenemos servidores que reciban tu audio ni tu texto, no usamos publicidad ni analítica, y no vendemos datos.</p>
+  </div>
+
+  <h2>1. Quién es responsable</h2>
+  <p>Konredus, desarrollador de Verbapp en Google Play. Contacto: <a href="mailto:latribumaker@gmail.com">latribumaker@gmail.com</a>.</p>
+
+  <h2>2. Qué datos maneja la app en tu teléfono</h2>
+  <ul>
+    <li><strong>Grabaciones de audio</strong> que haces con el micrófono o que importas. Se guardan en el almacenamiento privado de la app.</li>
+    <li><strong>Transcripciones, notas, títulos, momentos marcados y nombres de las personas</strong> que aparecen en tus grabaciones.</li>
+    <li><strong>Muestras de voz</strong> («Mi voz» y «Voces conocidas»): fragmentos de hasta 10 segundos que tú grabas o eliges, para reconocer quién habla.</li>
+    <li><strong>Tu clave de OpenRouter</strong>, guardada cifrada con el almacén de claves de Android (Android Keystore).</li>
+    <li><strong>Registro técnico de diagnóstico</strong>: eventos de funcionamiento (tiempos, tamaños, códigos de error), sin claves, títulos, audio ni texto. Se guardan como máximo unos 4 MB y 30 días.</li>
+    <li><strong>Tus métricas</strong> (tiempo grabado, rachas, gasto): se calculan en el teléfono con tus grabaciones.</li>
+  </ul>
+  <p>Nada de esto se envía a nosotros.</p>
+
+  <h2>3. Qué sale de tu teléfono, y a quién</h2>
+  <ul>
+    <li><strong>Al transcribir</strong>: el audio de la grabación y, si separas voces con voces conocidas, hasta 4 de tus muestras de voz se envían por una conexión cifrada (HTTPS) a OpenRouter (openrouter.ai). OpenRouter lo entrega al modelo de transcripción que elegiste (por ejemplo, de Microsoft, Deepgram, Google u OpenAI) y te devuelve el texto. Antes de enviar algo por primera vez, la app te lo explica y te pide que aceptes.</li>
+    <li><strong>Al armar una nota</strong>: se envía el texto de la transcripción (no el audio) a OpenRouter y al modelo de lenguaje que elegiste (por ejemplo, Claude, GPT o Gemini).</li>
+    <li><strong>Al comprobar tu clave</strong>: la clave se envía a OpenRouter para confirmar que funciona y mostrar tu saldo.</li>
+    <li><strong>Al actualizar la lista de modelos</strong>: la app consulta el catálogo de OpenRouter, sin enviar tus grabaciones ni tu texto.</li>
+  </ul>
+  <p>Estos envíos se hacen con tu propia cuenta y tu propia clave de OpenRouter. Lo que OpenRouter y cada proveedor hacen después con esos datos se rige por sus propias políticas: la de OpenRouter está en <a href="https://openrouter.ai/privacy">openrouter.ai/privacy</a>. Te recomendamos revisarlas.</p>
+  <p>Además, solo si tú lo eliges:</p>
+  <ul>
+    <li><strong>Copias y exportaciones</strong>: la app guarda copias (texto, notas o audio) en una carpeta que tú escojas, que puede estar en un servicio en la nube como Google Drive, o comparte un archivo con otra app desde el menú Compartir de Android.</li>
+    <li><strong>Informe de soporte</strong>: si tocas «Compartir informe de soporte», se genera un archivo de texto con el registro técnico (sin claves, títulos, audio ni texto) y tú decides a quién enviarlo.</li>
+  </ul>
+
+  <h2>4. Lo que no hacemos</h2>
+  <ul>
+    <li>No pedimos cuenta ni registro.</li>
+    <li>No tenemos servidores que reciban tu audio, tu texto ni tu clave.</li>
+    <li>No hay publicidad, analítica ni rastreo.</li>
+    <li>No vendemos tus datos ni los compartimos para publicidad.</li>
+  </ul>
+
+  <h2>5. Permisos que usa la app</h2>
+  <ul>
+    <li><strong>Micrófono</strong>: para grabar, solo cuando tú inicias una grabación.</li>
+    <li><strong>Notificaciones</strong>: para mostrar el estado de la grabación y de la transcripción.</li>
+    <li><strong>Servicios en primer plano</strong>: para seguir grabando, importando o transcribiendo con la pantalla bloqueada, siempre con una notificación visible.</li>
+    <li><strong>Internet y estado de la red</strong>: para transcribir y para respetar tu ajuste «Solo Wi-Fi».</li>
+    <li><strong>Trabajos iniciados por el usuario</strong> (Android 14 o superior): para que una transcripción que pediste siga aunque cierres la app.</li>
+  </ul>
+
+  <h2>6. Cuánto tiempo se guardan y cómo borrarlos</h2>
+  <p>Tus datos quedan en tu teléfono hasta que borres la grabación o desinstales la app. El registro de diagnóstico se borra solo a los 30 días y puedes borrarlo antes en Ajustes → Ayuda y soporte. Lo enviado a OpenRouter y a los proveedores se rige por sus políticas y puedes administrarlo desde tu cuenta de OpenRouter.</p>
+
+  <h2>7. Seguridad</h2>
+  <p>Los envíos usan conexiones cifradas (HTTPS). Tu clave se guarda cifrada y Android aísla los datos de la app de las demás apps.</p>
+
+  <h2>8. Niñas y niños</h2>
+  <p>Verbapp está pensada para personas adultas y no está dirigida a niñas ni niños.</p>
+
+  <h2>9. Cambios a esta política</h2>
+  <p>Si cambiamos esta política, publicaremos la nueva versión en esta misma página con su fecha.</p>
+
+  <h2>10. Contacto</h2>
+  <p>Para cualquier consulta sobre privacidad, escríbenos a <a href="mailto:latribumaker@gmail.com">latribumaker@gmail.com</a>.</p>
+</main>
+</body>
+</html>

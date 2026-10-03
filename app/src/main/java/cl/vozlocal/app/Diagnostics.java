@@ -75,7 +75,7 @@ final class Diagnostics {
         return out.append("\n").toString();
     }
     /** Textos fijos de la app que sí pueden ir entre « » en el informe (qué alternativa de «Volver a transcribir» se usó). */
-    private static Set<String> fixedQuotes(){Set<String> out=new HashSet<>();for(Retranscribe.Mode m:Retranscribe.Mode.values())out.add(Retranscribe.label(m));return out;}
+    private static Set<String> fixedQuotes(){return new HashSet<>(Retranscribe.allLabels());}
     private static final java.util.regex.Pattern QUOTED=java.util.regex.Pattern.compile("«([^»]*)»");
     /**
      * Línea de bitácora para el informe: el texto entre « » pasa a «…» (salvo los textos fijos de la app) y cada texto

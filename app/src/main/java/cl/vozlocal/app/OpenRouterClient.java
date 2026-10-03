@@ -113,7 +113,7 @@ final class OpenRouterClient implements TranscribeClient {
                 long[] size={0};HttpApi.Response response=send(built,config,body(config.model,built.format,language,recipe,ask,verbose),size);
                 JSONObject json=null;int code=response.code;
                 if(code>=200&&code<300){
-                    try{json=response.json();}catch(JSONException e){throw new IOException("OpenRouter devolvió una respuesta que no se pudo leer.");}
+                    try{json=response.json();}catch(JSONException e){throw new IOException(Lang.str(c,R.string.eng_err_or_unreadable));}
                     // OpenRouter a veces responde 200 con el error del proveedor adentro: se trata como el error que es.
                     JSONObject error=json.optJSONObject("error");
                     if(error!=null&&!json.has("text")&&!json.has("segments")){int inner=error.optInt("code",502);code=inner>=400&&inner<600?inner:502;}
@@ -122,7 +122,7 @@ final class OpenRouterClient implements TranscribeClient {
                 // Un 400 no se cobra; el WAV pesa el doble, así que solo se recuerda para el modelo si de verdad resolvió el problema.
                 if(code==400&&"flac".equals(built.format)&&!wav&&audioRejected(response.text)){
                     wav=true;flacRefused=true;built.file.delete();built=null;
-                    log.line("El proveedor no aceptó el audio en FLAC · se reenvía en WAV (pesa el doble)");
+                    log.line(Lang.str(c,R.string.eng_log_or_wav));
                     Diagnostics.event("or_fallback",http.jobId,"provider","openrouter","model",config.model,"reason","flac","http",400);
                     continue;
                 }
@@ -130,7 +130,7 @@ final class OpenRouterClient implements TranscribeClient {
                 // recuerda en esta sesión: los bloques que siguen van directo así (y el aviso queda una sola vez en la bitácora).
                 if(code==400&&(verbose||ask)&&formatRejected(response.text)){
                     plain=true;anchors=Collections.emptyList();
-                    if(PLAIN.add(config.model))log.line((ask?"El modelo no aceptó separar voces":"El modelo no aceptó el formato con tiempos")+" · se reenvía para obtener solo el texto (también en los próximos envíos con este modelo)");
+                    if(PLAIN.add(config.model))log.line(Lang.str(c,ask?R.string.eng_log_or_plain_voices:R.string.eng_log_or_plain_times));
                     Diagnostics.event("or_fallback",http.jobId,"provider","openrouter","model",config.model,"reason","format","http",400);
                     continue;
                 }
@@ -142,7 +142,7 @@ final class OpenRouterClient implements TranscribeClient {
                 if(!json.has("text")&&!json.has("segments")&&!json.has("words")){
                     StringBuilder fields=new StringBuilder();for(Iterator<String> it=json.keys();it.hasNext()&&fields.length()<80;)fields.append(fields.length()>0?",":"").append(it.next().replaceAll("[^A-Za-z0-9_]",""));
                     Diagnostics.event("or_fallback",http.jobId,"provider","openrouter","model",config.model,"reason","shape:"+fields);
-                    throw new HttpApi.UserAction("OpenRouter respondió en un formato que Verbapp no reconoce. Prueba con otro modelo en Ajustes.");
+                    throw new HttpApi.UserAction(Lang.str(c,R.string.eng_err_or_shape));
                 }
                 // 4. Respuesta → tramos.
                 Parsed parsed=read(json,ask,built.durationMs);
@@ -152,11 +152,11 @@ final class OpenRouterClient implements TranscribeClient {
                 if(built.leadMs>0&&!parsed.timed){
                     // Sin tiempos reales no se sabe dónde terminan las anclas: su texto contaminaría el comienzo. Se repite sin ellas.
                     NO_TIMES.add(config.model);anchors=Collections.emptyList();before+=cost(json);
-                    log.line("El modelo no devolvió tiempos · se reenvía sin las muestras de voz");
+                    log.line(Lang.str(c,R.string.eng_log_or_no_times));
                     Diagnostics.event("or_fallback",http.jobId,"provider","openrouter","model",config.model,"reason","no_times");
                     continue;
                 }
-                if(ask&&!parsed.diarized)log.line("El modelo no devolvió voces separadas en este envío · queda solo el texto");
+                if(ask&&!parsed.diarized)log.line(Lang.str(c,R.string.eng_log_or_no_voices));
                 if(flacRefused)NO_FLAC.add(config.model);
                 JSONObject out=finish(parsed,built.leadMs,built.anchors,refs);
                 JSONObject usage=usage(json,built.durationMs,before);before=0;
@@ -166,7 +166,7 @@ final class OpenRouterClient implements TranscribeClient {
                     "anchors",out.optInt("_anchors"),"matched",out.optInt("_matched"),"cost",usage.optDouble("cost",-1),"count",out.getJSONArray("segments").length());
                 return out;
             }
-            throw new IOException("OpenRouter no devolvió una transcripción utilizable.");
+            throw new IOException(Lang.str(c,R.string.eng_err_or_unusable));
         }catch(Exception e){
             // Un envío cobrado y descartado (p. ej. sin tiempos) cuyo reenvío falló no queda en ninguna respuesta: el motor
             // lo suma igual al costo real, para no mostrar menos de lo que se cobró.
@@ -205,15 +205,15 @@ final class OpenRouterClient implements TranscribeClient {
         catch(InterruptedIOException|HttpApi.UserAction e){throw e;}
         catch(OrAudio.TooShort e){
             Diagnostics.event("or_prepare_failed",http.jobId,"provider","openrouter","reason","too_short");
-            throw new HttpApi.UserAction("El audio está vacío o no se pudo leer (dura menos de un segundo). Si la grabación es más larga, prueba importar una copia.");
+            throw new HttpApi.UserAction(Lang.str(c,R.string.eng_err_audio_empty));
         }
         catch(OrAudio.NoTrack e){
             Diagnostics.event("or_prepare_failed",http.jobId,"provider","openrouter","reason","no_track");
-            throw new HttpApi.UserAction("No se pudo leer el audio: el archivo no tiene una pista de audio válida. Prueba importar una copia.");
+            throw new HttpApi.UserAction(Lang.str(c,R.string.eng_err_audio_no_track));
         }
         catch(Exception e){
             Diagnostics.event("or_prepare_failed",http.jobId,"provider","openrouter","error_class",e.getClass().getSimpleName(),"reason",HttpApi.safeReason(e));
-            throw new IOException("no se pudo preparar el audio para enviarlo ("+e.getClass().getSimpleName()+")",e);
+            throw new IOException(Lang.str(c,R.string.eng_err_prepare_failed,e.getClass().getSimpleName()),e);
         }
     }
     private OrAudio.Built make(File audio,List<File> anchors,File outBase,boolean wav)throws Exception{return wav?builder.wav(audio,anchors,outBase,http):builder.build(audio,anchors,outBase,http);}

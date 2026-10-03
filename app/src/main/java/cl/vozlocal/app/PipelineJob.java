@@ -16,6 +16,8 @@ import android.os.*;
  * plano (mismas rondas con reintentos, TranscribeService.rounds), con su notificación obligatoria.
  */
 public class PipelineJob extends JobService {
+    /** Idioma de la app (Lang): textos y notificaciones en el idioma elegido, aunque el teléfono esté en otro. */
+    @Override protected void attachBaseContext(android.content.Context base){super.attachBaseContext(Lang.wrap(base));}
     static final int OPEN_APP_NOTIFICATION=11;
     /** Una transferencia iniciada por el usuario está trabajando (las demás vías le ceden el turno). */
     static volatile boolean userRunning;
@@ -52,7 +54,7 @@ public class PipelineJob extends JobService {
     private boolean startUser(JobParameters params){
         if(Build.VERSION.SDK_INT<34)return false;
         if(TranscribeService.running||userRunning){Diagnostics.event("user_job",null,"result","skipped","runner","uij");return false;}
-        try{setNotification(params,Transcriber.NOTIFICATION,Transcriber.build(this,"Preparando…",true,-1),JobService.JOB_END_NOTIFICATION_POLICY_REMOVE);}
+        try{setNotification(params,Transcriber.NOTIFICATION,Transcriber.build(this,Lang.str(this,R.string.eng_notif_preparing),true,-1),JobService.JOB_END_NOTIFICATION_POLICY_REMOVE);}
         catch(RuntimeException e){Diagnostics.event("user_job",null,"result","no_notification","error_class",e.getClass().getSimpleName());}
         userRunning=true;HttpApi http=new HttpApi();actives.put(params.getJobId(),http);current=http;
         getSystemService(JobScheduler.class).cancel(Pipeline.JOB_ID);
@@ -99,7 +101,9 @@ public class PipelineJob extends JobService {
             // La línea va a una grabación que sigue pedida: http.jobId es la última que tomó el trabajo, que pudo terminar
             // mientras esperaba para seguir con otra (antes «se reanudará» quedaba en una ya transcrita).
             String shown=byApp?(requested(id)?id:null):pausedId(id);
-            if(shown!=null)Pipeline.log(this,shown,byApp?"Continúa en primer plano (sigue aunque bloquees el teléfono)":(user?"Android pausó la transferencia: ":"Android pausó la tarea de fondo: ")+stopReason(reason)+(stale?" · sigue la tarea de fondo con tus ajustes de ahora":" · se reanudará"));
+            // stale solo puede darse en la transferencia (ver arriba).
+            if(shown!=null)Pipeline.log(this,shown,byApp?Lang.str(this,R.string.eng_log_continues_foreground)
+                :Lang.str(this,!user?R.string.eng_log_paused_job:stale?R.string.eng_log_paused_transfer_stale:R.string.eng_log_paused_transfer,stopReason(this,reason)));
             if(id!=null&&reason==JobParameters.STOP_REASON_TIMEOUT)timedOut(id);
             if(reason==JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY)wifiNotice();}
         if(user&&current==h){userRunning=false;current=null;}
@@ -143,19 +147,19 @@ public class PipelineJob extends JobService {
         android.content.Context app=getApplicationContext();
         new Thread(()->{
             try{
-                int[] attempts={0};
+                int[] attempts={0};int max=Transcriber.ATTEMPTS;String why=Lang.str(app,R.string.eng_reason_job_timeout);
                 FilesStore.update(app,id,s->{if(!s.optBoolean("requested"))return;int a=s.optInt("attempts",0)+1;attempts[0]=a;s.put("attempts",a).put("retries",s.optInt("retries")+1);
-                    if(a>=5)s.put("requested",false).put("failed",true).put("lastError","Android cortó la tarea de fondo por tiempo");});
+                    if(a>=max)s.put("requested",false).put("failed",true).put("lastError",why);});
                 if(attempts[0]==0)return;
                 Diagnostics.event("job_timeout",id,"count",attempts[0],"runner","job");
-                if(attempts[0]<5){Pipeline.log(app,id,"Intento "+attempts[0]+" de 5: Android cortó la tarea de fondo por tiempo · abre la app para seguir en primer plano");return;}
+                if(attempts[0]<max){Pipeline.log(app,id,Lang.str(app,R.string.eng_log_job_timeout,attempts[0],max));return;}
                 boolean restoring=Retranscribe.hasPrevious(app,id)&&!Transcript.exists(app,id);
-                Pipeline.log(app,id,"Intento 5 de 5: Android cortó la tarea de fondo por tiempo"+(restoring?"":" · abre la app y pulsa Reintentar"));
+                Pipeline.log(app,id,Lang.str(app,restoring?R.string.eng_log_job_timeout_restoring:R.string.eng_log_job_timeout_last,max,max));
                 Diagnostics.event("job_failed",id,"count",attempts[0],"reason","timeout","runner","job");
                 if(restoring){
-                    Retranscribe.restore(app,id,"No se pudo hacer la nueva versión · se mantiene la anterior","retranscribe_failed");
-                    Transcriber.attention(app,id,"No se pudo hacer la nueva versión","Android cortó la tarea de fondo 5 veces. Se mantiene la versión anterior.");
-                }else Transcriber.attention(app,id,"La transcripción necesita atención","Android cortó la tarea de fondo 5 veces. Abre la grabación y pulsa Reintentar.");
+                    Retranscribe.restore(app,id,Lang.str(app,R.string.eng_log_new_version_failed),"retranscribe_failed");
+                    Transcriber.attention(app,id,Lang.str(app,R.string.eng_notif_new_version_failed),Lang.str(app,R.string.eng_notif_job_cut_keep,max));
+                }else Transcriber.attention(app,id,Lang.str(app,R.string.eng_notif_attention_title),Lang.str(app,R.string.eng_notif_job_cut_retry,max));
             }catch(Exception e){Diagnostics.event("job_timeout_failed",id,"error_class",e.getClass().getSimpleName());}
         },"VozLocal-timeout").start();
     }
@@ -180,37 +184,41 @@ public class PipelineJob extends JobService {
     }
     /** Un envío que solo se puede hacer en primer plano: el aviso abre esa grabación, y abrirla lo retoma. */
     private void openAppToSend(String id){
-        NotificationManager m=getSystemService(NotificationManager.class);m.createNotificationChannel(new NotificationChannel("processing","Transcripciones",NotificationManager.IMPORTANCE_LOW));
+        NotificationManager m=getSystemService(NotificationManager.class);m.createNotificationChannel(new NotificationChannel("processing",Lang.str(this,R.string.eng_channel_processing),NotificationManager.IMPORTANCE_LOW));
         Intent intent=new Intent(this,RecordingActivity.class).putExtra("id",id).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         PendingIntent open=PendingIntent.getActivity(this,OPEN_APP_NOTIFICATION,intent,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        String text="Este envío es largo y necesita la app abierta. Toca para seguir: continúa aunque bloquees el teléfono.";
-        Notification n=new Notification.Builder(this,"processing").setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle("Abre Verbapp para terminar").setContentText(text)
+        String text=Lang.str(this,R.string.eng_notif_open_app_text);
+        Notification n=new Notification.Builder(this,"processing").setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle(Lang.str(this,R.string.eng_notif_open_app_title)).setContentText(text)
             .setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true).setOnlyAlertOnce(true).build();
         try{m.notify(OPEN_APP_NOTIFICATION,n);}catch(SecurityException ignored){}
     }
-    /** Motivo de detención de Android (API 31+) en palabras simples. */
-    static String stopReason(int reason){
+    /** Motivo de detención de Android (API 31+) en palabras simples, en el idioma de la app. */
+    static String stopReason(android.content.Context c,int reason){return Lang.str(c,stopReasonText(reason));}
+    /** Igual, sin Context a mano. */
+    static String stopReason(int reason){return Lang.str(stopReasonText(reason));}
+    /** El texto de cada motivo de detención de Android. */
+    private static int stopReasonText(int reason){
         switch(reason){
-            case JobParameters.STOP_REASON_TIMEOUT:return "límite de tiempo de las tareas de fondo";
-            case JobParameters.STOP_REASON_DEVICE_STATE:return "ahorro de energía del teléfono (pantalla apagada)";
-            case JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY:return "cambió o se perdió la conexión";
-            case JobParameters.STOP_REASON_CONSTRAINT_CHARGING:return "se desconectó el cargador";
-            case JobParameters.STOP_REASON_CONSTRAINT_BATTERY_NOT_LOW:return "batería baja";
-            case JobParameters.STOP_REASON_QUOTA:return "Android agotó el tiempo que le da a la app en segundo plano";
-            case JobParameters.STOP_REASON_APP_STANDBY:return "la app lleva tiempo sin usarse (modo reposo)";
-            case JobParameters.STOP_REASON_BACKGROUND_RESTRICTION:return "la app tiene restringido el uso en segundo plano";
-            case JobParameters.STOP_REASON_PREEMPT:return "Android priorizó otra tarea";
-            case JobParameters.STOP_REASON_SYSTEM_PROCESSING:return "Android necesitaba recursos";
-            case JobParameters.STOP_REASON_USER:return "detenida desde Ajustes de Android";
-            default:return "motivo no informado por Android";
+            case JobParameters.STOP_REASON_TIMEOUT:return R.string.eng_stop_timeout;
+            case JobParameters.STOP_REASON_DEVICE_STATE:return R.string.eng_stop_device_state;
+            case JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY:return R.string.eng_stop_connectivity;
+            case JobParameters.STOP_REASON_CONSTRAINT_CHARGING:return R.string.eng_stop_charging;
+            case JobParameters.STOP_REASON_CONSTRAINT_BATTERY_NOT_LOW:return R.string.eng_stop_battery;
+            case JobParameters.STOP_REASON_QUOTA:return R.string.eng_stop_quota;
+            case JobParameters.STOP_REASON_APP_STANDBY:return R.string.eng_stop_standby;
+            case JobParameters.STOP_REASON_BACKGROUND_RESTRICTION:return R.string.eng_stop_restricted;
+            case JobParameters.STOP_REASON_PREEMPT:return R.string.eng_stop_preempt;
+            case JobParameters.STOP_REASON_SYSTEM_PROCESSING:return R.string.eng_stop_system;
+            case JobParameters.STOP_REASON_USER:return R.string.eng_stop_user;
+            default:return R.string.eng_stop_unknown;
         }
     }
     /** Con la app cerrada, Android no deja trabajar en primer plano: se sugiere abrirla (un toque) para acelerar. */
     private void suggestOpeningApp(){
-        for(Recording r:Recording.list(this))if(FilesStore.state(this,r.id).optBoolean("requested")){Pipeline.log(this,r.id,"Con la app cerrada Android solo permite una tarea de fondo (puede pausarla) · abre la app para acelerar");break;}
-        NotificationManager m=getSystemService(NotificationManager.class);m.createNotificationChannel(new NotificationChannel("processing","Transcripciones",NotificationManager.IMPORTANCE_LOW));
+        for(Recording r:Recording.list(this))if(FilesStore.state(this,r.id).optBoolean("requested")){Pipeline.log(this,r.id,Lang.str(this,R.string.eng_log_background_only));break;}
+        NotificationManager m=getSystemService(NotificationManager.class);m.createNotificationChannel(new NotificationChannel("processing",Lang.str(this,R.string.eng_channel_processing),NotificationManager.IMPORTANCE_LOW));
         PendingIntent open=PendingIntent.getActivity(this,11,new Intent(this,MainActivity.class).putExtra("library",true),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        Notification n=new Notification.Builder(this,"processing").setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle("Transcripción en segundo plano").setContentText("Toca para abrir Verbapp y acelerarla").setContentIntent(open).setAutoCancel(true).setOnlyAlertOnce(true).build();
+        Notification n=new Notification.Builder(this,"processing").setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle(Lang.str(this,R.string.eng_notif_background_title)).setContentText(Lang.str(this,R.string.eng_notif_background_text)).setContentIntent(open).setAutoCancel(true).setOnlyAlertOnce(true).build();
         try{m.notify(OPEN_APP_NOTIFICATION,n);}catch(SecurityException ignored){}
     }
     static String hash(byte[] data)throws Exception{return android.util.Base64.encodeToString(java.security.MessageDigest.getInstance("SHA-256").digest(data),android.util.Base64.NO_WRAP);}

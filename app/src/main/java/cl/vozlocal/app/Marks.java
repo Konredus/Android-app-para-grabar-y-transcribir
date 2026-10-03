@@ -19,8 +19,8 @@ final class Marks {
     static int count(Context c,String id){return list(c,id).length();}
     /** Solo los tiempos (ms), en orden: para dibujar los ★ sobre la onda. */
     static long[] times(Context c,String id){JSONArray a=list(c,id);long[] t=new long[a.length()];for(int i=0;i<t.length;i++)t[i]=a.optJSONObject(i).optLong("t");return t;}
-    /** «1 momento marcado», «3 momentos marcados». */
-    static String describe(int n){return n==1?"1 momento marcado":n+" momentos marcados";}
+    /** «1 momento marcado», «3 momentos marcados» (en el idioma de la app). */
+    static String describe(int n){return Lang.plural(R.plurals.marks_count,n);}
 
     /**
      * Agrega una marca en ms (de grabación). Si ya hay una en el mismo instante no la duplica:

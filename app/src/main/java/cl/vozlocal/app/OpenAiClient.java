@@ -19,14 +19,16 @@ final class OpenAiClient implements TranscribeClient {
         HttpApi.Response response=http.request("GET","https://api.openai.com/v1/models/gpt-4o-transcribe-diarize",key,null,null,null);
         HttpApi.require(response,"OpenAI");
     }
-    void verify(ProviderConfig config)throws Exception{HttpApi.Response response=http.request("GET",config.base+"/models/"+java.net.URLEncoder.encode(config.model,"UTF-8"),config.key,null,null,null);HttpApi.require(response,"Proveedor");}
+    void verify(ProviderConfig config)throws Exception{HttpApi.Response response=http.request("GET",config.base+"/models/"+java.net.URLEncoder.encode(config.model,"UTF-8"),config.key,null,null,null);HttpApi.require(response,provider());}
+    /** Nombre que dan los errores de un servidor compatible con OpenAI: «Proveedor», en el idioma de la app. */
+    static String provider(){return Lang.str(R.string.eng_provider);}
     JSONObject transcribe(File audio,String key,String language)throws Exception{
         return transcribe(audio,new ProviderConfig("openai","https://api.openai.com/v1","gpt-4o-transcribe-diarize",key,true),language);
     }
     JSONObject transcribe(File audio,ProviderConfig config,String language)throws Exception{return transcribe(audio,config,language,null,null);}
     /** references: pares {nombre, data URL} de muestras de voz (2–10 s) para reconocer a las mismas personas en otros bloques. */
     @Override public JSONObject transcribe(File audio,ProviderConfig config,String language,List<String[]> references,Delta delta)throws Exception{
-        if(audio.length()>25_000_000)throw new HttpApi.UserAction("Esta parte del audio supera el tamaño que acepta el proveedor (25 MB). Prueba recortar el audio.");
+        if(audio.length()>25_000_000)throw new HttpApi.UserAction(Lang.str(R.string.eng_err_part_too_big));
         String boundary="VozLocal"+java.util.UUID.randomUUID().toString().replace("-","");
         boolean fast=config.provider.equals("openai")&&config.model.equals("gpt-transcribe");
         StringBuilder header=new StringBuilder(field(boundary,"model",config.model));
@@ -47,8 +49,8 @@ final class OpenAiClient implements TranscribeClient {
         if(fast&&delta!=null){int[] chars={0};http.onEvent=event->{if("transcript.text.delta".equals(event.optString("type"))){chars[0]+=event.optString("delta").length();delta.text(chars[0]);}};}
         HttpApi.Response response;
         try{response=http.request("POST",config.base+"/audio/transcriptions",config.key,"multipart/form-data; boundary="+boundary,body,null);}finally{http.onEvent=null;}
-        HttpApi.require(response,"Proveedor");JSONObject result=response.json();
-        if(!config.speakers){if(!result.has("text"))throw new HttpApi.UserAction("El proveedor no devolvió texto en el formato esperado.");org.json.JSONArray segments=new org.json.JSONArray();if(!result.getString("text").trim().isEmpty())segments.put(new JSONObject().put("speaker","text").put("start",0).put("end",0).put("text",result.getString("text")));result.put("segments",segments);}
+        HttpApi.require(response,provider());JSONObject result=response.json();
+        if(!config.speakers){if(!result.has("text"))throw new HttpApi.UserAction(Lang.str(R.string.eng_err_no_text));org.json.JSONArray segments=new org.json.JSONArray();if(!result.getString("text").trim().isEmpty())segments.put(new JSONObject().put("speaker","text").put("start",0).put("end",0).put("text",result.getString("text")));result.put("segments",segments);}
         return result.put("_diarized",config.speakers);
     }
     private static String field(String boundary,String key,String value){return "--"+boundary+"\r\nContent-Disposition: form-data; name=\""+key+"\"\r\n\r\n"+value+"\r\n";}

@@ -20,12 +20,19 @@ abstract class Screen extends Activity {
     Glass.Backdrop backdrop;
     private int savedScroll;private android.animation.ValueAnimator vividAnim;
 
+    /** Idioma de la app (Lang): cada pantalla se crea con el idioma elegido, aunque el teléfono esté en otro. */
+    @Override protected void attachBaseContext(android.content.Context base){super.attachBaseContext(Lang.wrap(base));}
+    /** El idioma con que se armó esta pantalla. */
+    private String lang;
     @Override public void onCreate(Bundle state){
-        p=AppTheme.apply(this);ui=new Ui(this,p);
+        p=AppTheme.apply(this);ui=new Ui(this,p);lang=Lang.current(this);
         super.onCreate(state);if(state!=null)savedScroll=state.getInt("screen_scroll",0);
     }
-    /** Si cambió el tema o «Colores de tu fondo de pantalla» mientras la pantalla estaba detrás, se rehace con la paleta nueva. */
-    @Override protected void onResume(){super.onResume();if(p.dark!=AppTheme.isDark(this)||p.dynamic!=AppTheme.dynamicColor(this))recreate();}
+    /**
+     * Si cambió el tema o «Colores de tu fondo de pantalla» mientras la pantalla estaba detrás, se rehace con la paleta nueva.
+     * Lo mismo con el idioma: en Android 8–12, Lang.set solo rehace la pantalla de adelante (Android 13+ las rehace todas).
+     */
+    @Override protected void onResume(){super.onResume();Lang.refresh();if(p.dark!=AppTheme.isDark(this)||p.dynamic!=AppTheme.dynamicColor(this)||!Lang.current(this).equals(lang))recreate();}
     @Override protected void onSaveInstanceState(Bundle state){state.putInt("screen_scroll",scroll==null?0:scroll.getScrollY());super.onSaveInstanceState(state);}
 
     /**
@@ -45,7 +52,7 @@ abstract class Screen extends Activity {
         if(back!=null){
             // Barra superior: botón redondo de vidrio ← (sin texto) a la izquierda y acciones a la derecha.
             bar=ui.row();bar.setPadding(ui.dp(S3),ui.dp(S2),ui.dp(S3),ui.dp(S1));bar.setMinimumHeight(ui.dp(64));bar.setClipToPadding(false);bar.setClipChildren(false);
-            ImageButton backButton=ui.glassButton(R.drawable.ic_arrow_back,"Volver a "+back);backButton.setOnClickListener(v->onBackPressed());bar.addView(backButton);bar.addView(ui.flex());
+            ImageButton backButton=ui.glassButton(R.drawable.ic_arrow_back,getString(R.string.common_back_to,back));backButton.setOnClickListener(v->onBackPressed());bar.addView(backButton);bar.addView(ui.flex());
             barActions=ui.row();barActions.setClipChildren(false);bar.addView(barActions);root.addView(bar,Ui.fill());
         }
         scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setClipToPadding(false);scroll.setVerticalScrollBarEnabled(false);
@@ -107,9 +114,9 @@ abstract class Screen extends Activity {
 
     // ---------- Mensajes ----------
     Sheet sheet(String title,String message){return new Sheet(this,ui,title,message);}
-    void message(String title,String value){sheet(title,value).primary("Entendido",()->{}).show();}
+    void message(String title,String value){sheet(title,value).primary(getString(R.string.common_ok),()->{}).show();}
     void confirm(String title,String value,String action,boolean destructive,Runnable run){
-        sheet(title,value).primary(action,destructive?Ui.Style.DESTRUCTIVE:Ui.Style.PRIMARY,()->{run.run();return true;}).secondary("Cancelar",null).show();
+        sheet(title,value).primary(action,destructive?Ui.Style.DESTRUCTIVE:Ui.Style.PRIMARY,()->{run.run();return true;}).secondary(getString(R.string.common_cancel),null).show();
     }
     void toast(String value){Toast.makeText(this,value,Toast.LENGTH_SHORT).show();}
     private View snack,leaving;private final android.os.Handler snackTimer=new android.os.Handler(android.os.Looper.getMainLooper());
@@ -129,7 +136,7 @@ abstract class Screen extends Activity {
         LinearLayout.LayoutParams lp=Ui.fill();lp.setMargins(ui.dp(S4),ui.dp(S2),ui.dp(S4),ui.dp(S2));
         int at=bottom==null?root.getChildCount():root.indexOfChild(bottom);root.addView(s,Math.max(0,at),lp);snack=s;
         if(AppTheme.motion()){s.setAlpha(0f);s.setTranslationY(ui.dp(S6));s.animate().alpha(1f).translationY(0f).setStartDelay(0).setDuration(MOTION_BASE).setInterpolator(EMPHASIZED_DECELERATE).start();}
-        s.announceForAccessibility(text+(action!=null?". "+action+" disponible":""));
+        s.announceForAccessibility(text+(action!=null?". "+getString(R.string.common_action_available,action):""));
         android.view.accessibility.AccessibilityManager am=getSystemService(android.view.accessibility.AccessibilityManager.class);
         long timeout=8000;boolean keep=false;
         if(am!=null){if(Build.VERSION.SDK_INT>=29)timeout=am.getRecommendedTimeoutMillis(8000,android.view.accessibility.AccessibilityManager.FLAG_CONTENT_TEXT|(action!=null?android.view.accessibility.AccessibilityManager.FLAG_CONTENT_CONTROLS:0));else keep=action!=null&&am.isTouchExplorationEnabled();}
@@ -145,6 +152,6 @@ abstract class Screen extends Activity {
     /** Quita el aviso al instante (al mostrar otro o al salir de la pantalla). */
     private void removeSnackbar(){snackTimer.removeCallbacksAndMessages(null);View s=snack;snack=null;detach(s);detach(leaving);leaving=null;}
     private static void detach(View v){if(v==null)return;v.animate().cancel();if(v.getParent() instanceof ViewGroup)((ViewGroup)v.getParent()).removeView(v);}
-    void shareFile(String filename,String title){android.net.Uri uri=android.net.Uri.parse("content://cl.vozlocal.app.audio/"+filename);Intent share=new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);share.setClipData(android.content.ClipData.newRawUri(title,uri));startActivity(Intent.createChooser(share,title));}
+    void shareFile(String filename,String title){android.net.Uri uri=AudioProvider.uri(this,filename);Intent share=new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);share.setClipData(android.content.ClipData.newRawUri(title,uri));startActivity(Intent.createChooser(share,title));}
     int dp(float n){return ui.dp(n);}
 }

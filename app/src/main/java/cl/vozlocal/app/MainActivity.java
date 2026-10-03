@@ -50,7 +50,6 @@ import static cl.vozlocal.app.AppTheme.*;
  * personas y si ya está en 0-Inbox) en grupos de vidrio. Lo terminado va en silencio; se destaca solo lo que pide algo.
  */
 public class MainActivity extends Screen {
-    private static final Locale ES=new Locale("es","CL");
     /** Fecha ISO al comienzo del título (Ajustes → «Fecha en el nombre»). */
     private static final Pattern DATE=Pattern.compile("^(\\d{4}-\\d{2}-\\d{2})(?:\\s+|$)");
     /** Caja del botón de grabar con su halo (dp): normal (círculo de 76 dp) y compacta. */
@@ -148,9 +147,9 @@ public class MainActivity extends Screen {
          */
         String progressText(){
             boolean mine=Pipeline.processing(r.id);
-            String wait=mine?null:blocker!=null?"En cola · "+blocker.replaceFirst(" \\(.*$",""):"En cola";
-            int b=blocks();if(b>1)return (wait!=null?wait:"Transcribiendo")+" · "+blocksDone()+" de "+b+" partes";
-            return wait!=null?wait:"Transcribiendo…";
+            String wait=mine?null:StatusText.queuedLine(blocker);
+            int b=blocks();if(b>1)return Lang.str(R.string.home_parts,wait!=null?wait:Lang.str(R.string.home_transcribing),blocksDone(),b);
+            return wait!=null?wait:Lang.str(R.string.home_transcribing_dots);
         }
         String snippet(){Meta m=meta;return m!=null&&!m.snippet.isEmpty()?m.snippet:state.optString("snippet","");}
     }
@@ -273,10 +272,10 @@ public class MainActivity extends Screen {
         LinearLayout mid=ui.column();mid.setGravity(Gravity.CENTER_HORIZONTAL);mid.setClipChildren(false);
         micFrame=new FrameLayout(this);micFrame.setClipChildren(false);
         decor=new Waveform.Decor(this,p.waveIdle);decor.setGap(ui.dp(MIC_BOX-12));micFrame.addView(decor,new FrameLayout.LayoutParams(-1,ui.dp(72),Gravity.CENTER_VERTICAL));
-        record=new RecordButton(this,p);record.setContentDescription("Grabar");record.setOnClickListener(this::onRecordTap);micFrame.addView(record,new FrameLayout.LayoutParams(ui.dp(MIC_BOX),ui.dp(MIC_BOX),Gravity.CENTER));
+        record=new RecordButton(this,p);record.setContentDescription(getString(R.string.home_record));record.setOnClickListener(this::onRecordTap);micFrame.addView(record,new FrameLayout.LayoutParams(ui.dp(MIC_BOX),ui.dp(MIC_BOX),Gravity.CENTER));
         // Las ondas llegan hasta el borde de la pantalla (se desvanecen antes).
         LinearLayout.LayoutParams fl=new LinearLayout.LayoutParams(-1,ui.dp(MIC_BOX));fl.setMarginStart(-ui.dp(S4));fl.setMarginEnd(-ui.dp(S4));mid.addView(micFrame,fl);
-        prompt=ui.text("",Type.ITEM,p.onSurface);prompt.setTextSize(15);prompt.setGravity(Gravity.CENTER);prompt.setText(promptText());prompt.setContentDescription("Toca para grabar. Funciona sin internet.");LinearLayout.LayoutParams pp=Ui.wrap();pp.topMargin=ui.dp(S1);mid.addView(prompt,pp);
+        prompt=ui.text("",Type.ITEM,p.onSurface);prompt.setTextSize(15);prompt.setGravity(Gravity.CENTER);prompt.setText(promptText());prompt.setContentDescription(getString(R.string.home_tap_to_record_spoken));LinearLayout.LayoutParams pp=Ui.wrap();pp.topMargin=ui.dp(S1);mid.addView(prompt,pp);
         importPill=buildImportPill();LinearLayout.LayoutParams ip=Ui.wrap();ip.topMargin=ui.dp(S1);mid.addView(importPill,ip);
         center.addView(mid,new FrameLayout.LayoutParams(-1,-2,Gravity.CENTER));
         idleLayer.addView(center,new LinearLayout.LayoutParams(-1,0,1));
@@ -291,9 +290,9 @@ public class MainActivity extends Screen {
      * tinta con transparencia y no onSurfaceVariant: aquí el fondo ya empieza a ponerse verde y el gris perdería contraste.
      */
     private CharSequence promptText(){
-        String first="Toca para grabar",line=first+" · funciona sin internet";
+        String first=getString(R.string.home_tap_to_record),line=first+" · "+getString(R.string.home_works_offline_inline);
         boolean fits=prompt.getPaint().measureText(line)<=getResources().getDisplayMetrics().widthPixels-2*ui.dp(S4)-ui.dp(S2);
-        SpannableString s=new SpannableString(fits?line:first+"\nFunciona sin internet");
+        SpannableString s=new SpannableString(fits?line:first+"\n"+getString(R.string.home_works_offline));
         s.setSpan(new ForegroundColorSpan(withAlpha(p.onSurface,0xB8)),first.length(),s.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         return s;
     }
@@ -303,27 +302,27 @@ public class MainActivity extends Screen {
     private LinearLayout buildImportPill(){
         LinearLayout row=ui.row();row.setBackground(pill());row.setMinimumHeight(ui.dp(48));row.setPadding(ui.dp(S4),0,ui.dp(S4),0);
         row.addView(ui.icon(R.drawable.ic_upload,p.onSurface,18));row.addView(ui.space(S2));
-        importLabel=Ui.tabular(ui.oneLine(ui.text("Importar audio",Type.LABEL_LARGE,p.onSurface)));row.addView(importLabel);
-        row.setClickable(true);row.setFocusable(true);row.setAccessibilityDelegate(Ui.buttonRole());row.setContentDescription("Importar audio de WhatsApp, grabadoras o archivos");
-        row.setOnClickListener(v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Importar audio");if(RecorderService.activeId!=null){message("Grabación en curso","Guarda primero la grabación actual.");return;}startActivity(new Intent(this,ImportActivity.class));});
+        importLabel=Ui.tabular(ui.oneLine(ui.text(getString(R.string.home_import),Type.LABEL_LARGE,p.onSurface)));row.addView(importLabel);
+        row.setClickable(true);row.setFocusable(true);row.setAccessibilityDelegate(Ui.buttonRole());row.setContentDescription(getString(R.string.home_import_spoken));
+        row.setOnClickListener(v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Importar audio");if(RecorderService.activeId!=null){message(getString(R.string.home_recording_in_progress),getString(R.string.home_save_current_first));return;}startActivity(new Intent(this,ImportActivity.class));});
         Ui.pressable(row);return row;
     }
 
     /** Grabando (pantalla completa): volver, título, «● Grabando», cronómetro, la onda en vivo y los controles. */
     private void buildRecording(){
         LinearLayout top=ui.row();top.setPadding(0,ui.dp(S1),ui.dp(S1),ui.dp(S1));top.setMinimumHeight(ui.dp(56));top.setClipChildren(false);top.setClipToPadding(false);
-        ImageButton back=ui.glassButton(R.drawable.ic_arrow_back,"Ir a Biblioteca, la grabación sigue");back.setOnClickListener(v->section(true));top.addView(back);top.addView(ui.flex());top.addView(ui.brand(18));
+        ImageButton back=ui.glassButton(R.drawable.ic_arrow_back,getString(R.string.home_go_library_spoken));back.setOnClickListener(v->section(true));top.addView(back);top.addView(ui.flex());top.addView(ui.brand(18));
         recLayer.addView(top,Ui.fill());
         // En el lugar del «Default mic» de la referencia: el título de la grabación (tocar para escribirlo).
         titlePill=ui.row();titlePill.setBackground(pill());titlePill.setPadding(ui.dp(S4),0,ui.dp(S4),0);titlePill.setMinimumHeight(ui.dp(48));
         titlePill.addView(ui.icon(R.drawable.ic_edit,p.onSurface,16));titlePill.addView(ui.space(S2));
-        titlePillText=ui.oneLine(ui.text("Añadir título",Type.LABEL_LARGE,p.onSurface));titlePillText.setMaxWidth(ui.dp(220));titlePill.addView(titlePillText);
+        titlePillText=ui.oneLine(ui.text(getString(R.string.home_add_title),Type.LABEL_LARGE,p.onSurface));titlePillText.setMaxWidth(ui.dp(220));titlePill.addView(titlePillText);
         titlePill.setClickable(true);titlePill.setFocusable(true);titlePill.setAccessibilityDelegate(Ui.buttonRole());
         titlePill.setOnClickListener(v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Añadir título");titleWhileRecording();});Ui.pressable(titlePill);
         LinearLayout.LayoutParams tp=Ui.wrap();tp.gravity=Gravity.CENTER_HORIZONTAL;recLayer.addView(titlePill,tp);
         bigTitle=ui.heading("",Type.DISPLAY_SMALL);bigTitle.setGravity(Gravity.CENTER);bigTitle.setMaxLines(3);bigTitle.setEllipsize(TextUtils.TruncateAt.END);bigTitle.setPadding(ui.dp(S2),ui.dp(S3),ui.dp(S2),0);recLayer.addView(bigTitle,Ui.fill());
         statusRow=ui.row();statusRow.setGravity(Gravity.CENTER);statusDot=new View(this);statusDot.setBackground(oval(p.record));statusRow.addView(statusDot,new LinearLayout.LayoutParams(ui.dp(8),ui.dp(8)));statusRow.addView(ui.space(S2));
-        statusLabel=ui.text("Grabando",Type.LABEL_LARGE,p.onSurfaceVariant);statusLabel.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);statusRow.addView(statusLabel);
+        statusLabel=ui.text(getString(R.string.home_recording),Type.LABEL_LARGE,p.onSurfaceVariant);statusLabel.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);statusRow.addView(statusLabel);
         LinearLayout.LayoutParams sl=Ui.wrap();sl.gravity=Gravity.CENTER_HORIZONTAL;sl.topMargin=ui.dp(S4);recLayer.addView(statusRow,sl);
         timer=Ui.tabular(ui.text("00:00",Type.DISPLAY_LARGE,p.onSurface));timer.setGravity(Gravity.CENTER);timer.setIncludeFontPadding(false);timer.setLineSpacing(0,1f);timer.setMaxLines(1);timer.setPadding(0,ui.dp(S1),0,0);shrinkToFit(timer,36);recLayer.addView(timer,Ui.fill());
         // La onda toma el espacio libre sobre el verde, de borde a borde.
@@ -331,8 +330,8 @@ public class MainActivity extends Screen {
         LinearLayout.LayoutParams wl=new LinearLayout.LayoutParams(-1,0,1);wl.setMarginStart(-ui.dp(S4));wl.setMarginEnd(-ui.dp(S4));wl.topMargin=ui.dp(S2);wl.bottomMargin=ui.dp(S4);recLayer.addView(waveZone,wl);
         // [■ Detener] [❚❚ Pausa] (★): píldoras de vidrio sobre el verde y la ★ redonda con su contador.
         LinearLayout controls=ui.row();controls.setClipChildren(false);
-        stop=ui.button("Detener",R.drawable.ic_stop,Ui.Style.VIVID,v->{if(RecorderService.activeId!=null)onRecordTap(v);});stop.setContentDescription("Detener y guardar");
-        pause=ui.button("Pausa",R.drawable.ic_pause,Ui.Style.VIVID,v->{if(RecorderService.activeId==null)return;Ui.haptic(v,Ui.Haptic.TICK);send("PAUSE");});pause.setContentDescription("Pausar");
+        stop=ui.button(getString(R.string.home_stop),R.drawable.ic_stop,Ui.Style.VIVID,v->{if(RecorderService.activeId!=null)onRecordTap(v);});stop.setContentDescription(getString(R.string.home_stop_save));
+        pause=ui.button(getString(R.string.home_pause),R.drawable.ic_pause,Ui.Style.VIVID,v->{if(RecorderService.activeId==null)return;Ui.haptic(v,Ui.Haptic.TICK);send("PAUSE");});pause.setContentDescription(getString(R.string.home_pause_action));
         for(Ui.Btn b:new Ui.Btn[]{stop,pause}){b.setPadding(ui.dp(S3),0,ui.dp(S3),0);ui.oneLine(b.label);shrinkToFit(b.label,12);}
         controls.addView(stop,new LinearLayout.LayoutParams(0,ui.dp(52),1));
         LinearLayout.LayoutParams pl=new LinearLayout.LayoutParams(0,ui.dp(52),1);pl.setMarginStart(ui.dp(S3));controls.addView(pause,pl);
@@ -345,10 +344,10 @@ public class MainActivity extends Screen {
     /** ★ Marcar: un toque deja un momento con vibración; mantenerlo permite anotar una palabra. El globito dice cuántos van. */
     private View markButton(){
         FrameLayout box=new FrameLayout(this);box.setClipChildren(false);
-        mark=ui.iconButton(R.drawable.ic_sparkle,"Marcar momento",p.onVivid,0,52);mark.setImageTintList(null);mark.setImageDrawable(new StarIcon(p.onVivid,ui.dp(24)));
+        mark=ui.iconButton(R.drawable.ic_sparkle,getString(R.string.home_mark_moment),p.onVivid,0,52);mark.setImageTintList(null);mark.setImageDrawable(new StarIcon(p.onVivid,ui.dp(24)));
         GradientDrawable glassDisc=oval(p.glassOnVivid);glassDisc.setStroke(Math.max(1,ui.dp(1)),p.glassOnVividStroke);mark.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.stateLayer(p.onVivid)),glassDisc,oval(0xFF000000)));
         mark.setOnClickListener(v->markMoment(v,null,-1));mark.setOnLongClickListener(v->{markWithWord(v);return true;});
-        mark.setAccessibilityDelegate(new View.AccessibilityDelegate(){@Override public void onInitializeAccessibilityNodeInfo(View host,AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(host,info);info.addAction(new AccessibilityNodeInfo.AccessibilityAction(AccessibilityNodeInfo.ACTION_LONG_CLICK,"Marcar con una palabra"));}});
+        mark.setAccessibilityDelegate(new View.AccessibilityDelegate(){@Override public void onInitializeAccessibilityNodeInfo(View host,AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(host,info);info.addAction(new AccessibilityNodeInfo.AccessibilityAction(AccessibilityNodeInfo.ACTION_LONG_CLICK,getString(R.string.home_mark_with_word)));}});
         box.addView(mark,new FrameLayout.LayoutParams(-1,-1));
         markBadge=Ui.tabular(ui.text("",Type.LABEL_SMALL,p.onInk));markBadge.setGravity(Gravity.CENTER);markBadge.setMinWidth(ui.dp(20));markBadge.setPadding(ui.dp(5),0,ui.dp(5),0);
         GradientDrawable bubble=shape(this,p.ink,R_FULL);bubble.setStroke(Math.max(1,ui.dp(1.5f)),p.onVivid);markBadge.setBackground(bubble);markBadge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);markBadge.setVisibility(View.GONE);
@@ -364,7 +363,7 @@ public class MainActivity extends Screen {
         LinearLayout top=ui.row();
         lastLead=new FrameLayout(this);lastLead.setClipChildren(false);top.addView(lastLead,new LinearLayout.LayoutParams(ui.dp(44),ui.dp(44)));top.addView(ui.space(S3));
         LinearLayout texts=ui.column();
-        lastOverline=ui.text("Última grabación",Type.LABEL_MEDIUM,p.onSurfaceVariant);texts.addView(lastOverline);
+        lastOverline=ui.text(getString(R.string.home_last_recording),Type.LABEL_MEDIUM,p.onSurfaceVariant);texts.addView(lastOverline);
         lastTitle=ui.oneLine(ui.text("",Type.TITLE_MEDIUM,p.onSurface));texts.addView(lastTitle);
         lastStatus=Ui.tabular(ui.oneLine(ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant)));lastStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);texts.addView(lastStatus);
         top.addView(texts,new LinearLayout.LayoutParams(0,-2,1));card.addView(top,Ui.fill());
@@ -388,14 +387,14 @@ public class MainActivity extends Screen {
         LinearLayout card=ui.card();card.setPadding(ui.dp(S3),ui.dp(S3),ui.dp(S3),ui.dp(S3));
         weekHead=ui.row();weekHead.setPadding(ui.dp(S1),0,ui.dp(S1),ui.dp(S3));
         weekHead.addView(ui.icon(R.drawable.ic_sparkle,p.primary,16));weekHead.addView(ui.space(S2));
-        weekHead.addView(ui.text("Tu semana",Type.TITLE_SMALL,p.onSurface));weekHead.addView(ui.flex());
-        weekHead.addView(ui.text("Últimos 7 días",Type.LABEL_MEDIUM,p.onSurfaceVariant));
+        weekHead.addView(ui.text(getString(R.string.home_your_week),Type.TITLE_SMALL,p.onSurface));weekHead.addView(ui.flex());
+        weekHead.addView(ui.text(getString(R.string.home_last_7_days),Type.LABEL_MEDIUM,p.onSurfaceVariant));
         card.addView(weekHead,Ui.fill());
         weekStats=ui.row();weekStats.setGravity(Gravity.TOP);card.addView(weekStats,Ui.fill());
         // Franja (pantallas bajas): ✦ Tu semana ········ [≋ 3] [◷ 12 min] [▤ 1]
         weekStrip=ui.row();weekStrip.setMinimumHeight(ui.dp(40));weekStrip.setVisibility(View.GONE);
         weekStrip.addView(ui.icon(R.drawable.ic_sparkle,p.primary,16));weekStrip.addView(ui.space(S2));
-        weekStrip.addView(ui.text("Tu semana",Type.TITLE_SMALL,p.onSurface));weekStrip.addView(ui.flex());
+        weekStrip.addView(ui.text(getString(R.string.home_your_week),Type.TITLE_SMALL,p.onSurface));weekStrip.addView(ui.flex());
         weekStripStats=ui.row();weekStrip.addView(weekStripStats);card.addView(weekStrip,Ui.fill());
         for(View v:new View[]{weekHead,weekStats,weekStrip})v.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         card.setBackground(ui.ripple(glass(this,p,R_CARD),R_CARD));card.setClickable(true);card.setFocusable(true);card.setAccessibilityDelegate(Ui.buttonRole());
@@ -403,8 +402,8 @@ public class MainActivity extends Screen {
         return card;
     }
     private void renderWeek(){
-        Week w=week;String dur=w.ms<=0?"0 min":Ui.humanDuration(w.ms);String key=w.count+"|"+dur+"|"+w.notes;if(key.equals(weekKey))return;weekKey=key;
-        String[] values={String.valueOf(w.count),dur,String.valueOf(w.notes)},labels={w.count==1?"Grabación":"Grabaciones","Grabado",w.notes==1?"Nota":"Notas"};
+        Week w=week;String dur=w.ms<=0?getString(R.string.ui_duration_min,0):Ui.humanDuration(w.ms);String key=w.count+"|"+dur+"|"+w.notes;if(key.equals(weekKey))return;weekKey=key;
+        String[] values={String.valueOf(w.count),dur,String.valueOf(w.notes)},labels={quantity(R.plurals.home_week_recordings,w.count),getString(R.string.home_week_recorded),quantity(R.plurals.home_week_notes,w.notes)};
         int[] icons={R.drawable.ic_waveform,R.drawable.ic_clock,R.drawable.ic_note};
         weekStats.removeAllViews();weekStripStats.removeAllViews();
         for(int i=0;i<3;i++){
@@ -413,8 +412,14 @@ public class MainActivity extends Screen {
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);if(i>0)lp.setMarginStart(ui.dp(S2));weekStats.addView(s,lp);
             if(i>0)weekStripStats.addView(ui.space(S3));weekStripStats.addView(ui.icon(icons[i],p.onSurfaceVariant,16));weekStripStats.addView(ui.space(S1));weekStripStats.addView(Ui.tabular(ui.text(values[i],Type.LABEL_LARGE,p.onSurface)));
         }
-        weekCard.setContentDescription("Tu semana, últimos 7 días: "+w.count+(w.count==1?" grabación, ":" grabaciones, ")+dur+" grabado, "+w.notes+(w.notes==1?" nota":" notas")+". Toca para ver tus métricas");
+        weekCard.setContentDescription(getString(R.string.home_week_spoken,quantity(R.plurals.home_count_recordings,w.count),dur,quantity(R.plurals.home_count_notes,w.notes)));
     }
+    /**
+     * Texto en plural según n («1 grabación», «3 grabaciones»; con o sin el número, según el texto). En portugués el 0 cae en
+     * la forma «one» de Android («0 gravação»); aquí el 0 usa la forma del plural, como el 2 («0 gravações»). En español e
+     * inglés el 0 ya era plural: no cambia nada.
+     */
+    private String quantity(int id,int n){return getResources().getQuantityString(id,n==0?2:n,n);}
     /**
      * Achica un texto de una línea hasta que quepa entero (sin «…» ni saltos), sin bajar de minSp: sirve con la letra
      * grande del sistema, «1 h 04 min» en un dato de «Tu semana» o «1:02:03» en el cronómetro.
@@ -427,17 +432,17 @@ public class MainActivity extends Screen {
         });
     }
     private void whatsappHelp(){
-        Sheet s=sheet("Transcribir un audio de WhatsApp",null);
-        String[] steps={"Abre el chat y mantén presionado el audio.","Toca Compartir (o ⋮ → Compartir).","Elige Verbapp en la lista de apps.","Revisa el título y toca Guardar audio."};
+        Sheet s=sheet(getString(R.string.home_whatsapp_title),null);
+        String[] steps={getString(R.string.home_whatsapp_step1),getString(R.string.home_whatsapp_step2),getString(R.string.home_whatsapp_step3),getString(R.string.home_whatsapp_step4)};
         for(int i=0;i<steps.length;i++){LinearLayout r=ui.row();r.setGravity(Gravity.TOP);r.setPadding(ui.dp(S1),ui.dp(S2),0,ui.dp(S2));TextView n=ui.text(String.valueOf(i+1),Type.LABEL_MEDIUM,p.onPrimaryContainer);n.setGravity(Gravity.CENTER);n.setBackground(oval(p.primaryContainer));n.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);r.addView(n,new LinearLayout.LayoutParams(ui.dp(24),ui.dp(24)));r.addView(ui.space(S3));r.addView(ui.text(steps[i],Type.BODY_LARGE,p.onSurface),new LinearLayout.LayoutParams(0,-2,1));s.add(r);}
-        TextView note=ui.text("También funciona con grabadoras, Telegram y cualquier app que comparta audio.",Type.BODY_MEDIUM,p.onSurfaceVariant);note.setPadding(ui.dp(S1),ui.dp(S3),0,0);s.add(note);
-        s.primary("Entendido",()->{}).show();
+        TextView note=ui.text(getString(R.string.home_whatsapp_note),Type.BODY_MEDIUM,p.onSurfaceVariant);note.setPadding(ui.dp(S1),ui.dp(S3),0,0);s.add(note);
+        s.primary(getString(R.string.common_ok),()->{}).show();
     }
     /** Saludo según la hora y tu nombre de «Mi voz»; sin nombre, una invitación con «hoy?» destacado. */
     private void renderGreeting(){
         int hour=Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
-        setText(hello,hour>=5&&hour<12?"Buenos días,":hour>=12&&hour<20?"Buenas tardes,":"Buenas noches,");
-        String n=myName==null?"":myName.trim();boolean named=!n.isEmpty()&&!n.equals("Yo");String shown=named?n:"¿Qué grabamos hoy?";
+        setText(hello,getString(hour>=5&&hour<12?R.string.home_good_morning:hour>=12&&hour<20?R.string.home_good_afternoon:R.string.home_good_evening));
+        String n=myName==null?"":myName.trim();boolean named=!n.isEmpty()&&!Voices.isDefaultMeName(n);String shown=named?n:getString(R.string.home_what_today);
         if(shown.equals(shownName))return;shownName=shown;nameView.setContentDescription(null);
         if(named)nameView.setText(n);else ui.highlightLast(nameView,shown);
         // Un nombre de dos líneas ocupa más: se vuelve a medir si todo cabe.
@@ -453,15 +458,15 @@ public class MainActivity extends Screen {
      */
     private void renderChip(){
         Settings settings=new Settings(this);boolean ready=settings.hasOpenRouterKey();String text,description;int icon;boolean spin=false,quiet=false,alert=false,fresh=false;View.OnClickListener click;
-        if(!ready){text="Configurar transcripción";icon=R.drawable.ic_key;click=v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Configurar transcripción");startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true));};}
+        if(!ready){text=getString(R.string.home_setup);icon=R.drawable.ic_key;click=v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Configurar transcripción");startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true));};}
         else if(workingCount>0){text=queueText(workingCount,workingRuns?workingTitle:null,workingBlocks,workingDone,workingTitle,workingWait);icon=workingRuns?R.drawable.ic_wave:R.drawable.ic_clock;spin=workingRuns;click=v->{if(workingCount>1){filter=2;section(true);render();}else open(workingId);};}
-        else if(failedCount>0){text=failedCount>1?failedCount+" necesitan atención":"Revisar transcripción";icon=R.drawable.ic_alert;alert=true;click=v->{if(failedCount>1){filter=4;section(true);render();}else open(failedId);};}
+        else if(failedCount>0){text=failedCount>1?getString(R.string.home_need_attention,failedCount):getString(R.string.home_check_transcription);icon=R.drawable.ic_alert;alert=true;click=v->{if(failedCount>1){filter=4;section(true);render();}else open(failedId);};}
         // La última comprobación rechazó la clave (la regla de la bienvenida y de Ajustes): no se dice «Listo» con ✓ de una
         // clave con la que la próxima transcripción va a fallar. Abre Ajustes directo en la hoja de la clave.
-        else if(SettingsActivity.keyRejected(settings)){text="Revisa tu clave de OpenRouter";icon=R.drawable.ic_alert;alert=true;click=v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Revisa tu clave");startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true));};}
-        else if(reviewId!=null){String id=reviewId;text="Revisar · «"+reviewTitle+"»";icon=R.drawable.ic_doc;fresh=true;click=v->open(id);}
-        else{text="Listo para transcribir";icon=R.drawable.ic_check;quiet=true;click=v->startActivity(new Intent(this,SettingsActivity.class));}
-        description=quiet?"Listo para transcribir. Abrir ajustes":!ready?"Configurar transcripción: agrega tu clave de OpenRouter":text;
+        else if(SettingsActivity.keyRejected(settings)){text=getString(R.string.home_check_key);icon=R.drawable.ic_alert;alert=true;click=v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Revisa tu clave");startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true));};}
+        else if(reviewId!=null){String id=reviewId;text=getString(R.string.home_review_title,reviewTitle);icon=R.drawable.ic_doc;fresh=true;click=v->open(id);}
+        else{text=getString(R.string.home_ready);icon=R.drawable.ic_check;quiet=true;click=v->startActivity(new Intent(this,SettingsActivity.class));}
+        description=quiet?getString(R.string.home_ready_spoken):!ready?getString(R.string.home_setup_spoken):text;
         // Botón redondo de la cabecera: el ícono cambia con el estado; el punto marca un error o algo nuevo por revisar.
         statusIcon.setImageResource(icon);statusIcon.setImageTintList(ColorStateList.valueOf(alert?p.error:ready?p.primary:p.onSurface));
         statusIcon.setScaleX(spin?0.7f:1f);statusIcon.setScaleY(spin?0.7f:1f);statusRing.setVisibility(spin?View.VISIBLE:View.GONE);
@@ -478,10 +483,15 @@ public class MainActivity extends Screen {
      * Si ninguna se procesa: «N audios en cola» o, con una sola, «X» y por qué espera (Item.progressText). Antes decía
      * «Transcribiendo «X»», con el anillo girando, de una que esperaba Wi-Fi, bajo una tarjeta que decía «En cola».
      * running: título de la que se procesa (null: ninguna); first y wait: la primera pedida y su progressText.
+     * En el idioma de la app; «En cola», sin motivo, es el mismo texto del motor (StatusText.queuedLine).
      */
     static String queueText(int count,String running,int blocks,int done,String first,String wait){
-        if(running!=null)return "Transcribiendo «"+running+"»"+(blocks>1?" · "+done+" de "+blocks:"")+(count>1?" · "+(count-1)+" en cola":"");
-        return count>1?count+" audios en cola":"«"+first+"» · "+(wait!=null?wait:"En cola");
+        if(running!=null){
+            String s=Lang.str(R.string.home_queue_running,running);
+            if(blocks>1)s+=" · "+Lang.str(R.string.home_queue_parts,done,blocks);
+            return count>1?s+" · "+Lang.str(R.string.home_queue_behind,count-1):s;
+        }
+        return count>1?Lang.str(R.string.home_queue_count,count):Lang.str(R.string.home_queue_one,first,wait!=null?wait:StatusText.queuedLine(null));
     }
     /** Cambia el texto solo si cambió: las regiones «en vivo» no se vuelven a anunciar en cada actualización. */
     private static void setText(TextView t,String value){if(!value.contentEquals(t.getText()))t.setText(value);}
@@ -544,9 +554,9 @@ public class MainActivity extends Screen {
             }
             int marks=RecorderService.marksCount();if(marks!=shownMarks){boolean added=marks>shownMarks;shownMarks=marks;if(added)wave.mark();renderMarks(added);}
             String t=RecorderService.activeTitle;if(!Objects.equals(t,shownTitle)){shownTitle=t;renderRecTitle(t);}
-            if(recPill.getVisibility()==View.VISIBLE){setText(pillTime,Recording.time(elapsed)+(paused?" · En pausa":" · Grabando"));pillDot.setAlpha(paused?1f:beat);}
+            if(recPill.getVisibility()==View.VISIBLE){setText(pillTime,pillText(elapsed,paused));pillDot.setAlpha(paused?1f:beat);}
         }
-        if(RecorderService.error!=null){String m=RecorderService.error;RecorderService.error=null;starting=false;record.setEnabled(true);message("Grabación",m);}
+        if(RecorderService.error!=null){String m=RecorderService.error;RecorderService.error=null;starting=false;record.setEnabled(true);message(getString(R.string.home_recording_noun),m);}
         if(RecorderService.notice!=null&&!active){String m=RecorderService.notice;RecorderService.notice=null;toast(m);}
         String saved=RecorderService.lastSavedId;if(saved!=null&&!active){RecorderService.lastSavedId=null;afterSave(saved);}
         renderImport();
@@ -558,14 +568,14 @@ public class MainActivity extends Screen {
     /** Cambio de estado (reposo, grabando, en pausa): la composición cambia con un fundido; la barra se esconde al grabar. */
     private void applyState(boolean active,boolean paused,boolean animate,boolean was){
         shownActive=active;
-        record.setRecording(active,animate);record.setContentDescription(active?"Detener y guardar":"Grabar");
+        record.setRecording(active,animate);record.setContentDescription(getString(active?R.string.home_stop_save:R.string.home_record));
         if(active!=was||!animate)swapLayers(active,animate);
         // Solo cuando el cambio pasa a la vista (no al volver a la app a mitad de una grabación).
         if(active!=was&&animate&&!showLibrary)moveReaderFocus(active);
         // En pausa, «Reanudar» se destaca (píldora blanca); la onda se congela atenuada y el tiempo parpadea.
-        pause.label.setTextSize(15);pause.setText(paused?"Reanudar":"Pausa");pause.setIcon(paused?R.drawable.ic_play:R.drawable.ic_pause);pause.setContentDescription(paused?"Reanudar grabación":"Pausar");
+        pause.label.setTextSize(15);pause.setText(getString(paused?R.string.home_resume:R.string.home_pause));pause.setIcon(paused?R.drawable.ic_play:R.drawable.ic_pause);pause.setContentDescription(getString(paused?R.string.home_resume_spoken:R.string.home_pause_action));
         pause.setColors(paused?p.brandDeep:p.onVivid,paused?p.onVivid:p.glassOnVivid);
-        statusDot.setBackground(oval(paused?p.onSurfaceVariant:p.record));statusDot.setAlpha(1f);setText(statusLabel,paused?"En pausa":"Grabando");
+        statusDot.setBackground(oval(paused?p.onSurfaceVariant:p.record));statusDot.setAlpha(1f);setText(statusLabel,getString(paused?R.string.home_paused:R.string.home_recording));
         timer.setAlpha(1f);if(!active)timer.setText("00:00");
         wave.setMode(active?(paused?Waveform.PAUSED:Waveform.LIVE):Waveform.IDLE);
         if(active&&!was){
@@ -600,13 +610,13 @@ public class MainActivity extends Screen {
         handler.postDelayed(()->{
             if(active!=shownActive||showLibrary||!homePanel.hasWindowFocus())return;
             (active?stop:record).performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS,null);
-            if(active&&!RecorderService.paused)stop.announceForAccessibility("Grabando");
+            if(active&&!RecorderService.paused)stop.announceForAccessibility(getString(R.string.home_recording));
         },active&&!AppTheme.motion()?0:MOTION_FAST+MOTION_SLOW);
     }
     /** Título en la píldora ✎ y en grande (con la última palabra destacada). Sin título: «Añadir título» y «Nueva grabación». */
     private void renderRecTitle(String t){
-        titlePillText.setText(t==null?"Añadir título":t);titlePill.setContentDescription(t==null?"Añadir título a la grabación":"Título: "+t+". Toca para cambiarlo");
-        String big=t==null?"Nueva grabación":t;bigTitle.setContentDescription(null);
+        titlePillText.setText(t==null?getString(R.string.home_add_title):t);titlePill.setContentDescription(t==null?getString(R.string.home_add_title_spoken):getString(R.string.home_title_spoken,t));
+        String big=t==null?getString(R.string.home_new_recording):t;bigTitle.setContentDescription(null);
         // Un título muy largo va sin recuadro: con «…» al final, la palabra destacada quedaría cortada.
         if(big.length()>48)bigTitle.setText(big);else ui.highlightLast(bigTitle,big);
         // fitHome solo sube de nivel: lo compactado por un título largo se deshace aquí, así un título más corto (o la
@@ -616,24 +626,25 @@ public class MainActivity extends Screen {
     }
     /** Línea de ayuda al grabar. Sin marcas también explica la ★ (en 0.6 llevaba el rótulo «Marcar»; ahora es solo un ícono). */
     private void renderHint(boolean paused){
-        String text=paused?"En pausa · toca Reanudar para seguir o Detener para guardar."
-            :shownMarks>0?shownMarks+(shownMarks==1?" momento ★":" momentos ★")+" · mantén ★ para anotar una palabra."
-            :"Puedes bloquear el teléfono: la grabación sigue. Toca ★ para marcar un momento.";
+        // Los botones se nombran igual que se ven («Reanudar», «Detener»).
+        String text=paused?getString(R.string.home_hint_paused,getString(R.string.home_resume),getString(R.string.home_stop))
+            :shownMarks>0?getString(R.string.home_hint_marks,quantity(R.plurals.home_marks,shownMarks))
+            :getString(R.string.home_hint_idle);
         setText(hint,text);
     }
     private void renderMarks(boolean pop){
         int n=shownMarks;markBadge.setText(String.valueOf(n));markBadge.setVisibility(n>0?View.VISIBLE:View.GONE);
-        mark.setContentDescription(n==0?"Marcar momento":"Marcar momento. "+n+(n==1?" momento marcado":" momentos marcados"));
-        if(pop&&n>0){if(AppTheme.motion()){markBadge.setScaleX(1.4f);markBadge.setScaleY(1.4f);markBadge.animate().scaleX(1f).scaleY(1f).setDuration(SPATIAL_FAST.duration).setInterpolator(SPATIAL_FAST).start();}mark.announceForAccessibility("Momento marcado");}
+        mark.setContentDescription(n==0?getString(R.string.home_mark_moment):getString(R.string.home_mark_moment_spoken,quantity(R.plurals.home_marks_spoken,n)));
+        if(pop&&n>0){if(AppTheme.motion()){markBadge.setScaleX(1.4f);markBadge.setScaleY(1.4f);markBadge.animate().scaleX(1f).scaleY(1f).setDuration(SPATIAL_FAST.duration).setInterpolator(SPATIAL_FAST).start();}mark.announceForAccessibility(getString(R.string.home_moment_marked));}
         renderHint(RecorderService.paused);
     }
     /** Avance de una importación en curso en la píldora «Importar audio» (la importación sigue aunque salgas de esa pantalla). */
     private void renderImport(){
         String text=null;ImportSession s=ImportService.session(this);
-        if(s!=null&&!s.done&&!s.cancelled&&!s.stale()){if(s.busy)text="Importando…"+(s.total>0?" "+ImportService.percent(s)+" %":"");else if(!s.error.isEmpty())text="Importación pendiente";else if(s.ready)text="Audio listo para guardar";}
+        if(s!=null&&!s.done&&!s.cancelled&&!s.stale()){if(s.busy)text=s.total>0?getString(R.string.home_importing_percent,ImportService.percent(s)):getString(R.string.home_importing);else if(!s.error.isEmpty())text=getString(R.string.home_import_pending);else if(s.ready)text=getString(R.string.home_import_ready);}
         String key=text==null?"":text;if(key.equals(shownImport))return;shownImport=key;
-        importLabel.setText(text==null?"Importar audio":text);importLabel.setTextColor(text==null?p.onSurface:p.primary);
-        importPill.setContentDescription(text==null?"Importar audio de WhatsApp, grabadoras o archivos":"Importar audio: "+text);
+        importLabel.setText(text==null?getString(R.string.home_import):text);importLabel.setTextColor(text==null?p.onSurface:p.primary);
+        importPill.setContentDescription(text==null?getString(R.string.home_import_spoken):getString(R.string.home_import_status_spoken,text));
     }
     private void onRecordTap(View v){
         if(RecorderService.activeId!=null){
@@ -647,21 +658,21 @@ public class MainActivity extends Screen {
     private void markMoment(View v,String label,long at){
         if(RecorderService.activeId==null)return;Ui.haptic(v,Ui.Haptic.CONFIRM);
         Intent intent=new Intent(this,RecorderService.class).setAction("MARK");if(label!=null)intent.putExtra("label",label);if(at>=0)intent.putExtra("t",at);
-        try{startService(intent);}catch(RuntimeException e){toast("No se pudo marcar el momento.");}
+        try{startService(intent);}catch(RuntimeException e){toast(getString(R.string.home_mark_failed));}
     }
     private void markWithWord(View v){
         if(RecorderService.activeId==null)return;long at=RecorderService.elapsed();Ui.haptic(v,Ui.Haptic.TICK);
-        EditText input=ui.field("Ej. precio, idea, tarea","Palabra para este momento");input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(40)});input.setImeOptions(EditorInfo.IME_ACTION_DONE);
-        Sheet s=sheet("Marcar con una palabra","Momento "+Recording.time(at)+". La grabación sigue mientras escribes.").add(input);
+        EditText input=ui.field(getString(R.string.home_word_hint),getString(R.string.home_word_spoken));input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(40)});input.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        Sheet s=sheet(getString(R.string.home_mark_with_word),getString(R.string.home_word_body,Recording.time(at))).add(input);
         Runnable apply=()->{String w=input.getText().toString().trim();markMoment(mark,w.isEmpty()?null:w,at);};
-        s.primary("Marcar",apply).secondary("Cancelar",null).show();
+        s.primary(getString(R.string.home_mark),apply).secondary(getString(R.string.common_cancel),null).show();
         input.setOnEditorActionListener((view,action,event)->{if(action==EditorInfo.IME_ACTION_DONE){s.dismiss();apply.run();return true;}return false;});
         input.requestFocus();if(s.dialog.getWindow()!=null)s.dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }
     private void titleWhileRecording(){
-        EditText input=ui.field("Ej. Reunión con el equipo","Título de la grabación");String current=RecorderService.activeTitle;if(current!=null)input.setText(current);input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(120)});
-        Sheet s=sheet("Título de la grabación","La grabación sigue mientras escribes.").add(input);
-        s.primary("Guardar título",Ui.Style.PRIMARY,()->{String t=input.getText().toString().trim();if(!t.isEmpty())startService(new Intent(this,RecorderService.class).setAction("TITLE").putExtra("title",t));return true;}).secondary("Cancelar",null).show();
+        EditText input=ui.field(getString(R.string.home_title_hint),getString(R.string.home_recording_title));String current=RecorderService.activeTitle;if(current!=null)input.setText(current);input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(120)});
+        Sheet s=sheet(getString(R.string.home_recording_title),getString(R.string.home_keeps_recording)).add(input);
+        s.primary(getString(R.string.home_save_title),Ui.Style.PRIMARY,()->{String t=input.getText().toString().trim();if(!t.isEmpty())startService(new Intent(this,RecorderService.class).setAction("TITLE").putExtra("title",t));return true;}).secondary(getString(R.string.common_cancel),null).show();
         input.requestFocus();if(s.dialog.getWindow()!=null)s.dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }
     /**
@@ -676,29 +687,29 @@ public class MainActivity extends Screen {
         // juntado es de un tramo y estirarlo sobre todo el audio mostraría una onda que no es la que suena. Ahí va plana.
         boolean whole=r.duration-levelsMs<=Math.max(1000,r.duration/10);
         float[] bars=whole?levels.bars(40):new float[0];levels.clear();levelsMs=0;levelsLast=-1;levelsId=null;
-        if(!settings.askTitle()){toast("Guardado en Biblioteca · "+Recording.time(r.duration));return;}
+        if(!settings.askTitle()){toast(getString(R.string.home_saved_library,Recording.time(r.duration)));return;}
         boolean auto=settings.automatic()&&settings.hasOpenRouterKey();int marks=0;try{marks=Marks.list(this,r.id).length();}catch(RuntimeException ignored){}
         String prefix="",rest=r.title==null?"":r.title;
         if(settings.datePrefix()){Matcher m=DATE.matcher(rest);if(m.find()){prefix=m.group(1);rest=rest.substring(m.end()).trim();}}
         if(namePlayer!=null)namePlayer.release();
-        Sheet s=sheet("Nombra esta grabación",null);
+        Sheet s=sheet(getString(R.string.home_name_title),null);
         // Mini reproductor en una caja gris suave: ▶ redondo de tinta, la onda y «● 12:48».
         LinearLayout player=ui.row();player.setBackground(shape(this,p.dark?p.surfaceContainerHigh:p.surfaceContainer,R_CONTROL+4));player.setPadding(ui.dp(S1),ui.dp(S1),ui.dp(S4),ui.dp(S1));
-        ImageButton play=ui.iconButton(R.drawable.ic_play,"Escuchar la grabación",p.onInk,0,48);int in=ui.dp(S1);
+        ImageButton play=ui.iconButton(R.drawable.ic_play,getString(R.string.home_listen),p.onInk,0,48);int in=ui.dp(S1);
         play.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.stateLayer(p.onInk)),new InsetDrawable(oval(p.ink),in),new InsetDrawable(oval(0xFF000000),in)));
         player.addView(play,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));player.addView(ui.space(S2));
         Waveform.Mini mini=new Waveform.Mini(this,bars,p.outline,p.primary);player.addView(mini,new LinearLayout.LayoutParams(0,ui.dp(32),1));player.addView(ui.space(S3));
         View dot=new View(this);dot.setBackground(oval(p.record));player.addView(dot,new LinearLayout.LayoutParams(ui.dp(6),ui.dp(6)));player.addView(ui.space(S2));
-        TextView time=Ui.tabular(ui.text(Recording.time(r.duration),Type.LABEL_LARGE,p.onSurface));time.setContentDescription("Duración "+Ui.humanDuration(r.duration));player.addView(time);
+        TextView time=Ui.tabular(ui.text(Recording.time(r.duration),Type.LABEL_LARGE,p.onSurface));time.setContentDescription(getString(R.string.home_duration_spoken,Ui.humanDuration(r.duration)));player.addView(time);
         s.body.addView(player,Ui.fill());
         NamePlayer np=new NamePlayer(r,play,mini,time);namePlayer=np;play.setOnClickListener(v->np.toggle());
         // El nombre, con la fecha fija delante (si está activa).
         LinearLayout box=ui.row();box.setBackground(ui.fieldBackground());box.setPadding(ui.dp(S4),0,ui.dp(S2),0);box.setMinimumHeight(ui.dp(56));
-        if(!prefix.isEmpty()){TextView date=Ui.tabular(ui.text(prefix,Type.BODY_LARGE,p.onSurfaceVariant));date.setContentDescription("Fecha "+prefix+", fija");box.addView(date);box.addView(ui.space(S2));}
-        EditText input=ui.field("Nombre","Título de la grabación");input.setBackground(null);input.setPadding(0,ui.dp(S3),0,ui.dp(S3));input.setText(rest);input.setSelectAllOnFocus(true);input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(120)});input.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        if(!prefix.isEmpty()){TextView date=Ui.tabular(ui.text(prefix,Type.BODY_LARGE,p.onSurfaceVariant));date.setContentDescription(getString(R.string.home_date_fixed_spoken,prefix));box.addView(date);box.addView(ui.space(S2));}
+        EditText input=ui.field(getString(R.string.home_name_hint),getString(R.string.home_recording_title));input.setBackground(null);input.setPadding(0,ui.dp(S3),0,ui.dp(S3));input.setText(rest);input.setSelectAllOnFocus(true);input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(120)});input.setImeOptions(EditorInfo.IME_ACTION_DONE);
         box.addView(input,new LinearLayout.LayoutParams(0,-2,1));
         s.body.addView(box,ui.top(S4));
-        String detail="Guardada en este teléfono"+(marks>0?" · "+marks+(marks==1?" momento ★":" momentos ★"):"")+(auto?" · se transcribirá automáticamente":"");
+        String detail=getString(R.string.home_saved_on_phone)+(marks>0?" · "+quantity(R.plurals.home_marks,marks):"")+(auto?" · "+getString(R.string.home_will_auto_transcribe):"");
         TextView d=ui.text(detail,Type.BODY_SMALL,p.onSurfaceVariant);d.setPadding(ui.dp(S1),ui.dp(S2),ui.dp(S1),0);s.body.addView(d,Ui.fill());
         String date=prefix;
         Runnable saveTitle=()->{
@@ -706,7 +717,7 @@ public class MainActivity extends Screen {
             String full=date.isEmpty()||DATE.matcher(t).find()?t:date+" "+t;if(full.equals(r.title))return;
             r.title=full;try{r.save(this);Pipeline.edited(this,r.id);Diagnostics.event("title_edited",r.id);}catch(Exception ignored){}load();
         };
-        s.closable(saveTitle).primary("Ver grabación",()->{saveTitle.run();open(r.id);}).secondary("Listo",saveTitle).onDismiss(()->{np.release();if(namePlayer==np)namePlayer=null;saveTitle.run();}).show();
+        s.closable(saveTitle).primary(getString(R.string.home_view_recording),()->{saveTitle.run();open(r.id);}).secondary(getString(R.string.home_done),saveTitle).onDismiss(()->{np.release();if(namePlayer==np)namePlayer=null;saveTitle.run();}).show();
         input.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_DONE){s.dismiss();return true;}return false;});
         input.requestFocus();if(s.dialog.getWindow()!=null)s.dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }
@@ -720,33 +731,33 @@ public class MainActivity extends Screen {
                 if(mp==null){mp=new MediaPlayer();mp.setDataSource(r.audio(MainActivity.this).getPath());mp.prepare();length=Math.max(1,mp.getDuration()>0?mp.getDuration():(int)r.duration);mp.setOnCompletionListener(m->release());}
                 if(mp.isPlaying()){mp.pause();handler.removeCallbacks(tick);}else{mp.start();handler.removeCallbacks(tick);handler.post(tick);}
                 show(mp.isPlaying());
-            }catch(Exception e){release();toast("No se pudo reproducir el audio.");}
+            }catch(Exception e){release();toast(getString(R.string.home_play_failed));}
         }
         void release(){
             handler.removeCallbacks(tick);if(mp!=null){try{mp.release();}catch(RuntimeException ignored){}mp=null;}
             show(false);mini.setPlayed(0f);setText(time,Recording.time(r.duration));
         }
-        private void show(boolean playing){play.setImageResource(playing?R.drawable.ic_pause:R.drawable.ic_play);play.setContentDescription(playing?"Pausar":"Escuchar la grabación");}
+        private void show(boolean playing){play.setImageResource(playing?R.drawable.ic_pause:R.drawable.ic_play);play.setContentDescription(getString(playing?R.string.home_pause_action:R.string.home_listen));}
     }
     private void begin(){
         if(starting)return;
         if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
             // Verdadero: lo grabado queda en el teléfono, pero para transcribirse se envía a OpenRouter (no «se guarda aquí» a secas).
-            sheet("Permitir el micrófono","Verbapp usa el micrófono solo mientras grabas. El audio queda en tu teléfono hasta que lo transcribes.").primary("Continuar",()->requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},10)).secondary("Ahora no",null).show();return;
+            sheet(getString(R.string.home_mic_title),getString(R.string.home_mic_body)).primary(getString(R.string.home_continue),()->requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},10)).secondary(getString(R.string.act_not_now),null).show();return;
         }
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED&&!getPreferences(0).getBoolean("notificationAsked",false)){
             getPreferences(0).edit().putBoolean("notificationAsked",true).apply();requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},11);return;
         }
         starting=true;record.setEnabled(false);shownMarks=0;
         try{startForegroundService(new Intent(this,RecorderService.class).setAction("START"));}
-        catch(RuntimeException e){starting=false;record.setEnabled(true);message("Grabación","No se pudo iniciar el micrófono. Vuelve a intentarlo con la app abierta.");}
+        catch(RuntimeException e){starting=false;record.setEnabled(true);message(getString(R.string.home_recording_noun),getString(R.string.home_mic_failed));}
     }
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){
         super.onRequestPermissionsResult(request,permissions,results);
         if(request==11)begin();
         else if(request==10){
             if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)begin();
-            else sheet("El micrófono está desactivado","Actívalo en los ajustes de Android para poder grabar.").primary("Abrir ajustes",()->startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())))).secondary("Cerrar",null).show();
+            else sheet(getString(R.string.home_mic_off_title),getString(R.string.home_mic_off_body)).primary(getString(R.string.home_open_settings),()->startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())))).secondary(getString(R.string.ui_close),null).show();
         }
     }
     private void send(String action){startService(new Intent(this,RecorderService.class).setAction(action));}
@@ -776,26 +787,26 @@ public class MainActivity extends Screen {
         Item i=items.isEmpty()?null:items.get(0);lastLead.removeAllViews();
         if(i==null){
             lastLead.addView(leadCircle(R.drawable.ic_mic_fill,1,44,22),new FrameLayout.LayoutParams(-1,-1));
-            setText(lastTitle,"Aún no hay grabaciones");setText(lastStatus,"Graba una idea o trae un audio de WhatsApp.");lastStatus.setTextColor(p.onSurfaceVariant);
-            lastAction("Cómo traer un audio de WhatsApp",R.drawable.ic_chat,Ui.Style.TONAL,v->whatsappHelp());
-            lastCard.setOnClickListener(v->whatsappHelp());lastCard.setContentDescription("Última grabación: aún no hay grabaciones");return;
+            setText(lastTitle,getString(R.string.home_empty_title));setText(lastStatus,getString(R.string.home_empty_last_body));lastStatus.setTextColor(p.onSurfaceVariant);
+            lastAction(getString(R.string.home_whatsapp_how),R.drawable.ic_chat,Ui.Style.TONAL,v->whatsappHelp());
+            lastCard.setOnClickListener(v->whatsappHelp());lastCard.setContentDescription(getString(R.string.home_last_empty_spoken));return;
         }
         // tone: 0 = en calma (vidrio), 1 = pide acción o está en curso (menta), 2 = error.
         Recording r=i.r;String dur=Ui.humanDuration(r.duration);int icon=R.drawable.ic_doc,tone=0;int statusColor=p.onSurfaceVariant;
         String status,label;int actionIcon;Ui.Style style;View.OnClickListener action;float bar=Float.NaN;
         View.OnClickListener transcribe=v->{Ui.haptic(v,Ui.Haptic.CONFIRM);RecordingActions.transcribe(this,r,this::load);};
         switch(i.status.kind){
-            case QUEUED:icon=R.drawable.ic_clock;tone=1;status=i.progressText();statusColor=p.primary;bar=i.ring();label="Ver avance";actionIcon=R.drawable.ic_clock;style=Ui.Style.TONAL;action=v->open(r.id);break;
-            case FAILED:icon=R.drawable.ic_alert;tone=2;status="No se pudo transcribir";statusColor=p.error;label="Reintentar";actionIcon=R.drawable.ic_refresh;style=Ui.Style.PRIMARY;action=transcribe;break;
-            case NEW:icon=R.drawable.ic_wave;status=dur+" · Sin transcribir";label="Transcribir";actionIcon=R.drawable.ic_sparkle;style=Ui.Style.PRIMARY;action=transcribe;break;
+            case QUEUED:icon=R.drawable.ic_clock;tone=1;status=i.progressText();statusColor=p.primary;bar=i.ring();label=getString(R.string.home_see_progress);actionIcon=R.drawable.ic_clock;style=Ui.Style.TONAL;action=v->open(r.id);break;
+            case FAILED:icon=R.drawable.ic_alert;tone=2;status=getString(R.string.home_failed);statusColor=p.error;label=getString(R.string.act_retry);actionIcon=R.drawable.ic_refresh;style=Ui.Style.PRIMARY;action=transcribe;break;
+            case NEW:icon=R.drawable.ic_wave;status=dur+" · "+getString(R.string.act_not_transcribed);label=getString(R.string.act_transcribe);actionIcon=R.drawable.ic_sparkle;style=Ui.Style.PRIMARY;action=transcribe;break;
             default:{
-                Next.Step step=i.next!=null?i.next.step:derivedStep(i);String next=i.next!=null?i.next.label:null;String folder=folderName();
+                Next.Step step=i.next!=null?i.next.step:derivedStep(i);String next=i.next!=null?i.next.label:null;String folder=folderName();String ready=dur+" · "+getString(R.string.home_ready_short)+" · ";
                 switch(step){
-                    case REVIEW:{Meta m=i.meta;int n=m==null?0:m.names.size();icon=R.drawable.ic_people;tone=1;status=dur+" · Lista · "+(n>1?n+" voces por revisar":"voces por revisar");label=next!=null?next:"Revisar voces";actionIcon=R.drawable.ic_people;style=Ui.Style.PRIMARY;action=v->startActivity(new Intent(this,RecordingActivity.class).putExtra("id",r.id).putExtra("names",true));break;}
-                    case SAVE:icon=R.drawable.ic_inbox;tone=1;status=dur+" · Lista · por guardar";label=next!=null?next:"Guardar en "+folder;actionIcon=R.drawable.ic_save;style=Ui.Style.PRIMARY;action=v->saveInbox(r);break;
-                    case UPDATE:icon=R.drawable.ic_refresh;tone=1;status=dur+" · Hay cambios sin guardar";label=next!=null?next:"Actualizar en "+folder;actionIcon=R.drawable.ic_refresh;style=Ui.Style.PRIMARY;action=v->saveInbox(r);break;
-                    case CHOOSE_FOLDER:status=dur+" · Transcripción lista";label=next!=null?next:"Elegir carpeta rápida";actionIcon=R.drawable.ic_folder;style=Ui.Style.TONAL;action=v->startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true).putExtra("inbox",true));break;
-                    default:status=dur+" · ✓ "+(step==Next.Step.SAVED&&next!=null?next:"Transcripción lista");label="Abrir";actionIcon=R.drawable.ic_doc;style=Ui.Style.TONAL;action=v->open(r.id);
+                    case REVIEW:{Meta m=i.meta;int n=m==null?0:m.names.size();icon=R.drawable.ic_people;tone=1;status=ready+(n>1?getString(R.string.home_voices_to_review_n,n):getString(R.string.home_voices_to_review));label=next!=null?next:getString(R.string.act_review_voices);actionIcon=R.drawable.ic_people;style=Ui.Style.PRIMARY;action=v->startActivity(new Intent(this,RecordingActivity.class).putExtra("id",r.id).putExtra("names",true));break;}
+                    case SAVE:icon=R.drawable.ic_inbox;tone=1;status=ready+getString(R.string.home_unsaved_inline);label=next!=null?next:getString(R.string.act_save_to,folder);actionIcon=R.drawable.ic_save;style=Ui.Style.PRIMARY;action=v->saveInbox(r);break;
+                    case UPDATE:icon=R.drawable.ic_refresh;tone=1;status=dur+" · "+getString(R.string.home_unsaved_changes);label=next!=null?next:getString(R.string.act_update_in,folder);actionIcon=R.drawable.ic_refresh;style=Ui.Style.PRIMARY;action=v->saveInbox(r);break;
+                    case CHOOSE_FOLDER:status=dur+" · "+getString(R.string.home_transcript_ready);label=next!=null?next:getString(R.string.act_choose_folder);actionIcon=R.drawable.ic_folder;style=Ui.Style.TONAL;action=v->startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true).putExtra("inbox",true));break;
+                    default:status=dur+" · ✓ "+(step==Next.Step.SAVED&&next!=null?next:getString(R.string.home_transcript_ready));label=getString(R.string.home_open);actionIcon=R.drawable.ic_doc;style=Ui.Style.TONAL;action=v->open(r.id);
                 }
             }
         }
@@ -803,7 +814,7 @@ public class MainActivity extends Screen {
         lastLead.addView(Float.isNaN(bar)?leadCircle(icon,tone,44,22):progressLead(bar,icon,20,3),new FrameLayout.LayoutParams(-1,-1));if(i.fresh)lastLead.addView(newDot(),new FrameLayout.LayoutParams(ui.dp(12),ui.dp(12),Gravity.TOP|Gravity.END));
         setText(lastTitle,r.title);setText(lastStatus,status);lastStatus.setTextColor(statusColor);
         lastAction(label,actionIcon,style,action);
-        lastCard.setOnClickListener(v->open(r.id));lastCard.setContentDescription("Última grabación: "+r.title+". "+status+". Toca para abrirla");
+        lastCard.setOnClickListener(v->open(r.id));lastCard.setContentDescription(getString(R.string.home_last_spoken,r.title,status));
     }
     /** Siguiente paso si Next no respondió (misma lógica: revisar → guardar → actualizar → guardada). */
     private static Next.Step derivedStep(Item i){if(i.toReview())return Next.Step.REVIEW;if(!i.inbox)return Next.Step.CHOOSE_FOLDER;if(i.savedAt==0)return Next.Step.SAVE;if(i.outdated)return Next.Step.UPDATE;return Next.Step.SAVED;}
@@ -820,13 +831,13 @@ public class MainActivity extends Screen {
     }
     /** Guardar en la carpeta rápida (0-Inbox) en segundo plano; el resultado llega como aviso breve y con vibración. */
     private void saveInbox(Recording r){
-        if(savingInbox)return;savingInbox=true;if(lastButton!=null){lastButton.setEnabled(false);lastButton.setText("Guardando…");}
+        if(savingInbox)return;savingInbox=true;if(lastButton!=null){lastButton.setEnabled(false);lastButton.setText(getString(R.string.home_saving));}
         Context app=getApplicationContext();
         new Thread(()->{
             String folder=Inbox.folderName(app),message;boolean ok=false;
-            try{Inbox.save(app,r);ok=true;message="✓ Guardado en "+folder;}
-            catch(UnsupportedOperationException e){message=e.getMessage()!=null?e.getMessage():"El guardado rápido aún no está disponible.";}
-            catch(Exception e){message="No se pudo guardar en "+folder+". Revisa la carpeta rápida en Ajustes.";Diagnostics.event("inbox_save_failed",r.id,"error_class",e.getClass().getSimpleName());}
+            try{Inbox.save(app,r);ok=true;message=getString(R.string.home_saved_check,folder);}
+            catch(UnsupportedOperationException e){message=e.getMessage()!=null?e.getMessage():getString(R.string.home_quick_save_unavailable);}
+            catch(Exception e){message=getString(R.string.home_save_failed,folder);Diagnostics.event("inbox_save_failed",r.id,"error_class",e.getClass().getSimpleName());}
             boolean done=ok;String text=message;
             runOnUiThread(()->{savingInbox=false;if(isDestroyed())return;toast(text);Ui.haptic(lastCard,done?Ui.Haptic.CONFIRM:Ui.Haptic.REJECT);lastKey="";load();});
         },"Voz-inbox").start();
@@ -835,17 +846,17 @@ public class MainActivity extends Screen {
 
     // ================= BIBLIOTECA =================
     private void buildLibrary(){
-        largeTitle(libraryPanel,"Biblioteca",null);
+        largeTitle(libraryPanel,getString(R.string.nav_library),null);
         libraryCount=ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant);libraryCount.setPadding(ui.dp(S1),0,0,ui.dp(S4));libraryPanel.addView(libraryCount);
         ((LinearLayout.LayoutParams)libraryPanel.getChildAt(0).getLayoutParams()).bottomMargin=0;libraryPanel.getChildAt(0).setPadding(ui.dp(S1),ui.dp(S2),ui.dp(S1),ui.dp(2));
         // Búsqueda en una píldora blanca con sombra suave (como las píldoras de la referencia).
         LinearLayout box=ui.row();GradientDrawable field=ui.fieldBackground();field.setCornerRadius(ui.dp(R_FULL));box.setBackground(field);box.setPadding(ui.dp(S4),0,ui.dp(S1),0);
         if(!p.dark){box.setElevation(ui.dp(1));if(Build.VERSION.SDK_INT>=28){box.setOutlineSpotShadowColor(p.shadow);box.setOutlineAmbientShadowColor(p.shadow);}}
         box.addView(ui.icon(R.drawable.ic_search,p.onSurfaceVariant,20));
-        search=new EditText(this);search.setSingleLine(true);search.setHint("Buscar por título");search.setContentDescription("Buscar grabaciones por título");search.setTextColor(p.onSurface);search.setHintTextColor(p.onSurfaceVariant);AppTheme.type(search,Type.BODY_LARGE);search.setBackground(null);search.setPadding(ui.dp(S3),ui.dp(S3),ui.dp(S2),ui.dp(S3));search.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
+        search=new EditText(this);search.setSingleLine(true);search.setHint(getString(R.string.home_search_hint));search.setContentDescription(getString(R.string.home_search_spoken));search.setTextColor(p.onSurface);search.setHintTextColor(p.onSurfaceVariant);AppTheme.type(search,Type.BODY_LARGE);search.setBackground(null);search.setPadding(ui.dp(S3),ui.dp(S3),ui.dp(S2),ui.dp(S3));search.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         search.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_SEARCH){hideKeyboard();return true;}return false;});
         search.setOnFocusChangeListener((v,focused)->v.post(this::checkIme));
-        box.addView(search,new LinearLayout.LayoutParams(0,ui.dp(52),1));ImageButton clear=ui.iconButton(R.drawable.ic_close,"Borrar búsqueda",p.onSurfaceVariant,0,48);clear.setVisibility(query.isEmpty()?View.GONE:View.VISIBLE);clear.setOnClickListener(v->search.setText(""));box.addView(clear);
+        box.addView(search,new LinearLayout.LayoutParams(0,ui.dp(52),1));ImageButton clear=ui.iconButton(R.drawable.ic_close,getString(R.string.home_clear_search),p.onSurfaceVariant,0,48);clear.setVisibility(query.isEmpty()?View.GONE:View.VISIBLE);clear.setOnClickListener(v->search.setText(""));box.addView(clear);
         libraryPanel.addView(box,Ui.fill());
         search.setText(query);search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int c){}public void onTextChanged(CharSequence s,int a,int b,int c){query=s.toString();clear.setVisibility(query.isEmpty()?View.GONE:View.VISIBLE);render();}public void afterTextChanged(Editable e){}});
         // Filtros (píldoras) que llegan hasta el borde de la pantalla al desplazarse.
@@ -862,21 +873,23 @@ public class MainActivity extends Screen {
         pillDot=new View(this);pillDot.setBackground(oval(p.record));recPill.addView(pillDot,new LinearLayout.LayoutParams(ui.dp(10),ui.dp(10)));recPill.addView(ui.space(S3));
         pillTime=Ui.tabular(ui.oneLine(ui.text("00:00",Type.LABEL_LARGE,p.onInk)));pillTime.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);recPill.addView(pillTime,new LinearLayout.LayoutParams(0,-2,1));
         // «Detener»: píldora translúcida dentro de la cápsula (36 dp visibles, 48 dp para tocar).
-        TextView stopPill=ui.text("Detener",Type.LABEL_LARGE,p.onInk);stopPill.setGravity(Gravity.CENTER);stopPill.setMinHeight(ui.dp(48));stopPill.setMinWidth(ui.dp(48));
+        TextView stopPill=ui.text(getString(R.string.home_stop),Type.LABEL_LARGE,p.onInk);stopPill.setGravity(Gravity.CENTER);stopPill.setMinHeight(ui.dp(48));stopPill.setMinWidth(ui.dp(48));
         Drawable square=getDrawable(R.drawable.ic_stop).mutate();square.setTint(p.onInk);square.setBounds(0,0,ui.dp(16),ui.dp(16));stopPill.setCompoundDrawablesRelative(square,null,null,null);stopPill.setCompoundDrawablePadding(ui.dp(6));
         int inset=ui.dp(6);stopPill.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.stateLayer(p.onInk)),new InsetDrawable(shape(this,withAlpha(p.onInk,0x29),R_FULL),0,inset,0,inset),new InsetDrawable(shape(this,0xFF000000,R_FULL),0,inset,0,inset)));
         // El relleno va DESPUÉS del fondo (igual que con pill()): el InsetDrawable trae su propio relleno y setBackground
         // reemplaza el que hubiera; antes los lados quedaban en 0 (el ■ y la «r» pegados al borde redondeado).
         stopPill.setPadding(ui.dp(S4),0,ui.dp(S4),0);
-        stopPill.setClickable(true);stopPill.setFocusable(true);stopPill.setAccessibilityDelegate(Ui.buttonRole());stopPill.setContentDescription("Detener y guardar la grabación");
+        stopPill.setClickable(true);stopPill.setFocusable(true);stopPill.setAccessibilityDelegate(Ui.buttonRole());stopPill.setContentDescription(getString(R.string.home_stop_save_recording));
         stopPill.setOnClickListener(v->{if(RecorderService.activeId!=null)onRecordTap(v);});recPill.addView(stopPill);
-        recPill.setClickable(true);recPill.setFocusable(true);recPill.setAccessibilityDelegate(Ui.buttonRole());recPill.setContentDescription("Grabación en curso. Toca para ir a Grabar");recPill.setOnClickListener(v->section(false));
+        recPill.setClickable(true);recPill.setFocusable(true);recPill.setAccessibilityDelegate(Ui.buttonRole());recPill.setContentDescription(getString(R.string.home_pill_spoken,getString(R.string.nav_record)));recPill.setOnClickListener(v->section(false));
         LinearLayout.LayoutParams lp=Ui.fill();lp.setMargins(ui.dp(S4),ui.dp(S2),ui.dp(S4),ui.dp(S2));root.addView(recPill,Math.max(0,root.indexOfChild(scroll)),lp);recPill.setVisibility(View.GONE);
     }
     private void renderPill(){
         if(recPill==null)return;boolean show=showLibrary&&RecorderService.activeId!=null;recPill.setVisibility(show?View.VISIBLE:View.GONE);
-        if(show){boolean paused=RecorderService.paused;pillDot.setBackground(oval(paused?p.onInk:p.record));setText(pillTime,Recording.time(RecorderService.elapsed())+(paused?" · En pausa":" · Grabando"));}
+        if(show){boolean paused=RecorderService.paused;pillDot.setBackground(oval(paused?p.onInk:p.record));setText(pillTime,pillText(RecorderService.elapsed(),paused));}
     }
+    /** «12:34 · Grabando» (o «· En pausa») en la cápsula de la Biblioteca. */
+    private String pillText(long elapsed,boolean paused){return Recording.time(elapsed)+" · "+getString(paused?R.string.home_paused:R.string.home_recording);}
     /**
      * La barra de pestañas se esconde mientras el teclado de la búsqueda está abierto (más espacio para los resultados).
      * Solo con la búsqueda: el teclado de una hoja (p. ej. el título) no debe mover la pantalla de Grabar que queda detrás.
@@ -958,17 +971,17 @@ public class MainActivity extends Screen {
         nav.badge(1,counts[2]>0);renderLast();renderWeek();renderGreeting();
         // Biblioteca (solo se rearma si cambió algo: no salta mientras se actualiza el avance de otra grabación).
         String sig=signature();if(sig.equals(rendered))return;rendered=sig;
-        libraryCount.setText(items.isEmpty()?"Tus audios y transcripciones":items.size()+(items.size()==1?" grabación":" grabaciones")+(inboxOn&&counts[1]>0?" · "+counts[1]+" por guardar":" · "+done+(done==1?" transcrita":" transcritas")));
-        filters.removeAllViews();String[] names={"Todas",inboxOn?"Por guardar":"Transcritas","En proceso","Sin transcribir","Con error"};
+        libraryCount.setText(items.isEmpty()?getString(R.string.home_library_subtitle):quantity(R.plurals.home_count_recordings,items.size())+" · "+(inboxOn&&counts[1]>0?getString(R.string.home_count_unsaved,counts[1]):quantity(R.plurals.home_count_transcribed,done)));
+        filters.removeAllViews();String[] names={getString(R.string.home_filter_all),getString(inboxOn?R.string.home_unsaved:R.string.home_filter_transcribed),getString(R.string.act_state_queued),getString(R.string.act_not_transcribed),getString(R.string.home_filter_failed)};
         if(filter>0&&counts[filter]==0)filter=0;
         for(int f=0;f<5;f++){if(f>0&&counts[f]==0)continue;int index=f;
             // Tocar el filtro activo lo desactiva (vuelve a «Todas»).
             TextView chip=ui.filter(names[f]+(f>0?" "+counts[f]:""),f==filter,v->{filter=filter==index?0:index;Ui.haptic(v);render();});LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginEnd(ui.dp(S2));filters.addView(chip,lp);}
         ((View)filters.getParent()).setVisibility(items.isEmpty()?View.GONE:View.VISIBLE);
-        list.removeAllViews();String q=query.toLowerCase(ES).trim();String currentSection=null;LinearLayout group=null;int visible=0;
+        Locale locale=Lang.locale(this);list.removeAllViews();String q=query.toLowerCase(locale).trim();String currentSection=null;LinearLayout group=null;int visible=0;
         for(Item i:items){
-            if(!matches(i,filter)||!i.r.title.toLowerCase(ES).contains(q))continue;visible++;
-            String sec=dateSection(i.r.created);if(!sec.equals(currentSection)){currentSection=sec;TextView h=ui.section(sec);h.setPadding(ui.dp(S1),ui.dp(S5),0,ui.dp(S2));list.addView(h);group=ui.group();list.addView(group,Ui.fill());}
+            if(!matches(i,filter)||!i.r.title.toLowerCase(locale).contains(q))continue;visible++;
+            String sec=dateSection(i.r.created,locale);if(!sec.equals(currentSection)){currentSection=sec;TextView h=ui.section(sec);h.setPadding(ui.dp(S1),ui.dp(S5),0,ui.dp(S2));list.addView(h);group=ui.group();list.addView(group,Ui.fill());}
             addRow(group,row(i));
         }
         if(visible==0)list.addView(empty(items.isEmpty()));
@@ -980,13 +993,13 @@ public class MainActivity extends Screen {
         FrameLayout art=new FrameLayout(this);art.setBackground(oval(withAlpha(p.primary,0x14)));art.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         art.addView(ui.tile(nothing?R.drawable.ic_mic_fill:R.drawable.ic_search,p.onPrimaryContainer,p.primaryContainer,88,40),new FrameLayout.LayoutParams(ui.dp(88),ui.dp(88),Gravity.CENTER));
         e.addView(art,new LinearLayout.LayoutParams(ui.dp(120),ui.dp(120)));
-        TextView t=ui.heading(nothing?"Aún no hay grabaciones":"Sin resultados",Type.HEADLINE_SMALL);t.setPadding(0,ui.dp(S5),0,ui.dp(S2));t.setGravity(Gravity.CENTER);e.addView(t);
-        String detail=nothing?"Graba una idea o importa un audio para empezar.":filter>0?"No hay grabaciones con este filtro"+(query.isEmpty()?".":" y esta búsqueda."):"Prueba con otra palabra.";
+        TextView t=ui.heading(getString(nothing?R.string.home_empty_title:R.string.home_no_results),Type.HEADLINE_SMALL);t.setPadding(0,ui.dp(S5),0,ui.dp(S2));t.setGravity(Gravity.CENTER);e.addView(t);
+        String detail=getString(nothing?R.string.home_empty_body:filter>0?(query.isEmpty()?R.string.home_no_results_filter:R.string.home_no_results_filter_search):R.string.home_try_another_word);
         TextView d=ui.text(detail,Type.BODY_MEDIUM,p.onSurfaceVariant);d.setGravity(Gravity.CENTER);e.addView(d);
         Ui.Btn b=null;
-        if(nothing)b=ui.button("Grabar ahora",R.drawable.ic_mic_fill,Ui.Style.PRIMARY,v->section(false));
-        else if(filter>0)b=ui.button("Quitar filtro",R.drawable.ic_close,Ui.Style.SECONDARY,v->{filter=0;render();});
-        else if(!query.isEmpty())b=ui.button("Borrar búsqueda",R.drawable.ic_close,Ui.Style.SECONDARY,v->search.setText(""));
+        if(nothing)b=ui.button(getString(R.string.home_record_now),R.drawable.ic_mic_fill,Ui.Style.PRIMARY,v->section(false));
+        else if(filter>0)b=ui.button(getString(R.string.home_clear_filter),R.drawable.ic_close,Ui.Style.SECONDARY,v->{filter=0;render();});
+        else if(!query.isEmpty())b=ui.button(getString(R.string.home_clear_search),R.drawable.ic_close,Ui.Style.SECONDARY,v->search.setText(""));
         if(b!=null){LinearLayout.LayoutParams lp=Ui.wrap();lp.topMargin=ui.dp(S6);e.addView(b,lp);}
         return e;
     }
@@ -1005,21 +1018,21 @@ public class MainActivity extends Screen {
         String second;int secondColor=p.onSurfaceVariant;
         switch(i.status.kind){
             case QUEUED:second=i.progressText();secondColor=p.primary;break;
-            case FAILED:second="No se pudo transcribir";secondColor=p.error;break;
-            case NEW:second="Sin transcribir";break;
-            default:{String s=i.snippet();second=s.isEmpty()?"Transcripción lista":"«"+s+"»";}
+            case FAILED:second=getString(R.string.home_failed);secondColor=p.error;break;
+            case NEW:second=getString(R.string.act_not_transcribed);break;
+            default:{String s=i.snippet();second=s.isEmpty()?getString(R.string.home_transcript_ready):getString(R.string.home_snippet,s);}
         }
         TextView two=ui.oneLine(ui.text(second,Type.BODY_MEDIUM,secondColor));two.setPadding(0,ui.dp(2),0,0);texts.addView(two,Ui.fill());
         CharSequence meta="";
         if(i.done()){meta=metaLine(i);if(meta.length()>0){TextView m=ui.oneLine(ui.text("",Type.BODY_SMALL,p.onSurfaceVariant));m.setText(meta);m.setPadding(0,ui.dp(2),0,0);texts.addView(m,Ui.fill());}}
         else if(i.status.kind==RecState.Kind.FAILED){
-            Ui.Btn retry=ui.button("Reintentar",R.drawable.ic_refresh,Ui.Style.TONAL,v->{Ui.haptic(v,Ui.Haptic.CONFIRM);RecordingActions.transcribe(this,i.r,this::load);});retry.setMinimumHeight(ui.dp(48));retry.setPadding(ui.dp(S4),0,ui.dp(S4),0);retry.setContentDescription("Reintentar transcripción de "+i.r.title);
+            Ui.Btn retry=ui.button(getString(R.string.act_retry),R.drawable.ic_refresh,Ui.Style.TONAL,v->{Ui.haptic(v,Ui.Haptic.CONFIRM);RecordingActions.transcribe(this,i.r,this::load);});retry.setMinimumHeight(ui.dp(48));retry.setPadding(ui.dp(S4),0,ui.dp(S4),0);retry.setContentDescription(getString(R.string.home_retry_spoken,i.r.title));
             LinearLayout.LayoutParams rl=Ui.wrap();rl.topMargin=ui.dp(S2);texts.addView(retry,rl);
         }
         row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
-        ImageButton more=ui.iconButton(R.drawable.ic_more,"Opciones de "+i.r.title,p.onSurfaceVariant,0,48);more.setOnClickListener(v->RecordingActions.menu(this,i.r,this::load,null));row.addView(more);
+        ImageButton more=ui.iconButton(R.drawable.ic_more,getString(R.string.home_options_spoken,i.r.title),p.onSurfaceVariant,0,48);more.setOnClickListener(v->RecordingActions.menu(this,i.r,this::load,null));row.addView(more);
         row.setBackground(ui.ripple(null,0));row.setClickable(true);row.setFocusable(true);
-        row.setContentDescription(i.r.title+". "+Ui.humanDuration(i.r.duration)+". "+second+(meta.length()>0?". "+meta.toString().replace("●",""):"")+(i.fresh?". Nueva":""));row.setAccessibilityDelegate(Ui.buttonRole());
+        row.setContentDescription(i.r.title+". "+Ui.humanDuration(i.r.duration)+". "+second+(meta.length()>0?". "+meta.toString().replace("●",""):"")+(i.fresh?". "+getString(R.string.home_new_spoken):""));row.setAccessibilityDelegate(Ui.buttonRole());
         row.setOnClickListener(v->open(i.r.id));row.setOnLongClickListener(v->{Ui.haptic(v);RecordingActions.menu(this,i.r,this::load,null);return true;});
         return row;
     }
@@ -1052,15 +1065,16 @@ public class MainActivity extends Screen {
             b.append(' ');for(int k=0;k<Math.min(2,n);k++)b.append(k==0?"":", ").append(m.names.get(k));if(n>2)b.append(" +").append(String.valueOf(n-2));
         }
         String action=null;boolean highlight=false;
-        if(i.toReview(m)){action=m.names.size()+" voces por revisar";highlight=true;}
-        else if(i.inbox){String folder=folderName();if(i.savedAt==0){action="Por guardar";highlight=true;}else if(i.outdated){action="Actualizar en "+folder;highlight=true;}else action="✓ En "+folder;}
+        if(i.toReview(m)){action=getString(R.string.home_voices_to_review_n,m.names.size());highlight=true;}
+        else if(i.inbox){String folder=folderName();if(i.savedAt==0){action=getString(R.string.home_unsaved);highlight=true;}else if(i.outdated){action=getString(R.string.act_update_in,folder);highlight=true;}else action=getString(R.string.home_in_folder,folder);}
         if(action!=null){if(b.length()>0)b.append(" · ");int s=b.length();b.append(action);if(highlight)b.setSpan(new ForegroundColorSpan(p.primary),s,b.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);}
         return b;
     }
-    private static String dateSection(long time){
-        if(DateUtils.isToday(time))return "Hoy";if(DateUtils.isToday(time+DateUtils.DAY_IN_MILLIS))return "Ayer";
-        if(System.currentTimeMillis()-time<7*DateUtils.DAY_IN_MILLIS)return "Esta semana";
-        String month=new SimpleDateFormat("MMMM yyyy",ES).format(new Date(time));return Character.toUpperCase(month.charAt(0))+month.substring(1);
+    /** Grupo de la Biblioteca: «Hoy», «Ayer», «Esta semana» o el mes («Septiembre 2026»), en el idioma de la app. */
+    private String dateSection(long time,Locale locale){
+        if(DateUtils.isToday(time))return getString(R.string.home_today);if(DateUtils.isToday(time+DateUtils.DAY_IN_MILLIS))return getString(R.string.home_yesterday);
+        if(System.currentTimeMillis()-time<7*DateUtils.DAY_IN_MILLIS)return getString(R.string.home_this_week);
+        String month=new SimpleDateFormat(getString(R.string.home_month_pattern),locale).format(new Date(time));return Character.toUpperCase(month.charAt(0))+month.substring(1);
     }
     private void open(String id){startActivity(new Intent(this,RecordingActivity.class).putExtra("id",id));}
 

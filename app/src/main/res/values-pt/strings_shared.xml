@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_record">Gravar</string>
+    <string name="nav_library">Biblioteca</string>
+    <string name="nav_settings">Ajustes</string>
+    <string name="nav_busy">%1$s, trabalho em andamento</string>
+    <string name="metrics_title">Suas métricas</string>
+
+    <string name="rec_default_title">Gravação %1$s</string>
+    <string name="rec_recovered">Áudio recuperado · revisar</string>
+
+    <string name="speaker_n">Pessoa %1$d</string>
+    <string name="speaker_text">Texto</string>
+    <string name="voice_me_default">Eu</string>
+
+    <string name="wait_wifi">aguardando Wi-Fi (agora você está usando dados móveis; pode usá-los mesmo assim nos detalhes da gravação)</string>
+    <string name="retranscribe_choose_first">Primeiro escolha com qual versão você fica.</string>
+    <string name="settings_no_server">Configure o endereço do seu servidor em Ajustes.</string>
+
+    <string name="key_word">chave</string>
+    <string name="key_fix_in_settings">Confira em Ajustes.</string>
+
+    <string name="consent_title">Seu áudio é enviado para ser transcrito</string>
+    <string name="consent_body">Para transcrever, o Verbapp envia o áudio de cada gravação que você transcreve ao OpenRouter e ao modelo de IA que você escolher. Para escrever a nota, envia o texto da transcrição. As gravações que você não transcreve nunca são enviadas, e sua chave paga só o que você usar.</string>
+    <string name="consent_accept">Concordo</string>
+    <string name="consent_later">Agora não</string>
+    <string name="privacy_policy">Política de privacidade</string>
+    <string name="privacy_url">https://konredus.github.io/Android-app-para-grabar-y-transcribir/privacidade.html</string>
+</resources>

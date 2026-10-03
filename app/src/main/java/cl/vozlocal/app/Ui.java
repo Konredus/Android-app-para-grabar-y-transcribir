@@ -201,7 +201,7 @@ final class Ui {
                 if(done){done=false;glyph.animate().cancel();glyph.setScaleX(1f);glyph.setScaleY(1f);}
                 if(spinner==null){spinner=new ProgressBar(c,null,android.R.attr.progressBarStyleSmall);spinner.setIndeterminate(true);spinner.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);slot.addView(spinner,new FrameLayout.LayoutParams(dp(18),dp(18),Gravity.CENTER));}
                 spinner.setIndeterminateTintList(ColorStateList.valueOf(fg));spinner.animate().cancel();spinner.setAlpha(1f);spinner.setScaleX(1f);spinner.setScaleY(1f);spinner.setVisibility(VISIBLE);
-                glyph.setVisibility(INVISIBLE);slot.setVisibility(VISIBLE);if(Build.VERSION.SDK_INT>=30)setStateDescription("En curso");
+                glyph.setVisibility(INVISIBLE);slot.setVisibility(VISIBLE);if(Build.VERSION.SDK_INT>=30)setStateDescription(Lang.str(c,R.string.ui_busy));
             }else{
                 if(spinner!=null){spinner.animate().cancel();spinner.setVisibility(GONE);}
                 glyph.setVisibility(VISIBLE);slot.setVisibility(hasIcon?VISIBLE:GONE);if(Build.VERSION.SDK_INT>=30)setStateDescription(null);
@@ -248,7 +248,7 @@ final class Ui {
             main=button(label,icon,Style.PRIMARY,onMain);main.setCorners(mainCorners);main.setPadding(dp(S6),0,dp(S5),0);oneLine(main.label);
             addView(main,new LinearLayout.LayoutParams(0,dp(52),1));
             chevron=new RotateDrawable();chevron.setDrawable(c.getDrawable(R.drawable.ic_chevron_down).mutate());chevron.setFromDegrees(0f);chevron.setToDegrees(180f);chevron.setLevel(0);
-            more=iconButton(R.drawable.ic_chevron_down,"Más opciones para guardar o compartir",p.onInk,0,52);more.setImageDrawable(chevron);more.setImageTintList(ColorStateList.valueOf(p.onInk));
+            more=iconButton(R.drawable.ic_chevron_down,Lang.str(c,R.string.ui_more_save_share),p.onInk,0,52);more.setImageDrawable(chevron);more.setImageTintList(ColorStateList.valueOf(p.onInk));
             moreFill=new GradientDrawable();moreFill.setColor(p.ink);moreFill.setCornerRadii(moreCorners.clone());moreMask=new GradientDrawable();moreMask.setColor(0xFF000000);moreMask.setCornerRadii(moreCorners.clone());
             more.setBackground(new RippleDrawable(ColorStateList.valueOf(stateLayer(p.onInk)),moreFill,moreMask));pressable(more,false);
             more.setOnClickListener(v->{openMenu();if(onMore!=null)onMore.onClick(v);});
@@ -315,7 +315,7 @@ final class Ui {
         TextView t=text(value,Type.LABEL_LARGE,selected?p.onInk:p.onSurfaceVariant);t.setGravity(Gravity.CENTER_VERTICAL);t.setPadding(dp(selected?S3:S4),0,dp(S4),0);t.setMinHeight(dp(36));t.setMinimumHeight(dp(36));
         t.setBackground(new RippleDrawable(ColorStateList.valueOf(p.ripple),selected?shape(c,p.ink,R_FULL):outline(c,p.glass,p.outlineVariant,R_FULL,false),null));
         if(selected){Drawable d=c.getDrawable(R.drawable.ic_check).mutate();d.setTint(p.onInk);d.setBounds(0,0,dp(18),dp(18));t.setCompoundDrawablesRelative(d,null,null,null);t.setCompoundDrawablePadding(dp(6));}
-        t.setSelected(selected);t.setOnClickListener(click);t.setAccessibilityDelegate(buttonRole());t.setContentDescription(value+(selected?", seleccionado":""));return t;
+        t.setSelected(selected);t.setOnClickListener(click);t.setAccessibilityDelegate(buttonRole());t.setContentDescription(selected?Lang.str(c,R.string.ui_selected_item,value):value);return t;
     }
 
     // ---------- Filas de lista ----------
@@ -495,11 +495,11 @@ final class Ui {
         }
     }
     static void haptic(View v,Haptic h){if(v==null||h==null)return;try{v.performHapticFeedback(hapticConstant(h));}catch(RuntimeException ignored){}}
-    /** Duración en lenguaje humano: «5 s», «4 min», «52 min», «1 h», «1 h 04 min». */
+    /** Duración en lenguaje humano, en el idioma de la app: «5 s», «4 min», «52 min», «1 h», «1 h 04 min» (en inglés, «1 hr 4 min»). */
     static String humanDuration(long ms){
-        long s=Math.max(0,Math.round(ms/1000.0));if(s<60)return s+" s";
-        long m=Math.round(s/60.0);if(m<60)return m+" min";
-        long h=m/60,rest=m%60;return rest==0?h+" h":h+" h "+String.format(java.util.Locale.ROOT,"%02d",rest)+" min";
+        long s=Math.max(0,Math.round(ms/1000.0));if(s<60)return Lang.str(R.string.ui_duration_s,s);
+        long m=Math.round(s/60.0);if(m<60)return Lang.str(R.string.ui_duration_min,m);
+        long h=m/60,rest=m%60;return rest==0?Lang.str(R.string.ui_duration_h,h):Lang.str(R.string.ui_duration_h_min,h,rest);
     }
     static View.AccessibilityDelegate buttonRole(){return new View.AccessibilityDelegate(){@Override public void onInitializeAccessibilityNodeInfo(View host,AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(host,info);info.setClassName(Button.class.getName());}};}
     void fadeIn(View v){

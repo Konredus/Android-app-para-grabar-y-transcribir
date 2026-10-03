@@ -1,14 +1,42 @@
 plugins { id 'com.android.application' }
+
+// Firma de publicación (0.9.0). La clave de subida y sus contraseñas NO van en el repositorio: viven en
+// .tools/signing/keystore.properties (storeFile, storePassword, keyAlias, keyPassword). Sin ese archivo, el AAB de
+// release sale sin firmar y Google Play no lo acepta.
+def signingFile = rootProject.file('.tools/signing/keystore.properties')
+def signingProps = new Properties()
+if (signingFile.exists()) signingFile.withInputStream { signingProps.load(it) }
+
 android {
     namespace 'cl.vozlocal.app'
-    compileSdk 35
+    compileSdk 36
     defaultConfig {
-        applicationId 'cl.vozlocal.app'
+        // 0.9.0: paquete nuevo para Google Play (se puede tener instalada la versión anterior, cl.vozlocal.app, al lado).
+        applicationId 'cl.verbapp.app'
         minSdk 26
-        targetSdk 35
-        versionCode 13
-        versionName '0.8.0'
+        targetSdk 36
+        versionCode 14
+        versionName '0.9.0'
         testInstrumentationRunner 'cl.vozlocal.app.RecorderSmokeTest'
     }
+    signingConfigs {
+        release {
+            if (signingFile.exists()) {
+                storeFile rootProject.file(signingProps['storeFile'])
+                storePassword signingProps['storePassword']
+                keyAlias signingProps['keyAlias']
+                keyPassword signingProps['keyPassword']
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (signingFile.exists()) signingConfig signingConfigs.release
+        }
+    }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    // El idioma se elige dentro de la app (Lang): el AAB debe llevar los tres a todos los teléfonos. Con la división por
+    // idioma de Google Play, quien tiene el teléfono en español y elige inglés (o portugués) no tendría esos textos.
+    bundle { language { enableSplit = false } }
 }

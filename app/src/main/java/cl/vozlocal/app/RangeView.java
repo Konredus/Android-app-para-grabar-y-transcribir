@@ -61,6 +61,7 @@ final class RangeView extends View {
     }
     @Override public boolean performClick(){return super.performClick();}
     private void move(float ex){long v=ms(ex);if(dragging==0)from=clamp(v,0,Math.max(0,to-MIN_GAP));else if(dragging==1)to=clamp(v,Math.min(duration,from+MIN_GAP),duration);describe();invalidate();if(listener!=null)listener.changed(from,to);}
-    private void describe(){setContentDescription("Tramo seleccionado desde "+Recording.time(from)+" hasta "+Recording.time(to)+". Usa los campos de segundos para ajustarlo con precisión.");}
+    /** Se llama en cada movimiento: el contexto es la pantalla (ya en el idioma de la app), sin consultar el idioma cada vez. */
+    private void describe(){setContentDescription(getContext().getString(R.string.marks_range_desc,Recording.time(from),Recording.time(to)));}
     private float dp(float n){return n*getResources().getDisplayMetrics().density;}
 }

@@ -9,9 +9,16 @@ import android.provider.OpenableColumns;
 import java.io.*;
 
 public class AudioProvider extends ContentProvider {
+    /**
+     * Autoridad del proveedor: el paquete de la app + ".audio" (0.9.0: el paquete pasó de cl.vozlocal.app a cl.verbapp.app;
+     * el manifiesto usa ${applicationId}.audio, así la versión de Play y la anterior pueden convivir en el teléfono).
+     */
+    static String authority(Context c) { return c.getPackageName() + ".audio"; }
+    /** content://<paquete>.audio/<nombre> para compartir un audio, una transcripción o un informe. */
+    static Uri uri(Context c, String name) { return Uri.parse("content://" + authority(c) + "/" + name); }
     @Override public boolean onCreate() { return true; }
     private File resolve(Uri uri) throws FileNotFoundException {
-        if (!"content".equals(uri.getScheme()) || !"cl.vozlocal.app.audio".equals(uri.getAuthority()) || uri.getPathSegments().size() != 1) throw new FileNotFoundException();
+        if (!"content".equals(uri.getScheme()) || !authority(getContext()).equals(uri.getAuthority()) || uri.getPathSegments().size() != 1) throw new FileNotFoundException();
         String name = uri.getLastPathSegment();
         if (name == null || !(name.matches("[a-f0-9-]{36}\\.(m4a|txt)") || Diagnostics.isReport(name))) throw new FileNotFoundException();
         File f = new File(name.endsWith(".txt")?getContext().getCacheDir():Recording.directory(getContext()), name);

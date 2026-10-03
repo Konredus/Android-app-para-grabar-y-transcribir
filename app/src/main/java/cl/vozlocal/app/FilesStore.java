@@ -11,7 +11,7 @@ final class FilesStore {
     static final Object LOCK = new Object();
     static final AtomicInteger version = new AtomicInteger();
     static File file(Context c, String id, String suffix) {
-        if (id == null || !id.matches("[a-f0-9-]{36}")) throw new IllegalArgumentException("Grabación inválida");
+        if (id == null || !id.matches("[a-f0-9-]{36}")) throw new IllegalArgumentException(Lang.str(R.string.eng_err_bad_recording));
         return new File(Recording.directory(c), id + suffix);
     }
     static JSONObject read(File file) throws Exception {
@@ -36,8 +36,8 @@ final class FilesStore {
     static void status(Context c, String id, String label) throws Exception { update(c,id,s -> s.put("status",label)); }
     static String label(Context c, String id) {
         JSONObject state=state(c,id);
-        if (state.optBoolean("demo")) return "Ejemplo · texto de demostración";
-        return state.optString("status", Transcript.exists(c,id) ? "Transcripción disponible" : "Solo en este teléfono");
+        if (state.optBoolean("demo")) return Lang.str(c, R.string.eng_label_demo);
+        return state.optString("status", Lang.str(c, Transcript.exists(c,id) ? R.string.eng_label_transcribed : R.string.eng_label_local));
     }
     static Recording recording(Context c, String id) { for(Recording r:Recording.list(c)) if(r.id.equals(id))return r; return null; }
 }

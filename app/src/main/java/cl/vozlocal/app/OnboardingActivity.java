@@ -51,11 +51,13 @@ import static cl.vozlocal.app.AppTheme.*;
 /**
  * Bienvenida de la primera instalación (0.8.0, ver docs/diseno/SPEC-0.8.md → «onboarding»): cuatro pasos cortos a pantalla
  * completa sobre el fondo intenso de Grabar, con la estética Verbapp (docs/diseno/PROPUESTA-0.7.md):
- * 1. Bienvenida: el logo en grande, el lema y tres beneficios en tarjetas de vidrio.
+ * 1. Bienvenida: el logo en grande, el lema y tres beneficios en tarjetas de vidrio. Bajo el lema, el idioma de la app
+ *    (0.9.0): parte en el del teléfono (o en inglés) y se cambia ahí mismo, sin perder el paso ni lo escrito.
  * 2. Tú: tu nombre (opcional, para el saludo y para tu voz), el permiso del micrófono y, debajo, una fila más liviana
  *    «Con la pantalla bloqueada» (permiso de batería y la guía del fabricante; SPEC-0.8c, decisión 4).
  * 3. Conecta tu IA: solo OpenRouter (0.8.0, segunda ronda: docs/diseno/SPEC-0.8b.md). Antes de pedir la clave se dice en
- *    claro qué sale del teléfono, a quién y quién paga; después, el campo para pegarla.
+ *    claro qué sale del teléfono, a quién y quién paga; después, el campo para pegarla. La clave se guarda recién cuando
+ *    la persona aceptó el aviso de envío (Consent, 0.9.0): guardarla deja lista la primera subida de audio.
  * 4. Listo: cómo quedó la clave y dos accesos opcionales (grabar tu voz, elegir tu carpeta 0-Inbox).
  * Arriba van siempre ← (desde el segundo paso), los puntitos de avance y «Saltar»; abajo, fijo, UN botón de tinta que
  * no cambia de lugar. La ilustración de cada paso es el mismo gesto de Grabar: un disco verde con halo entre ondas grises.
@@ -81,12 +83,13 @@ public class OnboardingActivity extends Screen {
     /**
      * La explicación honesta del paso 3, antes de pedir la clave: qué sale del teléfono, a quién y quién paga. Se graba sin
      * internet, pero transcribir y armar la nota NO pasan en el teléfono (SPEC-0.8b: «Todo queda en tu teléfono» era falso).
+     * Los textos son métodos y no constantes: una constante quedaría en el idioma de cuando se cargó la clase.
      */
-    static final String SENT="Para transcribir, tu audio se envía a OpenRouter y al modelo que elijas; para la nota, el texto. Tu clave paga solo lo que usas.";
+    static String sent(){return Lang.str(R.string.onb_sent);}
     /** Lo que se dice de grabar en la bienvenida: verdadero también después de transcribir (lo grabado sigue en el teléfono). */
-    static final String KEPT="Queda en tu teléfono hasta transcribirlo.";
+    static String kept(){return Lang.str(R.string.onb_kept);}
     /** Lo que se dice cuando no se pudo preguntar al proveedor (sin red, servicio caído): la clave igual quedó guardada. */
-    static final String UNCHECKED="Clave guardada. No se pudo comprobar ahora: puedes hacerlo después en Ajustes.";
+    static String unchecked(){return Lang.str(R.string.onb_unchecked);}
 
     /**
      * La bienvenida terminó (o se saltó): no vuelve a aparecer sola y «Novedades» no sale encima de quien recién instaló
@@ -109,9 +112,9 @@ public class OnboardingActivity extends Screen {
      */
     static String keyProblem(String raw){
         String key=raw==null?"":raw.trim();
-        if(key.isEmpty())return "Pega tu clave para continuar.";
-        if(key.matches("(?s).*\\s.*")||key.length()>8192)return "La clave no debe tener espacios ni saltos de línea. Cópiala de nuevo, entera.";
-        if(key.length()<MIN_KEY)return "Esa clave parece incompleta. Cópiala entera y vuelve a pegarla.";
+        if(key.isEmpty())return Lang.str(R.string.onb_key_empty);
+        if(key.matches("(?s).*\\s.*")||key.length()>8192)return Lang.str(R.string.onb_key_spaces);
+        if(key.length()<MIN_KEY)return Lang.str(R.string.onb_key_short);
         return foreign(guessProvider(key));
     }
     /**
@@ -120,8 +123,8 @@ public class OnboardingActivity extends Screen {
      * Antes (con la tarjeta de OpenAI) se elegía esa tarjeta; ahora solo hay OpenRouter. null si no es de otro servicio.
      */
     static String foreign(String guess){
-        if("anthropic".equals(guess))return "Esa clave es de Anthropic (Claude). Aquí va una de OpenRouter, que empieza con «sk-or-».";
-        if(OPENAI.equals(guess))return "Esa clave no es de OpenRouter (parece de OpenAI u otro servicio). Las de OpenRouter empiezan con «sk-or-».";
+        if("anthropic".equals(guess))return Lang.str(R.string.onb_key_anthropic);
+        if(OPENAI.equals(guess))return Lang.str(R.string.onb_key_openai);
         return null;
     }
     /**
@@ -138,13 +141,27 @@ public class OnboardingActivity extends Screen {
         s.saveKeyFor(OPENROUTER,key);
         s.prefs.edit().putString("provider",OPENROUTER).apply();return true;
     }
+    /** Lo que hace «Continuar» en el paso de la clave: seguir sin clave, explicar qué falta, pedir el aviso de envío o guardar. */
+    static final int KEY_SKIP=0,KEY_ERROR=1,KEY_CONSENT=2,KEY_SAVE=3;
+    /**
+     * raw: lo escrito; skippable: se puede seguir sin escribir nada (repaso, o ya hay una clave guardada); consent: ya aceptó
+     * que su audio se envíe (Consent.given). Una clave que sirve sin el aviso aceptado no se guarda (Google Play pide la
+     * aceptación antes del primer envío, y con la clave guardada Pipeline.schedule puede empezar a transcribir lo que
+     * esperaba en cola). Una clave que no sirve ni siquiera pide el aviso: primero se corrige.
+     */
+    static int keyAction(String raw,boolean skippable,boolean consent){
+        String key=raw==null?"":raw.trim();
+        if(key.isEmpty())return skippable?KEY_SKIP:KEY_ERROR;
+        if(keyProblem(key)!=null)return KEY_ERROR;
+        return consent?KEY_SAVE:KEY_CONSENT;
+    }
     /**
      * «Clave válida · quedan US$4,20» (el saldo solo si se supo). La etiqueta de la clave no se muestra. Lo que va después
      * de «Clave válida» es SettingsActivity.balanceText, el mismo texto de Ajustes → «Comprobar conexión»: la misma clave
      * dice lo mismo en los dos lugares (también «aún sin créditos», que manda sobre el tope de la clave).
      */
     static String validText(double balance,boolean noCredits){
-        String what=SettingsActivity.balanceText(balance,noCredits);return what==null?"Clave válida":"Clave válida · "+what;
+        String what=SettingsActivity.balanceText(balance,noCredits);return what==null?Lang.str(R.string.onb_key_valid):Lang.str(R.string.onb_key_valid_with,what);
     }
     /**
      * Lo que se supo de una clave válida: el texto para la persona y lo que queda en Ajustes. balance: el saldo que se
@@ -172,10 +189,10 @@ public class OnboardingActivity extends Screen {
     /** Lo mismo desde GET /key y el saldo de la cuenta (GET /credits; NaN si no se supo). */
     static Valid valid(Models.KeyInfo info,double account){return valid(Models.balance(info,account));}
     /** El motivo del rechazo tal como lo dice el cliente, sin mandar a Ajustes: aquí la clave se corrige en el paso anterior. */
-    static String rejected(String message){String m=message==null?"":message.replace(" Revísala en Ajustes.","").trim();return m.isEmpty()?"La clave no funcionó.":m;}
+    static String rejected(String message){String m=StatusText.withoutSettingsHint(message);return m.isEmpty()?Lang.str(R.string.onb_key_failed):m;}
     /** Primer nombre para saludar («Konrad Peschka» → «Konrad»); vacío si no hay nombre o es el «Yo» por defecto. */
-    static String firstName(String raw){String n=Voices.clean(raw);if(n.isEmpty()||n.equals("Yo"))return "";int cut=n.indexOf(' ');return cut>0?n.substring(0,cut):n;}
-    static String readyTitle(String name){String first=firstName(name);return first.isEmpty()?"¡Todo listo!":"Todo listo, "+first;}
+    static String firstName(String raw){String n=Voices.clean(raw);if(n.isEmpty()||Voices.isDefaultMeName(n))return "";int cut=n.indexOf(' ');return cut>0?n.substring(0,cut):n;}
+    static String readyTitle(String name){String first=firstName(name);return first.isEmpty()?Lang.str(R.string.onb_ready_title):Lang.str(R.string.onb_ready_title_name,first);}
 
     /** Resultado de comprobar una clave. valid: lo que se supo de ella si es válida (null si no). */
     static final class Verdict{
@@ -197,9 +214,9 @@ public class OnboardingActivity extends Screen {
      * otra cosa (sin red, servicio caído), «no se pudo comprobar ahora». No lanza.
      */
     static Verdict verify(Checker checker,HttpApi http,String key){
-        try{Valid v=checker.check(http,key);return new Verdict(Check.VALID,v==null?"Clave válida":v.text,v);}
+        try{Valid v=checker.check(http,key);return new Verdict(Check.VALID,v==null?Lang.str(R.string.onb_key_valid):v.text,v);}
         catch(HttpApi.UserAction e){return new Verdict(Check.REJECTED,rejected(e.getMessage()),null);}
-        catch(Exception e){return new Verdict(Check.UNKNOWN,UNCHECKED,null);}
+        catch(Exception e){return new Verdict(Check.UNKNOWN,unchecked(),null);}
     }
     /**
      * La última comprobación guardada (preferencias verify*, las de Ajustes) si es de esta clave (target: la huella de
@@ -213,7 +230,7 @@ public class OnboardingActivity extends Screen {
     static Verdict saved(SharedPreferences prefs,String target){
         if(prefs.getLong("verifyAt",0)<=0||target==null||!target.equals(prefs.getString("verifyFor","")))return null;
         String why=prefs.getString("verifyMsg","");
-        if(!prefs.getBoolean("verifyOk",false))return why.toLowerCase(java.util.Locale.ROOT).contains("clave")?new Verdict(Check.REJECTED,rejected(why),null):new Verdict(Check.UNKNOWN,UNCHECKED,null);
+        if(!prefs.getBoolean("verifyOk",false))return StatusText.aboutKey(why)?new Verdict(Check.REJECTED,rejected(why),null):new Verdict(Check.UNKNOWN,unchecked(),null);
         double left;try{left=Double.parseDouble(prefs.getString("verifyBalance",""));}catch(NumberFormatException e){left=Double.NaN;}
         Valid v=validOf(left,prefs.getBoolean("verifyFree",false));return new Verdict(Check.VALID,v.text,v);
     }
@@ -248,11 +265,13 @@ public class OnboardingActivity extends Screen {
      * onResume); guideShown = la guía del fabricante ya se mostró sola una vez (después, solo si se toca la fila).
      */
     private boolean askedBattery,guideShown;
-    private int step,keyTone;private long switchedAt;private String name="";
+    /** Se eligió otro idioma: la pantalla se rehace en él (Lang.set) y, al volver, el lector de pantalla lee el selector. */
+    private boolean languageChanged;
+    private int step,keyTone;private long switchedAt,consentAskedAt;private String name="";
     // Marco fijo: barra de arriba y zona de abajo
     private ImageButton back;private Steps dots;private Ui.Btn skip,next;private TextView later;private LinearLayout stage;
     // Vistas del paso que está a la vista (null en los demás)
-    private TextView heading,micDetail,keyStatus;private EditText nameInput,keyInput;private Emblem micArt,keyArt;private Ui.Btn allow;
+    private TextView heading,micDetail,keyStatus,languageChip;private EditText nameInput,keyInput;private Emblem micArt,keyArt;private Ui.Btn allow;
     private LinearLayout nameCard,keyCard,readyList,batteryCard;
 
     @Override public void onCreate(Bundle state){
@@ -260,7 +279,7 @@ public class OnboardingActivity extends Screen {
         Object last=getLastNonConfigurationInstance();kept=last instanceof Kept?(Kept)last:new Kept();if(kept.check!=null)kept.check.screen=this;
         if(state!=null){step=Math.max(0,Math.min(STEPS-1,state.getInt("ob_step")));name=state.getString("ob_name","");askedMic=state.getBoolean("ob_asked");askedBattery=state.getBoolean("ob_battery");guideShown=state.getBoolean("ob_guide");}
         else{
-            String saved=settings.prefs.getString("myVoiceName","").trim();name=saved.equals("Yo")?"":saved;
+            String saved=settings.prefs.getString("myVoiceName","").trim();name=Voices.isDefaultMeName(saved)?"":saved;
             Diagnostics.event("ui_action",null,"screen","Onboarding","action",replay?"replay":"start");
         }
         shell(null,-1,true);
@@ -268,9 +287,12 @@ public class OnboardingActivity extends Screen {
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         buildFrame();show(step,0,false);
         if(state==null)enter(stage);
+        // Recién cambiado el idioma: el paso, el nombre y la clave a medio escribir siguen (estado guardado y Kept). El lector
+        // de pantalla vuelve al selector, que dice el idioma nuevo, en vez de quedar perdido en la pantalla rehecha.
+        else if(state.getBoolean("ob_lang"))main.postDelayed(()->{TextView l=languageChip;if(l!=null&&l.isAttachedToWindow())l.performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS,null);},600);
     }
     @Override protected void onResume(){super.onResume();renderMic(false);batteryReturned();renderReady();}
-    @Override protected void onSaveInstanceState(Bundle out){out.putInt("ob_step",step);out.putString("ob_name",name);out.putBoolean("ob_asked",askedMic);out.putBoolean("ob_battery",askedBattery);out.putBoolean("ob_guide",guideShown);super.onSaveInstanceState(out);}
+    @Override protected void onSaveInstanceState(Bundle out){out.putInt("ob_step",step);out.putString("ob_name",name);out.putBoolean("ob_asked",askedMic);out.putBoolean("ob_battery",askedBattery);out.putBoolean("ob_guide",guideShown);out.putBoolean("ob_lang",languageChanged);super.onSaveInstanceState(out);}
     @Override public Object onRetainNonConfigurationInstance(){return kept;}
     @Override protected void onDestroy(){
         main.removeCallbacksAndMessages(null);Check c=kept.check;
@@ -293,10 +315,10 @@ public class OnboardingActivity extends Screen {
         root.setFocusableInTouchMode(true);
         // Barra: ← a la izquierda, los puntitos al centro y «Saltar» siempre a mano.
         FrameLayout top=new FrameLayout(this);top.setPadding(dp(S3),dp(S1),dp(S2),dp(S1));top.setClipChildren(false);top.setClipToPadding(false);
-        back=ui.glassButton(R.drawable.ic_arrow_back,"Volver al paso anterior");back.setOnClickListener(v->onBackPressed());
+        back=ui.glassButton(R.drawable.ic_arrow_back,getString(R.string.onb_back_step));back.setOnClickListener(v->onBackPressed());
         top.addView(back,new FrameLayout.LayoutParams(dp(48),dp(48),Gravity.START|Gravity.CENTER_VERTICAL));
         dots=new Steps(this,p,STEPS);top.addView(dots,new FrameLayout.LayoutParams(-2,dp(48),Gravity.CENTER));
-        skip=ui.button(replay?"Cerrar":"Saltar",0,Ui.Style.PLAIN,v->finishFlow("skip"));skip.setMinimumHeight(dp(48));skip.setContentDescription(replay?"Cerrar la bienvenida":"Saltar la bienvenida");
+        skip=ui.button(getString(replay?R.string.onb_close:R.string.onb_skip),0,Ui.Style.PLAIN,v->finishFlow("skip"));skip.setMinimumHeight(dp(48));skip.setContentDescription(getString(replay?R.string.onb_close_desc:R.string.onb_skip_desc));
         top.addView(skip,new FrameLayout.LayoutParams(-2,-2,Gravity.END|Gravity.CENTER_VERTICAL));
         root.addView(top,0,Ui.fill());
         // Las ondas de la ilustración llegan hasta el borde de la pantalla: nada se corta en los márgenes.
@@ -304,28 +326,28 @@ public class OnboardingActivity extends Screen {
         // Abajo, fijo: el botón de tinta siempre en el mismo lugar. «Ahora no» (solo en el paso de la clave) va ENCIMA, así
         // no lo mueve, y es una píldora de vidrio: se lee tanto sobre el verde de abajo como sobre el blanco.
         bottom.setVisibility(View.VISIBLE);
-        later=ui.text("Ahora no, solo grabar",Type.LABEL_LARGE,p.onSurface);later.setGravity(Gravity.CENTER);int inset=dp(S1);
+        later=ui.text(getString(R.string.onb_later),Type.LABEL_LARGE,p.onSurface);later.setGravity(Gravity.CENTER);int inset=dp(S1);
         later.setBackground(new RippleDrawable(ColorStateList.valueOf(p.ripple),new InsetDrawable(outline(this,p.glass,p.outlineVariant,R_FULL,false),0,inset,0,inset),new InsetDrawable(shape(this,0xFF000000,R_FULL),0,inset,0,inset)));
         // El relleno va después del fondo: el InsetDrawable trae el suyo y setBackground lo reemplazaría.
         later.setPadding(dp(S5),0,dp(S5),0);later.setMinHeight(dp(48));later.setMinimumHeight(dp(48));
         later.setClickable(true);later.setFocusable(true);later.setAccessibilityDelegate(Ui.buttonRole());Ui.pressable(later);
         later.setOnClickListener(v->{Diagnostics.event("ui_action",null,"screen","Onboarding","action","later");go(READY);});
         LinearLayout.LayoutParams ll=Ui.wrap();ll.gravity=Gravity.CENTER_HORIZONTAL;ll.bottomMargin=dp(S1);bottom.addView(later,ll);
-        next=ui.button("Empezar",0,Ui.Style.PRIMARY,v->advance());bottom.addView(next,Ui.fill());
+        next=ui.button(getString(R.string.onb_start),0,Ui.Style.PRIMARY,v->advance());bottom.addView(next,Ui.fill());
         root.getViewTreeObserver().addOnGlobalLayoutListener(this::checkIme);
     }
     /** Lo que cambia con el paso en el marco: ←, los puntitos y el verbo del botón principal. */
     private void frame(boolean animate){
         dots.setStep(step,animate);
-        back.setVisibility(step>0||replay?View.VISIBLE:View.INVISIBLE);back.setContentDescription(step>0?"Volver al paso anterior":"Cerrar la bienvenida");
+        back.setVisibility(step>0||replay?View.VISIBLE:View.INVISIBLE);back.setContentDescription(getString(step>0?R.string.onb_back_step:R.string.onb_close_desc));
         boolean last=step==READY;
-        next.setText(step==WELCOME?"Empezar":!last?"Continuar":replay?"Listo":"Hacer mi primera grabación");next.setIcon(last&&!replay?R.drawable.ic_mic_fill:0);
+        next.setText(getString(step==WELCOME?R.string.onb_start:!last?R.string.onb_continue:replay?R.string.onb_done:R.string.onb_first_recording));next.setIcon(last&&!replay?R.drawable.ic_mic_fill:0);
         later.setVisibility(step==AI&&!imeShown?View.VISIBLE:View.GONE);
         // El lector de pantalla anuncia el cambio de paso con el título de la ventana.
-        setTitle(STEP_NAMES[step]+", paso "+(step+1)+" de "+STEPS);
+        setTitle(getString(R.string.onb_window_title,getString(STEP_NAMES[step]),step+1,STEPS));
         secure();
     }
-    private static final String[] STEP_NAMES={"Bienvenida","Tú","Conecta tu IA","Listo"};
+    private static final int[] STEP_NAMES={R.string.onb_step_welcome,R.string.onb_step_you,R.string.onb_step_ai,R.string.onb_step_ready};
     /**
      * Mientras la clave está en el campo (o se está por escribir), la pantalla no sale en capturas ni en la vista de
      * apps recientes, igual que la hoja de la clave en Ajustes. Solo cambia cuando hace falta: no en cada letra.
@@ -379,7 +401,7 @@ public class OnboardingActivity extends Screen {
      */
     private void show(int target,int dir,boolean animate){
         step=target;LinearLayout out=stage;
-        heading=null;micDetail=null;keyStatus=null;nameInput=null;keyInput=null;micArt=null;keyArt=null;allow=null;nameCard=null;keyCard=null;readyList=null;batteryCard=null;
+        heading=null;micDetail=null;keyStatus=null;languageChip=null;nameInput=null;keyInput=null;micArt=null;keyArt=null;allow=null;nameCard=null;keyCard=null;readyList=null;batteryCard=null;
         LinearLayout in=target==WELCOME?buildWelcome():target==YOU?buildYou():target==AI?buildAi():buildReady();stage=in;
         boolean[] done={false};
         Runnable swap=()->{
@@ -470,38 +492,74 @@ public class OnboardingActivity extends Screen {
     private LinearLayout buildWelcome(){
         LinearLayout c=column();
         c.addView(hero(new Emblem(this,p,Emblem.LOGO)));
-        c.addView(overline("Bienvenido a Verbapp"),Ui.fill());
-        heading=title("Tus palabras,\npara siempre","Tus palabras, para siempre");c.addView(heading,Ui.fill());
+        c.addView(overline(getString(R.string.onb_welcome_overline)),Ui.fill());
+        // El lema va en dos líneas; el lector lo lee como una sola frase.
+        String motto=getString(R.string.onb_welcome_title);heading=title(motto,motto.replace('\n',' '));c.addView(heading,Ui.fill());
+        languageChip=languageButton();LinearLayout.LayoutParams lp=Ui.wrap();lp.gravity=Gravity.CENTER_HORIZONTAL;lp.topMargin=dp(S2);c.addView(languageChip,lp);
         c.addView(gap());
         // Lo que se promete tiene que ser cierto: se graba sin internet y lo grabado queda en el teléfono, pero para
         // transcribir el audio sale (paso 3 lo explica). Cada apoyo cabe en una línea, así las tres tarjetas miden igual.
         int[] icons={R.drawable.ic_mic,R.drawable.ic_people,R.drawable.ic_note};
-        String[][] rows={{"Graba sin internet",KEPT},{"Transcribe separando voces","Para saber quién dijo cada cosa."},{"Una nota lista para guardar","Directo a tu segundo cerebro."}};
-        for(int i=0;i<rows.length;i++)c.addView(glassLead(icons[i],rows[i][0],rows[i][1]),ui.top(i==0?0:S2));
+        int[][] rows={{R.string.onb_welcome_record,R.string.onb_kept},{R.string.onb_welcome_voices,R.string.onb_welcome_voices_detail},{R.string.onb_welcome_note,R.string.onb_welcome_note_detail}};
+        for(int i=0;i<rows.length;i++)c.addView(glassLead(icons[i],getString(rows[i][0]),getString(rows[i][1])),ui.top(i==0?0:S2));
         return c;
+    }
+    /**
+     * Idioma de la app (0.9.0): píldora de vidrio bajo el lema con el globo, el idioma vigente y ▾ («English ▾»): el del
+     * teléfono si la app lo tiene; si no, inglés. Se toca en 48 dp aunque se vea de 40 (como «Ahora no» del paso 3).
+     */
+    private TextView languageButton(){
+        String now=getString(languageName(Lang.current(this)));
+        TextView t=ui.text(now,Type.LABEL_LARGE,p.onSurface);t.setGravity(Gravity.CENTER_VERTICAL);int inset=dp(S1);
+        t.setBackground(new RippleDrawable(ColorStateList.valueOf(p.ripple),new InsetDrawable(outline(this,p.glass,p.outlineVariant,R_FULL,false),0,inset,0,inset),new InsetDrawable(shape(this,0xFF000000,R_FULL),0,inset,0,inset)));
+        t.setPadding(dp(S3),0,dp(S3),0);t.setMinHeight(dp(48));t.setMinimumHeight(dp(48));
+        Drawable globe=getDrawable(R.drawable.ic_globe).mutate();globe.setTint(p.primary);globe.setBounds(0,0,dp(18),dp(18));
+        Drawable more=getDrawable(R.drawable.ic_chevron_down).mutate();more.setTint(p.onSurfaceVariant);more.setBounds(0,0,dp(18),dp(18));
+        t.setCompoundDrawablesRelative(globe,null,more,null);t.setCompoundDrawablePadding(dp(6));
+        t.setClickable(true);t.setFocusable(true);t.setAccessibilityDelegate(Ui.buttonRole());Ui.pressable(t);
+        t.setContentDescription(getString(R.string.onb_language_desc,now));t.setOnClickListener(v->languageSheet());
+        return t;
+    }
+    /** El nombre de cada idioma en su propio idioma («English», «Español», «Português (Brasil)»): cada persona encuentra el suyo. */
+    static int languageName(String lang){return Lang.ES.equals(lang)?R.string.lang_es:Lang.PT.equals(lang)?R.string.lang_pt:R.string.lang_en;}
+    /** Los tres idiomas, con el vigente marcado (radio y «seleccionado» para el lector). Elegir el mismo no hace nada. */
+    private void languageSheet(){
+        if(switching)return;String now=Lang.current(this);
+        Sheet s=sheet(getString(R.string.common_language),getString(R.string.common_language_hint));
+        for(String lang:Lang.SUPPORTED)s.choice(getString(languageName(lang)),null,lang.equals(now),()->pickLanguage(lang));
+        s.show();
+    }
+    /**
+     * Guarda el idioma y rehace la pantalla en él (Lang.set: Android 13+ lo hace solo; antes, recreate). El paso, el nombre
+     * y la clave a medio escribir siguen: van en el estado guardado y en Kept, igual que en un giro.
+     */
+    private void pickLanguage(String lang){
+        if(isFinishing()||lang.equals(Lang.current(this)))return;
+        Diagnostics.event("setting_changed",null,"action","app_language","source","onboarding","result",lang);
+        languageChanged=true;Ui.haptic(root,Ui.Haptic.CONFIRM);Lang.set(this,lang);
     }
 
     // ---------- 2. Tú ----------
     private LinearLayout buildYou(){
         LinearLayout c=column();
         micArt=new Emblem(this,p,Emblem.MIC);c.addView(hero(micArt));
-        c.addView(overline("Un gusto,"),Ui.fill());
-        heading=title("¿Cómo te llamas?",null);c.addView(heading,Ui.fill());
+        c.addView(overline(getString(R.string.onb_you_overline)),Ui.fill());
+        heading=title(getString(R.string.onb_you_title),null);c.addView(heading,Ui.fill());
         // El nombre: opcional. La tarjeta va a 8 dp del campo (esquinas de 16 dentro de 24: concéntricas).
         nameCard=ui.card();nameCard.setPadding(dp(S2),dp(S2),dp(S2),dp(S3));
-        nameInput=ui.field("Tu nombre","Tu nombre, opcional");nameInput.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PERSON_NAME|InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        nameInput=ui.field(getString(R.string.onb_name_hint),getString(R.string.onb_name_desc));nameInput.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PERSON_NAME|InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         nameInput.setFilters(new InputFilter[]{new InputFilter.LengthFilter(80)});nameInput.setImeOptions(EditorInfo.IME_ACTION_DONE);nameInput.setSaveEnabled(false);nameInput.setText(name);
         nameInput.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int n){}public void onTextChanged(CharSequence s,int a,int b,int n){name=s.toString();}public void afterTextChanged(Editable e){}});
         nameInput.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_DONE){hideKeyboard();return true;}return false;});
         nameCard.addView(nameInput,Ui.fill());
-        TextView why=ui.text("Opcional: para saludarte y poner tu nombre en las transcripciones.",Type.BODY_MEDIUM,p.onSurfaceVariant);why.setPadding(dp(S2),dp(S2),dp(S2),0);nameCard.addView(why,Ui.fill());
+        TextView why=ui.text(getString(R.string.onb_name_why),Type.BODY_MEDIUM,p.onSurfaceVariant);why.setPadding(dp(S2),dp(S2),dp(S2),0);nameCard.addView(why,Ui.fill());
         c.addView(nameCard,ui.top(S4));
         c.addView(gap());
         // El micrófono: se puede seguir sin permitirlo (Grabar lo vuelve a pedir al primer toque).
         LinearLayout mic=ui.card();mic.setPadding(dp(S2),dp(S2),dp(S2),dp(S2));
         micDetail=ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant);micDetail.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        LinearLayout head=lead(R.drawable.ic_mic,"Micrófono",micDetail);head.setPadding(dp(S1),dp(S1),dp(S2),dp(S3));mic.addView(head,Ui.fill());
-        allow=ui.button("Permitir micrófono",R.drawable.ic_mic_fill,Ui.Style.RECORD,v->askMic());mic.addView(allow,Ui.fill());
+        LinearLayout head=lead(R.drawable.ic_mic,getString(R.string.onb_mic),micDetail);head.setPadding(dp(S1),dp(S1),dp(S2),dp(S3));mic.addView(head,Ui.fill());
+        allow=ui.button(getString(R.string.onb_mic_allow),R.drawable.ic_mic_fill,Ui.Style.RECORD,v->askMic());mic.addView(allow,Ui.fill());
         c.addView(mic,Ui.fill());
         // Debajo, «Con la pantalla bloqueada» (SPEC-0.8c, decisión 4): una instalación nueva queda con la batería optimizada
         // y Android pausa la transcripción con la app cerrada (diagnóstico del 2026-10-01). Va como una fila de vidrio que
@@ -514,12 +572,12 @@ public class OnboardingActivity extends Screen {
     /** Estado real del permiso: verde «Permitir micrófono» mientras falta; menta con ✓ (lo logrado) cuando ya está, y el ✓ también en la ilustración. */
     private void renderMic(boolean celebrate){
         if(allow==null||micDetail==null)return;boolean ok=micGranted();
-        allow.setText(ok?"Micrófono permitido":"Permitir micrófono");allow.setIcon(ok?R.drawable.ic_check:R.drawable.ic_mic_fill);
+        allow.setText(getString(ok?R.string.onb_mic_allowed:R.string.onb_mic_allow));allow.setIcon(ok?R.drawable.ic_check:R.drawable.ic_mic_fill);
         allow.setColors(ok?p.onPrimaryContainer:p.onBrand,ok?p.primaryContainer:p.brand);allow.setClickable(!ok);
         // Ya concedido deja de ser un botón: sin esto, el gesto de «hundirse» al tocar quedaría a medias (no llega el soltar).
         if(ok){allow.setOnTouchListener(null);allow.animate().cancel();allow.setScaleX(1f);allow.setScaleY(1f);}
         // Nada de «el audio queda en tu teléfono» a secas: para transcribir sale (lo explica el paso siguiente).
-        String text=ok?"Listo: ya puedes grabar cuando quieras.":Build.VERSION.SDK_INT>=33?"Solo se usa mientras grabas. Los avisos muestran que sigue grabando.":"Solo se usa mientras grabas, y funciona sin internet.";
+        String text=getString(ok?R.string.onb_mic_ready:Build.VERSION.SDK_INT>=33?R.string.onb_mic_use_notify:R.string.onb_mic_use_offline);
         if(!text.contentEquals(micDetail.getText()))micDetail.setText(text);
         if(micArt!=null)micArt.setBadge(ok,celebrate);
         if(celebrate&&ok)Ui.haptic(allow,Ui.Haptic.CONFIRM);
@@ -529,9 +587,9 @@ public class OnboardingActivity extends Screen {
         if(micGranted()){renderMic(false);return;}
         // Ya se pidió y Android no volverá a preguntar (se negó dos veces): la salida son los ajustes del sistema.
         if(askedMic&&!shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)){
-            sheet("El micrófono está desactivado","Actívalo en los ajustes de Android para poder grabar. También puedes hacerlo después.")
-                .primary("Abrir ajustes",()->{try{startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}catch(RuntimeException e){toast("No se pudieron abrir los ajustes.");}})
-                .secondary("Ahora no",null).show();return;
+            sheet(getString(R.string.onb_mic_off_title),getString(R.string.onb_mic_off_body))
+                .primary(getString(R.string.onb_open_settings),()->{try{startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}catch(RuntimeException e){toast(getString(R.string.onb_settings_failed));}})
+                .secondary(getString(R.string.onb_not_now),null).show();return;
         }
         askedMic=true;ArrayList<String> ask=new ArrayList<>();ask.add(Manifest.permission.RECORD_AUDIO);
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){ask.add(Manifest.permission.POST_NOTIFICATIONS);notificationsAsked();}
@@ -563,14 +621,14 @@ public class OnboardingActivity extends Screen {
         boolean ok=Battery.unrestricted(this),extra=ok&&Battery.makerSteps().length>0;String key=ok+"|"+extra;
         if(key.equals(batteryShown)&&!celebrate)return;batteryShown=key;batteryCard.removeAllViews();
         String detail;View.OnClickListener click;
-        if(!ok){detail="Para que tus audios se transcriban aunque bloquees el teléfono.";click=v->askBattery();}
-        else if(extra){detail="Permitido. En "+Battery.makerName()+" hay un ajuste más: toca para verlo.";click=v->makerGuide();}
-        else{detail="Listo: Verbapp transcribe aunque bloquees el teléfono.";click=null;}
-        LinearLayout row=stateRow(R.drawable.ic_battery,"Con la pantalla bloqueada",detail,ok?ROW_DONE:ROW_GO,click);
+        if(!ok){detail=getString(R.string.onb_battery_ask);click=v->askBattery();}
+        else if(extra){detail=getString(R.string.onb_battery_extra,Battery.makerName());click=v->makerGuide();}
+        else{detail=getString(R.string.onb_battery_done);click=null;}
+        LinearLayout row=stateRow(R.drawable.ic_battery,getString(R.string.onb_battery_title),detail,ok?ROW_DONE:ROW_GO,click);
         // Alineada con la tarjeta del micrófono de arriba: el círculo del ícono queda a 12 dp del borde, igual que allá.
         row.setPaddingRelative(dp(S3),dp(S3),dp(S3),dp(S3));batteryCard.addView(row,Ui.fill());
         // Para el lector de pantalla, lo pendiente dice primero qué hace el toque (la flecha no se anuncia).
-        if(!ok)row.setContentDescription("Permitir transcribir con la pantalla bloqueada. "+detail);
+        if(!ok)row.setContentDescription(getString(R.string.onb_battery_allow_desc,detail));
         if(celebrate&&ok){
             // La marca ✓ es lo último de la fila: aparece con un resorte corto (tamaño: puede rebotar), como la insignia de arriba.
             View mark=row.getChildAt(row.getChildCount()-1);
@@ -595,7 +653,7 @@ public class OnboardingActivity extends Screen {
         Diagnostics.event("ui_action",null,"screen","Onboarding","action","battery","result",ok);
         renderBattery(ok);
         if(!ok||batteryCard==null)return;
-        batteryCard.announceForAccessibility("Permitido: Verbapp transcribe aunque bloquees el teléfono.");
+        batteryCard.announceForAccessibility(getString(R.string.onb_battery_allowed));
         // Primero se ve el ✓ y después sube la guía (con «Quitar animaciones», de inmediato).
         if(!guideShown&&Battery.makerSteps().length>0)main.postDelayed(()->{if(!isFinishing()&&!isDestroyed()&&step==YOU)makerGuide();},AppTheme.motion()?MOTION_SLOW:0);
     }
@@ -607,11 +665,11 @@ public class OnboardingActivity extends Screen {
     private void makerGuide(){
         String[] steps=Battery.makerSteps();if(steps.length==0)return;guideShown=true;String maker=Battery.makerName();
         Diagnostics.event("ui_action",null,"screen","Onboarding","action","battery_guide");
-        Sheet s=sheet("Un ajuste más en "+maker,maker+" tiene su propio ahorro de batería, aparte del de Android. Sin este ajuste puede pausar tus transcripciones al bloquear el teléfono.");
+        Sheet s=sheet(getString(R.string.bat_guide_title,maker),getString(R.string.bat_guide_body,maker));
         SheetParts.hero(s,R.drawable.ic_battery,false);numbered(s,steps);
-        TextView tip=ui.text("¿No lo encuentras? En Ajustes, toca la lupa y busca «segundo plano».",Type.BODY_MEDIUM,p.onSurfaceVariant);tip.setPadding(dp(S1),dp(S3),0,0);s.add(tip);
+        TextView tip=ui.text(getString(R.string.bat_search_tip),Type.BODY_MEDIUM,p.onSurfaceVariant);tip.setPadding(dp(S1),dp(S3),0,0);s.add(tip);
         // El botón ya queda en el diagnóstico por su rótulo (Ui.Btn); devolver false deja la hoja abierta.
-        s.primary(Battery.OPEN_SETTINGS,Ui.Style.PRIMARY,()->{Battery.appSettings(this);return false;}).secondary("Listo",null).show();
+        s.primary(Battery.openSettings(),Ui.Style.PRIMARY,()->{Battery.appSettings(this);return false;}).secondary(getString(R.string.onb_done),null).show();
     }
     /** Pasos numerados en una hoja: círculo menta con el número y el texto al lado (como «Cómo conseguir tu clave»). */
     private void numbered(Sheet s,String[] steps){
@@ -639,31 +697,32 @@ public class OnboardingActivity extends Screen {
     private LinearLayout buildAi(){
         LinearLayout c=column();
         keyArt=new Emblem(this,p,Emblem.HUB);renderKeyArt();c.addView(hero(keyArt));
-        c.addView(overline("Una sola clave para todo"),Ui.fill());
-        heading=title("Conecta tu IA",null);c.addView(heading,Ui.fill());
+        c.addView(overline(getString(R.string.onb_ai_overline)),Ui.fill());
+        heading=title(getString(R.string.onb_ai_title),null);c.addView(heading,Ui.fill());
         c.addView(gap());
-        c.addView(glassLead(R.drawable.ic_upload,"Así funciona",SENT),Ui.fill());
+        c.addView(glassLead(R.drawable.ic_upload,getString(R.string.onb_ai_how),getString(R.string.onb_sent)),Ui.fill());
         // La clave: rótulo, campo con «Pegar» adentro, el estado en palabras y cómo conseguirla.
         keyCard=ui.card();keyCard.setPadding(dp(S2),dp(S3),dp(S2),dp(S1));
         LinearLayout label=ui.row();label.setPadding(dp(S2),0,dp(S2),dp(S2));label.addView(ui.icon(R.drawable.ic_key,p.primary,18));label.addView(ui.space(S2));
-        label.addView(ui.text("Clave de OpenRouter",Type.TITLE_SMALL,p.onSurface));keyCard.addView(label,Ui.fill());
+        label.addView(ui.text(getString(R.string.onb_ai_key_label),Type.TITLE_SMALL,p.onSurface));keyCard.addView(label,Ui.fill());
         LinearLayout box=ui.row();box.setBackground(ui.fieldBackground());box.setPadding(dp(S4),0,dp(S1),0);box.setMinimumHeight(dp(56));
         // Campo oculto, sin autocompletar y sin guardarse en el estado de la pantalla (igual que la hoja de la clave en Ajustes).
-        keyInput=ui.field("sk-or-…","Clave de OpenRouter");keyInput.setBackground(null);keyInput.setPadding(0,dp(S3),dp(S2),dp(S3));
+        // «sk-or-…» es la forma de la clave, igual en todos los idiomas.
+        keyInput=ui.field("sk-or-…",getString(R.string.onb_ai_key_label));keyInput.setBackground(null);keyInput.setPadding(0,dp(S3),dp(S2),dp(S3));
         keyInput.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);keyInput.setSaveEnabled(false);keyInput.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);keyInput.setImeOptions(EditorInfo.IME_ACTION_DONE);
         keyInput.setText(kept.key);
         keyInput.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int n){}public void onTextChanged(CharSequence s,int a,int b,int n){keyChanged(s.toString());}public void afterTextChanged(Editable e){}});
         keyInput.setOnFocusChangeListener((v,focused)->secure());
         keyInput.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_DONE){advance();return true;}return false;});
         box.addView(keyInput,new LinearLayout.LayoutParams(0,-2,1));
-        TextView paste=ui.text("Pegar",Type.LABEL_LARGE,p.onPrimaryContainer);paste.setGravity(Gravity.CENTER);int in=dp(6);
+        TextView paste=ui.text(getString(R.string.onb_paste),Type.LABEL_LARGE,p.onPrimaryContainer);paste.setGravity(Gravity.CENTER);int in=dp(6);
         paste.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.stateLayer(p.onPrimaryContainer)),new InsetDrawable(shape(this,p.primaryContainer,R_FULL),0,in,0,in),new InsetDrawable(shape(this,0xFF000000,R_FULL),0,in,0,in)));
         paste.setPadding(dp(S3),0,dp(S4),0);paste.setMinHeight(dp(48));paste.setMinimumHeight(dp(48));
         Drawable clip=getDrawable(R.drawable.onboarding_paste).mutate();clip.setTint(p.onPrimaryContainer);clip.setBounds(0,0,dp(18),dp(18));paste.setCompoundDrawablesRelative(clip,null,null,null);paste.setCompoundDrawablePadding(dp(6));
-        paste.setClickable(true);paste.setFocusable(true);paste.setAccessibilityDelegate(Ui.buttonRole());paste.setContentDescription("Pegar la clave copiada");paste.setOnClickListener(v->paste());Ui.pressable(paste);
+        paste.setClickable(true);paste.setFocusable(true);paste.setAccessibilityDelegate(Ui.buttonRole());paste.setContentDescription(getString(R.string.onb_paste_desc));paste.setOnClickListener(v->paste());Ui.pressable(paste);
         box.addView(paste);keyCard.addView(box,Ui.fill());
         keyStatus=ui.text("",Type.BODY_MEDIUM,p.onSurfaceVariant);keyStatus.setPadding(dp(S2),dp(S2),dp(S2),0);keyStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);keyCard.addView(keyStatus,Ui.fill());
-        Ui.Btn how=ui.button("¿Cómo consigo una clave?",R.drawable.ic_open_in_new,Ui.Style.PLAIN,v->howTo());how.setMinimumHeight(dp(48));how.setPadding(dp(S2),0,dp(S3),0);keyCard.addView(how,Ui.wrap());
+        Ui.Btn how=ui.button(getString(R.string.onb_how_get_key),R.drawable.ic_open_in_new,Ui.Style.PLAIN,v->howTo());how.setMinimumHeight(dp(48));how.setPadding(dp(S2),0,dp(S3),0);keyCard.addView(how,Ui.wrap());
         c.addView(keyCard,ui.top(S2));
         // Tras un giro con la clave a medio escribir, la línea de estado vuelve a decir lo que corresponde (p. ej. «es de otro servicio»).
         defaultNote();if(!kept.key.trim().isEmpty())keyChanged(kept.key);
@@ -689,9 +748,9 @@ public class OnboardingActivity extends Screen {
     /** Lo que dice la línea bajo el campo cuando no hay nada que avisar: si la última clave falló, si ya hay una guardada, o cómo se guarda. */
     private void defaultNote(){
         Verdict v=rejection();
-        if(v!=null)note(v.message+" Pega otra clave.",BAD);
-        else if(settings.hasOpenRouterKey())note("Ya hay una clave guardada. Pega otra solo si quieres cambiarla.",OK);
-        else note("Se guarda cifrada en este teléfono.",INFO);
+        if(v!=null)note(getString(R.string.onb_key_rejected_paste,v.message),BAD);
+        else if(settings.hasOpenRouterKey())note(getString(R.string.onb_key_saved_already),OK);
+        else note(getString(R.string.onb_key_encrypted),INFO);
     }
     /**
      * Cada cambio del campo: la clave queda solo en memoria. Si por su comienzo ya se sabe que es de otro servicio, se avisa
@@ -709,25 +768,38 @@ public class OnboardingActivity extends Screen {
         try{android.content.ClipboardManager cm=getSystemService(android.content.ClipboardManager.class);ClipData clip=cm==null?null:cm.getPrimaryClip();
             if(clip!=null&&clip.getItemCount()>0){CharSequence t=clip.getItemAt(0).coerceToText(this);if(t!=null)text=t.toString().trim();}
         }catch(RuntimeException ignored){}
-        if(text.isEmpty()){note("No hay nada copiado. Copia tu clave y vuelve a tocar Pegar.",BAD);Ui.haptic(keyInput,Ui.Haptic.REJECT);return;}
-        if(text.matches("(?s).*\\s.*")||text.length()<MIN_KEY||text.length()>8192){note("Lo que copiaste no parece una clave. Cópiala entera y vuelve a tocar Pegar.",BAD);Ui.haptic(keyInput,Ui.Haptic.REJECT);return;}
+        if(text.isEmpty()){note(getString(R.string.onb_paste_empty),BAD);Ui.haptic(keyInput,Ui.Haptic.REJECT);return;}
+        if(text.matches("(?s).*\\s.*")||text.length()<MIN_KEY||text.length()>8192){note(getString(R.string.onb_paste_not_key),BAD);Ui.haptic(keyInput,Ui.Haptic.REJECT);return;}
         keyInput.setText(text);keyInput.setSelection(keyInput.length());
         // Si es de otro servicio, keyChanged ya lo dijo en la línea de estado: aquí solo cambia la vibración.
         boolean bad=foreign(guessProvider(text))!=null;Ui.haptic(keyInput,bad?Ui.Haptic.REJECT:Ui.Haptic.CONFIRM);
-        if(!bad)note("Clave pegada. Toca Continuar.",OK);
+        if(!bad)note(getString(R.string.onb_paste_ok),OK);
     }
     private void keyError(String text){note(text,BAD);Ui.haptic(next,Ui.Haptic.REJECT);scroll.post(()->reveal(keyCard));}
     /**
      * Continuar en el paso de la clave: se guarda, OpenRouter queda como servicio de transcripción y se comprueba en
      * segundo plano mientras ya se pasa a «Listo» (no bloquea: sin red igual se sigue). Sin nada escrito solo se avanza si
      * ya había una clave o es un repaso; la primera vez se explica cómo seguir sin clave.
+     * 0.9.0: si aún no aceptó el aviso de envío, primero se muestra (Consent.ensure: qué se envía, a quién, la política de
+     * privacidad y «Acepto»). Con «Ahora no» la clave no se guarda y queda en el campo; «Ahora no, solo grabar» sigue a mano.
      */
     private void submitKey(){
         String raw=kept.key.trim();
-        if(raw.isEmpty()){if(replay||settings.hasOpenRouterKey())go(READY);else keyError("Pega tu clave o toca «Ahora no, solo grabar».");return;}
-        String problem=keyProblem(raw);if(problem!=null){keyError(problem);return;}
+        int action=keyAction(raw,replay||settings.hasOpenRouterKey(),Consent.given(this));
+        if(action==KEY_SKIP){go(READY);return;}
+        if(action==KEY_ERROR){keyError(raw.isEmpty()?getString(R.string.onb_key_or_later,getString(R.string.onb_later)):keyProblem(raw));return;}
+        if(action==KEY_CONSENT){
+            // Un doble toque en Continuar abre una sola hoja.
+            long now=SystemClock.elapsedRealtime();if(now-consentAskedAt<1000)return;consentAskedAt=now;
+            hideKeyboard();Diagnostics.event("ui_action",null,"screen","Onboarding","action","upload_consent");
+            Consent.ensure(this,()->{if(!isFinishing()&&!isDestroyed())saveKey(raw);});return;
+        }
+        saveKey(raw);
+    }
+    /** Guarda la clave ya revisada (y con el aviso aceptado), la comprueba en segundo plano y pasa a «Listo». */
+    private void saveKey(String raw){
         try{applyKey(settings,raw);}
-        catch(Exception e){Diagnostics.event("setting_changed",null,"action","api_key","source","onboarding","result","failed","error_class",e.getClass().getSimpleName());keyError("No se pudo guardar la clave en este teléfono. Inténtalo de nuevo.");return;}
+        catch(Exception e){Diagnostics.event("setting_changed",null,"action","api_key","source","onboarding","result","failed","error_class",e.getClass().getSimpleName());keyError(getString(R.string.onb_key_save_failed));return;}
         Diagnostics.event("setting_changed",null,"action","api_key","source","onboarding","provider",OPENROUTER);
         // La clave ya no se vuelve a mostrar: el campo queda vacío aunque se vuelva a este paso.
         kept.key="";if(keyInput!=null)keyInput.setText("");
@@ -774,19 +846,19 @@ public class OnboardingActivity extends Screen {
     /** Antes de mandar a nadie al navegador: los pasos, en palabras simples, y recién ahí el botón que abre la página. */
     private void howTo(){
         String site="openrouter.ai";
-        Sheet s=sheet("Cómo conseguir tu clave","OpenRouter te da acceso a muchas IA con una sola clave. Pagas solo lo que usas.");
-        numbered(s,new String[]{"Crea tu cuenta en openrouter.ai.","Carga un poco de crédito: se descuenta solo lo que usas.","En «Keys», crea una clave y cópiala.","Vuelve a Verbapp y toca Pegar."});
-        s.primary("Abrir "+site,()->{
+        Sheet s=sheet(getString(R.string.onb_howto_title),getString(R.string.onb_howto_body));
+        numbered(s,new String[]{getString(R.string.onb_howto_1),getString(R.string.onb_howto_2),getString(R.string.onb_howto_3),getString(R.string.onb_howto_4)});
+        s.primary(getString(R.string.onb_open_site,site),()->{
             try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(KEYS_OPENROUTER)));}
-            catch(ActivityNotFoundException|SecurityException e){message("No se pudo abrir el navegador","Entra a "+site+" desde un navegador, crea tu clave y vuelve para pegarla.");}
-        }).secondary("Cerrar",null).show();
+            catch(ActivityNotFoundException|SecurityException e){message(getString(R.string.onb_no_browser_title),getString(R.string.onb_no_browser_body,site));}
+        }).secondary(getString(R.string.onb_close),null).show();
     }
 
     // ---------- 4. Listo ----------
     private LinearLayout buildReady(){
         LinearLayout c=column();
         c.addView(hero(new Emblem(this,p,Emblem.DONE)));
-        c.addView(overline("Ya puedes grabar"),Ui.fill());
+        c.addView(overline(getString(R.string.onb_ready_overline)),Ui.fill());
         heading=title(readyTitle(name),null);c.addView(heading,Ui.fill());
         c.addView(gap());
         readyList=ui.group();c.addView(readyList,Ui.fill());renderReady();
@@ -798,9 +870,9 @@ public class OnboardingActivity extends Screen {
         // Con el mismo ícono de OpenRouter del paso 3. Válida pero sin saldo va sin ✓: así todavía no transcribe.
         String who="OpenRouter";int hub=R.drawable.onboarding_hub;boolean has=settings.hasOpenRouterKey();Check c=kept.check;
         if(has&&c!=null){
-            if(c.state==Check.CHECKING)readyRow(hub,who,"Comprobando tu clave…",ROW_BUSY,null);
+            if(c.state==Check.CHECKING)readyRow(hub,who,getString(R.string.onb_checking),ROW_BUSY,null);
             else if(c.state==Check.VALID)readyRow(hub,who,c.message,c.empty?ROW_PLAIN:ROW_DONE,null);
-            else if(c.state==Check.REJECTED)readyRow(R.drawable.ic_alert,"Revisa tu clave de "+who,c.message,ROW_BAD,()->go(AI));
+            else if(c.state==Check.REJECTED)readyRow(R.drawable.ic_alert,getString(R.string.onb_check_key_of,who),c.message,ROW_BAD,()->go(AI));
             else readyRow(hub,who,c.message,ROW_PLAIN,null);
         }
         else if(has){
@@ -808,16 +880,16 @@ public class OnboardingActivity extends Screen {
             // la misma que muestra Ajustes. Rechazada, sin saldo o sin comprobar (falló sin decir nada de la clave) no lleva
             // ✓, como en la comprobación en memoria; sin nada guardado (o válida con saldo), sí.
             Verdict v=saved(settings.prefs,SettingsActivity.verifyTarget(settings));
-            if(v!=null&&v.state==Check.REJECTED)readyRow(R.drawable.ic_alert,"Revisa tu clave de "+who,v.message,ROW_BAD,()->go(AI));
+            if(v!=null&&v.state==Check.REJECTED)readyRow(R.drawable.ic_alert,getString(R.string.onb_check_key_of,who),v.message,ROW_BAD,()->go(AI));
             else if(v!=null&&(v.empty()||v.state==Check.UNKNOWN))readyRow(hub,who,v.message,ROW_PLAIN,null);
-            else readyRow(hub,who,"Clave guardada: lista para transcribir.",ROW_DONE,null);
+            else readyRow(hub,who,getString(R.string.onb_key_ready),ROW_DONE,null);
         }
-        else readyRow(R.drawable.ic_key,"Conectar tu IA","Sin clave solo grabas. Agrégala cuando quieras.",ROW_GO,()->go(AI));
+        else readyRow(R.drawable.ic_key,getString(R.string.onb_connect_ai),getString(R.string.onb_no_key),ROW_GO,()->go(AI));
         boolean voice=false;try{voice=Voices.has(this);}catch(RuntimeException ignored){}
-        if(voice)readyRow(R.drawable.ic_voice,"Tu voz","Guardada: Verbapp ya te reconoce.",ROW_DONE,()->openSettings("voice"));
-        else readyRow(R.drawable.ic_voice,"Grabar mi voz","Opcional: 10 segundos para que Verbapp te reconozca.",ROW_GO,()->openSettings("voice"));
-        if(Inbox.configured(this))readyRow(R.drawable.ic_inbox,"Guardado rápido","Tus notas van a «"+Inbox.folderName(this)+"» con un toque.",ROW_DONE,()->openSettings("inbox"));
-        else readyRow(R.drawable.ic_inbox,"Elegir mi carpeta 0-Inbox","Opcional: donde quedan tus notas con un toque.",ROW_GO,()->openSettings("inbox"));
+        if(voice)readyRow(R.drawable.ic_voice,getString(R.string.onb_voice),getString(R.string.onb_voice_saved),ROW_DONE,()->openSettings("voice"));
+        else readyRow(R.drawable.ic_voice,getString(R.string.onb_voice_record),getString(R.string.onb_voice_optional),ROW_GO,()->openSettings("voice"));
+        if(Inbox.configured(this))readyRow(R.drawable.ic_inbox,getString(R.string.onb_inbox),getString(R.string.onb_inbox_set,Inbox.folderName(this)),ROW_DONE,()->openSettings("inbox"));
+        else readyRow(R.drawable.ic_inbox,getString(R.string.onb_inbox_pick),getString(R.string.onb_inbox_optional),ROW_GO,()->openSettings("inbox"));
     }
     private void readyRow(int icon,String title,String detail,int tone,Runnable click){
         // Se registra el tipo de fila (su lugar en la lista), no su texto: el de la carpeta trae un nombre puesto por la persona.
@@ -858,7 +930,8 @@ public class OnboardingActivity extends Screen {
         private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);private final RectF rect=new RectF();private final int count,on,off;private float pos;private ValueAnimator anim;
         Steps(Context c,Palette p,int count){super(c);this.count=count;on=p.primary;off=p.outlineVariant;setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);setStep(0,false);}
         void setStep(int step,boolean animate){
-            setContentDescription("Paso "+(step+1)+" de "+count);if(anim!=null)anim.cancel();
+            // Lang.str y no getString: la vista puede vivir en un contexto sin el idioma de la app (las pruebas la crean así).
+            setContentDescription(Lang.str(getContext(),R.string.onb_step_of,step+1,count));if(anim!=null)anim.cancel();
             if(!animate||!AppTheme.motion()||!isAttachedToWindow()){pos=step;invalidate();return;}
             anim=ValueAnimator.ofFloat(pos,step);anim.setDuration(MOTION_SLOW);anim.setInterpolator(EMPHASIZED);
             anim.addUpdateListener(a->{pos=(float)a.getAnimatedValue();invalidate();});anim.start();

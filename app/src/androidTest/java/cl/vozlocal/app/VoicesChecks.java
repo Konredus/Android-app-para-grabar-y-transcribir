@@ -101,6 +101,10 @@ final class VoicesChecks {
         check(refs.get(1)[0].equals("voz_"+fran.id)&&refs.get(1)[2].equals("voice:"+fran.id)&&refs.get(1)[3].equals("Francisca")&&refs.get(1)[1].startsWith("data:audio/mp4;base64,"),"Saved voice reference wrong");
         check(refs.get(2)[0].equals("voz_"+ana.id)&&refs.get(2)[2].equals("voice:"+ana.id),"Second saved voice reference wrong");
         check(Voices.people(Voices.selected(c)).equals("a ti, a Francisca y a Zoe"),"People phrase wrong: "+Voices.people(Voices.selected(c)));
+        // 0.9.0: la misma frase en inglés y portugués (la usan «Volver a transcribir» y «¿Separar voces?»).
+        try{Lang.override(Lang.EN);String en=Voices.people(Voices.selected(c));Lang.override(Lang.PT);String pt=Voices.people(Voices.selected(c));
+            check(en.equals("you, Francisca and Zoe")&&pt.equals("você, Francisca e Zoe"),"People phrase in other languages wrong: "+en+" / "+pt);}
+        finally{Lang.override(Lang.ES);}
 
         // Usar o no: la voz apagada no se envía y la huella cambia.
         String before=Voices.fingerprint(c);

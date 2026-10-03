@@ -1,0 +1,36 @@
+Verbapp turns what you say into text you can keep. Record meetings, ideas and conversations offline and, whenever you want, transcribe them with AI: every speaker with their name and a note ready for your second brain.
+
+RECORD WITH ONE TAP
+• Works offline: your recordings stay on your phone.
+• Keeps recording with the screen locked.
+• Mark key moments with ★ while you record, even from the notification.
+• Import audio from WhatsApp, voice recorders and other apps (M4A, MP3, WAV and more).
+
+TRANSCRIBE AND SEPARATE SPEAKERS
+• Transcribe with the latest speech-to-text models through OpenRouter. The list updates itself and “Automatic” picks the recommended one.
+• Separates each person who speaks and recognizes the voices you already know: yours and those of the people you talk to most.
+• Fix who said what with one tap, always with Undo.
+• Long recordings are split into parts that are sent in parallel.
+
+YOUR SECOND BRAIN
+• An AI note: summary, decisions, tasks and key quotes.
+• Save the note (.md) or the text (.txt) with one tap to the folder you choose, such as your Obsidian 0-Inbox or Google Drive.
+• Copy, share or export whatever you need.
+
+YOUR METRICS
+• How much you talk, your streaks, when you record and who you talk with.
+• How much you’ve spent on transcriptions, with the real cost reported by OpenRouter.
+• Everything is calculated on your phone.
+
+YOU CONTROL YOUR DATA
+• No account, no ads and no tracking.
+• Audio leaves your phone only when you ask for a transcription (or turn on automatic transcription), and it goes to OpenRouter with your own key.
+• Send on Wi-Fi only, or use mobile data for a single recording when you need to.
+
+IN YOUR LANGUAGE
+• English, Spanish and Brazilian Portuguese. Verbapp starts in your phone’s language, and you can change it anytime.
+
+HOW TO START
+Recording is free and needs no setup. To transcribe you need an OpenRouter key (openrouter.ai): with a single key you transcribe and create your notes, and you pay OpenRouter only for what you use, with no subscription. Depending on the model you choose, an hour of audio costs from about US$0.10.
+
+Made for people who talk a lot and want to keep their ideas: meetings, classes, interviews, voice notes and conversations.

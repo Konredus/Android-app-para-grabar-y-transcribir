@@ -16,6 +16,15 @@ final class IntegrationChecks {
         check(NameVoices.mergeRecent(Collections.singletonList("Fran"),Arrays.asList("Konra","persona 2","fran")).equals(Arrays.asList("Konra","fran")),"Recent names merge wrong");
         check(NameVoices.initial("Persona 3").equals("3")&&NameVoices.initial("fran").equals("F"),"Voice initials wrong");
         check(NameVoices.percent(0.004).equals("< 1 %")&&NameVoices.percent(0.46).equals("46 %"),"Voice share wrong");
+        // 0.9.0: «Persona N» puede venir de otro idioma; el % sigue el estilo del idioma; escribir la etiqueta de otra voz en
+        // otro idioma también une; los nombres de «Volver a transcribir» se reconocen en los tres idiomas (Diagnostics).
+        check(NameVoices.initial("Person 3").equals("3")&&NameVoices.initial("Pessoa 12").equals("12"),"Voice initials from other languages wrong");
+        try{Lang.override(Lang.EN);check(NameVoices.percent(0.46).equals("46%")&&NameVoices.percent(0.004).equals("<1%"),"English voice share wrong: "+NameVoices.percent(0.46));}
+        finally{Lang.override(Lang.ES);}
+        Transcript cross=new Transcript(new JSONObject().put("diarized",true).put("segments",new JSONArray().put(seg("A",0,5)).put(seg("B",5,9))));
+        check(cross.applyNames(Collections.singletonMap("B","Person 1"))==1&&cross.speakers().size()==1,"A label typed in another language did not merge");
+        Set<String> labels=Retranscribe.allLabels();
+        check(labels.size()==12&&labels.contains("Second pass with your corrections")&&labels.contains(Retranscribe.label(Retranscribe.Mode.CORRECTIONS)),"Retranscribe labels in all languages wrong: "+labels);
         // Novedades: orden de versiones, titulares y fechas en español.
         check(Novedades.compare("0.4.10","0.5.0")<0&&Novedades.compare("0.6.0","0.6.0")==0,"Version compare wrong");
         check(Novedades.headline("Mi voz: x")==6&&Novedades.headline("sin titular")<0,"Novedades headline wrong");
@@ -86,7 +95,7 @@ final class IntegrationChecks {
             java.io.File prev=FilesStore.file(c,d.id,".transcript.prev.json");
             check(Retranscribe.hasPrevious(c,d.id)&&Transcript.exists(c,d.id),"Test versions not set up");
             for(Retranscribe.Mode m:Retranscribe.Mode.values()){
-                check(Retranscribe.CHOOSE_FIRST.equals(Retranscribe.reason(c,d,m))&&!Retranscribe.available(c,d,m),"Retranscribe offered while a previous version is pending: "+m);
+                check(Retranscribe.chooseFirst().equals(Retranscribe.reason(c,d,m))&&!Retranscribe.available(c,d,m),"Retranscribe offered while a previous version is pending: "+m);
             }
             boolean refused=false;try{Retranscribe.start(c,d,Retranscribe.Mode.TEXT);}catch(HttpApi.UserAction e){refused=true;}
             check(refused&&!FilesStore.state(c,d.id).optBoolean("requested"),"A second retranscription was queued");

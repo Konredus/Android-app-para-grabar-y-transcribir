@@ -30,7 +30,10 @@ final class OnboardingChecks {
         verdicts();
         preferences(c);
         savedVerdict(c);
+        consent(c);
         battery(c);
+        languages(c);
+        novedades(c);
         libraryFilter();
         UiChecks.onMain(()->{drawables(c);views(c,false);views(c,true);});
     }
@@ -46,7 +49,7 @@ final class OnboardingChecks {
         check(Battery.makerName("Google").isEmpty()&&Battery.makerName(null).isEmpty(),"Una marca sin ahorro propio no tiene nombre que mostrar");
         // vivo con Android 16 (el teléfono del diagnóstico): parte por el botón de la hoja y dice qué permitir.
         String[] vivo=Battery.makerSteps("vivo",36);
-        check(vivo.length>=3&&vivo.length<=5&&vivo[0].contains("«"+Battery.OPEN_SETTINGS+"»"),"La guía de vivo debe empezar por el botón «"+Battery.OPEN_SETTINGS+"»");
+        check(vivo.length>=3&&vivo.length<=5&&vivo[0].contains("«"+Battery.openSettings()+"»"),"La guía de vivo debe empezar por el botón «"+Battery.openSettings()+"»");
         check(String.join(" ",vivo).contains("segundo plano"),"La guía de vivo debe decir que se permite el uso en segundo plano");
         check(String.join(" ",Battery.makerSteps("vivo",31)).contains("Control de energía en segundo plano"),"En vivo con Android 12 o menos el ajuste está en Batería");
         String hint=Battery.makerHint("vivo",36);
@@ -59,6 +62,81 @@ final class OnboardingChecks {
         }
         check(Battery.makerSteps("samsung",34).length==0&&!Battery.makerHint("samsung",34).isEmpty(),"Samsung no necesita un paso aparte en la bienvenida");
         check(Battery.makerSteps("Google",36).length==0&&Battery.makerSteps(null,36).length==0&&Battery.makerHint("Google",36).isEmpty(),"Un teléfono sin ahorro propio no muestra guía");
+    }
+
+    /**
+     * Aviso de envío antes de guardar la clave (0.9.0, Google Play): sin «Acepto», «Continuar» no guarda la clave, aunque
+     * sirva; con el aviso aceptado se guarda sin volver a preguntar. Lógica pura más la preferencia real (se repone al final).
+     */
+    static void consent(Context c){
+        check(OnboardingActivity.keyAction(OR,false,false)==OnboardingActivity.KEY_CONSENT&&OnboardingActivity.keyAction("  "+OR+"\n",true,false)==OnboardingActivity.KEY_CONSENT,"Sin aceptar el aviso, la clave no debe guardarse: primero se pide");
+        check(OnboardingActivity.keyAction(OR,false,true)==OnboardingActivity.KEY_SAVE&&OnboardingActivity.keyAction(OR,true,true)==OnboardingActivity.KEY_SAVE,"Con el aviso aceptado, la clave se guarda");
+        // Sin nada escrito no hay nada que guardar ni que aceptar: se sigue (repaso o clave ya guardada) o se explica qué falta.
+        check(OnboardingActivity.keyAction("",false,false)==OnboardingActivity.KEY_ERROR&&OnboardingActivity.keyAction("  ",true,false)==OnboardingActivity.KEY_SKIP&&OnboardingActivity.keyAction(null,true,true)==OnboardingActivity.KEY_SKIP,"Sin clave escrita no se pide el aviso");
+        // Una clave que no sirve se corrige primero: ni aviso ni guardado.
+        for(String bad:new String[]{"sk-or-v1-corta",OA,CLAUDE,OR.substring(0,14)+" "+OR.substring(14)})
+            check(OnboardingActivity.keyAction(bad,true,false)==OnboardingActivity.KEY_ERROR&&OnboardingActivity.keyAction(bad,true,true)==OnboardingActivity.KEY_ERROR,"Una clave que no sirve no debe pedir el aviso ni guardarse");
+        Settings s=new Settings(c);String key="uploadConsentAt";boolean had=s.prefs.contains(key);long before=s.prefs.getLong(key,0);
+        try{
+            s.prefs.edit().remove(key).commit();
+            check(!Consent.given(c)&&OnboardingActivity.keyAction(OR,false,Consent.given(c))==OnboardingActivity.KEY_CONSENT,"Recién instalada, la bienvenida debe pedir el aviso antes de guardar la clave");
+            Consent.accept(c);
+            check(Consent.given(c)&&OnboardingActivity.keyAction(OR,false,Consent.given(c))==OnboardingActivity.KEY_SAVE,"Aceptado el aviso, la clave se guarda sin volver a preguntar");
+        }finally{SharedPreferences.Editor e=s.prefs.edit();if(had)e.putLong(key,before);else e.remove(key);e.commit();}
+    }
+
+    /**
+     * 0.9.0: la bienvenida y la guía de batería en los tres idiomas (el resto de la corrida va en español). Las mismas reglas
+     * de forma que en español, el selector con el nombre propio de cada idioma y los rechazos reconocibles como «de la
+     * clave» (StatusText.aboutKey) en cualquiera. Solo lógica: no abre pantallas.
+     */
+    static void languages(Context c){
+        try{
+            for(String lang:Lang.SUPPORTED){
+                Lang.override(lang);
+                for(String l:Lang.SUPPORTED)check(c.getString(OnboardingActivity.languageName(l)).equals(Lang.nativeName(l)),"El selector debe mostrar "+l+" con su propio nombre");
+                check(OnboardingActivity.sent().contains("OpenRouter")&&!OnboardingActivity.kept().isEmpty()&&!OnboardingActivity.unchecked().isEmpty(),"Faltan los textos de lo que se envía en "+lang);
+                check(OnboardingActivity.keyProblem(OA).contains("sk-or-")&&OnboardingActivity.keyProblem("")!=null,"La revisión de la clave en "+lang+" debe decir cómo empiezan las de OpenRouter");
+                check(StatusText.aboutKey(OnboardingActivity.rejected(null))&&StatusText.aboutKey(OnboardingActivity.keyProblem(CLAUDE))&&StatusText.aboutKey(OnboardingActivity.keyProblem("sk-or-v1-corta")),"Un rechazo en "+lang+" debe hablar de la clave");
+                check(OnboardingActivity.readyTitle("Konrad Peschka").endsWith("Konrad")&&!OnboardingActivity.readyTitle("").isEmpty(),"Título final en "+lang);
+                String open=Battery.openSettings();
+                check(!open.isEmpty()&&Battery.makerSteps("vivo",36)[0].contains(open),"La guía de vivo en "+lang+" debe empezar por el botón «"+open+"»");
+                for(String maker:new String[]{"vivo","Xiaomi","HUAWEI","OPPO","samsung"})for(int sdk:new int[]{29,36}){
+                    for(String step:Battery.makerSteps(maker,sdk))check(!step.isEmpty()&&step.length()<=110&&step.endsWith("."),"Paso de "+maker+" en "+lang+" largo o sin punto final: «"+step+"»");
+                    check(Battery.makerHint(maker,sdk).contains(Battery.makerName(maker)),"La línea de "+maker+" en "+lang+" debe nombrar la marca");
+                }
+            }
+        }finally{Lang.override(Lang.ES);}
+    }
+
+    /**
+     * Novedades (0.9.0): un archivo por idioma, con las mismas versiones, fechas y cantidad de puntos que el original en
+     * español (y titular donde el español lo tiene); la hoja sale en el idioma de la app, y la fecha con su formato.
+     */
+    static void novedades(Context c){
+        List<Novedades.Entry> es=Novedades.all(c,Lang.ES);String current=Novedades.versionName(c);
+        check(!es.isEmpty(),"Faltan las novedades en español");
+        for(String lang:new String[]{Lang.EN,Lang.PT}){
+            List<Novedades.Entry> t=Novedades.all(c,lang);
+            check(t.size()==es.size(),"Novedades en "+lang+": "+t.size()+" versiones en vez de "+es.size());
+            for(int i=0;i<es.size();i++){
+                Novedades.Entry a=es.get(i),b=t.get(i);
+                check(a.version.equals(b.version)&&a.date.equals(b.date)&&!b.title.isEmpty()&&a.items.size()==b.items.size(),"Las novedades de la "+a.version+" en "+lang+" no calzan con las del español");
+                for(int k=0;k<a.items.size();k++){String x=b.items.get(k);
+                    check((Novedades.headline(a.items.get(k))>0)==(Novedades.headline(x)>0)&&!x.contains("«"),"Punto "+(k+1)+" de la "+a.version+" en "+lang+": «"+x+"»");}
+            }
+        }
+        try{
+            for(String lang:Lang.SUPPORTED){
+                Lang.override(lang);Novedades.Entry e=Novedades.entry(c,current);
+                check(e!=null&&!e.items.isEmpty()&&Novedades.all(c,lang).stream().anyMatch(x->x.version.equals(current)&&x.title.equals(e.title)),"Las novedades de la "+current+" deben salir en "+lang);
+                check(Novedades.all(c).get(0).title.equals(Novedades.all(c,lang).get(0).title),"El historial debe salir en "+lang);
+            }
+            Lang.override(Lang.EN);String en=Novedades.date("2026-09-29");
+            check(en.contains("September")&&en.contains("29")&&en.contains("2026"),"Fecha en inglés: «"+en+"»");
+            Lang.override(Lang.PT);String pt=Novedades.date("2026-09-29");
+            check("29 de setembro de 2026".equals(pt),"Fecha en portugués: «"+pt+"»");
+        }finally{Lang.override(Lang.ES);}
     }
 
     /** La Biblioteca abierta desde «Tus métricas» («A medio camino») toma el filtro que se pide, y solo uno que existe. */
@@ -94,8 +172,8 @@ final class OnboardingChecks {
     /** Textos que ve la persona: lo que se envía, saldo, rechazo y saludo final. */
     static void texts(){
         // Lo honesto (SPEC-0.8b): se dice que el audio sale hacia OpenRouter y quién paga; ya no «Todo queda en tu teléfono».
-        check(OnboardingActivity.SENT.contains("audio se envía a OpenRouter")&&OnboardingActivity.SENT.contains("paga solo lo que usas"),"El paso 3 debe decir que el audio se envía a OpenRouter y quién paga");
-        check(!OnboardingActivity.KEPT.contains("Todo queda")&&OnboardingActivity.KEPT.contains("hasta transcribir"),"La bienvenida no debe prometer que todo queda en el teléfono");
+        check(OnboardingActivity.sent().contains("audio se envía a OpenRouter")&&OnboardingActivity.sent().contains("paga solo lo que usas"),"El paso 3 debe decir que el audio se envía a OpenRouter y quién paga");
+        check(!OnboardingActivity.kept().contains("Todo queda")&&OnboardingActivity.kept().contains("hasta transcribir"),"La bienvenida no debe prometer que todo queda en el teléfono");
         String valid=OnboardingActivity.validText(4.2,false);
         // El saldo se escribe igual que en Ajustes (SettingsActivity.money): «US$4,20», sin espacio.
         check("Clave válida · quedan US$4,20".equals(valid)&&valid.endsWith(SettingsActivity.money(4.2)),"Saldo mal escrito: «"+valid+"»");
@@ -142,7 +220,7 @@ final class OnboardingChecks {
         check(no.state==OnboardingActivity.Check.REJECTED&&"La clave del proveedor no es válida o fue revocada.".equals(no.message)&&no.valid==null,"Un rechazo del proveedor debe mostrar su mensaje");
         OnboardingActivity.Verdict pending=OnboardingActivity.verify((h,k)->{throw new UnsupportedOperationException("pendiente");},idle,OR);
         OnboardingActivity.Verdict offline=OnboardingActivity.verify((h,k)->{throw new java.io.IOException("sin red");},idle,OR);
-        check(pending.state==OnboardingActivity.Check.UNKNOWN&&offline.state==OnboardingActivity.Check.UNKNOWN&&OnboardingActivity.UNCHECKED.equals(pending.message)&&OnboardingActivity.UNCHECKED.equals(offline.message),"Lo que no se pudo comprobar no es un rechazo");
+        check(pending.state==OnboardingActivity.Check.UNKNOWN&&offline.state==OnboardingActivity.Check.UNKNOWN&&OnboardingActivity.unchecked().equals(pending.message)&&OnboardingActivity.unchecked().equals(offline.message),"Lo que no se pudo comprobar no es un rechazo");
         for(OnboardingActivity.Verdict v:new OnboardingActivity.Verdict[]{ok,no,pending,offline})check(!v.message.contains(OR),"El resultado no debe repetir la clave");
 
         // OpenRouter con un HttpApi simulado: GET /key y GET /credits, con la clave solo como Bearer y solo a openrouter.ai.
@@ -249,7 +327,7 @@ final class OnboardingChecks {
             for(String why:new String[]{"No se pudo conectar. Revisa tu conexión a internet.","OpenRouter no está disponible temporalmente (503)."}){
                 SettingsActivity.saveVerify(s,target,false,900,why,Double.NaN,false);
                 OnboardingActivity.Verdict off=OnboardingActivity.saved(s.prefs,target);
-                check(off!=null&&off.state==OnboardingActivity.Check.UNKNOWN&&OnboardingActivity.UNCHECKED.equals(off.message)&&!off.empty(),"«"+why+"» guardado no debe mandar a revisar la clave");
+                check(off!=null&&off.state==OnboardingActivity.Check.UNKNOWN&&OnboardingActivity.unchecked().equals(off.message)&&!off.empty(),"«"+why+"» guardado no debe mandar a revisar la clave");
                 check(!SettingsActivity.keyRejected(s.prefs,target),"«"+why+"» no es una clave rechazada en Ajustes ni en Grabar");
             }
             // Válida sin saldo, o de una cuenta sin créditos: sin ✓ (así todavía no transcribe), con el texto de Ajustes.

@@ -30,9 +30,9 @@ final class Inbox {
     static Uri save(Context c,Recording r)throws Exception{
         synchronized(SAVING){
             String selected=new Settings(c).inboxTree(),folder=folderName(c);
-            if(selected.isEmpty())throw new HttpApi.UserAction("Primero elige tu carpeta rápida en Ajustes.");
+            if(selected.isEmpty())throw new HttpApi.UserAction(Lang.str(c,R.string.inbox_choose_first));
             Recording latest=FilesStore.recording(c,r.id);if(latest!=null)r=latest;
-            if(!Transcript.exists(c,r.id))throw new HttpApi.UserAction("Esta grabación aún no tiene transcripción.");
+            if(!Transcript.exists(c,r.id))throw new HttpApi.UserAction(Lang.str(c,R.string.inbox_no_transcript));
             // La hora se toma ANTES de leer: un cambio que llegue mientras se escribe deja el guardado como «por actualizar».
             long at=System.currentTimeMillis();
             boolean md=Notes.exists(c,r.id);String kind=md?"md":"txt";
@@ -52,7 +52,7 @@ final class Inbox {
                 if(doc==null){doc=create(c,tree,name,md);LocalStorage.writeText(c,doc,content);}
             }catch(Exception e){
                 Diagnostics.event("transcript_inbox_failed",r.id,"kind",kind,"error_class",e.getClass().getSimpleName());
-                HttpApi.UserAction friendly=new HttpApi.UserAction("No se pudo guardar en "+folder+". Puede que Android haya retirado el permiso a esa carpeta: elígela de nuevo en Ajustes o usa «Otra carpeta».");
+                HttpApi.UserAction friendly=new HttpApi.UserAction(Lang.str(c,R.string.inbox_save_failed,folder));
                 friendly.initCause(e);throw friendly;
             }
             Uri saved=doc;String how=mode,title=r.title;
