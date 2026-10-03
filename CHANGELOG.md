@@ -1,5 +1,28 @@
 # Historial de versiones
 
+## 0.9.0 — 2026-10-02 · «Verbapp en tu idioma»
+
+Preparada para **Google Play** y en **tres idiomas**: inglés, español y portugués de Brasil. El paquete publicado es `cl.verbapp.app` (se instala al lado de la versión anterior); el código sigue en `cl.vozlocal.app`.
+
+**Tres idiomas**
+- Toda la app (pantallas, avisos, notificaciones, errores, bitácora, TXT exportado, la nota con IA y las novedades) está en inglés, español y portugués de Brasil. El español quedó igual que antes.
+- Parte en el idioma del teléfono si es uno de los tres; si no, en inglés. Se cambia en la bienvenida (selector bajo el título) o en Ajustes → Idioma, y en Android 13+ también en Ajustes del teléfono → Idiomas de las apps.
+- **Idioma del audio:** detección automática, inglés, español o portugués. Si no eliges, se usa el idioma de la app.
+- La nota con IA se escribe en el idioma de la app. Fechas, números y montos usan el formato de cada idioma.
+- Lo guardado en otro idioma (bitácora, títulos automáticos, «Persona N», el «Yo» de tu voz, el último error de la clave) se sigue reconociendo al cambiar de idioma (`Lang`, `StatusText`).
+
+**Google Play**
+- **Aviso antes del primer envío:** qué se envía a OpenRouter, para qué, y la política de privacidad; se acepta con «Acepto» antes de guardar la clave o de la primera transcripción (`Consent`).
+- **Política de privacidad** a un toque en Ajustes → Ayuda y soporte, en el idioma de la app.
+- Android 16 (API 36). Sin el permiso para pedir quitar la optimización de batería: el botón abre la ficha de la app.
+- Los bloqueos de suspensión (wake locks) de grabar, importar y transcribir tienen límite de tiempo y se renuevan mientras trabajan.
+- El AAB lleva los tres idiomas a todos los teléfonos; firma de publicación desde `.tools/signing` (fuera de git).
+
+**Más**
+- **«Detener»** en la notificación de la transcripción: la corta sin abrir la app y deja la grabación lista para «Transcribir» de nuevo.
+- Cancelar una transcripción corta también las partes que se estaban enviando.
+- Arreglo: la bitácora simplificada ya no cambia «pantalla bloqueada» por «pantalla parteada».
+
 ## 0.8.0 — 2026-10-01 · «Una sola clave para todo»
 
 Todo pasa por **OpenRouter**, con una sola clave, y llegan **«Tus métricas»**, una **bienvenida** para quien instala por primera vez y los arreglos del diagnóstico del 2026-10-01: una grabación corta quedó más de 1 hora sin transcribir. Diseño en `docs/diseno/SPEC-0.8.md`, `SPEC-0.8b.md` y `SPEC-0.8c.md`; plan en `docs/PLAN-openrouter.md`.
