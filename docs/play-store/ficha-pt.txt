@@ -1,4 +1,9 @@
-O Verbapp transforma o que você fala em texto que dá para guardar. Grave reuniões, ideias e conversas sem internet e, quando quiser, transcreva com inteligência artificial: cada pessoa com seu nome e uma nota pronta para o seu segundo cérebro.
+O Verbapp nasceu para o seu SEGUNDO CÉREBRO (Second Brain). O que você fala vira notas prontas para guardar: grave reuniões, ideias e conversas sem internet e, quando quiser, transcreva com inteligência artificial, com cada pessoa pelo nome e uma nota que vai direto para o seu Obsidian ou para a pasta que você escolher.
+
+FEITO PARA O SEU SEGUNDO CÉREBRO
+• Uma nota com IA por gravação: resumo, decisões, tarefas e frases-chave, em Markdown (.md) com propriedades e etiquetas.
+• Salve com um toque no seu cofre do Obsidian (por exemplo, o seu 0-Inbox), no Google Drive ou na pasta que você usar.
+• Também o texto completo (.txt) com quem disse o quê, para buscar e vincular quando precisar.
 
 GRAVE COM UM TOQUE
 • Funciona sem internet: suas gravações ficam no seu celular.
@@ -11,11 +16,6 @@ TRANSCREVA E SEPARE VOZES
 • Separa cada pessoa que fala e reconhece as vozes que você já conhece: a sua e as de quem mais conversa com você.
 • Corrija quem disse o quê com um toque, sempre com Desfazer.
 • Áudios longos são divididos em partes enviadas em paralelo.
-
-SEU SEGUNDO CÉREBRO
-• Uma nota com IA: resumo, decisões, tarefas e frases-chave.
-• Salve a nota (.md) ou o texto (.txt) com um toque na pasta que você escolher, como o seu 0-Inbox do Obsidian ou o Google Drive.
-• Copie, compartilhe ou exporte o que precisar.
 
 SUAS MÉTRICAS
 • Quanto você fala, suas sequências, a que horas grava e com quem conversa.
@@ -33,4 +33,4 @@ NO SEU IDIOMA
 COMO COMEÇAR
 Gravar é grátis e não precisa de configuração. Para transcrever, você precisa de uma chave do OpenRouter (openrouter.ai): com uma única chave você transcreve e cria suas notas, e paga ao OpenRouter só o que usar, sem assinatura. Dependendo do modelo escolhido, uma hora de áudio custa a partir de cerca de US$ 0,10.
 
-Feito para quem fala muito e quer guardar suas ideias: reuniões, aulas, entrevistas, notas de voz e conversas.
+Feito para quem constrói um segundo cérebro e fala mais do que escreve: reuniões, aulas, entrevistas, notas de voz e conversas.

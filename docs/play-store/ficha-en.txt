@@ -1,4 +1,9 @@
-Verbapp turns what you say into text you can keep. Record meetings, ideas and conversations offline and, whenever you want, transcribe them with AI: every speaker with their name and a note ready for your second brain.
+Verbapp was born for your SECOND BRAIN. What you say becomes notes ready to keep: record meetings, ideas and conversations offline and, whenever you want, transcribe them with AI, with every speaker by name and a note that goes straight to your Obsidian vault or the folder you choose.
+
+BUILT FOR YOUR SECOND BRAIN
+• One AI note per recording: summary, decisions, tasks and key quotes, in Markdown (.md) with properties and tags.
+• Save it with one tap to your Obsidian vault (for example your 0-Inbox), to Google Drive or to any folder you use.
+• Plus the full text (.txt) with who said what, so you can search and link it whenever you need it.
 
 RECORD WITH ONE TAP
 • Works offline: your recordings stay on your phone.
@@ -11,11 +16,6 @@ TRANSCRIBE AND SEPARATE SPEAKERS
 • Separates each person who speaks and recognizes the voices you already know: yours and those of the people you talk to most.
 • Fix who said what with one tap, always with Undo.
 • Long recordings are split into parts that are sent in parallel.
-
-YOUR SECOND BRAIN
-• An AI note: summary, decisions, tasks and key quotes.
-• Save the note (.md) or the text (.txt) with one tap to the folder you choose, such as your Obsidian 0-Inbox or Google Drive.
-• Copy, share or export whatever you need.
 
 YOUR METRICS
 • How much you talk, your streaks, when you record and who you talk with.
@@ -33,4 +33,4 @@ IN YOUR LANGUAGE
 HOW TO START
 Recording is free and needs no setup. To transcribe you need an OpenRouter key (openrouter.ai): with a single key you transcribe and create your notes, and you pay OpenRouter only for what you use, with no subscription. Depending on the model you choose, an hour of audio costs from about US$0.10.
 
-Made for people who talk a lot and want to keep their ideas: meetings, classes, interviews, voice notes and conversations.
+Made for people who build a second brain and talk more than they type: meetings, classes, interviews, voice notes and conversations.

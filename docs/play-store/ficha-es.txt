@@ -1,4 +1,9 @@
-Verbapp convierte lo que hablas en texto que puedes guardar. Graba reuniones, ideas y conversaciones sin internet y, cuando quieras, transcríbelas con inteligencia artificial: cada persona con su nombre y una nota lista para tu segundo cerebro.
+Verbapp nació para tu SEGUNDO CEREBRO (Second Brain). Lo que hablas se convierte en notas listas para guardar: graba reuniones, ideas y conversaciones sin internet y, cuando quieras, transcríbelas con inteligencia artificial, con cada persona con su nombre y una nota que llega directo a tu Obsidian o a la carpeta que elijas.
+
+PENSADA PARA TU SEGUNDO CEREBRO
+• Una nota con IA por grabación: resumen, decisiones, tareas y frases clave, en Markdown (.md) con propiedades y etiquetas.
+• Guárdala con un toque en tu bóveda de Obsidian (por ejemplo, tu 0-Inbox), en Google Drive o en la carpeta que uses.
+• También el texto completo (.txt) con quién dijo qué, para buscarlo y enlazarlo cuando lo necesites.
 
 GRABA CON UN TOQUE
 • Funciona sin internet: tus grabaciones quedan en tu teléfono.
@@ -11,11 +16,6 @@ TRANSCRIBE Y SEPARA VOCES
 • Separa a cada persona que habla y reconoce las voces que ya conoces: la tuya y las de quienes más hablan contigo.
 • Corrige quién dijo qué con un toque, siempre con Deshacer.
 • Los audios largos se dividen en partes que se envían en paralelo.
-
-TU SEGUNDO CEREBRO
-• Una nota con IA: resumen, decisiones, tareas y frases clave.
-• Guarda la nota (.md) o el texto (.txt) con un toque en la carpeta que elijas, por ejemplo tu 0-Inbox de Obsidian o Google Drive.
-• Copia, comparte o exporta lo que necesites.
 
 TUS MÉTRICAS
 • Cuánto hablas, tus rachas, a qué hora grabas y con quién conversas.
@@ -33,4 +33,4 @@ EN TU IDIOMA
 CÓMO EMPEZAR
 Grabar es gratis y no necesita configuración. Para transcribir necesitas una clave de OpenRouter (openrouter.ai): con una sola clave transcribes y armas tus notas, y le pagas a OpenRouter solo lo que usas, sin suscripción. Según el modelo que elijas, una hora de audio cuesta desde unos US$0,10.
 
-Hecha para quienes hablan mucho y quieren guardar sus ideas: reuniones, clases, entrevistas, notas de voz y conversaciones.
+Hecha para quienes construyen un segundo cerebro y hablan más de lo que escriben: reuniones, clases, entrevistas, notas de voz y conversaciones.
