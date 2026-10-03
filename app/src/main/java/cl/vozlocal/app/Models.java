@@ -480,12 +480,7 @@ final class Models {
     /** Alias que OpenRouter resuelve siempre a la última versión de cada familia. El primero es el recomendado. */
     static final String[] NOTE_MODELS={"~anthropic/claude-sonnet-latest","~openai/gpt-luna-latest","~google/gemini-flash-latest"};
     /** Nombre de cada familia (el mismo en todos los idiomas), en el orden de NOTE_MODELS. */
-    private static final String[] NOTE_FAMILIES={"Claude Sonnet","GPT Luna","Gemini Flash"};
-    /**
-     * Solo en español, como era antes de la 0.9.0: queda mientras Ajustes no pase a noteName(i). No usar: no cambia con
-     * el idioma de la app.
-     */
-    @Deprecated static final String[] NOTE_NAMES={"Claude Sonnet (el más nuevo)","GPT Luna (el más nuevo)","Gemini Flash (el más nuevo)"};
+    static final String[] NOTE_FAMILIES={"Claude Sonnet","GPT Luna","Gemini Flash"};
     /** Nombre para mostrar del alias i de NOTE_MODELS, en el idioma de la app: «Claude Sonnet (el más nuevo)». */
     static String noteName(int i){return Lang.str(R.string.eng_note_model_latest,NOTE_FAMILIES[i]);}
     /** Los nombres de todos los alias de NOTE_MODELS, en el idioma de la app y en el mismo orden. */

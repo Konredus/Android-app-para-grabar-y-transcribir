@@ -119,7 +119,8 @@ final class RetranscribeSheet {
         m.append(' ').append(s.getString(R.string.retr_kept));
         if(corrected&&mode!=Retranscribe.Mode.CORRECTIONS)m.append(' ').append(s.getString(R.string.retr_corrections_lost));
         Sheet sheet=s.sheet(title(s,mode),m.toString());SheetParts.hero(sheet,icon(mode),false);
-        sheet.primary(s.getString(R.string.retr_again),()->start(s,r,mode,changed))
+        // 0.9.0: si aún no se aceptó el aviso de envío (Consent), se muestra antes de volver a enviar el audio.
+        sheet.primary(s.getString(R.string.retr_again),()->Consent.ensure(s,()->start(s,r,mode,changed)))
             .secondary(s.getString(R.string.common_cancel),null).show();
     }
     private static void start(Screen s,Recording r,Retranscribe.Mode mode,Runnable changed){

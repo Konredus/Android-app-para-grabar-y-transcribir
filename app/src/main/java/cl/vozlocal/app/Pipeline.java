@@ -52,7 +52,8 @@ final class Pipeline {
         if(waitsForWifi(c,id))waitingWifi(c,id);
         start(c,byUser);
     }
-    static void afterRecording(Context c,String id){LocalStorage.enqueue(c,id);Diagnostics.event("audio_saved",id);try{if(new Settings(c).automatic())request(c,id,new Settings(c).defaultSpeakers(),false);}catch(Exception ignored){}}
+    /** Al guardar una grabación. «Transcribir automáticamente» solo envía el audio si ya se aceptó el aviso de envío (Consent). */
+    static void afterRecording(Context c,String id){LocalStorage.enqueue(c,id);Diagnostics.event("audio_saved",id);try{if(new Settings(c).automatic()&&Consent.given(c))request(c,id,new Settings(c).defaultSpeakers(),false);}catch(Exception ignored){}}
     static void edited(Context c,String id)throws Exception{
         if(FilesStore.state(c,id).optBoolean("demo")){FilesStore.version.incrementAndGet();return;}
         LocalStorage.enqueue(c,id);Diagnostics.event("recording_edited",id);

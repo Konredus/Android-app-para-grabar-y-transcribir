@@ -539,8 +539,8 @@ public class SettingsActivity extends Screen {
     private int noteAlias(){String m=settings.noteModel().trim();int i=Arrays.asList(Models.NOTE_MODELS).indexOf(m);return i>=0?i:Notes.routerModel(m)?-1:0;}
     /** Nombre del modelo de la nota: la familia del alias («Claude Sonnet»; full, con «(el más nuevo)») o el id escrito a mano. */
     private String noteRouterModel(boolean full){int i=noteAlias();return i<0?settings.noteModel().trim():full?getString(R.string.set_note_model_latest,noteAliasName(i)):noteAliasName(i);}
-    /** La familia («Claude Sonnet»): el nombre de Models.NOTE_NAMES sin lo que vaya entre paréntesis al final (0.9.0: «(el más nuevo)» sale de los textos de Ajustes, en el idioma de la app). */
-    private static String noteAliasName(int i){return Models.NOTE_NAMES[i].replaceAll(" \\(.*\\)$","");}
+    /** La familia («Claude Sonnet»); «(el más nuevo)» sale de los textos de Ajustes, en el idioma de la app. */
+    private static String noteAliasName(int i){return Models.NOTE_FAMILIES[i];}
     /** Bajo el modelo de la nota: con un alias, que no hay que actualizarlo; con uno escrito a mano, que es ese. */
     private String noteAiHint(){return getString(noteAlias()<0?R.string.set_note_ai_typed:R.string.set_note_ai_latest);}
     /** La nota quedó activada pero falta la clave de OpenRouter: se pide ahí mismo. */
