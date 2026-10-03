@@ -795,14 +795,47 @@ public class RecordingActivity extends Screen {
     }
     /** Vidrio como las demás tarjetas; el error se distingue por el círculo rojo con la alerta, sin teñir toda la tarjeta. */
     private void showFailed(JSONObject st){
+        // 0.9.1: si se rindió porque OpenRouter estuvo caído (Transcriber.outcome, "lastErrorKind"), se dice así y se ofrece
+        // probar con otro modelo: en Ajustes no hay nada que revisar.
+        boolean server="server".equals(st.optString("lastErrorKind"));List<Models.Model> others=server?otherModels(st):Collections.emptyList();
         LinearLayout card=ui.card();card.setPadding(ui.dp(S5),ui.dp(S5),ui.dp(S5),ui.dp(S4));
         card.addView(ui.tile(R.drawable.ic_alert,p.onErrorContainer,p.errorContainer,44,24));
-        TextView h=ui.heading(getString(R.string.detail_failed_title),Type.TITLE_LARGE);h.setPadding(0,ui.dp(S4),0,ui.dp(S1));card.addView(h);
+        TextView h=ui.heading(getString(server?R.string.detail_server_title:R.string.detail_failed_title),Type.TITLE_LARGE);h.setPadding(0,ui.dp(S4),0,ui.dp(S1));card.addView(h);
         card.addView(ui.text(st.optString("status",getString(R.string.detail_failed_title)),Type.BODY_MEDIUM,p.onSurface));
-        TextView hint=ui.text(getString(R.string.detail_failed_hint),Type.BODY_SMALL,p.onSurfaceVariant);hint.setPadding(0,ui.dp(S2),0,0);card.addView(hint);
+        TextView hint=ui.text(getString(server?R.string.detail_server_body:R.string.detail_failed_hint),Type.BODY_SMALL,p.onSurfaceVariant);hint.setPadding(0,ui.dp(S2),0,0);card.addView(hint);
         if(Retranscribe.hasPrevious(this,id))card.addView(ui.button(getString(R.string.detail_restore_previous),R.drawable.ic_refresh,Ui.Style.TONAL,v->restorePrevious()),ui.top(S4));
-        card.addView(ui.button(getString(R.string.detail_check_settings),0,Ui.Style.PLAIN,v->startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true))),ui.top(S1));
+        if(!others.isEmpty())card.addView(ui.button(getString(R.string.detail_try_other_model),R.drawable.ic_sparkle,Ui.Style.TONAL,v->otherModelSheet(st)),ui.top(S4));
+        if(!server)card.addView(ui.button(getString(R.string.detail_check_settings),0,Ui.Style.PLAIN,v->startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true))),ui.top(S1));
         content.addView(card,gap());content.addView(details(st,false));
+    }
+    /**
+     * 0.9.1: «Probar con otro modelo». Lo que falta se envía con el modelo elegido; las partes ya listas se conservan y no se
+     * vuelven a cobrar (Pipeline.request con fallback). Solo modelos que «Automático» podría usar y que aceptan las partes
+     * ya cortadas (Models.fallbacks).
+     */
+    private void otherModelSheet(JSONObject st){
+        List<Models.Model> list=otherModels(st);
+        if(list.isEmpty()){message(getString(R.string.detail_other_model_title),getString(R.string.detail_other_model_none));return;}
+        Sheet s=sheet(getString(R.string.detail_other_model_title),getString(R.string.detail_other_model_body));
+        for(Models.Model m:list)s.option(R.drawable.ic_sparkle,Models.label(m),m.perHour>0?getString(R.string.detail_other_model_price,SettingsActivity.hourPrice(m.perHour)):null,()->useModel(st,m));
+        s.secondary(getString(R.string.common_cancel),null).show();
+    }
+    /** Los modelos que sirven para seguir esta transcripción: sin el que falló y aceptando la parte más larga ya cortada. */
+    private List<Models.Model> otherModels(JSONObject st){
+        String failing=st.optString("fallbackModel","");if(failing.isEmpty())failing=st.optString("model","");
+        return Models.fallbacks(this,speakersOf(st),failing,maxPartMs(st));
+    }
+    private boolean speakersOf(JSONObject st){return st.has("speakers")?st.optBoolean("speakers"):new Settings(this).defaultSpeakers();}
+    /** La parte más larga ya cortada, en ms (los cortes, "cuts", se reutilizan al seguir); 0 si aún no hay cortes. */
+    static long maxPartMs(JSONObject st){JSONArray cuts=st==null?null:st.optJSONArray("cuts");long max=0;if(cuts!=null)for(int i=0;i+1<cuts.length();i++)max=Math.max(max,cuts.optLong(i+1)-cuts.optLong(i));return max;}
+    private void useModel(JSONObject st,Models.Model m){
+        boolean speakers=speakersOf(st);
+        Consent.ensure(this,()->{
+            RecordingActions.askNotifications(this);
+            try{Pipeline.request(this,id,speakers,true,m.id);Diagnostics.event("ui_action",id,"screen","RecordingActivity","action","other_model");
+                Ui.haptic(getWindow().getDecorView(),Ui.Haptic.CONFIRM);reload();toast(getString(R.string.detail_other_model_started,Models.label(m)));}
+            catch(Exception e){message(getString(R.string.act_queue_failed),e instanceof HttpApi.UserAction?e.getMessage():getString(R.string.act_try_again));}
+        });
     }
     private void restorePrevious(){
         try{Retranscribe.restorePrevious(this,id);Diagnostics.event("retranscribe_restored",id);reload();snackbar(getString(R.string.retr_restored),null,null);}

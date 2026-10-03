@@ -37,8 +37,43 @@ final class OpenRouterChecks {
         memory();
         rules();
         retries();
+        kept(c);
         device(c,r);
     }
+
+    // ---------- 0.9.1: el audio preparado se reutiliza tras una caída del servidor ----------
+    static void kept(Context c)throws Exception{
+        File audio=write(new File(c.getCacheDir(),"or-check-kept.m4a"),bytes(2000));String id=UUID.randomUUID().toString();
+        File dir=new File(c.getCacheDir(),"openrouter");
+        try{
+            // 1. El servidor falla (502, con Retry-After): el audio armado queda guardado y el error es una caída (ServerBusy).
+            Fake http=new Fake();HttpApi.Response busy=new HttpApi.Response(502,"{\"error\":{\"code\":502,\"message\":\"Provider returned error\"}}",null);busy.retryAfterMs=90_000;http.replies.add(busy);http.jobId=id;
+            FakeAudio fake=new FakeAudio(5000);List<String> lines=new ArrayList<>();
+            Exception e=null;try{client(c,http,fake,lines).transcribe(audio,config("microsoft/mai-transcribe-2",false),"es",null,null);}catch(Exception x){e=x;}
+            HttpApi.ServerBusy busyError=HttpApi.serverBusy(e);
+            check(busyError!=null&&busyError.code==502&&busyError.retryAfterMs==90_000,"502 should be a ServerBusy with its Retry-After: "+e);
+            check(fake.asked.size()==1&&keptFiles(dir,id)==2,"Prepared audio not kept after a server error: "+fake.asked+" / "+keptFiles(dir,id));
+            // 2. El intento siguiente lo reutiliza: no se prepara de nuevo y, al transcribirse la parte, se borra.
+            Fake ok=new Fake().reply(200,"{\"text\":\"Hola\",\"segments\":[{\"start\":0,\"end\":1,\"text\":\"Hola\"}]}");ok.jobId=id;
+            JSONObject out=client(c,ok,fake,lines).transcribe(audio,config("microsoft/mai-transcribe-2",false),"es",null,null);
+            check(fake.asked.size()==1&&ok.calls==1&&lines.contains(Lang.str(c,R.string.eng_log_or_prepared_reused)),"Prepared audio not reused: "+fake.asked+" "+lines);
+            check(keptFiles(dir,id)==0&&out.getJSONArray("segments").length()>=1,"Kept audio not removed after the part was transcribed");
+            // 3. Un error que reintentar no arregla (401) no deja audio guardado; un 429 sí, y forget() lo borra.
+            Fake key=new Fake().reply(401,"{\"error\":{\"code\":401,\"message\":\"No auth\"}}");key.jobId=id;
+            try{client(c,key,fake,lines).transcribe(audio,config("microsoft/mai-transcribe-2",false),"es",null,null);}catch(Exception ignored){}
+            check(keptFiles(dir,id)==0,"Kept audio left after a key error");
+            Fake limited=new Fake().reply(429,"{}");limited.jobId=id;
+            try{client(c,limited,fake,lines).transcribe(audio,config("microsoft/mai-transcribe-2",false),"es",null,null);}catch(Exception ignored){}
+            check(keptFiles(dir,id)==2,"429 should keep the prepared audio");
+            OpenRouterClient.forget(c,id);check(keptFiles(dir,id)==0,"forget() left kept audio");
+            // 4. Retry-After: segundos, fecha HTTP, tope de una hora y valores que no sirven.
+            long now=System.currentTimeMillis();
+            check(HttpApi.retryAfter("120",now)==120_000&&HttpApi.retryAfter("0",now)==0&&HttpApi.retryAfter("abc",now)==0&&HttpApi.retryAfter(null,now)==0&&HttpApi.retryAfter("999999",now)==HttpApi.RETRY_AFTER_MAX_MS,"Retry-After seconds parsed wrong");
+            java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz",Locale.US);f.setTimeZone(TimeZone.getTimeZone("GMT"));
+            long d=HttpApi.retryAfter(f.format(new Date(now+300_000)),now);check(d>290_000&&d<=301_000,"Retry-After date parsed wrong: "+d);
+        }finally{audio.delete();OpenRouterClient.forget(c,id);}
+    }
+    private static int keptFiles(File dir,String id){File[] all=dir.listFiles((d,n)->n.startsWith("keep-"+id+"-"));return all==null?0:all.length;}
 
     // ---------- Utilidades ----------
     /** Bytes conocidos (sin azar: la prueba da siempre lo mismo). */

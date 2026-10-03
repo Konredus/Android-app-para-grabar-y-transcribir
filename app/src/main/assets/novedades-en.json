@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.9.1",
+    "date": "2026-10-03",
+    "title": "More patience when OpenRouter fails",
+    "items": [
+      "Retries that wait: if OpenRouter or the model is down (502 or 429 errors), the app keeps trying on its own for up to an hour, waiting longer each time, without using up your attempts.",
+      "No double preparing: each part's audio is prepared once and reused on retries, so every attempt starts right away.",
+      "A clear message: if OpenRouter is still having issues, the recording says so. It's not your phone or your key, and what was already transcribed stays saved.",
+      "Try another model: finish what's left with another recommended model, without paying again for the parts that are done."
+    ]
+  },
+  {
     "version": "0.9.0",
     "date": "2026-10-02",
     "title": "Verbapp in your language",

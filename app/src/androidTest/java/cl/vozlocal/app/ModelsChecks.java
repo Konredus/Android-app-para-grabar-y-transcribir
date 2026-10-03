@@ -27,6 +27,17 @@ final class ModelsChecks {
     private static final String[] PREFS={"provider","orSpeakersModel","orTextModel","orAutoSpeakers","orAutoText","orAutoBeforeSpeakers","orAutoBeforeText","noteProvider","noteModel","speakersMode","customBase","customModel","customSpeakers","orCatalogTried",
         "keyEncrypted","keyIv","openrouter_keyEncrypted","openrouter_keyIv","custom_keyEncrypted","custom_keyIv","anthropic_keyEncrypted","anthropic_keyIv"};
 
+    /** 0.9.1: «Probar con otro modelo»: sin el que falló, que separen voces si se piden y que acepten la parte ya cortada. */
+    static void fallbacks(Context c,long now)throws Exception{
+        JSONArray models=new JSONArray();
+        for(String id:new String[]{MAI,NOVA,GPT})models.put(new JSONObject().put("id",id).put("name",id).put("created",1).put("prompt",0.10).put("expires",0));
+        FilesStore.write(Models.file(c),new JSONObject().put("v",1).put("fetchedAt",now).put("models",models));Models.forget();
+        List<Models.Model> voices=Models.fallbacks(c,true,MAI,6*60_000L);
+        check(!voices.isEmpty()&&voices.get(0).id.equals(NOVA)&&voices.stream().noneMatch(m->m.id.equals(MAI))&&voices.stream().allMatch(m->m.recipe.diarizes),"Fallbacks with voices wrong: "+voices.size());
+        List<Models.Model> text=Models.fallbacks(c,false,MAI,6*60_000L);
+        check(text.stream().noneMatch(m->m.id.equals(MAI))&&text.stream().anyMatch(m->m.id.equals(GPT)),"Fallbacks for text wrong: "+text.size());
+        check(Models.fallbacks(c,true,MAI,10*3600_000L).isEmpty(),"A model that cannot take the part should not be offered");
+    }
     static void run(Context c,Recording r)throws Exception{
         Settings s=new Settings(c);Map<String,Object> before=new HashMap<>(s.prefs.getAll());
         File cache=Models.file(c);byte[] saved=cache.isFile()?java.nio.file.Files.readAllBytes(cache.toPath()):null;
@@ -43,6 +54,7 @@ final class ModelsChecks {
             billed();
             settings(c,s);
             onlyOpenRouter(s);
+            fallbacks(c,now);
         }finally{
             SharedPreferences.Editor e=s.prefs.edit();
             for(String k:PREFS){Object v=before.get(k);

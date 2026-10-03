@@ -89,11 +89,40 @@ class HttpApi {
     interface Body { long length(); void write(OutputStream out) throws Exception; }
     static class Response {
         String jobId; final int code; final String text, location,requestId;
+        /** 0.9.1: lo que el servidor pidió esperar antes de reintentar (cabecera Retry-After), en ms; 0 si no lo dijo. */
+        long retryAfterMs;
         Response(int code,String text,String location){this(code,text,location,"");}
         Response(int code,String text,String location,String requestId){this.code=code;this.text=text;this.location=location;this.requestId=safeToken(requestId);}
         JSONObject json() throws Exception { return text.isEmpty()?new JSONObject():new JSONObject(text); }
     }
     static class UserAction extends Exception { UserAction(String message){super(message);} }
+    /**
+     * 0.9.1: el servicio está caído o saturado (408, 429, 5xx). No es culpa del teléfono, de la red ni de la clave: el motor
+     * lo reintenta solo por más tiempo que un error común (Transcriber.outcome) y respeta la espera que pidió el servidor.
+     * Sigue siendo una IOException, así que todo lo que ya trataba estos errores como reintentables sigue igual.
+     */
+    static class ServerBusy extends IOException {
+        /** El código HTTP (429, 502…). */
+        final int code;
+        /** Lo que el servidor pidió esperar (Retry-After), en ms; 0 si no lo dijo. */
+        final long retryAfterMs;
+        ServerBusy(String message,int code,long retryAfterMs){super(message);this.code=code;this.retryAfterMs=retryAfterMs;}
+    }
+    /** ¿e (o lo que la causó) es una caída del servidor? */
+    static ServerBusy serverBusy(Throwable e){for(int i=0;e!=null&&i<6;i++,e=e.getCause())if(e instanceof ServerBusy)return (ServerBusy)e;return null;}
+    /** Tope de la espera que se acepta de un Retry-After (una hora). */
+    static final long RETRY_AFTER_MAX_MS=3600_000L;
+    /**
+     * Retry-After en ms: segundos («120») o una fecha HTTP («Wed, 21 Oct 2026 07:28:00 GMT»), con tope de una hora.
+     * 0 si no viene o no se entiende. now: la hora actual en ms (para la fecha).
+     */
+    static long retryAfter(String value,long now){
+        if(value==null)return 0;String v=value.trim();if(v.isEmpty())return 0;
+        try{long s=Long.parseLong(v);return s<=0?0:Math.min(RETRY_AFTER_MAX_MS,s*1000L);}catch(NumberFormatException ignored){}
+        try{java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz",Locale.US);f.setTimeZone(java.util.TimeZone.getTimeZone("GMT"));
+            java.util.Date d=f.parse(v);if(d==null)return 0;long ms=d.getTime()-now;return ms<=0?0:Math.min(RETRY_AFTER_MAX_MS,ms);}
+        catch(Exception ignored){return 0;}
+    }
     void cancel(){cancelled=true;HttpURLConnection connection=active;if(connection!=null)connection.disconnect();for(HttpApi c:children)c.cancel();}
     void check() throws InterruptedIOException {
         if(cancelled || (parent!=null&&parent.cancelled) || Thread.currentThread().isInterrupted())throw new InterruptedIOException("Trabajo pausado");
@@ -117,12 +146,12 @@ class HttpApi {
                 try(BufferedReader reader=new BufferedReader(new InputStreamReader(c.getInputStream(),StandardCharsets.UTF_8))){String line;while((line=reader.readLine())!=null){check();touch();if(!line.startsWith("data:"))continue;String data=line.substring(5).trim();if(data.isEmpty()||data.equals("[DONE]"))continue;JSONObject event=new JSONObject(data);events.event(event);if(event.optString("type").endsWith(".done"))done=event;}}
                 if(done==null)throw new IOException(Lang.str(R.string.eng_err_stream_cut));
                 String requestId=c.getHeaderField("x-request-id");Diagnostics.event("http_end",jobId,"http",code,"request_id",safeToken(requestId),"elapsed_ms",System.currentTimeMillis()-started);
-                Response response=new Response(code,done.toString(),location,requestId);response.jobId=jobId;return response;
+                Response response=new Response(code,done.toString(),location,requestId);response.jobId=jobId;response.retryAfterMs=retryAfter(c.getHeaderField("Retry-After"),System.currentTimeMillis());return response;
             }
             InputStream raw=code>=400?c.getErrorStream():c.getInputStream(); ByteArrayOutputStream bytes=new ByteArrayOutputStream();
             if(raw!=null)try(InputStream in=raw){byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1){check();if(bytes.size()+n>8*1024*1024)throw new IOException(Lang.str(R.string.eng_err_response_too_big));bytes.write(buffer,0,n);}}
             String requestId=c.getHeaderField("x-request-id");Diagnostics.event("http_end",jobId,"http",code,"request_id",safeToken(requestId),"elapsed_ms",System.currentTimeMillis()-started);
-            Response response=new Response(code,bytes.toString(StandardCharsets.UTF_8.name()),location,requestId);response.jobId=jobId;return response;
+            Response response=new Response(code,bytes.toString(StandardCharsets.UTF_8.name()),location,requestId);response.jobId=jobId;response.retryAfterMs=retryAfter(c.getHeaderField("Retry-After"),System.currentTimeMillis());return response;
         }catch(Exception e){
             String why=stalled;if(why!=null&&!(e instanceof Stalled)){Stalled s=new Stalled(why,stalledLocal);s.initCause(e);e=s;}
             Diagnostics.event("http_failure",jobId,"error_class",e.getClass().getSimpleName(),"elapsed_ms",System.currentTimeMillis()-started,"reason",safeReason(e),"stage",PHASES[lastPhase]);throw e;
@@ -199,8 +228,9 @@ class HttpApi {
         if(router&&response.code==404)throw new UserAction(Lang.str(all.contains("data policy")||all.contains("privacy")?R.string.eng_err_or_privacy:R.string.eng_err_or_model_gone));
         if(response.code==403)throw new UserAction(Lang.str(R.string.eng_err_forbidden,service));
         if(response.code==429 && response.text.contains("insufficient_quota"))throw new UserAction(Lang.str(R.string.eng_err_no_quota));
-        // Se reintentan (con esperas crecientes; al quinto intento se avisa). Con OpenRouter, un 429 es su límite de ritmo.
-        if(response.code==408 || response.code==429 || response.code>=500)throw new IOException(router&&response.code==429?Lang.str(R.string.eng_err_or_rate_limited):Lang.str(R.string.eng_err_unavailable,service,response.code));
+        // Se reintentan. Con OpenRouter, un 429 es su límite de ritmo (o el del proveedor final). 0.9.1: son caídas del servicio
+        // (ServerBusy), que el motor reintenta solo por más tiempo y respetando la espera que pidió el servidor.
+        if(response.code==408 || response.code==429 || response.code>=500)throw new ServerBusy(router&&response.code==429?Lang.str(R.string.eng_err_or_rate_limited):Lang.str(R.string.eng_err_unavailable,service,response.code),response.code,response.retryAfterMs);
         String text=Lang.str(R.string.eng_err_http,service,response.code,Lang.str(reason))+(code.isEmpty()?"":" "+Lang.str(R.string.eng_err_code,code))+(param.isEmpty()?"":" "+Lang.str(R.string.eng_err_param,param))+(response.requestId.isEmpty()?"":" · "+Lang.str(R.string.eng_err_ref,response.requestId));
         if(response.code==413)throw new TooLarge(text);
         throw new UserAction(text);

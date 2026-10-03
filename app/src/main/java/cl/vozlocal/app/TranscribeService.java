@@ -34,6 +34,11 @@ public class TranscribeService extends Service {
     static volatile HttpApi current;
     /** Esperas entre reintentos dentro del servicio (ms). */
     private static final long[] BACKOFF={20_000,60_000,120_000,300_000};
+    /**
+     * 0.9.1: tope de una espera por caída del servicio dentro del trabajo en curso. Una espera más larga no retiene el
+     * teléfono: el trabajo termina y la tarea de fondo lo retoma a esa hora (Pipeline.schedule la programa con esa demora).
+     */
+    static final long SERVER_HOLD_MS=5*60_000L;
     /** Tras un corte del propio teléfono se reintenta pronto: no es un problema del proveedor. */
     private static final long LOCAL_CUT_DELAY=15_000;
     /**
@@ -91,11 +96,16 @@ public class TranscribeService extends Service {
         try{
             for(int loop=0;loop<40&&!http.cancelled;loop++){
                 Transcriber t=new Transcriber(c,http,0);t.runner=runner;retry=t.runAll();Diagnostics.event("runner_round",null,"runner",runner,"count",round,"result",retry);
-                if(!retry||http.cancelled||!Pipeline.pending(c)||round==BACKOFF.length)break;
+                if(!retry||http.cancelled||!Pipeline.pending(c))break;
                 // Lo único que queda espera Wi-Fi desde el comienzo de la ronda (y no tiene permiso para datos móviles): no se
                 // retiene el trabajo esperando; la tarea de fondo lo retoma sola cuando haya Wi-Fi (o al tocar «Usar datos móviles
                 // ahora»). Si el Wi-Fi se fue a mitad (t.lostWifi), en cambio, se espera aquí: ver waitBeforeRetry.
                 if(t.onlyWaitingWifi())break;
+                // 0.9.1: todo lo pedido espera que el servicio se recupere (Transcriber.outcome): se espera hasta esa hora sin
+                // avanzar la escala de esperas; si falta mucho, se cede a la tarea de fondo programada para esa hora.
+                long server=Transcriber.serverDelay(c,pendingIds(c),System.currentTimeMillis());
+                if(server>0){if(server>SERVER_HOLD_MS||!waitBeforeRetry(c,http,server,nudged,java.util.Collections.emptyList()))break;continue;}
+                if(round==BACKOFF.length)break;
                 // Una ronda detenida por el cargador, la batería o internet (t.held) no falló: no sube la escala de esperas.
                 if(!waitBeforeRetry(c,http,t.sawLocalCut||t.lostWifi||t.held?LOCAL_CUT_DELAY:BACKOFF[round++],nudged,t.retrying()))break;
             }
@@ -107,6 +117,8 @@ public class TranscribeService extends Service {
      * que sigue lista (ready: pedida y sin nada que la retenga). null si ninguna: entonces nadie dice «Reintento en…» (una
      * recién pedida que espera su turno no se reintenta). Separada del teléfono para poder probarla.
      */
+    /** Las grabaciones pedidas, en el orden de la biblioteca (0.9.1: Transcriber.serverDelay). */
+    static java.util.List<String> pendingIds(Context c){java.util.List<String> out=new java.util.ArrayList<>();for(Recording r:Recording.list(c))if(FilesStore.state(c,r.id).optBoolean("requested"))out.add(r.id);return out;}
     static String retryTarget(Collection<String> held,java.util.function.Predicate<String> ready){
         for(String id:held)if(ready.test(id))return id;
         return null;

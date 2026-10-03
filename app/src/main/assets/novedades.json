@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.9.1",
+    "date": "2026-10-03",
+    "title": "Más paciencia cuando OpenRouter falla",
+    "items": [
+      "Reintentos que esperan: si OpenRouter o el modelo están caídos (errores 502 o 429), la app sigue intentando sola por hasta una hora, con esperas cada vez más largas, sin gastar tus intentos.",
+      "Sin preparar dos veces: el audio de cada parte se prepara una vez y se reutiliza en los reintentos, así cada intento parte al tiro.",
+      "Mensaje claro: si OpenRouter sigue con problemas, la grabación lo dice tal cual. No es tu teléfono ni tu clave, y lo ya transcrito queda guardado.",
+      "Probar con otro modelo: termina lo que falta con otro modelo recomendado, sin volver a pagar las partes ya listas."
+    ]
+  },
+  {
     "version": "0.9.0",
     "date": "2026-10-02",
     "title": "Verbapp en tu idioma",

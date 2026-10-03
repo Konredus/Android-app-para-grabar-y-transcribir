@@ -320,6 +320,21 @@ final class Models {
         for(Recipe r:TABLE)if(usable(find(catalog,r.id),speakers,now))return r.id;
         return "";
     }
+    /**
+     * 0.9.1: modelos para «Probar con otro modelo» (tras una caída del servicio): los que «Automático» podría usar, en su
+     * orden de preferencia, menos el que falló (exclude), y solo los que aceptan partes de maxPartMs (las ya cortadas se
+     * reutilizan). Vacío si no hay ninguno.
+     */
+    static List<Model> fallbacks(Context c,boolean speakers,String exclude,long maxPartMs){
+        List<Model> catalog=cached(c),out=new ArrayList<>();long now=System.currentTimeMillis();
+        List<String> order=new ArrayList<>(java.util.Arrays.asList(speakers?PREFER_SPEAKERS:PREFER_TEXT));for(Recipe r:TABLE)if(!order.contains(r.id))order.add(r.id);
+        for(String id:order){
+            if(id.equals(exclude))continue;Model m=find(catalog,id);if(!usable(m,speakers,now))continue;
+            if(maxPartMs>0&&m.recipe.maxMs>0&&m.recipe.maxMs-Transcriber.OR_ANCHOR_ROOM_MS<maxPartMs)continue;
+            out.add(m);
+        }
+        return out;
+    }
     private static final AtomicBoolean BUSY=new AtomicBoolean();
     /**
      * Pone al día el catálogo en segundo plano, a lo más una vez al día, para que «Automático» cambie solo si OpenRouter

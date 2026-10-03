@@ -459,4 +459,13 @@
         <item quantity="other">%1$d marked moments</item>
     </plurals>
     <string name="marks_range_desc">Selected clip from %1$s to %2$s. Use the seconds fields to fine-tune it.</string>
+    <!-- 0.9.1: la transcripción se rindió porque OpenRouter (o el modelo) estuvo caído. -->
+    <string name="detail_server_title">OpenRouter is having issues</string>
+    <string name="detail_server_body">It\'s not your phone or your key: the transcription service failed several times in a row. What was already transcribed is saved, and retrying only sends what\'s left.</string>
+    <string name="detail_try_other_model">Try another model</string>
+    <string name="detail_other_model_title">Try another model</string>
+    <string name="detail_other_model_body">What\'s left is sent with the model you choose. Finished parts are kept and aren\'t charged again.</string>
+    <string name="detail_other_model_none">No other model can take this recording right now. Try again in a few minutes.</string>
+    <string name="detail_other_model_price">%1$s per hour</string>
+    <string name="detail_other_model_started">What\'s left goes to %1$s</string>
 </resources>

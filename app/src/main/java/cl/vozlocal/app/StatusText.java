@@ -36,6 +36,8 @@ final class StatusText {
     static String working(boolean again,boolean mine,String blocker){
         if(mine)return Lang.str(again?R.string.eng_btn_working_again:R.string.eng_btn_working);
         if(blocker==null)return Lang.str(R.string.eng_btn_queued);
+        // 0.9.1: OpenRouter caído (Pipeline.serverWait).
+        if(Pipeline.isServerWait(blocker))return Lang.str(R.string.eng_btn_wait_server);
         // «Wi-Fi» se escribe igual en los tres idiomas.
         if(Pipeline.isWifiWait(blocker)||blocker.contains("Wi-Fi"))return Lang.str(R.string.eng_btn_wait_wifi);
         if(Lang.containsAny(blocker,R.string.eng_wait_charger))return Lang.str(R.string.eng_btn_wait_charger);
@@ -148,7 +150,7 @@ final class StatusText {
      * solo»): mientras tanto no se envía nada. Lo usa Transcriber.waiting.
      */
     static boolean paused(String text){
-        return like(text,R.string.eng_notif_wifi_wait)||like(text,R.string.eng_notif_hold)||like(text,R.string.eng_notif_cut_retry)||like(text,R.string.eng_notif_attempt_retry);
+        return like(text,R.string.eng_notif_wifi_wait)||like(text,R.string.eng_notif_hold)||like(text,R.string.eng_notif_cut_retry)||like(text,R.string.eng_notif_attempt_retry)||like(text,R.string.eng_notif_server_retry);
     }
 
     // ---------- Errores de la clave (HttpApi, Models, Notes) ----------
