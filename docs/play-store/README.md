@@ -41,15 +41,21 @@ Lo que se cargó en Play Console el 2026-10-02 (app «Verbapp: graba y transcrib
 9. Funciones financieras: ninguna.
 10. Apps de salud: ninguna función de salud.
 
-## Prueba cerrada (enviada a revisión el 2026-10-02)
-- Segmento «Prueba cerrada - Alpha»: versión **14 (0.9.0)** (`entrega/Verbapp-0.9.0.aab`, firmado con la clave de subida), notas de la versión en es-419, en-US y pt-BR.
+## Prueba cerrada
+- Segmento «Prueba cerrada - Alpha».
+  - Versión **14 (0.9.0)**: enviada a revisión el 2026-10-02 y publicada el 2026-10-03.
+  - Versión **15 (0.9.1)**: enviada a revisión el 2026-10-03. Trae reintentos que esperan cuando OpenRouter falla y «Probar con otro modelo».
+  - Cada AAB está en `entrega/Verbapp-<versión>.aab`, firmado con la clave de subida, con notas de la versión en es-419, en-US y pt-BR.
+- Enlace para unirse a la prueba: https://play.google.com/apps/testing/cl.verbapp.app
+  - Cada tester lo abre con la cuenta de Google de su lista, acepta y luego instala desde Play.
+  - Quien instaló una APK de prueba (firma de depuración) debe desinstalarla antes.
 - Países: todos (178).
-- Testers: lista «Testers Verbapp» (3 correos al enviarla). Google pide **al menos 12** que la usen **14 días seguidos** antes de poder pedir producción.
+- Testers: lista «Testers Verbapp», con 4 correos al 2026-10-03. Google pide **al menos 12** que la usen **14 días seguidos** antes de poder pedir producción.
 - **Permisos de servicios en primer plano** (declaración que pidió la versión): sincronización de datos (procesamiento en la red: «Otro», el envío del audio a OpenRouter para transcribir; procesamiento local: «Importación y exportación»), procesamiento multimedia («Transcodificación multimedia») y micrófono («Entrada de audio en segundo plano»). Video de demostración (no listado): https://www.youtube.com/watch?v=gdiARACfbIk
 - Advertencia sin importancia: no hay archivo de desofuscación (la app no ofusca su código).
 - **Detalles de acceso:** la clave de prueba de OpenRouter (con tope) ya está cargada.
 
 ## Pendiente
-- Que Google apruebe la prueba cerrada y que los testers acepten la invitación desde el enlace de la prueba.
+- Que Google apruebe la 0.9.1 y que los testers acepten la invitación desde el enlace de la prueba.
 - Juntar 12 testers y esperar 14 días; después, pedir acceso a producción.
 - Capturas de pantalla en inglés y portugués (opcional).
