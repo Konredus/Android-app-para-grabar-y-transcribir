@@ -4,7 +4,7 @@ Lo que se cargó en Play Console el 2026-10-02 (app «Verbapp: graba y transcrib
 
 ## Ficha principal (español, es-419)
 - **Nombre:** Verbapp: graba y transcribe
-- **Descripción breve:** Graba sin internet y transcribe con IA, separando voces y armando tus notas.
+- **Descripción breve:** Tu voz, directo a tu segundo cerebro: graba, transcribe con IA y arma notas.
 - **Descripción completa:** `ficha-es.txt`
 - **Ícono:** `icono-512.png` (mismas formas y colores que el ícono adaptativo de la app)
 - **Gráfico destacado:** `grafico-destacado-1024x500.png`
@@ -12,10 +12,11 @@ Lo que se cargó en Play Console el 2026-10-02 (app «Verbapp: graba y transcrib
 - **Capturas de tablet 7" y 10" (1920×1080):** `capturas-tablet/tablet-01.png` a `04.png`
 - Los gráficos se generan con `store_assets.py` y `store_tablet.py` a partir de capturas del emulador.
 
-## Traducciones de la ficha (0.9.0)
-- **Inglés (en-US):** nombre «Verbapp: record & transcribe»; breve «Record offline, transcribe with AI, separate speakers and get ready-made notes.»; completa en `ficha-en.txt`.
-- **Portugués (pt-BR):** nombre «Verbapp: grave e transcreva»; breve «Grave sem internet e transcreva com IA, separando vozes e montando suas notas.»; completa en `ficha-pt.txt`.
-- La ficha en español suma la sección «EN TU IDIOMA».
+## Traducciones de la ficha (0.9.0, cargadas el 2026-10-02)
+- **Inglés (en-US):** nombre «Verbapp: record & transcribe»; breve «Your voice, straight to your second brain: record, AI transcripts and notes.»; completa en `ficha-en.txt`.
+- **Portugués (pt-BR):** nombre «Verbapp: grave e transcreva»; breve «Sua voz direto para o seu segundo cérebro: grave, transcreva com IA, crie notas.»; completa en `ficha-pt.txt`.
+- Pedido del dueño: que quede clarísimo que la app nació para el **segundo cerebro (Second Brain)**. Las tres fichas parten con eso y su primera sección es «Pensada para tu segundo cerebro» (nota en Markdown para Obsidian).
+- Las capturas son las de la ficha en español (Google las usa para los idiomas sin capturas propias).
 
 ## Configuración de la tienda
 - Categoría: Productividad.
@@ -40,7 +41,15 @@ Lo que se cargó en Play Console el 2026-10-02 (app «Verbapp: graba y transcrib
 9. Funciones financieras: ninguna.
 10. Apps de salud: ninguna función de salud.
 
-## Pendiente antes de publicar
-- Versión 0.9: multi idioma (inglés, español, portugués de Brasil), API 36, sin el permiso de batería, aviso de privacidad con «Acepto», AAB firmado.
-- Fichas traducidas (inglés y portugués) con capturas en cada idioma.
-- Prueba cerrada con al menos 12 testers durante 14 días seguidos; después, pedir acceso a producción.
+## Prueba cerrada (enviada a revisión el 2026-10-02)
+- Segmento «Prueba cerrada - Alpha»: versión **14 (0.9.0)** (`entrega/Verbapp-0.9.0.aab`, firmado con la clave de subida), notas de la versión en es-419, en-US y pt-BR.
+- Países: todos (178).
+- Testers: lista «Testers Verbapp» (3 correos al enviarla). Google pide **al menos 12** que la usen **14 días seguidos** antes de poder pedir producción.
+- **Permisos de servicios en primer plano** (declaración que pidió la versión): sincronización de datos (procesamiento en la red: «Otro», el envío del audio a OpenRouter para transcribir; procesamiento local: «Importación y exportación»), procesamiento multimedia («Transcodificación multimedia») y micrófono («Entrada de audio en segundo plano»). Video de demostración (no listado): https://www.youtube.com/watch?v=gdiARACfbIk
+- Advertencia sin importancia: no hay archivo de desofuscación (la app no ofusca su código).
+- **Detalles de acceso:** la clave de prueba de OpenRouter (con tope) ya está cargada.
+
+## Pendiente
+- Que Google apruebe la prueba cerrada y que los testers acepten la invitación desde el enlace de la prueba.
+- Juntar 12 testers y esperar 14 días; después, pedir acceso a producción.
+- Capturas de pantalla en inglés y portugués (opcional).
