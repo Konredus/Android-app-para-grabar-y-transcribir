@@ -175,15 +175,57 @@ final class Transcriber {
     static final long LOCAL_CUT_WINDOW_MS=15*60_000L;
     /** Intentos que tiene cada transcripción antes de rendirse y pedir «Reintentar». */
     static final int ATTEMPTS=5;
+    /**
+     * 0.9.1: caídas del servicio (HttpApi.ServerBusy: 429, 502, 503…). No son culpa del teléfono ni de la clave y suelen
+     * arreglarse solas: no gastan los 5 intentos. Se reintenta sola mientras no pase SERVER_WINDOW_MS desde la primera caída
+     * (una parte que termina vuelve a empezar la cuenta), con las esperas de SERVER_WAITS (o la que pida el servidor, si es
+     * mayor) y un tope de SERVER_TRIES por si el servicio no vuelve. Diagnóstico del 2026-10-03: con OpenRouter caído
+     * (502 y 429 por más de media hora), los 5 intentos se gastaban en 12 min y había que tocar «Reintentar» a mano.
+     */
+    static final long SERVER_WINDOW_MS=60*60_000L;
+    static final int SERVER_TRIES=20;
+    static final long[] SERVER_WAITS={30_000,60_000,120_000,300_000,600_000,900_000};
+    /** Espera antes del reintento n (1 = el primero) tras una caída del servicio; retryAfterMs: lo que pidió el servidor. */
+    static long serverWait(int n,long retryAfterMs){
+        long base=SERVER_WAITS[Math.max(0,Math.min(SERVER_WAITS.length-1,n-1))];
+        return Math.max(base,Math.min(HttpApi.RETRY_AFTER_MAX_MS,retryAfterMs));
+    }
+    /** ¿Esta grabación espera que el servicio se recupere? Antes de "serverRetryAt" no se le envía nada. */
+    static boolean serverWaiting(JSONObject st,long now){return st!=null&&st.optBoolean("requested")&&st.optLong("serverRetryAt",0)>now;}
+    /**
+     * Cuánto falta para reintentar, si TODO lo pedido (de ids) espera que el servicio se recupere: la espera más corta.
+     * 0 si alguna puede intentarse ya (o no hay nada pedido): entonces manda la escala de esperas de siempre.
+     */
+    static long serverDelay(Context c,Collection<String> ids,long now){
+        long min=Long.MAX_VALUE;
+        for(String id:ids){JSONObject st=FilesStore.state(c,id);if(!st.optBoolean("requested"))continue;long at=st.optLong("serverRetryAt",0);if(at<=now)return 0;min=Math.min(min,at-now);}
+        return min==Long.MAX_VALUE?0:min;
+    }
+    /** La hora («16:45», o «4:45 PM» en inglés de EE. UU.) para «se reintenta a las …». */
+    static String clock(long at){return java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT,Lang.locale()).format(new Date(at));}
     /** Qué hacer con un intento fallido: si fue un corte del teléfono, si es gratis, cuántos intentos van y si se reintenta. */
     static final class Outcome{
         final boolean cut,local,again;final int attempts,cuts;final long cutSince;
-        Outcome(boolean cut,boolean local,int attempts,int cuts,long cutSince){this.cut=cut;this.local=local;this.attempts=attempts;this.again=attempts<ATTEMPTS;this.cuts=cuts;this.cutSince=cutSince;}
+        /** 0.9.1: fue una caída del servicio (ver SERVER_WINDOW_MS): cuántas van, desde cuándo y cuándo se reintenta. */
+        final boolean server;final int serverTries,serverBlocks;final long serverSince,retryAt;
+        Outcome(boolean cut,boolean local,int attempts,int cuts,long cutSince){this(cut,local,attempts,cuts,cutSince,attempts<ATTEMPTS,false,0,0,0,0);}
+        Outcome(boolean cut,boolean local,int attempts,int cuts,long cutSince,boolean again,boolean server,int serverTries,int serverBlocks,long serverSince,long retryAt){
+            this.cut=cut;this.local=local;this.attempts=attempts;this.again=again;this.cuts=cuts;this.cutSince=cutSince;
+            this.server=server;this.serverTries=serverTries;this.serverBlocks=serverBlocks;this.serverSince=serverSince;this.retryAt=retryAt;
+        }
     }
     /** La regla de reintentos, separada del teléfono para poder probarla. st: el estado antes de este fallo; now: ahora (ms). */
     static Outcome outcome(JSONObject st,Throwable e,long now){
         boolean cut=localCut(e);int before=st.optInt("localCuts",0),cuts=before+(cut?1:0);
         long since=before>0?st.optLong("cutSince",now):now;
+        HttpApi.ServerBusy busy=cut?null:HttpApi.serverBusy(e);
+        if(busy!=null){
+            // Caída del servicio: no gasta los 5 intentos. Si desde la última caída terminó alguna parte, la cuenta empieza de nuevo.
+            int blocks=st.optInt("blocksDone",0);boolean fresh=!st.has("serverSince")||st.optInt("serverBlocks",-1)!=blocks;
+            long first=fresh?now:st.optLong("serverSince",now);int tries=(fresh?0:st.optInt("serverTries",0))+1;
+            boolean again=now-first<SERVER_WINDOW_MS&&tries<SERVER_TRIES;
+            return new Outcome(false,false,st.optInt("attempts",0),cuts,since,again,true,tries,blocks,first,again?now+serverWait(tries,busy.retryAfterMs):0);
+        }
         // Un corte hecho por el propio teléfono (pantalla bloqueada, ahorro de batería) no es culpa del proveedor: no gasta
         // uno de los 5 intentos, salvo que se repita demasiado (más de 12 veces, o durante más de 15 min seguidos).
         boolean local=cut&&cuts<=MAX_LOCAL_CUTS&&now-since<LOCAL_CUT_WINDOW_MS;
@@ -235,6 +277,9 @@ final class Transcriber {
                 JSONObject state=FilesStore.state(c,r.id);if(!state.optBoolean("requested"))continue;
                 if(RecorderService.activeId!=null){retry=true;Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_hold_recording));break;}
                 if(budgetMs>0&&System.currentTimeMillis()-started>budgetMs){retry=true;break;}
+                // 0.9.1: espera que el servicio se recupere (outcome): antes de esa hora no se le envía nada. La retoma la espera
+                // de TranscribeService.rounds o la tarea de fondo, que Pipeline.schedule programa para esa hora.
+                if(serverWaiting(state,System.currentTimeMillis())){retry=true;continue;}
                 // Falta el cargador, la batería o internet: la ronda se detiene sin gastar un intento y el trabajo espera a que
                 // se cumpla (TranscribeService.waitBeforeRetry), como dicen las pantallas.
                 String wait=Pipeline.blocker(c,r.id);
@@ -271,25 +316,31 @@ final class Transcriber {
                     String reason=describe(e);
                     // «Volver a transcribir» que se rinde: vuelve la versión anterior en vez de pedir Reintentar.
                     boolean restoring=!o.again&&Retranscribe.hasPrevious(c,r.id)&&!Transcript.exists(c,r.id);
-                    FilesStore.update(c,r.id,s->{s.put("attempts",o.attempts).put("retries",s.optInt("retries")+1).put("localCuts",o.cuts).put("requested",o.again).put("failed",!o.again).put("lastError",reason);if(o.cut)s.put("cutSince",o.cutSince);});
+                    FilesStore.update(c,r.id,s->{s.put("attempts",o.attempts).put("retries",s.optInt("retries")+1).put("localCuts",o.cuts).put("requested",o.again).put("failed",!o.again).put("lastError",reason);if(o.cut)s.put("cutSince",o.cutSince);
+                        // 0.9.1: de qué tipo fue el último error (el detalle explica distinto una caída del servicio) y cuándo reintentar.
+                        s.put("lastErrorKind",o.server?"server":"other");
+                        if(o.server){s.put("serverSince",o.serverSince).put("serverTries",o.serverTries).put("serverBlocks",o.serverBlocks);if(o.again)s.put("serverRetryAt",o.retryAt);else s.remove("serverRetryAt");}
+                        else s.remove("serverRetryAt");});
                     boolean hint=o.local&&!Battery.unrestricted(c);
                     // Un corte del teléfono que ya se repitió demasiado pasa a contar como intento: se dice, para que se entienda el cambio.
                     String why=o.cut&&!o.local?Lang.str(c,R.string.eng_reason_repeated,reason):reason;
                     Pipeline.log(c,r.id,o.local?Lang.str(c,hint?R.string.eng_log_phone_cut_hint:R.string.eng_log_phone_cut,reason)
+                        :o.server&&o.again?Lang.str(c,R.string.eng_log_server_retry,why,clock(o.retryAt))
+                        :o.server&&!restoring?Lang.str(c,R.string.eng_log_server_gave_up,why,Ui.humanDuration(Math.max(60_000L,now-o.serverSince)))
                         :Lang.str(c,o.again?R.string.eng_log_attempt_failed_retry:restoring?R.string.eng_log_attempt_failed:R.string.eng_log_attempt_failed_button,o.attempts,ATTEMPTS,why));
                     // Cuánto lleva pedida y en qué paso quedó el envío: con eso se diagnostica un caso «bloqueado» desde el informe.
                     long waited=Math.max(0,now-st.optLong("queuedAt",now));
-                    Diagnostics.event("job_retry",r.id,"count",o.attempts,"error_class",e.getClass().getSimpleName(),"reason",HttpApi.safeReason(e),"net",Pipeline.networkName(c),
+                    Diagnostics.event("job_retry",r.id,"count",o.attempts,"server",o.server?o.serverTries:0,"retry_ms",o.server&&o.again?o.retryAt-now:0,"error_class",e.getClass().getSimpleName(),"reason",HttpApi.safeReason(e),"net",Pipeline.networkName(c),
                         "local",o.local,"display",Battery.screenOn(c)?"on":"off","idle",Battery.idle(c),"battery",Battery.unrestricted(c)?"unrestricted":"optimized","stage",failedStage,"elapsed_ms",waited);
                     if(restoring)keepPrevious(r);
                     else if(!o.again){
                         // Se rindió: además de la bitácora, un aviso. Antes solo quedaba escrito, y con la app cerrada la grabación
                         // parecía seguir «en cola» sin que nadie supiera que esperaba un Reintentar.
-                        attention(r,Lang.str(c,R.string.eng_notif_attention_title),Lang.str(c,R.string.eng_notif_failed_text,ATTEMPTS,reason));
+                        attention(r,Lang.str(c,R.string.eng_notif_attention_title),o.server?Lang.str(c,R.string.eng_notif_server_failed):Lang.str(c,R.string.eng_notif_failed_text,ATTEMPTS,reason));
                         Diagnostics.event("job_failed",r.id,"count",o.attempts,"error_class",e.getClass().getSimpleName(),"reason",HttpApi.safeReason(e),"stage",failedStage,"elapsed_ms",waited);
                     }
                     // Mientras reintenta, la notificación lo dice (antes seguía en «Enviando…» durante las esperas).
-                    else notice(o.local?Lang.str(c,R.string.eng_notif_cut_retry):Lang.str(c,R.string.eng_notif_attempt_retry,o.attempts,ATTEMPTS),true,-1);
+                    else notice(o.local?Lang.str(c,R.string.eng_notif_cut_retry):o.server?Lang.str(c,R.string.eng_notif_server_retry,clock(o.retryAt)):Lang.str(c,R.string.eng_notif_attempt_retry,o.attempts,ATTEMPTS),true,-1);
                 }
                 finally{currentId=null;}
             }
@@ -380,6 +431,8 @@ final class Transcriber {
      * Una sola regla, la de Models.resume (0.8.0, tercera ronda: antes el motor tenía la suya, más amplia, que también
      * retenía el modelo anterior cuando era la PERSONA quien había cambiado a «Automático»; ahí manda su elección).
      */
+    /** El mismo proveedor y clave con otro modelo de OpenRouter (0.9.1: «Probar con otro modelo»). */
+    static ProviderConfig modelConfig(ProviderConfig base,String model,boolean speakers)throws Exception{return new ProviderConfig("openrouter",Models.BASE,model,base.key,speakers&&Models.recipe(model).diarizes);}
     private ProviderConfig keepAutoModel(Recording r,Settings settings,ProviderConfig config,JSONObject st,boolean wantSpeakers){
         try{
             if(!"openrouter".equals(config.provider))return config;
@@ -398,17 +451,23 @@ final class Transcriber {
         if(!Transcript.exists(c,r.id)){
             ProviderConfig resolved=settings.config(wantSpeakers);
             if(resolved.key.isEmpty())throw new HttpApi.UserAction(Lang.str(c,R.string.eng_err_add_key));
-            ProviderConfig config=keepAutoModel(r,settings,resolved,initial,wantSpeakers);
+            // 0.9.1: «Probar con otro modelo» (Pipeline.request con fallback): lo que falta se envía con ese modelo (config), pero
+            // el plan —tamaño de los bloques, cortes y perfil— sigue siendo el del modelo con que empezó (plan): así las partes
+            // ya listas (y pagadas) no se descartan. Con un modelo así elegido, «Automático» no decide nada (keepAutoModel).
+            String fallback="openrouter".equals(resolved.provider)?initial.optString("fallbackModel",""):"";
+            ProviderConfig chosen=fallback.isEmpty()?keepAutoModel(r,settings,resolved,initial,wantSpeakers):resolved;
+            ProviderConfig plan=fallback.isEmpty()?chosen:modelConfig(chosen,initial.optString("fallbackFrom",fallback),wantSpeakers);
+            ProviderConfig config=fallback.isEmpty()?chosen:modelConfig(chosen,fallback,wantSpeakers);
             // OpenRouter (0.8.0): el tamaño de los bloques sale de la receta del modelo y no del peso del m4a. La mitad tras
             // un 413 vale solo para el modelo que lo respondió.
-            boolean router=config.provider.equals("openrouter"),half=router&&config.model.equals(initial.optString("orHalf"));Models.Recipe recipe=router?Models.recipe(config.model):null;
+            boolean router=config.provider.equals("openrouter"),half=router&&plan.model.equals(initial.optString("orHalf"));Models.Recipe recipe=router?Models.recipe(plan.model):null;
             long bytes=r.audio(c).length(),audioMs=r.duration>0||!(config.speakers||router)?r.duration:AudioConvert.duration(r.audio(c));
             // «Separar voces sin cortar el audio»: un solo envío, sin uniones donde las voces se crucen (fits: cabría en uno).
-            boolean fits=mode==Retranscribe.Mode.SINGLE&&config.speakers&&(router?Retranscribe.fitsSingle(recipe,audioMs):Retranscribe.fitsSingle(audioMs,bytes)),single=fits&&!half;
+            boolean fits=mode==Retranscribe.Mode.SINGLE&&plan.speakers&&(router?Retranscribe.fitsSingle(recipe,audioMs):Retranscribe.fitsSingle(audioMs,bytes)),single=fits&&!half;
             // Tarea de fondo: un envío único que no alcanza a volver antes del corte de Android se deja al primer plano.
             if(single&&budgetMs>0&&sendEstimate(config.provider,audioMs)>JOB_SEND_LIMIT_MS)throw new NeedsForeground(Lang.str(c,R.string.eng_what_single));
-            long blockMax=router?orBlockMax(recipe,config.speakers):0;
-            long target=single?audioMs:router?orTarget(audioMs,blockMax,half,fits):config.speakers?speakerBlockMs(audioMs,bytes):BLOCK_TEXT_MS;
+            long blockMax=router?orBlockMax(recipe,plan.speakers):0;
+            long target=single?audioMs:router?orTarget(audioMs,blockMax,half,fits):plan.speakers?speakerBlockMs(audioMs,bytes):BLOCK_TEXT_MS;
             // Hasta qué duración el audio va entero. Con OpenRouter partido a la mitad, el propio bloque es el tope.
             long wholeMax=router?Math.min(AudioParts.SINGLE_MAX_MS,half?target:blockMax):AudioParts.SINGLE_MAX_MS;
             // Voces conocidas («Mi voz» y las demás guardadas) van en todos los bloques (también el primero), la tuya primero y
@@ -423,7 +482,7 @@ final class Transcriber {
             int attempt=initial.optInt("attempt",0);
             // Con OpenRouter el perfil lleva además el formato del audio y el tope de bloque: así no se mezclan puntos de
             // control hechos con otro formato o con otro tamaño. Para los demás proveedores queda igual que antes.
-            String profile=profile(config.fingerprint()+settings.language()+"|v3|"+target+"|"+(saved.isEmpty()?"none":Voices.fingerprint(c))
+            String profile=profile(plan.fingerprint()+settings.language()+"|v3|"+target+"|"+(saved.isEmpty()?"none":Voices.fingerprint(c))
                 +(router?"|"+OpenRouterClient.PROFILE+"|"+blockMax+(half?"|half":""):""),attempt,mode);
             if(!profile.equals(FilesStore.state(c,r.id).optString("profile"))){
                 Retranscribe.clearCheckpoints(c,r.id);
@@ -501,7 +560,8 @@ final class Transcriber {
         if(FilesStore.state(c,r.id).optBoolean("notePending"))note(r);
         check(r);long queued=FilesStore.state(c,r.id).optLong("queuedAt",start);long total=System.currentTimeMillis()-queued;
         boolean again=FilesStore.state(c,r.id).has("retranscribe");
-        FilesStore.update(c,r.id,s->{s.put("requested",false).put("failed",false).put("attempts",0).put("doneIn",total).put("upSent",0).put("upTotal",0).put("doneAudioMs",r.duration).put("doneAt",System.currentTimeMillis());s.remove("prepPct");});
+        OpenRouterClient.forget(c,r.id);
+        FilesStore.update(c,r.id,s->{s.remove("serverRetryAt");s.remove("serverSince");s.remove("serverTries");s.remove("serverBlocks");s.remove("lastErrorKind");s.put("requested",false).put("failed",false).put("attempts",0).put("doneIn",total).put("upSent",0).put("upTotal",0).put("doneAudioMs",r.duration).put("doneAt",System.currentTimeMillis());s.remove("prepPct");});
         Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_done,Lang.str(c,R.string.eng_frag_total,Recording.time(total))));
         if(again)Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_new_version_ready));
         LocalStorage.enqueue(c,r.id);done(r,again);Diagnostics.event("job_complete",r.id,"elapsed_ms",System.currentTimeMillis()-start,"mode",mode==null?"":mode.name());

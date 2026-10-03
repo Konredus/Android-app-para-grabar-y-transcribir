@@ -19,6 +19,7 @@ final class EngineChecks {
     private static JSONObject seg(String who,double a,double b,String text)throws JSONException{return new JSONObject().put("speaker",who).put("start",a).put("end",b).put("text",text);}
 
     static void run(Context c,Recording r)throws Exception{
+        outage(c,r);
         availability();
         sizing();
         corrections();
@@ -131,6 +132,49 @@ final class EngineChecks {
 
     // ---------- 0.8.0, revisión r4: lo que se dice mientras se espera ----------
     private static String title(Notification n){return String.valueOf(n.extras.getCharSequence(Notification.EXTRA_TITLE));}
+    // ---------- 0.9.1: caídas del servicio (502, 429…) ----------
+    static void outage(Context c,Recording r)throws Exception{
+        long now=1_800_000_000_000L;
+        JSONObject st=new JSONObject().put("attempts",2).put("blocksDone",1);
+        HttpApi.ServerBusy busy=new HttpApi.ServerBusy("OpenRouter no está disponible temporalmente (502).",502,0);
+        Transcriber.Outcome o=Transcriber.outcome(st,busy,now);
+        check(o.server&&o.again&&o.attempts==2&&o.serverTries==1&&o.serverSince==now&&o.retryAt==now+30_000,"A first outage should wait 30 s without spending an attempt");
+        st.put("serverSince",o.serverSince).put("serverTries",o.serverTries).put("serverBlocks",o.serverBlocks);
+        // La caída puede venir envuelta en otra excepción; la espera que pidió el servidor manda si es mayor.
+        o=Transcriber.outcome(st,new java.io.IOException("x",new HttpApi.ServerBusy("429",429,120_000)),now+60_000);
+        check(o.server&&o.serverTries==2&&o.retryAt==now+60_000+120_000,"Retry-After not honored, or the wrapped outage not seen");
+        // Pasada la ventana desde la primera caída, se rinde (sin gastar intentos comunes).
+        st.put("serverTries",5);o=Transcriber.outcome(st,busy,now+Transcriber.SERVER_WINDOW_MS+1);
+        check(o.server&&!o.again&&o.attempts==2,"Outage window not enforced");
+        // Una parte que terminó desde la última caída vuelve a empezar la cuenta.
+        st.put("blocksDone",2);o=Transcriber.outcome(st,busy,now+Transcriber.SERVER_WINDOW_MS+1);
+        check(o.server&&o.again&&o.serverTries==1,"A finished part should restart the outage window");
+        st.put("blocksDone",1).put("serverTries",Transcriber.SERVER_TRIES-1);o=Transcriber.outcome(st,busy,now+60_000);
+        check(!o.again,"Outage retries not capped");
+        // Un error común sigue gastando uno de los 5 intentos.
+        o=Transcriber.outcome(st,new java.io.IOException("x"),now);check(!o.server&&o.attempts==3,"Normal errors should still count attempts");
+        check(Transcriber.serverWait(1,0)==30_000&&Transcriber.serverWait(3,0)==120_000&&Transcriber.serverWait(99,0)==900_000&&Transcriber.serverWait(1,600_000)==600_000,"Outage waits wrong");
+        // HttpApi.require: 408, 429 y 5xx son caídas; 401 no.
+        for(int code:new int[]{408,429,500,502,503}){Exception e=null;try{HttpApi.require(new HttpApi.Response(code,"{}",null),HttpApi.OPENROUTER);}catch(Exception x){e=x;}check(e instanceof HttpApi.ServerBusy&&((HttpApi.ServerBusy)e).code==code,"HTTP "+code+" should be ServerBusy: "+e);}
+        Exception e=null;try{HttpApi.require(new HttpApi.Response(401,"{}",null),HttpApi.OPENROUTER);}catch(Exception x){e=x;}check(e instanceof HttpApi.UserAction,"401 should not be an outage: "+e);
+        // Una grabación que espera: Pipeline.blocker la nombra, el botón lo dice y no se le envía nada antes de la hora.
+        JSONObject before=FilesStore.state(c,r.id);boolean requested=before.optBoolean("requested"),mobileOk=before.has("mobileOk");
+        try{
+            long at=System.currentTimeMillis()+200_000;
+            // mobileOk: que «Solo con Wi-Fi» del emulador (que anda con datos móviles) no tape la espera.
+            FilesStore.update(c,r.id,s->s.put("requested",true).put("mobileOk",true).put("serverRetryAt",at));
+            String server=Pipeline.serverWait(at),blocker=Pipeline.blocker(c,r.id);
+            check(Pipeline.isServerWait(server)&&server.contains(Transcriber.clock(at)),"Outage wait text wrong: "+server);
+            // Las condiciones del teléfono (internet, cargador, batería) van primero; sin ninguna, manda la caída.
+            check(blocker!=null&&(Pipeline.isServerWait(blocker)||Pipeline.blocker(c,true)!=null),"Outage wait not shown as the blocker: "+blocker);
+            blocker=server;
+            check(Lang.str(c,R.string.eng_btn_wait_server).equals(StatusText.working(false,false,blocker)),"The button should say OpenRouter is having issues");
+            check(StatusText.queuedLine(blocker).startsWith(Lang.str(c,R.string.eng_queued_wait,"")),"Library line wrong: "+StatusText.queuedLine(blocker));
+            long d=Transcriber.serverDelay(c,java.util.Collections.singletonList(r.id),System.currentTimeMillis());check(d>190_000&&d<=200_000,"serverDelay wrong: "+d);
+            check(Transcriber.serverWaiting(FilesStore.state(c,r.id),System.currentTimeMillis()),"serverWaiting should be true");
+            check(StatusText.paused(Lang.str(c,R.string.eng_notif_server_retry,Transcriber.clock(at))),"The outage notification should read as a pause");
+        }finally{FilesStore.update(c,r.id,s->{s.remove("serverRetryAt");s.put("requested",requested);if(!mobileOk)s.remove("mobileOk");});}
+    }
     static void waits(Context c){
         // Titular al pedir: lo que espera, o su turno detrás de la que se transcribe (como el aviso y el botón).
         check(Pipeline.queuedLine(null,false).equals("En cola · empezando")&&Pipeline.queuedLine(null,true).equals("En cola · empieza cuando termine la transcripción en curso")

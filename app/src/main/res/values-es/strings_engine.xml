@@ -307,4 +307,13 @@
     <string name="eng_label_demo">Ejemplo · texto de demostración</string>
     <string name="eng_label_transcribed">Transcripción disponible</string>
     <string name="eng_label_local">Solo en este teléfono</string>
+    <!-- 0.9.1: caídas de OpenRouter (502, 429…): se reintenta sola por más tiempo, sin gastar los 5 intentos. -->
+    <string name="eng_wait_server">esperando que OpenRouter se recupere (se reintenta sola a las %1$s)</string>
+    <string name="eng_btn_wait_server">OpenRouter con problemas…</string>
+    <string name="eng_log_server_retry">%1$s · OpenRouter tiene problemas: se reintenta sola a las %2$s (las partes ya listas no se vuelven a enviar)</string>
+    <string name="eng_log_server_gave_up">%1$s · OpenRouter siguió con problemas durante %2$s: toca «Reintentar» más tarde o «Probar con otro modelo»</string>
+    <string name="eng_notif_server_retry">OpenRouter con problemas · se reintenta a las %1$s</string>
+    <string name="eng_notif_server_failed">OpenRouter sigue con problemas. Lo ya transcrito quedó guardado: abre la grabación para reintentar o probar con otro modelo.</string>
+    <string name="eng_log_or_prepared_reused">El audio de esta parte ya estaba preparado del intento anterior · se envía sin prepararlo de nuevo</string>
+    <string name="eng_log_fallback_model">Probar con otro modelo: lo que falta se envía con %1$s y lo ya listo se conserva</string>
 </resources>

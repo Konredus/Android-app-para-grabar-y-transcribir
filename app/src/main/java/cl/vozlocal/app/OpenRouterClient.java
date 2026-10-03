@@ -87,7 +87,7 @@ final class OpenRouterClient implements TranscribeClient {
         // Solo se piden voces si el motor las pidió y la receta del modelo sabe cómo.
         boolean voices=config.speakers&&recipe.diarizes;
         File dir=new File(c.getCacheDir(),"openrouter");dir.mkdirs();sweep(dir);
-        String tag=UUID.randomUUID().toString();List<File> temps=new ArrayList<>();
+        String tag=UUID.randomUUID().toString();List<File> temps=new ArrayList<>();Kept kept=null;
         // plain: modo simple (json, sin voces ni tiempos), porque el modelo ya rechazó el formato con tiempos en esta sesión
         // o lo rechaza en este envío. wav: el proveedor no acepta el FLAC. before: costo de envíos cobrados que se descartaron.
         boolean plain=PLAIN.contains(config.model),wav=NO_FLAC.contains(config.model),flacRefused=false;double before=0;
@@ -98,14 +98,21 @@ final class OpenRouterClient implements TranscribeClient {
                 if(ref==null||ref.length<2)continue;File clip=new File(dir,tag+"-voz"+anchors.size()+".m4a");
                 if(decode(ref[1],clip)){refs.add(ref);anchors.add(clip);temps.add(clip);}
             }
-            OrAudio.Built built=null;
+            // 0.9.1: si un intento anterior de esta misma parte ya preparó su audio (y falló por el servidor), se reutiliza.
+            kept=Kept.of(dir,http.jobId,audio,refs,wav);
+            OrAudio.Built built=kept==null?null:kept.load();
+            if(built!=null){if(built.leadMs<=0)anchors=Collections.emptyList();log.line(Lang.str(c,R.string.eng_log_or_prepared_reused));}
             // Cada vuelta cambia algo una sola vez (WAV, modo simple o sin anclas): a lo más cuatro envíos.
             for(int round=0;round<4;round++){
                 http.check();
                 // 2. Audio («Preparando audio»): se arma una vez; de nuevo solo si hay que quitarle las anclas o pasarlo a WAV.
+                // El primer armado queda guardado (Kept) hasta que la parte se transcriba; un rearmado va a un temporal.
                 if(built==null||(built.leadMs>0&&anchors.isEmpty())){
-                    if(built!=null)built.file.delete();
-                    built=prepare(audio,anchors,new File(dir,tag+"-"+round),wav);temps.add(built.file);
+                    if(built!=null&&(kept==null||!kept.owns(built.file)))built.file.delete();
+                    boolean keep=kept!=null&&round==0&&built==null;
+                    if(!keep&&kept!=null){kept.drop();kept=null;}
+                    built=prepare(audio,anchors,keep?kept.base():new File(dir,tag+"-"+round),wav);
+                    if(keep)kept.save(built);else temps.add(built.file);
                     if(built.leadMs<=0)anchors=Collections.emptyList();
                 }
                 boolean ask=voices&&!plain,verbose=!plain&&(recipe.verbose||ask);
@@ -134,7 +141,7 @@ final class OpenRouterClient implements TranscribeClient {
                     Diagnostics.event("or_fallback",http.jobId,"provider","openrouter","model",config.model,"reason","format","http",400);
                     continue;
                 }
-                if(code!=response.code){HttpApi.Response inner=new HttpApi.Response(code,response.text,null,response.requestId);inner.jobId=response.jobId;response=inner;}
+                if(code!=response.code){HttpApi.Response inner=new HttpApi.Response(code,response.text,null,response.requestId);inner.jobId=response.jobId;inner.retryAfterMs=response.retryAfterMs;response=inner;}
                 HttpApi.require(response,HttpApi.OPENROUTER);
                 // Una respuesta sin texto, tramos ni palabras no es «silencio» (eso llega como texto vacío): es un formato que
                 // la app no conoce. No se guarda como transcripción vacía ni se reintenta (cada reintento se cobraría): se
@@ -164,6 +171,7 @@ final class OpenRouterClient implements TranscribeClient {
                 out.put("usage",usage).put("_bytes",size[0]).put("_format",built.format).put("_timed",parsed.timed);
                 Diagnostics.event("or_transcribed",http.jobId,"provider","openrouter","model",config.model,"format",built.format,"bytes",size[0],"duration_ms",built.durationMs,
                     "anchors",out.optInt("_anchors"),"matched",out.optInt("_matched"),"cost",usage.optDouble("cost",-1),"count",out.getJSONArray("segments").length());
+                if(kept!=null)kept.drop();
                 return out;
             }
             throw new IOException(Lang.str(c,R.string.eng_err_or_unusable));
@@ -171,6 +179,8 @@ final class OpenRouterClient implements TranscribeClient {
             // Un envío cobrado y descartado (p. ej. sin tiempos) cuyo reenvío falló no queda en ninguna respuesta: el motor
             // lo suma igual al costo real, para no mostrar menos de lo que se cobró.
             if(before>0){HttpApi.Billed billed=http.onBilled;if(billed!=null)billed.cost(before);}
+            // El audio preparado queda para el próximo intento solo si el problema fue de red o del servidor.
+            if(kept!=null&&!(e instanceof IOException))kept.drop();
             throw e;
         }finally{
             // 5. Temporales: el audio convertido y las muestras no quedan en el teléfono.
@@ -217,6 +227,60 @@ final class OpenRouterClient implements TranscribeClient {
         }
     }
     private OrAudio.Built make(File audio,List<File> anchors,File outBase,boolean wav)throws Exception{return wav?builder.wav(audio,anchors,outBase,http):builder.build(audio,anchors,outBase,http);}
+    /**
+     * 0.9.1: el audio ya preparado de una parte, guardado mientras la parte no se transcriba. Preparar una parte de 6 min
+     * tarda de 20 s a más de 1 min (bastante más con la pantalla apagada), y cuando OpenRouter falla (502, 429) se repetía
+     * en cada reintento: el diagnóstico del 2026-10-03 muestra la misma parte preparada cinco veces (00:17, 00:24, 00:32,
+     * 00:59, 01:08). La clave es la grabación, el archivo de la parte (ruta, tamaño, fecha), las muestras de voz y el
+     * formato; no el modelo: el mismo audio sirve si se prueba con otro. Queda en el caché privado de la app y se borra al
+     * transcribirse la parte, ante un error que reintentar no arregla, al cancelar o eliminar la grabación (forget) o a
+     * las 3 h (sweep).
+     */
+    static final class Kept{
+        private final File dir;private final String name,key;
+        private Kept(File dir,String name,String key){this.dir=dir;this.name=name;this.key=key;}
+        /** null si no hay con qué identificar la parte (sin grabación o sin archivo). */
+        static Kept of(File dir,String jobId,File audio,List<String[]> refs,boolean wav){
+            if(jobId==null||!jobId.matches("[a-f0-9-]{36}")||audio==null||!audio.isFile())return null;
+            StringBuilder k=new StringBuilder(audio.getAbsolutePath()).append('|').append(audio.length()).append('|').append(audio.lastModified()).append('|').append(wav?"wav":"flac");
+            if(refs!=null)for(String[] ref:refs)k.append('|').append(ref.length>0?ref[0]:"").append(':').append(digest(ref.length>1?ref[1]:""));
+            String key=k.toString();
+            return new Kept(dir,"keep-"+jobId+"-"+digest(key).substring(0,16),key);
+        }
+        /** Ruta de salida sin extensión (OrAudio agrega ".flac" o ".wav"). */
+        File base(){return new File(dir,name);}
+        private File meta(){return new File(dir,name+".json");}
+        boolean owns(File f){return f!=null&&f.getName().startsWith(name);}
+        /** El audio guardado de esta parte, o null si no hay (o no coincide). */
+        OrAudio.Built load(){
+            try{
+                File m=meta();if(!m.isFile())return null;
+                JSONObject j=new JSONObject(new String(java.nio.file.Files.readAllBytes(m.toPath()),StandardCharsets.UTF_8));
+                if(!key.equals(j.optString("key")))return null;
+                File f=new File(dir,j.optString("file"));if(!owns(f)||!f.isFile()||f.length()==0)return null;
+                JSONArray a=j.optJSONArray("anchors");long[][] anchors=new long[a==null?0:a.length()][];
+                for(int i=0;i<anchors.length;i++){JSONArray p=a.getJSONArray(i);anchors[i]=new long[]{p.getLong(0),p.getLong(1)};}
+                return new OrAudio.Built(f,j.getString("format"),j.getLong("leadMs"),anchors,j.getLong("durationMs"));
+            }catch(Exception e){drop();return null;}
+        }
+        void save(OrAudio.Built b){
+            try{
+                JSONArray a=new JSONArray();if(b.anchors!=null)for(long[] p:b.anchors)a.put(new JSONArray().put(p[0]).put(p[1]));
+                JSONObject j=new JSONObject().put("key",key).put("file",b.file.getName()).put("format",b.format).put("leadMs",b.leadMs).put("durationMs",b.durationMs).put("anchors",a);
+                java.nio.file.Files.write(meta().toPath(),j.toString().getBytes(StandardCharsets.UTF_8));
+            }catch(Exception e){drop();}
+        }
+        void drop(){File[] all=dir.listFiles((d,n)->n.startsWith(name));if(all!=null)for(File f:all)f.delete();}
+        private static String digest(String s){
+            try{byte[] h=java.security.MessageDigest.getInstance("SHA-1").digest(s.getBytes(StandardCharsets.UTF_8));StringBuilder b=new StringBuilder();for(byte x:h)b.append(String.format(Locale.ROOT,"%02x",x));return b.toString();}
+            catch(Exception e){return Integer.toHexString(s.hashCode());}
+        }
+    }
+    /** Borra el audio preparado que quedó guardado de una grabación (al cancelar, eliminar o terminar su transcripción). */
+    static void forget(Context c,String id){
+        if(id==null)return;File dir=new File(c.getCacheDir(),"openrouter");File[] all=dir.listFiles((d,n)->n.startsWith("keep-"+id+"-"));
+        if(all!=null)for(File f:all)f.delete();
+    }
     /** Carpeta de trabajo: lo que quedó de un envío que Android cortó a la mitad se borra en la siguiente pasada. */
     private static void sweep(File dir){File[] old=dir.listFiles();long limit=System.currentTimeMillis()-3*3600_000L;if(old!=null)for(File f:old)if(f.lastModified()<limit)f.delete();}
     /** «data:audio/mp4;base64,…» → archivo. false si no es una data URL o no se pudo escribir. */

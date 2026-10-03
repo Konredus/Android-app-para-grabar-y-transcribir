@@ -34,12 +34,21 @@ final class Pipeline {
      * byUser: lo pidió la persona con un toque («Transcribir», «Reintentar», «Volver a transcribir»); si además la app
      * está visible, en Android 14+ va como transferencia iniciada por el usuario. false: el trabajo automático al guardar.
      */
-    static void request(Context c,String id,boolean speakers,boolean byUser)throws Exception{
+    static void request(Context c,String id,boolean speakers,boolean byUser)throws Exception{request(c,id,speakers,byUser,null);}
+    /**
+     * fallback (0.9.1, «Probar con otro modelo» tras una caída del servicio): lo que falta se envía con ese modelo y las
+     * partes ya listas se conservan (Transcriber planifica con el modelo con que empezó, "fallbackFrom"). null: el de siempre.
+     */
+    static void request(Context c,String id,boolean speakers,boolean byUser,String fallback)throws Exception{
         if(FilesStore.state(c,id).optBoolean("demo"))throw new HttpApi.UserAction(Lang.str(c,R.string.eng_err_demo));
         if(Transcript.exists(c,id)){LocalStorage.enqueue(c,id);return;}
+        JSONObject previous=FilesStore.state(c,id);String started=previous.optString("fallbackFrom","");if(started.isEmpty())started=previous.optString("model","");
+        final String from=started.isEmpty()?(fallback==null?"":fallback):started;
         // "mobileOk" vale para un pedido: un «Reintentar» o «Volver a transcribir» vuelve a respetar «Solo con Wi-Fi».
-        FilesStore.update(c,id,s -> {s.put("requested",true).put("failed",false).put("attempts",0).put("retries",0).put("localCuts",0).put("queuedAt",System.currentTimeMillis()).put("log",new JSONArray()).put("upSent",0).put("upTotal",0).put("speakers",speakers).put("liveChars",0);s.remove("lastError");s.remove("mobileOk");s.remove("prepPct");});
+        FilesStore.update(c,id,s -> {s.put("requested",true).put("failed",false).put("attempts",0).put("retries",0).put("localCuts",0).put("queuedAt",System.currentTimeMillis()).put("log",new JSONArray()).put("upSent",0).put("upTotal",0).put("speakers",speakers).put("liveChars",0);s.remove("serverRetryAt");s.remove("serverSince");s.remove("serverTries");s.remove("serverBlocks");s.remove("lastErrorKind");
+            if(fallback!=null)s.put("fallbackModel",fallback).put("fallbackFrom",from);else{s.remove("fallbackModel");s.remove("fallbackFrom");}s.remove("lastError");s.remove("mobileOk");s.remove("prepPct");});
         Diagnostics.event("job_queued",id);
+        if(fallback!=null){log(c,id,Lang.str(c,R.string.eng_log_fallback_model,Models.name(c,fallback)));Diagnostics.event("fallback_model",id,"model",fallback,"from",from);}
         // «Volver a transcribir»: la bitácora dice qué alternativa se usó (para aprender cuál funciona mejor). Cuántas
         // personas, no quiénes: la bitácora viaja (sin títulos ni nombres) en el informe de soporte.
         JSONObject state=FilesStore.state(c,id);Retranscribe.Mode again=Retranscribe.mode(state);
@@ -69,17 +78,21 @@ final class Pipeline {
         if(!pending(c)){if(replace)scheduler.cancel(JOB_ID);return;}
         if(!replace && scheduler.getPendingJob(JOB_ID)!=null)return;
         Settings settings=new Settings(c);
-        JobInfo info=jobInfo(c,settings,anyMobileOk(c));
+        JobInfo info=jobInfo(c,settings,anyMobileOk(c),Transcriber.serverDelay(c,TranscribeService.pendingIds(c),System.currentTimeMillis()));
         scheduler.schedule(info);
     }
     /** La tarea de fondo según los ajustes (Wi-Fi, cargador). */
     static JobInfo jobInfo(Context c,Settings settings){return jobInfo(c,settings,false);}
     /** anyNetwork: alguna grabación pedida puede usar datos móviles, así que la tarea no espera Wi-Fi. */
-    static JobInfo jobInfo(Context c,Settings settings,boolean anyNetwork){
-        return new JobInfo.Builder(JOB_ID,new ComponentName(c,PipelineJob.class))
+    static JobInfo jobInfo(Context c,Settings settings,boolean anyNetwork){return jobInfo(c,settings,anyNetwork,0);}
+    /** latencyMs: no correr antes (0.9.1: todo lo pedido espera que el servicio se recupere hasta entonces). */
+    static JobInfo jobInfo(Context c,Settings settings,boolean anyNetwork,long latencyMs){
+        JobInfo.Builder b=new JobInfo.Builder(JOB_ID,new ComponentName(c,PipelineJob.class))
             .setRequiredNetworkType(settings.wifiOnly()&&!anyNetwork?JobInfo.NETWORK_TYPE_UNMETERED:JobInfo.NETWORK_TYPE_ANY)
             .setRequiresCharging(settings.charging()).setRequiresBatteryNotLow(true)
-            .setPersisted(true).setBackoffCriteria(30000,JobInfo.BACKOFF_POLICY_EXPONENTIAL).build();
+            .setPersisted(true).setBackoffCriteria(30000,JobInfo.BACKOFF_POLICY_EXPONENTIAL);
+        if(latencyMs>0)b.setMinimumLatency(latencyMs);
+        return b.build();
     }
 
     // ---------- Por dónde corre el trabajo (0.8.0, tercera ronda) ----------
@@ -256,8 +269,17 @@ final class Pipeline {
      */
     static String blocker(Context c){return blocker(c,anyMobileOk(c));}
     /** Lo mismo para una grabación: con «Usar datos móviles ahora» no espera Wi-Fi. */
-    static String blocker(Context c,String id){return blocker(c,FilesStore.state(c,id).optBoolean("mobileOk"));}
-    private static String blocker(Context c,boolean mobileOk){
+    static String blocker(Context c,String id){
+        JSONObject st=FilesStore.state(c,id);String b=blocker(c,st.optBoolean("mobileOk"));if(b!=null)return b;
+        // 0.9.1: espera que OpenRouter se recupere (Transcriber.outcome): las pantallas lo dicen en vez de «En cola».
+        return Transcriber.serverWaiting(st,System.currentTimeMillis())?serverWait(st.optLong("serverRetryAt")):null;
+    }
+    /** «esperando que OpenRouter se recupere (se reintenta sola a las 16:45)». */
+    static String serverWait(long at){return Lang.str(R.string.eng_wait_server,Transcriber.clock(at));}
+    /** ¿Este motivo de espera es el de una caída del servicio? (en cualquiera de los tres idiomas). */
+    static boolean isServerWait(String blocker){return Lang.startsAny(blocker,R.string.eng_wait_server);}
+    /** Las condiciones del teléfono (internet, Wi-Fi, cargador, batería); mobileOk: se permitieron los datos móviles. */
+    static String blocker(Context c,boolean mobileOk){
         Settings settings=new Settings(c);Network network=network(c);
         if(network==null)return Lang.str(c,R.string.eng_wait_internet);
         if(settings.wifiOnly()&&!mobileOk&&!unmetered(c))return wifiWait();
@@ -365,7 +387,7 @@ final class Pipeline {
     static void cancel(Context c,String id,boolean restorePrevious)throws Exception{cancel(c,id,restorePrevious,Lang.str(c,R.string.eng_log_cancelled));}
     /** line: lo que dice la bitácora («Transcripción cancelada»; «Detenida desde la notificación» si fue desde ahí). */
     static void cancel(Context c,String id,boolean restorePrevious,String line)throws Exception{
-        Diagnostics.event("job_cancelled",id);FilesStore.update(c,id,s -> {s.put("requested",false);s.remove("mobileOk");s.remove("prepPct");});log(c,id,line);AudioParts.clearBlocks(c,id);
+        Diagnostics.event("job_cancelled",id);FilesStore.update(c,id,s -> {s.put("requested",false);s.remove("mobileOk");s.remove("prepPct");s.remove("serverRetryAt");});log(c,id,line);AudioParts.clearBlocks(c,id);OpenRouterClient.forget(c,id);
         // El envío en curso se corta ya, lo haga el servicio en primer plano o la transferencia iniciada por el usuario.
         for(HttpApi active:new HttpApi[]{TranscribeService.current,PipelineJob.current})if(active!=null&&id.equals(active.jobId))active.cancel();
         // También las partes de esta grabación que se están preparando o subiendo, aunque las envíe la tarea de fondo (su

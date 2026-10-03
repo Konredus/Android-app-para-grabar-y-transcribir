@@ -1,5 +1,29 @@
 # Historial de versiones
 
+## 0.9.1 — 2026-10-03 · «Más paciencia cuando OpenRouter falla»
+
+Arreglos del informe de soporte del 2026-10-03. Una grabación se rindió dos veces porque OpenRouter (o el modelo) respondía 502 y 429. Había tres problemas:
+- la app gastaba sus 5 intentos en unos 12 minutos;
+- preparaba el audio de nuevo en cada intento (de 17 s a más de 1 minuto);
+- al final ofrecía «Revisar ajustes», que no servía de nada.
+
+**Reintentos que esperan**
+- Las caídas del servicio (408, 429 y 5xx, `HttpApi.ServerBusy`) ya no gastan los 5 intentos comunes. La app reintenta sola durante hasta una hora desde la primera caída, con un máximo de 20 intentos.
+  - Esperas: 30 s, 1, 2, 5, 10 y 15 min. Si el servidor pide más con `Retry-After`, espera eso, hasta 1 h.
+  - Cada parte que se termina reinicia la cuenta.
+- Mientras espera, la grabación dice «esperando que OpenRouter se recupere (se reintenta sola a las HH:MM)» y el botón dice «OpenRouter con problemas…».
+- Si la espera dura más de 5 minutos, la notificación no queda encendida: Android retoma el trabajo a la hora del reintento.
+
+**Sin preparar el audio dos veces**
+- Tras una caída, el audio ya preparado de cada parte (FLAC o WAV, con las muestras de voz) queda guardado y el reintento lo reutiliza (`OpenRouterClient.Kept`).
+- Se borra cuando la parte se transcribe, al cancelar o ante un error que reintentar no arregla.
+
+**Mensaje claro y «Probar con otro modelo»**
+- Si se rinde por una caída, el detalle dice «OpenRouter tiene problemas»: no es el teléfono ni la clave, y lo ya transcrito queda guardado. Ya no aparece «Revisar ajustes».
+- **«Probar con otro modelo»** termina lo que falta con el modelo elegido. Las partes listas se conservan y no se vuelven a cobrar (`Pipeline.request` con `fallbackModel`).
+  - La lista muestra los modelos que «Automático» podría usar, sin el que falló.
+  - Solo aparecen los que separan voces, si se pidió, y los que aceptan las partes ya cortadas (`Models.fallbacks`).
+
 ## 0.9.0 — 2026-10-02 · «Verbapp en tu idioma»
 
 Preparada para **Google Play** y en **tres idiomas**: inglés, español y portugués de Brasil. El paquete publicado es `cl.verbapp.app` (se instala al lado de la versión anterior); el código sigue en `cl.vozlocal.app`.

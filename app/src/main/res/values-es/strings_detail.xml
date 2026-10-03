@@ -442,4 +442,13 @@
         <item quantity="other">%1$d momentos marcados</item>
     </plurals>
     <string name="marks_range_desc">Tramo seleccionado desde %1$s hasta %2$s. Usa los campos de segundos para ajustarlo con precisión.</string>
+    <!-- 0.9.1: la transcripción se rindió porque OpenRouter (o el modelo) estuvo caído. -->
+    <string name="detail_server_title">OpenRouter tiene problemas</string>
+    <string name="detail_server_body">No es tu teléfono ni tu clave: el servicio de transcripción falló varias veces seguidas. Lo ya transcrito quedó guardado y al reintentar solo se envía lo que falta.</string>
+    <string name="detail_try_other_model">Probar con otro modelo</string>
+    <string name="detail_other_model_title">Probar con otro modelo</string>
+    <string name="detail_other_model_body">Lo que falta se envía con el modelo que elijas. Las partes ya listas se conservan y no se vuelven a cobrar.</string>
+    <string name="detail_other_model_none">Ahora no hay otro modelo que sirva para esta grabación. Reintenta en unos minutos.</string>
+    <string name="detail_other_model_price">%1$s por hora</string>
+    <string name="detail_other_model_started">Lo que falta se envía con %1$s</string>
 </resources>

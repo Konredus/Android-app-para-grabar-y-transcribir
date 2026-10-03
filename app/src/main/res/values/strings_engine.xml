@@ -308,4 +308,13 @@
     <string name="eng_label_demo">Sample · demo text</string>
     <string name="eng_label_transcribed">Transcript available</string>
     <string name="eng_label_local">Only on this phone</string>
+    <!-- 0.9.1: caídas de OpenRouter (502, 429…): se reintenta sola por más tiempo, sin gastar los 5 intentos. -->
+    <string name="eng_wait_server">waiting for OpenRouter to recover (retrying on its own at %1$s)</string>
+    <string name="eng_btn_wait_server">OpenRouter is having issues…</string>
+    <string name="eng_log_server_retry">%1$s · OpenRouter is having issues: retrying on its own at %2$s (finished parts won\'t be sent again)</string>
+    <string name="eng_log_server_gave_up">%1$s · OpenRouter kept failing for %2$s: tap “Retry” later or “Try another model”</string>
+    <string name="eng_notif_server_retry">OpenRouter is having issues · retrying at %1$s</string>
+    <string name="eng_notif_server_failed">OpenRouter is still having issues. What was already transcribed is saved: open the recording to retry or try another model.</string>
+    <string name="eng_log_or_prepared_reused">This part\'s audio was already prepared in the previous attempt · sending it without preparing it again</string>
+    <string name="eng_log_fallback_model">Trying another model: what\'s left goes to %1$s; finished parts are kept</string>
 </resources>
