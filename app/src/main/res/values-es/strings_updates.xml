@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Actualizaciones de Google Play (0.9.2), en español. Ver values/strings_updates.xml. -->
+<resources>
+    <string name="upd_home_available">Hay una versión nueva</string>
+    <string name="upd_home_downloading">Descargando la versión nueva…</string>
+    <string name="upd_home_downloading_pct">Descargando la versión nueva… %1$d %%</string>
+    <string name="upd_home_ready">Versión nueva lista para instalar</string>
+
+    <string name="upd_row_title">Buscar actualizaciones</string>
+    <string name="upd_row_check">Toca para revisar en Google Play</string>
+    <string name="upd_row_checking">Buscando…</string>
+    <string name="upd_row_latest">Tienes la última versión</string>
+    <string name="upd_row_available">Hay una versión nueva · Toca para descargarla</string>
+    <string name="upd_row_downloading">Descargando…</string>
+    <string name="upd_row_downloading_pct">Descargando… %1$d %%</string>
+    <string name="upd_row_ready">Lista · Toca para instalarla</string>
+    <string name="upd_row_not_play">Solo para copias instaladas desde Google Play</string>
+    <string name="upd_row_failed">No se pudo revisar. Toca para intentar de nuevo.</string>
+
+    <string name="upd_toast_downloading">La versión nueva se está descargando</string>
+    <string name="upd_install_title">Instalar la versión nueva</string>
+    <string name="upd_install_body">Verbapp se cierra un momento y vuelve a abrirse ya actualizada.</string>
+    <string name="upd_install_transcribing">La transcripción en curso sigue sola después.</string>
+    <string name="upd_install_busy">Termina primero la grabación o la importación: al instalar, Verbapp se cierra un momento.</string>
+    <string name="upd_install_now">Instalar</string>
+    <string name="upd_later">Ahora no</string>
+
+    <string name="upd_not_play_title">Las actualizaciones llegan por Google Play</string>
+    <string name="upd_not_play_body">Esta copia de Verbapp no se instaló desde Google Play, así que no puede actualizarse sola. Para recibir actualizaciones, instálala desde Google Play.\n\nOjo: primero hay que desinstalar esta copia, y al desinstalarla se borran tus grabaciones. Guarda antes lo que quieras conservar.</string>
+    <string name="upd_open_play">Abrir Google Play</string>
+</resources>

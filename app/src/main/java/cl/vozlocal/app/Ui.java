@@ -477,6 +477,21 @@ final class Ui {
         private static float[] effective(GradientDrawable g){float[] r=g.getCornerRadii();return clamp(r!=null?r:uniform(g.getCornerRadius()),g.getBounds());}
         private static float[] clamp(float[] r,Rect b){float max=Math.min(b.width(),b.height())/2f;for(int k=0;k<8;k++)r[k]=Math.min(r[k],max);return r;}
     }
+    /**
+     * Abre el teclado para este campo apenas su ventana tiene el foco: antes de eso Android ignora el pedido (0.9.2, ver
+     * Sheet.keyboard). No toca el texto ni la selección.
+     */
+    static void showKeyboard(EditText input){
+        Runnable show=()->input.post(()->{
+            if(!input.isAttachedToWindow()||!input.hasFocus())return;
+            if(Build.VERSION.SDK_INT>=30){WindowInsetsController c=input.getWindowInsetsController();if(c!=null)c.show(WindowInsets.Type.ime());}
+            android.view.inputmethod.InputMethodManager imm=input.getContext().getSystemService(android.view.inputmethod.InputMethodManager.class);
+            if(imm!=null)imm.showSoftInput(input,android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+        });
+        if(input.hasWindowFocus()){show.run();return;}
+        input.getViewTreeObserver().addOnWindowFocusChangeListener(new ViewTreeObserver.OnWindowFocusChangeListener(){
+            @Override public void onWindowFocusChanged(boolean focused){if(!focused)return;input.getViewTreeObserver().removeOnWindowFocusChangeListener(this);show.run();}});
+    }
     static void haptic(View v){v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);}
     /**
      * Vibraciones con significado (PROPUESTA #12): cada tipo de momento se siente distinto.

@@ -189,10 +189,14 @@ public class MainActivity extends Screen {
         super.onResume();lastState="";if(search!=null&&search.hasFocus()){search.clearFocus();root.requestFocus();}
         boolean fromWelcome=welcoming&&welcomeLeft;if(fromWelcome)endWelcome();
         handler.post(tick);load();if(!Pipeline.startForeground(this))Pipeline.schedule(this,false);renderChip();renderGreeting();
+        // 0.9.2: ¿hay una versión nueva en Google Play? (Updates espacia estas revisiones; la respuesta redibuja la píldora.)
+        Updates.onChange=updatesChanged;Updates.check(this,false);
         // Novedades de la versión: nunca junto con la bienvenida (ni mientras se abre ni al volver de ella).
         if(!welcoming&&!fromWelcome)try{Novedades.maybeShow(this);}catch(RuntimeException e){Diagnostics.event("novedades_failed",null,"error_class",e.getClass().getSimpleName());}
     }
-    @Override protected void onPause(){handler.removeCallbacks(tick);if(namePlayer!=null)namePlayer.release();if(welcoming)welcomeLeft=true;super.onPause();}
+    @Override protected void onPause(){handler.removeCallbacks(tick);if(namePlayer!=null)namePlayer.release();if(welcoming)welcomeLeft=true;if(Updates.onChange==updatesChanged)Updates.onChange=null;super.onPause();}
+    /** Updates avisa aquí cuando cambia (versión nueva, descarga, lista para instalar). */
+    private final Runnable updatesChanged=()->{if(!isFinishing()&&!isDestroyed())renderChip();};
     @Override protected void onDestroy(){if(namePlayer!=null)namePlayer.release();handler.removeCallbacksAndMessages(null);disk.shutdown();super.onDestroy();}
     @Override protected void onSaveInstanceState(Bundle out){out.putBoolean("library",showLibrary);out.putString("query",query);out.putInt("filter",filter);if(showLibrary)libraryScroll=scroll.getScrollY();else homeScroll=scroll.getScrollY();out.putInt("homeScroll",homeScroll);out.putInt("libraryScroll",libraryScroll);super.onSaveInstanceState(out);}
     @Override protected void onNewIntent(Intent intent){
@@ -450,7 +454,7 @@ public class MainActivity extends Screen {
     }
     /**
      * Estado, con esta prioridad: falta la clave > transcribiendo o en cola > error > clave rechazada > una transcripción
-     * lista sin abrir > todo bien.
+     * lista sin abrir > una versión nueva de la app (0.9.2, Updates) > todo bien.
      * Arriba a la derecha va siempre como un botón redondo (llave, anillo que gira, alerta, documento o ✓); si algo pide
      * atención, además se dice con palabras en la píldora bajo el saludo. Ambos hacen lo mismo que el chip de 0.6.
      * La clave es la de OpenRouter (0.8.0, SPEC-0.8b: solo OpenRouter): sin ella, «Configurar transcripción» abre Ajustes
@@ -458,6 +462,7 @@ public class MainActivity extends Screen {
      */
     private void renderChip(){
         Settings settings=new Settings(this);boolean ready=settings.hasOpenRouterKey();String text,description;int icon;boolean spin=false,quiet=false,alert=false,fresh=false;View.OnClickListener click;
+        String update=Updates.homeText(this);Updates.State updateState=Updates.state;
         if(!ready){text=getString(R.string.home_setup);icon=R.drawable.ic_key;click=v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Configurar transcripción");startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true));};}
         else if(workingCount>0){text=queueText(workingCount,workingRuns?workingTitle:null,workingBlocks,workingDone,workingTitle,workingWait);icon=workingRuns?R.drawable.ic_wave:R.drawable.ic_clock;spin=workingRuns;click=v->{if(workingCount>1){filter=2;section(true);render();}else open(workingId);};}
         else if(failedCount>0){text=failedCount>1?getString(R.string.home_need_attention,failedCount):getString(R.string.home_check_transcription);icon=R.drawable.ic_alert;alert=true;click=v->{if(failedCount>1){filter=4;section(true);render();}else open(failedId);};}
@@ -465,6 +470,9 @@ public class MainActivity extends Screen {
         // clave con la que la próxima transcripción va a fallar. Abre Ajustes directo en la hoja de la clave.
         else if(SettingsActivity.keyRejected(settings)){text=getString(R.string.home_check_key);icon=R.drawable.ic_alert;alert=true;click=v->{Diagnostics.event("ui_action",null,"screen","MainActivity","action","Revisa tu clave");startActivity(new Intent(this,SettingsActivity.class).putExtra("focusKey",true));};}
         else if(reviewId!=null){String id=reviewId;text=getString(R.string.home_review_title,reviewTitle);icon=R.drawable.ic_doc;fresh=true;click=v->open(id);}
+        // 0.9.2: una versión nueva en Google Play, solo si nada más pide atención. Descargando, el anillo gira; lista, el ícono
+        // cambia y tocar ofrece instalarla (Updates.act).
+        else if(update!=null){text=update;icon=updateState==Updates.State.DOWNLOADED?R.drawable.ic_refresh:R.drawable.ic_download;spin=updateState==Updates.State.DOWNLOADING;fresh=!spin;click=v->Updates.act(this);}
         else{text=getString(R.string.home_ready);icon=R.drawable.ic_check;quiet=true;click=v->startActivity(new Intent(this,SettingsActivity.class));}
         description=quiet?getString(R.string.home_ready_spoken):!ready?getString(R.string.home_setup_spoken):text;
         // Botón redondo de la cabecera: el ícono cambia con el estado; el punto marca un error o algo nuevo por revisar.
@@ -667,13 +675,13 @@ public class MainActivity extends Screen {
         Runnable apply=()->{String w=input.getText().toString().trim();markMoment(mark,w.isEmpty()?null:w,at);};
         s.primary(getString(R.string.home_mark),apply).secondary(getString(R.string.common_cancel),null).show();
         input.setOnEditorActionListener((view,action,event)->{if(action==EditorInfo.IME_ACTION_DONE){s.dismiss();apply.run();return true;}return false;});
-        input.requestFocus();if(s.dialog.getWindow()!=null)s.dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        s.keyboard(input);
     }
     private void titleWhileRecording(){
         EditText input=ui.field(getString(R.string.home_title_hint),getString(R.string.home_recording_title));String current=RecorderService.activeTitle;if(current!=null)input.setText(current);input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(120)});
         Sheet s=sheet(getString(R.string.home_recording_title),getString(R.string.home_keeps_recording)).add(input);
         s.primary(getString(R.string.home_save_title),Ui.Style.PRIMARY,()->{String t=input.getText().toString().trim();if(!t.isEmpty())startService(new Intent(this,RecorderService.class).setAction("TITLE").putExtra("title",t));return true;}).secondary(getString(R.string.common_cancel),null).show();
-        input.requestFocus();if(s.dialog.getWindow()!=null)s.dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        s.keyboard(input);
     }
     /**
      * «Nombra esta grabación» (al detener): un mini reproductor con la onda de lo recién grabado, y el nombre ya enfocado
@@ -719,7 +727,7 @@ public class MainActivity extends Screen {
         };
         s.closable(saveTitle).primary(getString(R.string.home_view_recording),()->{saveTitle.run();open(r.id);}).secondary(getString(R.string.home_done),saveTitle).onDismiss(()->{np.release();if(namePlayer==np)namePlayer=null;saveTitle.run();}).show();
         input.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_DONE){s.dismiss();return true;}return false;});
-        input.requestFocus();if(s.dialog.getWindow()!=null)s.dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        s.keyboard(input);
     }
     /** Mini reproductor de «Nombra esta grabación» (▶/❚❚): se libera al cerrar la hoja, al salir de la app y en onDestroy. */
     private final class NamePlayer {

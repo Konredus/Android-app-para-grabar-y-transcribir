@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Atualizações do Google Play (0.9.2), em português do Brasil. Ver values/strings_updates.xml. -->
+<resources>
+    <string name="upd_home_available">Há uma versão nova</string>
+    <string name="upd_home_downloading">Baixando a versão nova…</string>
+    <string name="upd_home_downloading_pct">Baixando a versão nova… %1$d%%</string>
+    <string name="upd_home_ready">Versão nova pronta para instalar</string>
+
+    <string name="upd_row_title">Procurar atualizações</string>
+    <string name="upd_row_check">Toque para verificar no Google Play</string>
+    <string name="upd_row_checking">Procurando…</string>
+    <string name="upd_row_latest">Você tem a versão mais recente</string>
+    <string name="upd_row_available">Há uma versão nova · Toque para baixar</string>
+    <string name="upd_row_downloading">Baixando…</string>
+    <string name="upd_row_downloading_pct">Baixando… %1$d%%</string>
+    <string name="upd_row_ready">Pronta · Toque para instalar</string>
+    <string name="upd_row_not_play">Só para cópias instaladas pelo Google Play</string>
+    <string name="upd_row_failed">Não foi possível verificar. Toque para tentar de novo.</string>
+
+    <string name="upd_toast_downloading">A versão nova está sendo baixada</string>
+    <string name="upd_install_title">Instalar a versão nova</string>
+    <string name="upd_install_body">O Verbapp fecha por um momento e abre de novo já atualizado.</string>
+    <string name="upd_install_transcribing">A transcrição em andamento continua sozinha depois.</string>
+    <string name="upd_install_busy">Termine primeiro a gravação ou a importação: ao instalar, o Verbapp fecha por um momento.</string>
+    <string name="upd_install_now">Instalar</string>
+    <string name="upd_later">Agora não</string>
+
+    <string name="upd_not_play_title">As atualizações chegam pelo Google Play</string>
+    <string name="upd_not_play_body">Esta cópia do Verbapp não foi instalada pelo Google Play, então não pode se atualizar sozinha. Para receber atualizações, instale pelo Google Play.\n\nAtenção: antes é preciso desinstalar esta cópia, e ao desinstalar suas gravações são apagadas. Salve antes o que quiser manter.</string>
+    <string name="upd_open_play">Abrir o Google Play</string>
+</resources>

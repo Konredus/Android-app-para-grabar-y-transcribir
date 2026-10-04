@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.9.2",
+    "date": "2026-10-03",
+    "title": "Te avisa cuando hay versión nueva",
+    "items": [
+      "Aviso de versión nueva: cuando Google Play tiene una actualización de Verbapp, Grabar te lo dice bajo el saludo. Se descarga mientras sigues usando la app y se instala con un toque.",
+      "Buscar actualizaciones: en Ajustes → Ayuda y soporte puedes revisar cuando quieras si hay una versión nueva.",
+      "Funciona si instalaste Verbapp desde Google Play. Si la instalaste a mano, Ajustes te explica cómo pasarte.",
+      "Teclado al tiro: al nombrar una grabación o cambiarle el título, el teclado se abre solo con el nombre ya seleccionado, listo para escribir encima."
+    ]
+  },
+  {
     "version": "0.9.1",
     "date": "2026-10-03",
     "title": "Más paciencia cuando OpenRouter falla",
