@@ -69,7 +69,9 @@ public class SettingsActivity extends Screen {
      * detrás de la lista) y stats (el resumen de «Tus métricas», que lee todas las grabaciones).
      */
     private Settings settings;private final ExecutorService io=Executors.newSingleThreadExecutor(),checks=Executors.newSingleThreadExecutor(),stats=Executors.newSingleThreadExecutor();private HttpApi http;
-    private Ui.Row folderRow,saveRow,batteryRow,voiceRow,verifyRow;
+    private Ui.Row folderRow,saveRow,batteryRow,voiceRow,verifyRow,updateRow;
+    /** Updates avisa aquí cuando cambia (0.9.2): la fila «Buscar actualizaciones» dice en qué va. */
+    private final Runnable updatesChanged=this::paintUpdates;
     private boolean verifying;
     private String batteryValue(){return getString(Battery.unrestricted(this)?R.string.set_battery_unrestricted:R.string.set_battery_optimized);}
     /**
@@ -82,7 +84,11 @@ public class SettingsActivity extends Screen {
         super.onResume();if(batteryRow!=null)batteryRow.setValue(batteryValue());
         if(lastShown!=null&&!lastShown.equals(shown()))render();
         loadMetrics();
+        Updates.onChange=updatesChanged;Updates.check(this,false);paintUpdates();
     }
+    @Override protected void onPause(){if(Updates.onChange==updatesChanged)Updates.onChange=null;super.onPause();}
+    /** La fila «Buscar actualizaciones»: lo que dice Updates, con el color de marca si hay una versión nueva o lista. */
+    private void paintUpdates(){if(updateRow==null||isFinishing())return;updateRow.setSubtitle(Updates.rowText(this));updateRow.subtitle.setTextColor(Updates.news()?p.primary:p.onSurfaceVariant);}
     /** Lo que se mostró en el último render(): sus preferencias, las voces conocidas y la fecha de la lista de modelos. */
     private String lastShown;
     private String shown(){return new java.util.TreeMap<>(settings.prefs.getAll()).toString()+"|"+voiceValue()+"|"+Models.fetchedAt(this);}
@@ -204,6 +210,9 @@ public class SettingsActivity extends Screen {
         page.addView(ui.section(getString(R.string.set_section_help)));LinearLayout help=ui.group();page.addView(help,Ui.fill());
         String version=versionName();
         Ui.Row news=row(R.drawable.ic_info,getString(R.string.set_news),null,version).onClick(v->Novedades.showAll(this));versionPill(news.value);add(help,news);
+        // 0.9.2: versiones nuevas desde Google Play (Updates): tocar revisa, descarga o instala, según en qué va.
+        updateRow=row(R.drawable.ic_download,getString(R.string.upd_row_title),Updates.rowText(this),null);updateRow.subtitle.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        updateRow.onClick(v->Updates.act(this));add(help,updateRow);paintUpdates();
         // 0.8.0: la bienvenida de la primera instalación se puede volver a ver (no cambia claves ni ajustes ya guardados).
         add(help,row(R.drawable.ic_replay,getString(R.string.set_welcome),getString(R.string.set_welcome_sub),null).onClick(v->OnboardingActivity.open(this,true)));
         add(help,row(R.drawable.ic_people,getString(R.string.set_demo),getString(R.string.set_demo_sub),null).onClick(v->startActivity(new Intent(this,RecordingActivity.class).putExtra("demo",true))));
@@ -634,7 +643,7 @@ public class SettingsActivity extends Screen {
             String problem=OnboardingActivity.keyProblem(input.getText().toString());if(problem!=null){input.setError(problem);Ui.haptic(input,Ui.Haptic.REJECT);return false;}
             Consent.ensure(this,()->{if(keep(input,secret,saved))s.dismiss();});return false;})
             .secondary(getString(R.string.common_cancel),null).secure().show();
-        input.requestFocus();if(s.dialog.getWindow()!=null)s.dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        s.keyboard(input);
     }
     /**
      * Guarda lo pegado en la hoja de la clave: true si quedó guardado. Si la clave no sirve (secret lanza

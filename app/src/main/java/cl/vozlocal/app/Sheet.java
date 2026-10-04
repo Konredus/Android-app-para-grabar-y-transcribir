@@ -88,6 +88,16 @@ final class Sheet {
     private static final int DARK_NAV_ICONS_FROM=33;
     Sheet add(View v){body.addView(v,Ui.fill());return this;}
     /**
+     * Después de show(): el campo queda enfocado (con su selección, p. ej. todo el nombre) y el teclado se abre solo.
+     * 0.9.2: pedirlo solo con SOFT_INPUT_STATE_VISIBLE no bastaba en Android 13+ (vivo con Android 16): había que tocar el
+     * campo, y ese toque movía el cursor y deshacía la selección. Ahora se pide cuando la hoja ya tiene el foco
+     * (Ui.showKeyboard).
+     */
+    Sheet keyboard(EditText input){
+        Window w=dialog.getWindow();if(w!=null)w.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        input.requestFocus();Ui.showKeyboard(input);return this;
+    }
+    /**
      * Botón ✕ redondo junto al título (como «Nombra esta grabación» en la referencia). onClose puede ser null.
      * Se ve de 40 dp pero se toca en 48×48 dp (el mínimo de CRITERIOS): el círculo de vidrio va 4 dp hacia adentro.
      */

@@ -238,7 +238,7 @@ final class RecordingActions {
             try{r.save(s);Pipeline.edited(s,r.id);Diagnostics.event("title_edited",r.id);if(changed!=null)changed.run();return true;}
             catch(Exception e){r.title=previous;input.setError(Lang.str(s,R.string.act_title_save_failed));return false;}
         }).secondary(Lang.str(s,R.string.common_cancel),null).show();
-        input.requestFocus();sheet.dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE|android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        sheet.keyboard(input);
     }
     static void shareAudio(Screen s,Recording r){
         Uri uri=AudioProvider.uri(s,r.id+".m4a");

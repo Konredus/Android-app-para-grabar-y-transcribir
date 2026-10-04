@@ -99,6 +99,8 @@ public class RecorderSmokeTest extends Instrumentation {
             ModelsChecks.run(c,r);
             OnboardingChecks.run(c,r);
             MetricsChecks.run(c,r);
+            UpdatesChecks.run(c,activity);
+            KeyboardChecks.run(this,c,r);
             I18nChecks.run(c);
             long longStarted = SystemClock.elapsedRealtime();
             if (longChecks) LongImportChecks.run(c,r);

@@ -1,5 +1,21 @@
 # Historial de versiones
 
+## 0.9.2 — 2026-10-03 · «Te avisa cuando hay versión nueva»
+
+**Aviso de versión nueva** (`Updates`, con la librería oficial de Google `com.google.android.play:app-update` 2.1.0)
+- **Qué hace:** cuando Google Play tiene una versión nueva, Grabar lo dice en la píldora bajo el saludo, solo si nada más pide atención.
+  - Al tocar, Play pide confirmar (con el tamaño) y descarga mientras sigues usando la app.
+  - Cuando termina, aparece «Versión nueva lista para instalar». Verbapp se cierra un momento y vuelve a abrirse actualizada.
+  - No se ofrece instalar mientras grabas o importas. Una transcripción en curso sigue sola después.
+- **Ajustes → Ayuda y soporte → «Buscar actualizaciones»:** revisa cuando quieras y dice en qué va (la última versión, descargando con su %, lista para instalar).
+- **Qué versión ofrece:** la que Play le asigna a cada persona (prueba cerrada o pública), así que nunca avisa de una que Google aún no aprueba. La revisión automática se hace como mucho cada 30 minutos.
+- **Solo con Google Play:** una copia instalada a mano (APK) no puede actualizarse sola. Ajustes lo explica y advierte que desinstalarla borra las grabaciones.
+- Es la primera dependencia de la app. Trae piezas de Google Play services y de AndroidX, y la APK de prueba pasa de ~1,7 MB a ~3 MB.
+
+**El teclado se abre solo**
+- En «Nombra esta grabación», «Cambiar título», el título mientras grabas, «Marcar con una palabra» y pegar la clave, el campo queda listo para escribir con el teclado abierto.
+- Antes, en Android 13+ (el vivo con Android 16) había que tocar el campo, y ese toque deshacía la selección de todo el nombre (`Sheet.keyboard`, `Ui.showKeyboard`).
+
 ## 0.9.1 — 2026-10-03 · «Más paciencia cuando OpenRouter falla»
 
 Arreglos del informe de soporte del 2026-10-03. Una grabación se rindió dos veces porque OpenRouter (o el modelo) respondía 502 y 429. Había tres problemas:
