@@ -384,6 +384,14 @@ public class RecordingActivity extends Screen {
 
     // ---------- Reproductor ----------
     private long total(){return player!=null&&prepared?player.getDuration():recording.duration;}
+    /** Las opciones de «Ruido de fondo» con que se grabó ("recNoise") y se transcribió ("audioClean"), o "" si ninguna. */
+    private String audioUsed(JSONObject st){
+        List<String> used=new ArrayList<>();int clean=st.optInt("audioClean");
+        if(st.optBoolean("recNoise"))used.add(getString(R.string.detail_audio_rec_noise));
+        if((clean&AudioClean.LEVEL)!=0)used.add(getString(R.string.detail_audio_clean_level));
+        if((clean&AudioClean.NOISE)!=0)used.add(getString(R.string.detail_audio_clean_noise));
+        return android.text.TextUtils.join(" · ",used);
+    }
     private void ensurePlayer(){
         if(player!=null||demo)return;
         if(RecorderService.activeId!=null){message(getString(R.string.detail_recording_now),getString(R.string.detail_recording_now_body));return;}
@@ -391,6 +399,8 @@ public class RecordingActivity extends Screen {
             player=new MediaPlayer();AudioAttributes attr=new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build();player.setAudioAttributes(attr);
             focus=new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(attr).setOnAudioFocusChangeListener(c->{if(c<0&&player!=null&&player.isPlaying()){player.pause();setPlaying(false);}}).build();
             player.setDataSource(recording.audio(this).getAbsolutePath());player.prepare();prepared=true;if(scrubber!=null)scrubber.setDuration(player.getDuration());
+            // 0.9.3: «Realzar voces al escuchar» (VoiceBoost): solo lo que se oye; el archivo no cambia.
+            boost=VoiceBoost.attach(this,player.getAudioSessionId());
             player.setOnCompletionListener(mp->{setPlaying(false);if(playUntil>0){playUntil=0;if(tramoEnded!=null)tramoEnded.run();}});
             player.setOnErrorListener((mp,w,e)->{releasePlayer();message(getString(R.string.detail_play_failed),getString(R.string.detail_play_failed_cut));return true;});
             Diagnostics.event("playback_open",id);
@@ -495,7 +505,8 @@ public class RecordingActivity extends Screen {
     private void cycleSpeed(){float[] rates={1f,1.25f,1.5f,2f,0.75f};int i=0;for(int k=0;k<rates.length;k++)if(Math.abs(rates[k]-rate)<0.01f)i=k;rate=rates[(i+1)%rates.length];
         speedChip.setText(speedLabel());speedBox.setContentDescription(getString(R.string.detail_speed_desc,speedLabel()));applySpeed();}
     private void applySpeed(){if(player!=null&&prepared)try{boolean playing=player.isPlaying();player.setPlaybackParams(player.getPlaybackParams().setSpeed(rate));if(!playing&&player.isPlaying())player.pause();}catch(Exception ignored){}}
-    private void releasePlayer(){prepared=false;if(player!=null){player.release();player=null;}if(focus!=null){getSystemService(AudioManager.class).abandonAudioFocusRequest(focus);focus=null;}setPlaying(false);}
+    private VoiceBoost boost;
+    private void releasePlayer(){prepared=false;if(boost!=null){boost.release();boost=null;}if(player!=null){player.release();player=null;}if(focus!=null){getSystemService(AudioManager.class).abandonAudioFocusRequest(focus);focus=null;}setPlaying(false);}
     /** La envolvente guardada se dibuja al tiro; si no existe, se calcula en segundo plano y la onda aparece al terminar. */
     private void loadWave(){
         if(scrubber==null)return;
@@ -754,6 +765,8 @@ public class RecordingActivity extends Screen {
         // De dónde sale el costo: informado por el proveedor (real), del catálogo de OpenRouter o de la tabla pública de OpenAI.
         String priced=real>=0?getString(R.string.detail_cost_reported,RecordingActions.providerName(provider)):total<0?"":"openrouter".equals(provider)?getString(R.string.detail_cost_catalog):getString(R.string.detail_cost_public,Pricing.REVIEWED);
         if(!model.isEmpty()){TextView m=ui.text(getString(R.string.detail_model,model)+(st.optBoolean("speakers")?" · "+getString(R.string.detail_model_voices):"")+(priced.isEmpty()?"":" · "+priced),Type.BODY_SMALL,p.onSurfaceVariant);m.setPadding(0,ui.dp(S2),0,0);grid.addView(m);}
+        // 0.9.3: con qué opciones de «Ruido de fondo» se grabó y se transcribió (para comparar con «Volver a transcribir»).
+        String noiseUsed=audioUsed(st);if(!noiseUsed.isEmpty()){TextView a=ui.text(getString(R.string.detail_audio_used,noiseUsed),Type.BODY_SMALL,p.onSurfaceVariant);a.setPadding(0,ui.dp(S1),0,0);grid.addView(a);}
         if(live)liveState=st;return grid;
     }
     /**

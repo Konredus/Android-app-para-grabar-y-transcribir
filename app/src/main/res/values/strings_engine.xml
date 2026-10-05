@@ -133,7 +133,6 @@
 
     <!-- Nota para tu segundo cerebro -->
     <string name="eng_st_note">Writing the note for your second brain</string>
-    <string name="eng_log_note_ready">Note ready · %1$s</string>
     <string name="eng_log_note_unavailable">The note for your second brain isn\'t available right now · the transcript is ready</string>
     <string name="eng_log_note_failed">Couldn\'t write the note: %1$s · the transcript is ready and you can write the note later</string>
     <string name="eng_note_unavailable">Not available right now</string>
@@ -220,7 +219,7 @@
     <string name="eng_stop_restricted">the app is restricted from running in the background</string>
     <string name="eng_stop_preempt">Android gave priority to another task</string>
     <string name="eng_stop_system">Android needed resources</string>
-    <string name="eng_stop_user">stopped from Android Settings</string>
+    <string name="eng_stop_user">stopped by the phone\'s battery saver or task manager</string>
     <string name="eng_stop_unknown">reason not given by Android</string>
 
     <!-- Errores de la API (HttpApi). Los que empiezan con el nombre del servicio siguen empezando con él en los tres

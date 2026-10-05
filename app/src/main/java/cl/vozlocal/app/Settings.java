@@ -105,6 +105,17 @@ final class Settings {
     /** Recordar si la bitácora quedó abierta (se miraba en cada visita). */
     boolean bitacoraOpen(){return prefs.getBoolean("bitacoraOpen",false);}
     void setBitacoraOpen(boolean open){prefs.edit().putBoolean("bitacoraOpen",open).apply();}
+    // ---------- 0.9.3: Ruido de fondo (todas apagadas por defecto: el usuario las prueba de a una) ----------
+    /** Grabar con el micrófono de las llamadas (VOICE_COMMUNICATION): la reducción de ruido del propio teléfono. */
+    boolean recordNoise(){return prefs.getBoolean("recordNoise",false);}
+    /** Antes de transcribir: pasa-altos y nivelador (AudioClean.LEVEL). */
+    boolean cleanLevel(){return prefs.getBoolean("cleanLevel",false);}
+    /** Antes de transcribir: reductor de ruido (AudioClean.NOISE, experimental). */
+    boolean cleanNoise(){return prefs.getBoolean("cleanNoise",false);}
+    /** Lo que AudioClean le aplica al audio que se envía (0 = nada). */
+    int audioClean(){return (cleanLevel()?AudioClean.LEVEL:0)|(cleanNoise()?AudioClean.NOISE:0);}
+    /** Al reproducir: realzar voces (VoiceBoost). */
+    boolean playBoost(){return prefs.getBoolean("playBoost",false);}
     private void encrypt(String prefixKey,String value)throws Exception{
         value=value.trim();
         if(value.isEmpty()){prefs.edit().remove(prefixKey+"keyEncrypted").remove(prefixKey+"keyIv").commit();return;}

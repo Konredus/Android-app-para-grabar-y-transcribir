@@ -1,5 +1,30 @@
 # Historial de versiones
 
+## 0.9.3 — 2026-10-04 · «Menos ruido, más voz»
+
+**Ruido de fondo** (Ajustes → «Ruido de fondo»; todas apagadas por defecto, para probarlas de a una, pedido del usuario)
+- **Grabar con reducción de ruido del teléfono:** usa el micrófono de las llamadas (`VOICE_COMMUNICATION`), ideal para una persona cerca del teléfono.
+  - Si el teléfono no lo deja preparar, graba con el micrófono normal.
+  - La grabación queda marcada con `recNoise`.
+- **Quitar zumbidos y nivelar el volumen** (`AudioClean.LEVEL`), sobre la copia que se envía a transcribir:
+  - un pasa-altos Butterworth de 4.º orden a 100 Hz baja el zumbido de 50 Hz en 24 dB;
+  - un nivelador lento lleva la voz hacia −20 dBFS (de −6 a +12 dB) y solo se ajusta mientras hay voz.
+- **Reducir el ruido de fondo (experimental)** (`AudioClean.NOISE`): filtro de Wiener por bandas.
+  - Trabaja con una FFT de 512 y la mitad de solape.
+  - El ruido se estima por estadística de mínimos (~1,5 s), con «decision-directed» y un tope de −12 dB.
+- **Las dos limpiezas:**
+  - Trabajan en streaming y no cambian el número de muestras, así que los tiempos y las anclas siguen exactos.
+  - La grabación original nunca se toca.
+  - La limpieza viaja con el trabajo (`HttpApi.audioClean`) y entra en la clave del audio guardado (`Kept`).
+- **Realzar voces al escuchar** (`VoiceBoost`): ecualizador (menos graves, más 1–4,5 kHz) y realce de volumen de 6 dB sobre la sesión del reproductor. Solo cambia lo que se oye.
+- El detalle de cada grabación dice con qué opciones se grabó y se transcribió («Audio: …»). Para comparar, sirve «Volver a transcribir».
+
+**Arreglos del informe del 2026-10-04** (un Xiaomi con Android 16 y la batería optimizada)
+- **Se sigue al tiro tras un corte:** si Android corta la transferencia con una pantalla de Verbapp a la vista, sigue en primer plano (`PipelineJob.resumeNow`, `Screen.visible`). Antes quedó «En cola…» 42 s, hasta volver a Grabar.
+  - No se aplica si la cortó la propia app ni si falta red, cargador, batería o espacio.
+- **Texto del corte:** el código 13 ya no dice «detenida desde Ajustes de Android». Ahora dice que lo cortó el ahorro de batería o el administrador de tareas del teléfono.
+- **«Nota lista» sin repetir:** se escribía dos veces en la bitácora (una con «8 s» y otra con «00:07»), y parecía un segundo intento.
+
 ## 0.9.2 — 2026-10-03 · «Te avisa cuando hay versión nueva»
 
 **Aviso de versión nueva** (`Updates`, con la librería oficial de Google `com.google.android.play:app-update` 2.1.0)

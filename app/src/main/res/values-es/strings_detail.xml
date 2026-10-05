@@ -451,4 +451,9 @@
     <string name="detail_other_model_none">Ahora no hay otro modelo que sirva para esta grabación. Reintenta en unos minutos.</string>
     <string name="detail_other_model_price">%1$s por hora</string>
     <string name="detail_other_model_started">Lo que falta se envía con %1$s</string>
+    <!-- 0.9.3: Ruido de fondo, en los detalles del proceso -->
+    <string name="detail_audio_used">Audio: %1$s</string>
+    <string name="detail_audio_rec_noise">grabado con reducción de ruido del teléfono</string>
+    <string name="detail_audio_clean_level">sin zumbidos y con volumen nivelado</string>
+    <string name="detail_audio_clean_noise">con menos ruido de fondo</string>
 </resources>

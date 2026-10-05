@@ -391,4 +391,16 @@
 
     <!-- Pricing: un monto en dólares; %1$s ya trae la coma o el punto del idioma. -->
     <string name="price_usd">US$%1$s</string>
+    <!-- 0.9.3: Ruido de fondo -->
+    <string name="set_section_noise">Background noise</string>
+    <string name="set_rec_noise">Record with the phone\'s noise reduction</string>
+    <string name="set_rec_noise_sub">The call microphone. Best when you speak alone, close to the phone</string>
+    <string name="set_clean_level">Remove hum and level the volume</string>
+    <string name="set_clean_level_sub">Before transcribing: removes low rumble (engine, air) and raises quiet voices</string>
+    <string name="set_clean_noise">Reduce background noise (experimental)</string>
+    <string name="set_clean_noise_sub">Before transcribing: lowers steady noise (fan, traffic)</string>
+    <string name="set_play_boost">Enhance voices when listening</string>
+    <string name="set_play_boost_sub">Only on playback: more voice, less bass. The file doesn\'t change</string>
+    <string name="set_noise_foot">Try them one at a time. Each recording\'s details show which ones were used.</string>
+    <string name="set_noise_more">Each option does something different:\n\n• Record with the phone\'s noise reduction: uses the microphone mode for calls, the one that cleans up noise when you talk on the phone. It works very well with one person close to the phone, but it can turn down people who speak from farther away (in a meeting, for example), and every brand does it its own way. It applies to new recordings.\n\n• Remove hum and level the volume: before sending to transcribe, it removes the low sounds that aren\'t voice (engine, air conditioning, bumps) and evens out the volume so quiet or distant voices come up.\n\n• Reduce background noise (experimental): before sending, it lowers steady noise, like a fan or traffic. It\'s gentle on purpose: a strong filter can also affect the voice.\n\n• Enhance voices when listening: it only changes how recordings sound in Verbapp\'s player.\n\nThe last three never change your recording: they work on a copy. To compare, transcribe the same recording again (“Transcribe again…”) with an option on, then with it off.</string>
 </resources>
