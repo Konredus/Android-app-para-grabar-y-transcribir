@@ -44,7 +44,8 @@ Lo que se cargó en Play Console el 2026-10-02 (app «Verbapp: graba y transcrib
 ## Prueba cerrada
 - Segmento «Prueba cerrada - Alpha».
   - Versión **14 (0.9.0)**: enviada a revisión el 2026-10-02 y publicada el 2026-10-03.
-  - Versión **15 (0.9.1)**: enviada a revisión el 2026-10-03. Trae reintentos que esperan cuando OpenRouter falla y «Probar con otro modelo».
+  - Versión **15 (0.9.1)**: enviada a revisión y publicada el 2026-10-03. Trae reintentos que esperan cuando OpenRouter falla y «Probar con otro modelo».
+  - Versión **16 (0.9.2)**: enviada a revisión el 2026-10-03. Avisa cuando Google Play tiene una versión nueva (librería oficial `app-update`) y abre el teclado solo en las hojas con un campo.
   - Cada AAB está en `entrega/Verbapp-<versión>.aab`, firmado con la clave de subida, con notas de la versión en es-419, en-US y pt-BR.
 - Enlace para unirse a la prueba: https://play.google.com/apps/testing/cl.verbapp.app
   - Cada tester lo abre con la cuenta de Google de su lista, acepta y luego instala desde Play.
@@ -53,9 +54,13 @@ Lo que se cargó en Play Console el 2026-10-02 (app «Verbapp: graba y transcrib
 - Testers: lista «Testers Verbapp», con 4 correos al 2026-10-03. Google pide **al menos 12** que la usen **14 días seguidos** antes de poder pedir producción.
 - **Permisos de servicios en primer plano** (declaración que pidió la versión): sincronización de datos (procesamiento en la red: «Otro», el envío del audio a OpenRouter para transcribir; procesamiento local: «Importación y exportación»), procesamiento multimedia («Transcodificación multimedia») y micrófono («Entrada de audio en segundo plano»). Video de demostración (no listado): https://www.youtube.com/watch?v=gdiARACfbIk
 - Advertencia sin importancia: no hay archivo de desofuscación (la app no ofusca su código).
+- **Política de privacidad:** desde la 0.9.2 dice que, para buscar actualizaciones, la app le pregunta a Google Play.
+  - Google Play recibe la versión instalada y datos técnicos del teléfono, nunca grabaciones ni texto.
+  - Según Google, la librería usa esos datos solo para saber si hay una actualización. Van cifrados y no se comparten con terceros.
+  - No encajan en ninguna categoría del formulario de Seguridad de los datos, que quedó igual.
 - **Detalles de acceso:** la clave de prueba de OpenRouter (con tope) ya está cargada.
 
 ## Pendiente
-- Que Google apruebe la 0.9.1 y que los testers acepten la invitación desde el enlace de la prueba.
+- Que Google apruebe la 0.9.2 y que los testers acepten la invitación desde el enlace de la prueba.
 - Juntar 12 testers y esperar 14 días; después, pedir acceso a producción.
 - Capturas de pantalla en inglés y portugués (opcional).
