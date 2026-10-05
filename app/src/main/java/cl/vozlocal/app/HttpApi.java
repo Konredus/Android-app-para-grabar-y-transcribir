@@ -84,7 +84,13 @@ class HttpApi {
     /** Conexiones hijas (bloques en paralelo): cancelar la madre cancela todas. */
     private final HttpApi parent;private final java.util.List<HttpApi> children=new java.util.concurrent.CopyOnWriteArrayList<>();
     HttpApi(){parent=null;}
-    private HttpApi(HttpApi parent){this.parent=parent;this.jobId=parent.jobId;this.readTimeoutMs=parent.readTimeoutMs;}
+    private HttpApi(HttpApi parent){this.parent=parent;this.jobId=parent.jobId;this.readTimeoutMs=parent.readTimeoutMs;this.audioClean=parent.audioClean;}
+    /**
+     * 0.9.3: limpieza del audio que se envía a transcribir (AudioClean.LEVEL|NOISE; 0 = nada). La pone el motor con los
+     * ajustes de ese momento (Transcriber); OrAudio la lee al armar el archivo y OpenRouterClient la suma a la clave del
+     * audio guardado (Kept), para no reutilizar uno armado con otra limpieza.
+     */
+    volatile int audioClean;
     HttpApi child(){HttpApi c=new HttpApi(this);children.add(c);if(cancelled)c.cancelled=true;return c;}
     interface Body { long length(); void write(OutputStream out) throws Exception; }
     static class Response {

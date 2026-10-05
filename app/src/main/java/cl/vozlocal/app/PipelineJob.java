@@ -108,6 +108,9 @@ public class PipelineJob extends JobService {
             if(reason==JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY)wifiNotice();}
         if(user&&current==h){userRunning=false;current=null;}
         if(stale){Diagnostics.event("user_job",null,"result","stale","runner","uij","reason",reason);android.content.Context app=getApplicationContext();new Handler(getMainLooper()).post(()->Pipeline.schedule(app,true));}
+        // 0.9.3 (informe del 2026-10-04, un Xiaomi): Android cortó la transferencia con la grabación a la vista y quedó «En
+        // cola…» 42 s, hasta volver a Grabar. Con una pantalla de Verbapp abierta, se sigue al tiro en primer plano.
+        else if(h!=null&&resumeNow(reason,Screen.visible>0)){android.content.Context app=getApplicationContext();new Handler(getMainLooper()).post(()->{if(Screen.visible>0&&!Pipeline.working()){Diagnostics.event("job_resumed",null,"reason",reason);Pipeline.startForeground(app);}});}
         // La notificación de avance es compartida: si otro trabajador la está usando (el servicio en primer plano o la
         // transferencia que tomó el relevo), no se quita.
         if(!Pipeline.working())getSystemService(NotificationManager.class).cancel(Transcriber.NOTIFICATION);Diagnostics.event("job_interrupted",null,"reason",reason,"runner",user?"uij":"job");return true;
@@ -127,6 +130,19 @@ public class PipelineJob extends JobService {
         return false;
     }
     private boolean requested(String id){return id!=null&&FilesStore.state(this,id).optBoolean("requested");}
+    /**
+     * ¿Seguir al tiro en primer plano tras un corte de Android? Solo con una pantalla de Verbapp a la vista, y no si lo cortó
+     * la propia app (otro trabajador tomó el relevo) o una condición que sigue sin cumplirse (red, cargador, batería, espacio):
+     * esas las retoma la tarea de fondo cuando se cumplan. Separada para probarla.
+     */
+    static boolean resumeNow(int reason,boolean visible){
+        if(!visible)return false;
+        switch(reason){
+            case JobParameters.STOP_REASON_CANCELLED_BY_APP:case JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY:case JobParameters.STOP_REASON_CONSTRAINT_CHARGING:
+            case JobParameters.STOP_REASON_CONSTRAINT_BATTERY_NOT_LOW:case JobParameters.STOP_REASON_CONSTRAINT_STORAGE_NOT_LOW:return false;
+            default:return true;
+        }
+    }
     /**
      * A quién le corresponde «Android pausó…»: la del envío si sigue pedida; si no, la que el trabajo esperaba para reintentar
      * (Transcriber.retryingId) o la primera pedida. null si no queda ninguna.

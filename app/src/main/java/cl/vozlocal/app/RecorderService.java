@@ -139,14 +139,12 @@ public class RecorderService extends Service {
             recording = new Recording(UUID.randomUUID().toString(), Recording.defaultTitle(now), now, 0);
             if(title!=null && !title.trim().isEmpty())recording.title=title.trim().substring(0,Math.min(120,title.trim().length()));
             activeId = recording.id; activeTitle = title != null && !title.trim().isEmpty() ? recording.title : null;
-            recorder = Build.VERSION.SDK_INT >= 31 ? new MediaRecorder(this) : new MediaRecorder();
-            recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
-            recorder.setAudioEncodingBitRate(96000); recorder.setAudioSamplingRate(44100); recorder.setAudioChannels(1);
-            recorder.setOutputFile(recording.audio(this).getAbsolutePath());
-            recorder.setOnErrorListener((r,w,e) -> { error = Lang.str(this, R.string.eng_rec_err_mic); finishRecording(); stopSelf(); });
-            recorder.prepare(); recorder.start(); started = SystemClock.elapsedRealtime(); startedAtMs = started;Diagnostics.event("recording_started",activeId);
+            // 0.9.3: «Grabar con reducción de ruido del teléfono» usa el micrófono de las llamadas. Si el teléfono no lo deja
+            // preparar, se graba con el normal (la grabación no se pierde por una opción).
+            quietMic = new Settings(this).recordNoise();
+            try { recorder = newRecorder(quietMic); recorder.prepare(); }
+            catch (Exception e) { if (!quietMic) throw e; if (recorder != null) recorder.release(); quietMic = false; recorder = newRecorder(false); recorder.prepare(); Diagnostics.event("recording_mic_fallback", activeId, "error_class", e.getClass().getSimpleName()); }
+            recorder.start(); started = SystemClock.elapsedRealtime(); startedAtMs = started;Diagnostics.event("recording_started",activeId,"mic",quietMic?"voice":"default");
             refresh(); // el cronómetro de la notificación parte ahora, no al preparar el micrófono
             getSystemService(android.app.job.JobScheduler.class).cancel(Pipeline.JOB_ID);
             wakeLock = getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "VozLocal:Recording");
@@ -223,6 +221,21 @@ public class RecorderService extends Service {
         }
     }
 
+    /** El micrófono de las llamadas (VOICE_COMMUNICATION) o el normal. Separado para probarlo. */
+    static int audioSource(boolean quiet) { return quiet ? MediaRecorder.AudioSource.VOICE_COMMUNICATION : MediaRecorder.AudioSource.MIC; }
+    /** ¿Esta grabación usa el micrófono de las llamadas? Se anota en su estado al guardarla ("recNoise"). */
+    private boolean quietMic;
+    private MediaRecorder newRecorder(boolean quiet) {
+        MediaRecorder m = Build.VERSION.SDK_INT >= 31 ? new MediaRecorder(this) : new MediaRecorder();
+        m.setAudioSource(audioSource(quiet));
+        m.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+        m.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+        m.setAudioEncodingBitRate(96000); m.setAudioSamplingRate(44100); m.setAudioChannels(1);
+        m.setOutputFile(recording.audio(this).getAbsolutePath());
+        m.setOnErrorListener((r,w,e) -> { error = Lang.str(this, R.string.eng_rec_err_mic); finishRecording(); stopSelf(); });
+        return m;
+    }
+
     private void finishRecording() {
         if (recorder == null) return;
         long duration = elapsed(); boolean valid = false;
@@ -237,6 +250,7 @@ public class RecorderService extends Service {
         else if (recording != null) {
             if (valid) {
                 recording.duration = duration; try { recording.save(this); } catch (Exception e) { error = Lang.str(this, R.string.eng_rec_err_title); }
+                if (quietMic) { try { FilesStore.update(this, recording.id, s -> s.put("recNoise", true)); } catch (Exception ignored) { } }
                 JSONArray marks = marksJson();
                 if (marks.length() > 0) { try { Marks.setAll(this, recording.id, marks); } catch (Exception ignored) { } Diagnostics.event("recording_marks", recording.id, "count", marks.length()); }
             }

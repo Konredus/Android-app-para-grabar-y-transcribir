@@ -731,18 +731,18 @@ public class MainActivity extends Screen {
     }
     /** Mini reproductor de «Nombra esta grabación» (▶/❚❚): se libera al cerrar la hoja, al salir de la app y en onDestroy. */
     private final class NamePlayer {
-        private final Recording r;private final ImageButton play;private final Waveform.Mini mini;private final TextView time;private MediaPlayer mp;private int length=1;
+        private final Recording r;private final ImageButton play;private final Waveform.Mini mini;private final TextView time;private MediaPlayer mp;private VoiceBoost boost;private int length=1;
         private final Runnable tick=new Runnable(){@Override public void run(){if(mp==null)return;try{int pos=mp.getCurrentPosition();mini.setPlayed(pos/(float)length);setText(time,Recording.time(pos));if(mp.isPlaying())handler.postDelayed(this,50);}catch(IllegalStateException ignored){}}};
         NamePlayer(Recording r,ImageButton play,Waveform.Mini mini,TextView time){this.r=r;this.play=play;this.mini=mini;this.time=time;}
         void toggle(){
             try{
-                if(mp==null){mp=new MediaPlayer();mp.setDataSource(r.audio(MainActivity.this).getPath());mp.prepare();length=Math.max(1,mp.getDuration()>0?mp.getDuration():(int)r.duration);mp.setOnCompletionListener(m->release());}
+                if(mp==null){mp=new MediaPlayer();mp.setDataSource(r.audio(MainActivity.this).getPath());mp.prepare();boost=VoiceBoost.attach(MainActivity.this,mp.getAudioSessionId());length=Math.max(1,mp.getDuration()>0?mp.getDuration():(int)r.duration);mp.setOnCompletionListener(m->release());}
                 if(mp.isPlaying()){mp.pause();handler.removeCallbacks(tick);}else{mp.start();handler.removeCallbacks(tick);handler.post(tick);}
                 show(mp.isPlaying());
             }catch(Exception e){release();toast(getString(R.string.home_play_failed));}
         }
         void release(){
-            handler.removeCallbacks(tick);if(mp!=null){try{mp.release();}catch(RuntimeException ignored){}mp=null;}
+            handler.removeCallbacks(tick);if(boost!=null){boost.release();boost=null;}if(mp!=null){try{mp.release();}catch(RuntimeException ignored){}mp=null;}
             show(false);mini.setPlayed(0f);setText(time,Recording.time(r.duration));
         }
         private void show(boolean playing){play.setImageResource(playing?R.drawable.ic_pause:R.drawable.ic_play);play.setContentDescription(getString(playing?R.string.home_pause_action:R.string.home_listen));}

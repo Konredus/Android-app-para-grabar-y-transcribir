@@ -290,6 +290,10 @@ final class Transcriber {
                 if(Pipeline.waitsForWifi(c,r.id)){waitWifi(r,false);retry=true;continue;}
                 Pipeline.clearWaitingWifi(c,r.id);
                 http.jobId=r.id;currentId=r.id;failedStage="";
+                // 0.9.3: la limpieza del audio (Ajustes → Ruido de fondo) es la de ahora; queda anotada en la grabación para que
+                // su detalle diga con qué se transcribió (y se pueda comparar con «Volver a transcribir»).
+                int clean=new Settings(c).audioClean();http.audioClean=clean;
+                try{FilesStore.update(c,r.id,s->{if(clean==0)s.remove("audioClean");else s.put("audioClean",clean);});}catch(Exception ignored){}
                 try{process(r);}
                 catch(Yield y){retry=true;Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_yield));break;}
                 // Se fue el Wi-Fi antes de enviar una parte: espera como las demás (ver WaitWifi).
@@ -574,8 +578,8 @@ final class Transcriber {
     private void note(Recording r)throws Exception{
         stage(r,Lang.str(c,R.string.eng_st_note),-1);long noteStart=System.currentTimeMillis();
         try{
+            // «Nota lista · tardó…» la escribe Notes (0.9.3: aquí se repetía, y en la bitácora parecía un segundo intento).
             Notes.generate(c,r,http);
-            Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_note_ready,Lang.str(c,R.string.eng_frag_took,Recording.time(System.currentTimeMillis()-noteStart))));
             Diagnostics.event("note_auto",r.id,"result","ok","elapsed_ms",System.currentTimeMillis()-noteStart);
         }catch(Throwable e){
             if(e instanceof VirtualMachineError)throw (VirtualMachineError)e;

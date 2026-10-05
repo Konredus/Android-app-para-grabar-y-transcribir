@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.9.3",
+    "date": "2026-10-04",
+    "title": "Menos ruido, más voz",
+    "items": [
+      "Ruido de fondo, a tu gusto: en Ajustes hay cuatro opciones nuevas para probar de a una: grabar con la reducción de ruido del teléfono, quitar zumbidos y nivelar el volumen, reducir el ruido de fondo (experimental) y realzar voces al escuchar.",
+      "Para comparar: el detalle de cada grabación dice qué opciones se usaron. Con «Volver a transcribir» puedes probar la misma grabación con y sin limpieza.",
+      "Si Android corta una transcripción mientras miras la app, sigue al tiro, sin quedarse esperando en la cola.",
+      "La bitácora ya no repite «Nota lista» y explica mejor cuando el ahorro de batería del teléfono corta el envío."
+    ]
+  },
+  {
     "version": "0.9.2",
     "date": "2026-10-03",
     "title": "Te avisa cuando hay versión nueva",

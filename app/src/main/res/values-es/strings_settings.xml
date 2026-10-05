@@ -392,4 +392,16 @@
 
     <!-- Pricing: un monto en dólares; %1$s ya trae la coma o el punto del idioma. -->
     <string name="price_usd">US$%1$s</string>
+    <!-- 0.9.3: Ruido de fondo -->
+    <string name="set_section_noise">Ruido de fondo</string>
+    <string name="set_rec_noise">Grabar con reducción de ruido del teléfono</string>
+    <string name="set_rec_noise_sub">El micrófono de las llamadas. Ideal si hablas tú solo, cerca del teléfono</string>
+    <string name="set_clean_level">Quitar zumbidos y nivelar el volumen</string>
+    <string name="set_clean_level_sub">Antes de transcribir: saca graves (motor, aire) y sube las voces bajas</string>
+    <string name="set_clean_noise">Reducir el ruido de fondo (experimental)</string>
+    <string name="set_clean_noise_sub">Antes de transcribir: baja el ruido constante (ventilador, tráfico)</string>
+    <string name="set_play_boost">Realzar voces al escuchar</string>
+    <string name="set_play_boost_sub">Solo al reproducir: más voz y menos graves. El archivo no cambia</string>
+    <string name="set_noise_foot">Pruébalas de a una. El detalle de cada grabación dice cuáles se usaron.</string>
+    <string name="set_noise_more">Cada opción hace algo distinto:\n\n• Grabar con reducción de ruido del teléfono: usa el modo de micrófono de las llamadas, el que limpia el ruido cuando hablas por teléfono. Funciona muy bien con una persona cerca del teléfono, pero puede bajar a quienes hablan más lejos (en una reunión, por ejemplo), y cada marca lo hace a su manera. Vale para las grabaciones nuevas.\n\n• Quitar zumbidos y nivelar el volumen: antes de enviar a transcribir, saca los sonidos graves que no son voz (motor, aire acondicionado, golpes) y empareja el volumen para que suban las voces bajas o lejanas.\n\n• Reducir el ruido de fondo (experimental): antes de enviar, baja el ruido constante, como un ventilador o el tráfico. Es suave a propósito: un filtro fuerte también puede afectar la voz.\n\n• Realzar voces al escuchar: solo cambia cómo suenan las grabaciones en el reproductor de Verbapp.\n\nLas tres últimas nunca modifican tu grabación: trabajan sobre una copia. Para comparar, vuelve a transcribir una misma grabación («Volver a transcribir…») con una opción prendida y después apagada.</string>
 </resources>

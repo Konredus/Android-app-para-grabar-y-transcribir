@@ -32,7 +32,9 @@ abstract class Screen extends Activity {
      * Si cambió el tema o «Colores de tu fondo de pantalla» mientras la pantalla estaba detrás, se rehace con la paleta nueva.
      * Lo mismo con el idioma: en Android 8–12, Lang.set solo rehace la pantalla de adelante (Android 13+ las rehace todas).
      */
-    @Override protected void onResume(){super.onResume();Lang.refresh();if(p.dark!=AppTheme.isDark(this)||p.dynamic!=AppTheme.dynamicColor(this)||!Lang.current(this).equals(lang))recreate();}
+    /** 0.9.3: pantallas de Verbapp a la vista (hilo principal). PipelineJob sigue al tiro tras un corte si hay alguna. */
+    static int visible;
+    @Override protected void onResume(){super.onResume();visible++;Lang.refresh();if(p.dark!=AppTheme.isDark(this)||p.dynamic!=AppTheme.dynamicColor(this)||!Lang.current(this).equals(lang))recreate();}
     @Override protected void onSaveInstanceState(Bundle state){state.putInt("screen_scroll",scroll==null?0:scroll.getScrollY());super.onSaveInstanceState(state);}
 
     /**
@@ -121,7 +123,7 @@ abstract class Screen extends Activity {
     void toast(String value){Toast.makeText(this,value,Toast.LENGTH_SHORT).show();}
     private View snack,leaving;private final android.os.Handler snackTimer=new android.os.Handler(android.os.Looper.getMainLooper());
     /** Al salir de la pantalla (otra app, compartir, bloqueo), el aviso se quita: su «Deshacer» ya no tiene contexto. */
-    @Override protected void onPause(){super.onPause();removeSnackbar();}
+    @Override protected void onPause(){super.onPause();visible=Math.max(0,visible-1);removeSnackbar();}
     /**
      * Snackbar de Material 3: confirma un cambio y ofrece deshacerlo durante unos segundos.
      * Va sobre la zona inferior fija, sin tapar el contenido (colores invertidos, ver CRITERIOS.md → Componentes).

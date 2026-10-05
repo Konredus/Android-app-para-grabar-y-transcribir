@@ -171,24 +171,28 @@ final class OrAudio {
             // Referencia de volumen para las anclas: se mide antes de abrir la salida, porque en el archivo van primero.
             double reference=asked>0?level(audio,cancel):0;
             out=flac?new FlacOut(tmp,cancel):new WavOut(tmp);
+            // 0.9.3: limpieza opcional (Ajustes → Ruido de fondo, AudioClean): pasa todo lo que va al archivo (anclas, silencios y
+            // audio) sin cambiar la cuenta de muestras, así los tiempos siguen exactos. La pone el motor en cancel.audioClean.
+            int mask=cancel==null?0:cancel.audioClean;AudioClean clean=mask==0?null:new AudioClean(out,mask);Sink sink=clean==null?out:clean;
             long lead=0;short[] quiet=new short[4096];final long gap=GAP_MS*RATE/1000;
             for(int a=0;a<asked;a++){
                 marks[a]=new long[]{-1,-1};short[] clip=anchor(anchors.get(a),reference,cancel);if(clip==null)continue;
-                out.write(clip,clip.length);for(long left=gap;left>0;left-=quiet.length)out.write(quiet,(int)Math.min(left,quiet.length));
+                sink.write(clip,clip.length);for(long left=gap;left>0;left-=quiet.length)sink.write(quiet,(int)Math.min(left,quiet.length));
                 // Exactos: cada ancla mide un número entero de milisegundos (ver anchor()) y el silencio también.
                 marks[a][0]=lead*1000/RATE;marks[a][1]=(lead+clip.length)*1000/RATE;lead+=clip.length+gap;used++;
             }
             // El avance de la etapa «Preparando audio» sale de cuánto del bloque ya se leyó (las anclas son segundos, no cuentan).
             // Llega hasta 99: el 100 se dice solo cuando el archivo quedó listo y comprobado.
             Advance advance=cancel==null?null:(doneUs,totalUs)->{if(totalUs>0)cancel.prepared((int)Math.min(99,doneUs*100/totalUs));};
-            long body=decode(audio,Long.MAX_VALUE,cancel,out,advance);if(body<RATE/10)throw new TooShort();
+            long body=decode(audio,Long.MAX_VALUE,cancel,sink,advance);if(body<RATE/10)throw new TooShort();
+            if(clean!=null)clean.flush();
             long total=out.finish();alive(cancel);
             String format=flac?"flac":"wav";File target=new File(outBase.getPath()+"."+format);
             target.delete();if(!tmp.renameTo(target))throw new IOException("Could not save converted audio");ok=true;
             // Si quedó el otro formato de un intento anterior, se quita: que nadie envíe un archivo viejo por error.
             new File(outBase.getPath()+(flac?".wav":".flac")).delete();
             long durationMs=(total*1000+RATE/2)/RATE;
-            Diagnostics.event("or_audio",cancel==null?null:cancel.jobId,"format",format,"duration_ms",durationMs,"bytes",target.length(),"anchors",used,"elapsed_ms",SystemClock.elapsedRealtime()-started);
+            Diagnostics.event("or_audio",cancel==null?null:cancel.jobId,"format",format,"duration_ms",durationMs,"bytes",target.length(),"anchors",used,"clean",mask,"elapsed_ms",SystemClock.elapsedRealtime()-started);
             if(cancel!=null)cancel.prepared(100);
             return new Built(target,format,lead*1000/RATE,marks,durationMs);
         }finally{if(out!=null)out.release();if(!ok)tmp.delete();}

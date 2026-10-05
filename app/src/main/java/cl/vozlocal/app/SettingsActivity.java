@@ -181,7 +181,16 @@ public class SettingsActivity extends Screen {
         Ui.Btn how=ui.button(getString(R.string.set_how_key),0,Ui.Style.PLAIN,v->howToKey());how.setMinimumHeight(ui.dp(48));
         page.addView(more(getString(R.string.set_ai_foot),getString(R.string.set_section_ai),getString(R.string.set_ai_more),how));
 
-        // 3. Energía y red: cuándo se envía el audio.
+        // 3. Ruido de fondo (0.9.3, pedido del usuario): opciones para probar de a una, todas apagadas por defecto. Solo la
+        // primera cambia cómo graba el micrófono; las demás trabajan sobre una copia y nunca tocan la grabación.
+        page.addView(ui.section(getString(R.string.set_section_noise)));LinearLayout noise=ui.group();page.addView(noise,Ui.fill());
+        add(noise,toggleRow(R.drawable.ic_voice,getString(R.string.set_rec_noise),getString(R.string.set_rec_noise_sub),settings.recordNoise(),on->toggle("recordNoise",on)));
+        add(noise,toggleRow(R.drawable.ic_waveform,getString(R.string.set_clean_level),getString(R.string.set_clean_level_sub),settings.cleanLevel(),on->toggle("cleanLevel",on)));
+        add(noise,toggleRow(R.drawable.ic_filter,getString(R.string.set_clean_noise),getString(R.string.set_clean_noise_sub),settings.cleanNoise(),on->toggle("cleanNoise",on)));
+        add(noise,toggleRow(R.drawable.ic_headphones,getString(R.string.set_play_boost),getString(R.string.set_play_boost_sub),settings.playBoost(),on->toggle("playBoost",on)));
+        page.addView(more(getString(R.string.set_noise_foot),getString(R.string.set_section_noise),getString(R.string.set_noise_more)));
+
+        // 4. Energía y red: cuándo se envía el audio.
         page.addView(ui.section(getString(R.string.set_section_energy)));LinearLayout energy=ui.group();page.addView(energy,Ui.fill());
         // «Solo Wi-Fi» viene activado y, con datos móviles, la transcripción espera sin que se note (diagnóstico del
         // 2026-10-01: 27 min esperando Wi-Fi). Desde la tercera ronda de la 0.8.0, cada transcripción que espera ofrece

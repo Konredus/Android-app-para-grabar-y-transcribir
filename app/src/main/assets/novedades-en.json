@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.9.3",
+    "date": "2026-10-04",
+    "title": "Less noise, more voice",
+    "items": [
+      "Background noise, your way: Settings has four new options to try one at a time: record with the phone's noise reduction, remove hum and level the volume, reduce background noise (experimental), and enhance voices when listening.",
+      "To compare: each recording's details show which options were used. With “Transcribe again…” you can try the same recording with and without cleanup.",
+      "If Android stops a transcription while you're looking at the app, it picks up right away instead of waiting in the queue.",
+      "The log no longer repeats “Note ready” and explains better when the phone's battery saver cuts the upload."
+    ]
+  },
+  {
     "version": "0.9.2",
     "date": "2026-10-03",
     "title": "Tells you when there's a new version",

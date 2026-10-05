@@ -392,4 +392,16 @@
 
     <!-- Pricing: un monto en dólares, con espacio fijo como se escribe en Brasil («US$ 4,20»). -->
     <string name="price_usd">US$ %1$s</string>
+    <!-- 0.9.3: Ruído de fundo -->
+    <string name="set_section_noise">Ruído de fundo</string>
+    <string name="set_rec_noise">Gravar com a redução de ruído do celular</string>
+    <string name="set_rec_noise_sub">O microfone das chamadas. Ideal se você fala sozinho, perto do celular</string>
+    <string name="set_clean_level">Tirar zumbidos e nivelar o volume</string>
+    <string name="set_clean_level_sub">Antes de transcrever: tira graves (motor, ar) e aumenta as vozes baixas</string>
+    <string name="set_clean_noise">Reduzir o ruído de fundo (experimental)</string>
+    <string name="set_clean_noise_sub">Antes de transcrever: diminui o ruído constante (ventilador, trânsito)</string>
+    <string name="set_play_boost">Realçar vozes ao ouvir</string>
+    <string name="set_play_boost_sub">Só ao reproduzir: mais voz e menos graves. O arquivo não muda</string>
+    <string name="set_noise_foot">Teste uma de cada vez. Os detalhes de cada gravação mostram quais foram usadas.</string>
+    <string name="set_noise_more">Cada opção faz uma coisa diferente:\n\n• Gravar com a redução de ruído do celular: usa o modo de microfone das chamadas, o que limpa o ruído quando você fala ao telefone. Funciona muito bem com uma pessoa perto do celular, mas pode abaixar quem fala mais longe (numa reunião, por exemplo), e cada marca faz do seu jeito. Vale para as gravações novas.\n\n• Tirar zumbidos e nivelar o volume: antes de enviar para transcrever, tira os sons graves que não são voz (motor, ar-condicionado, batidas) e iguala o volume para que as vozes baixas ou distantes subam.\n\n• Reduzir o ruído de fundo (experimental): antes de enviar, diminui o ruído constante, como um ventilador ou o trânsito. É suave de propósito: um filtro forte também pode afetar a voz.\n\n• Realçar vozes ao ouvir: só muda como as gravações soam no player do Verbapp.\n\nAs três últimas nunca alteram a sua gravação: trabalham sobre uma cópia. Para comparar, transcreva de novo a mesma gravação (“Transcrever de novo…”) com uma opção ligada e depois desligada.</string>
 </resources>

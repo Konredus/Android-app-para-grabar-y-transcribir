@@ -128,7 +128,6 @@
 
     <!-- Nota para tu segundo cerebro -->
     <string name="eng_st_note">Armando la nota para tu segundo cerebro</string>
-    <string name="eng_log_note_ready">Nota lista · %1$s</string>
     <string name="eng_log_note_unavailable">La nota para tu segundo cerebro no está disponible por ahora · la transcripción está lista</string>
     <string name="eng_log_note_failed">No se pudo armar la nota: %1$s · la transcripción está lista y puedes armar la nota después</string>
     <string name="eng_note_unavailable">No disponible por ahora</string>
@@ -219,7 +218,7 @@
     <string name="eng_stop_restricted">la app tiene restringido el uso en segundo plano</string>
     <string name="eng_stop_preempt">Android priorizó otra tarea</string>
     <string name="eng_stop_system">Android necesitaba recursos</string>
-    <string name="eng_stop_user">detenida desde Ajustes de Android</string>
+    <string name="eng_stop_user">la cortó el ahorro de batería o el administrador de tareas del teléfono</string>
     <string name="eng_stop_unknown">motivo no informado por Android</string>
 
     <!-- Errores de la API (HttpApi) -->

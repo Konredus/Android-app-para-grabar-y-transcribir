@@ -99,7 +99,7 @@ final class OpenRouterClient implements TranscribeClient {
                 if(decode(ref[1],clip)){refs.add(ref);anchors.add(clip);temps.add(clip);}
             }
             // 0.9.1: si un intento anterior de esta misma parte ya preparó su audio (y falló por el servidor), se reutiliza.
-            kept=Kept.of(dir,http.jobId,audio,refs,wav);
+            kept=Kept.of(dir,http.jobId,audio,refs,wav,http.audioClean);
             OrAudio.Built built=kept==null?null:kept.load();
             if(built!=null){if(built.leadMs<=0)anchors=Collections.emptyList();log.line(Lang.str(c,R.string.eng_log_or_prepared_reused));}
             // Cada vuelta cambia algo una sola vez (WAV, modo simple o sin anclas): a lo más cuatro envíos.
@@ -240,9 +240,9 @@ final class OpenRouterClient implements TranscribeClient {
         private final File dir;private final String name,key;
         private Kept(File dir,String name,String key){this.dir=dir;this.name=name;this.key=key;}
         /** null si no hay con qué identificar la parte (sin grabación o sin archivo). */
-        static Kept of(File dir,String jobId,File audio,List<String[]> refs,boolean wav){
+        static Kept of(File dir,String jobId,File audio,List<String[]> refs,boolean wav,int clean){
             if(jobId==null||!jobId.matches("[a-f0-9-]{36}")||audio==null||!audio.isFile())return null;
-            StringBuilder k=new StringBuilder(audio.getAbsolutePath()).append('|').append(audio.length()).append('|').append(audio.lastModified()).append('|').append(wav?"wav":"flac");
+            StringBuilder k=new StringBuilder(audio.getAbsolutePath()).append('|').append(audio.length()).append('|').append(audio.lastModified()).append('|').append(wav?"wav":"flac").append("|clean").append(clean);
             if(refs!=null)for(String[] ref:refs)k.append('|').append(ref.length>0?ref[0]:"").append(':').append(digest(ref.length>1?ref[1]:""));
             String key=k.toString();
             return new Kept(dir,"keep-"+jobId+"-"+digest(key).substring(0,16),key);
