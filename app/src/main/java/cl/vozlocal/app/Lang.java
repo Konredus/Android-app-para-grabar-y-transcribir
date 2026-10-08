@@ -23,19 +23,20 @@ import java.util.Locale;
  * - En todo lo demás (servicios, notificaciones, motor, modelos, ayudas estáticas): Lang.str(c, R.string.x, …). Usa los
  *   recursos del idioma vigente aunque el contexto sea el de la app, que se creó con otro idioma o antes de elegirlo.
  * - Formatos de números y fechas: Lang.locale(c).
- * Recursos: values/ (inglés, el respaldo), values-es/ y values-pt/ (portugués de Brasil; sirve también a pt-PT).
+ * Recursos: values/ (inglés, el respaldo), values-es/, values-pt/ (portugués de Brasil; sirve también a pt-PT) y
+ * values-de/ (alemán, 0.9.4; sirve a de-DE, de-AT y de-CH).
  */
 final class Lang {
     private Lang(){}
-    static final String EN="en",ES="es",PT="pt";
-    static final String[] SUPPORTED={EN,ES,PT};
+    static final String EN="en",ES="es",PT="pt",DE="de";
+    static final String[] SUPPORTED={EN,ES,PT,DE};
     private static final String PREFS="settings",KEY="appLang";
     /** Solo para pruebas: fuerza un idioma sin tocar lo elegido por la persona. */
     private static volatile String override;
     private static volatile String cachedTag;private static volatile Resources cachedRes;
 
     /** Nombre de cada idioma en su propio idioma, para el selector. */
-    static String nativeName(String lang){return EN.equals(lang)?"English":ES.equals(lang)?"Español":"Português (Brasil)";}
+    static String nativeName(String lang){return EN.equals(lang)?"English":ES.equals(lang)?"Español":DE.equals(lang)?"Deutsch":"Português (Brasil)";}
 
     /**
      * Caché del idioma vigente. En Android 13+ leerlo es una llamada al sistema (LocaleManager), y las listas lo piden por cada
@@ -88,7 +89,7 @@ final class Lang {
         String n=normalize(lang);if(n==null)n=EN;
         Locale d=device();
         if(d!=null&&n.equals(normalize(d.getLanguage()))&&!d.getCountry().isEmpty())return new Locale(d.getLanguage(),d.getCountry());
-        return PT.equals(n)?new Locale("pt","BR"):ES.equals(n)?new Locale("es","CL"):Locale.US;
+        return PT.equals(n)?new Locale("pt","BR"):ES.equals(n)?new Locale("es","CL"):DE.equals(n)?Locale.GERMANY:Locale.US;
     }
     static Locale locale(Context c){return locale(current(c));}
     /** Etiqueta BCP 47 ("en", "es", "pt-BR"), p. ej. para pedir la nota en ese idioma. */
@@ -154,10 +155,10 @@ final class Lang {
     /*
      * Algunos textos se guardan y se vuelven a leer: la bitácora de cada grabación, el título por defecto, el nombre «Yo»
      * de tu voz, el último mensaje de «Comprobar conexión»… Si la persona cambia de idioma entre medio, lo guardado queda
-     * en el idioma anterior. Para reconocerlo igual, estas ayudas comparan con el mismo texto en los tres idiomas.
+     * en el idioma anterior. Para reconocerlo igual, estas ayudas comparan con el mismo texto en todos los idiomas.
      */
-    private static final Resources[] ALL=new Resources[3];
-    /** El texto en inglés, español y portugués (sin argumentos; un texto con %1$s se compara solo hasta el primer %). */
+    private static final Resources[] ALL=new Resources[SUPPORTED.length];
+    /** El texto en cada idioma de SUPPORTED (sin argumentos; un texto con %1$s se compara solo hasta el primer %). */
     static String[] all(int id){
         Context c=app();String[] out=new String[SUPPORTED.length];
         for(int i=0;i<SUPPORTED.length;i++){
@@ -170,16 +171,16 @@ final class Lang {
     }
     /** El texto hasta su primer argumento ("Grabación %1$s" → "Grabación "), para comparar comienzos. */
     private static String head(String s){int cut=s.indexOf('%');return cut<0?s:s.substring(0,cut);}
-    /** ¿text es este texto en alguno de los tres idiomas? */
+    /** ¿text es este texto en alguno de los idiomas? */
     static boolean isAny(int id,String text){if(text==null)return false;for(String s:all(id))if(s.equals(text))return true;return false;}
-    /** ¿text empieza con este texto (hasta su primer argumento) en alguno de los tres idiomas? */
+    /** ¿text empieza con este texto (hasta su primer argumento) en alguno de los idiomas? */
     static boolean startsAny(String text,int id){if(text==null)return false;for(String s:all(id)){String h=head(s);if(!h.isEmpty()&&text.startsWith(h))return true;}return false;}
-    /** ¿text contiene este texto (hasta su primer argumento) en alguno de los tres idiomas? Sin distinguir mayúsculas. */
+    /** ¿text contiene este texto (hasta su primer argumento) en alguno de los idiomas? Sin distinguir mayúsculas. */
     static boolean containsAny(String text,int id){
         if(text==null)return false;String t=text.toLowerCase(Locale.ROOT);
         for(String s:all(id)){String h=head(s).toLowerCase(Locale.ROOT);if(!h.isEmpty()&&t.contains(h))return true;}return false;
     }
-    /** ¿text termina con este texto (sin argumentos) en alguno de los tres idiomas? */
+    /** ¿text termina con este texto (sin argumentos) en alguno de los idiomas? */
     static boolean endsAny(String text,int id){if(text==null)return false;for(String s:all(id))if(!s.isEmpty()&&text.endsWith(s))return true;return false;}
     /** Las versiones del texto, escapadas para una expresión regular: "(?:Recording|Grabación|Gravação)". */
     static String anyRegex(int id){

@@ -116,7 +116,7 @@ final class OnboardingChecks {
     static void novedades(Context c){
         List<Novedades.Entry> es=Novedades.all(c,Lang.ES);String current=Novedades.versionName(c);
         check(!es.isEmpty(),"Faltan las novedades en español");
-        for(String lang:new String[]{Lang.EN,Lang.PT}){
+        for(String lang:new String[]{Lang.EN,Lang.PT,Lang.DE}){
             List<Novedades.Entry> t=Novedades.all(c,lang);
             check(t.size()==es.size(),"Novedades en "+lang+": "+t.size()+" versiones en vez de "+es.size());
             for(int i=0;i<es.size();i++){
@@ -136,6 +136,8 @@ final class OnboardingChecks {
             check(en.contains("September")&&en.contains("29")&&en.contains("2026"),"Fecha en inglés: «"+en+"»");
             Lang.override(Lang.PT);String pt=Novedades.date("2026-09-29");
             check("29 de setembro de 2026".equals(pt),"Fecha en portugués: «"+pt+"»");
+            Lang.override(Lang.DE);String de=Novedades.date("2026-09-29");
+            check("29. September 2026".equals(de),"Fecha en alemán: «"+de+"»");
         }finally{Lang.override(Lang.ES);}
     }
 

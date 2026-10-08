@@ -1,0 +1,156 @@
+[
+  {
+    "version": "0.9.4",
+    "date": "2026-10-08",
+    "title": "Verbapp spricht jetzt Deutsch",
+    "items": [
+      "Verbapp spricht jetzt Deutsch: die ganze App, die KI-Notiz und die Transkription, alles auf Deutsch. Ändern kannst du die Sprache unter Einstellungen → Sprache.",
+      "Wartung: Wir haben eine interne Android-Komponente erneuert, um die Google Play gebeten hatte. Alles funktioniert wie bisher."
+    ]
+  },
+  {
+    "version": "0.9.3",
+    "date": "2026-10-04",
+    "title": "Weniger Rauschen, mehr Stimme",
+    "items": [
+      "Hintergrundgeräusche nach deinem Geschmack: In den Einstellungen gibt es vier neue Optionen, die du einzeln ausprobieren kannst: mit der Rauschunterdrückung des Handys aufnehmen, Brummen entfernen und die Lautstärke angleichen, Hintergrundgeräusche reduzieren (experimentell) und Stimmen beim Anhören hervorheben.",
+      "Zum Vergleichen: In den Details jeder Aufnahme steht, welche Optionen verwendet wurden. Mit „Neu transkribieren…“ kannst du dieselbe Aufnahme mit und ohne Bereinigung ausprobieren.",
+      "Wenn Android eine Transkription unterbricht, während du die App offen hast, geht es sofort weiter, statt in der Warteschlange zu warten.",
+      "Das Protokoll wiederholt „Notiz fertig“ nicht mehr und erklärt besser, wenn der Energiesparmodus des Handys das Hochladen unterbricht."
+    ]
+  },
+  {
+    "version": "0.9.2",
+    "date": "2026-10-03",
+    "title": "Sagt dir Bescheid, wenn es eine neue Version gibt",
+    "items": [
+      "Hinweis auf neue Versionen: Wenn Google Play ein Update für Verbapp hat, zeigt dir Aufnehmen das unter der Begrüßung an. Es wird heruntergeladen, während du die App weiter nutzt, und mit einem Tippen installiert.",
+      "Nach Updates suchen: Unter Einstellungen → Hilfe und Support kannst du jederzeit prüfen, ob es eine neue Version gibt.",
+      "Das funktioniert, wenn du Verbapp über Google Play installiert hast. Hast du die App von Hand installiert, erklären dir die Einstellungen, wie du umsteigst.",
+      "Tastatur sofort da: Wenn du eine Aufnahme benennst oder ihren Titel änderst, öffnet sich die Tastatur von selbst, mit dem Namen schon markiert und bereit zum Überschreiben."
+    ]
+  },
+  {
+    "version": "0.9.1",
+    "date": "2026-10-03",
+    "title": "Mehr Geduld, wenn OpenRouter hakt",
+    "items": [
+      "Wiederholungen, die warten: Wenn OpenRouter oder das Modell ausfällt (Fehler 502 oder 429), versucht es die App bis zu einer Stunde lang selbst weiter, mit jedes Mal längeren Pausen, ohne deine Versuche aufzubrauchen.",
+      "Kein doppeltes Vorbereiten: Das Audio jedes Teils wird einmal vorbereitet und bei Wiederholungen weiterverwendet, sodass jeder Versuch sofort startet.",
+      "Eine klare Meldung: Wenn OpenRouter weiter Probleme hat, sagt dir die Aufnahme das direkt. Es liegt nicht an deinem Handy oder deinem Schlüssel, und was schon transkribiert ist, bleibt gespeichert.",
+      "Ein anderes Modell ausprobieren: Mach den Rest mit einem anderen empfohlenen Modell fertig, ohne für die fertigen Teile noch einmal zu zahlen."
+    ]
+  },
+  {
+    "version": "0.9.0",
+    "date": "2026-10-02",
+    "title": "Verbapp in deiner Sprache",
+    "items": [
+      "Verbapp spricht deine Sprache: Englisch, Spanisch oder brasilianisches Portugiesisch. Die App startet in der Sprache deines Handys, und du kannst sie jederzeit im Willkommensbildschirm oder unter Einstellungen → Sprache ändern.",
+      "Sprache des Audios: Wähle Englisch, Spanisch, Portugiesisch oder automatische Erkennung für bessere Transkriptionen. Wenn du nichts auswählst, wird die Sprache der App verwendet.",
+      "Datenschutz klar erklärt: Vor deiner ersten Transkription erklärt dir die App, was an OpenRouter gesendet wird, und bittet um dein OK. Die Datenschutzerklärung ist in den Einstellungen nur einen Tipp entfernt.",
+      "Aus der Benachrichtigung stoppen: Beende eine laufende Transkription, ohne die App zu öffnen.",
+      "Bereit für Google Play und Android 16."
+    ]
+  },
+  {
+    "version": "0.8.0",
+    "date": "2026-10-01",
+    "title": "Ein Schlüssel für alles",
+    "items": [
+      "Alles über OpenRouter: ein einziger Schlüssel zum Transkribieren und zum Schreiben deiner Notizen. Wenn du OpenAI oder deinen eigenen Server genutzt hast, erstelle einen Schlüssel auf openrouter.ai und füge ihn unter Einstellungen → Deine KI (OpenRouter) ein; der alte wird nicht mehr verwendet.",
+      "Modelle immer aktuell: Die Liste aktualisiert sich selbst und zeigt, welche Modelle Stimmen trennen und was sie pro Stunde kosten. „Automatisch“ wählt das empfohlene Modell für dich aus.",
+      "Deine bekannten Stimmen mit OpenRouter: Die App setzt deine Stimmproben vor das Audio, um zu erkennen, wer spricht. Wenn ein Name vertauscht ist, korrigierst du ihn wie gewohnt.",
+      "Deine Statistiken: In den Einstellungen (oder mit einem Tipp auf „Deine Woche“) siehst du, wie viel du sprichst, deine Serien, zu welcher Uhrzeit du aufnimmst, mit wem du sprichst und wie viel du ausgegeben hast, mit den echten Kosten jeder Transkription.",
+      "Notizen mit der neuesten KI: Die Notiz nutzt immer die neueste Version des Modells, das du wählst (Claude, GPT oder Gemini), und sagt dir, welches geantwortet hat.",
+      "Schneller und ohne Hänger: Das Vorbereiten des Audios geht um ein Vielfaches schneller und zeigt den Fortschritt in %. Ab Android 14 läuft weiter, was du transkribieren lässt, auch wenn du die App schließt.",
+      "Jetzt mobile Daten nutzen: Wenn eine Transkription auf WLAN wartet, schickt ein Button (auch in der Benachrichtigung) sie nur dieses eine Mal über mobile Daten.",
+      "Ein Willkommen für alle, die die App zum ersten Mal installieren, mit der Berechtigung zum Transkribieren bei gesperrtem Handy und den Schritten für vivo und andere Marken. Du kannst es unter Einstellungen → Hilfe und Support erneut ansehen.",
+      "Supportberichte mit Datum und Uhrzeit im Namen, damit du sie auseinanderhalten kannst. Und ein neues Symbol für die Bibliothek."
+    ]
+  },
+  {
+    "version": "0.7.0",
+    "date": "2026-09-29",
+    "title": "Verbapp: neues Gesicht, dasselbe Gehirn",
+    "items": [
+      "Neuer Name und neues Symbol: Voz local heißt jetzt Verbapp, denn gesprochene Worte verfliegen, geschriebene bleiben. Deine Aufnahmen und Einstellungen bleiben genau so, wie sie waren.",
+      "Grün, Glas und eine neue Schrift: Glaskarten auf grünem Hintergrund und die Schrift Outfit, auch im Dunkelmodus.",
+      "Aufnahme im Vollbild: ein riesiger Timer und die Live-Wellenform deiner Stimme, mit Stopp, Pause und ★ immer griffbereit.",
+      "Benenne diese Aufnahme: Wenn du stoppst, erscheint ein Fenster mit einem Mini-Player, damit du ihr gleich einen Namen geben kannst.",
+      "Schwebende Leiste: Aufnehmen, Bibliothek und Einstellungen sitzen in einer Kapsel, die unten schwebt, in Reichweite deines Daumens.",
+      "Alles Bisherige funktioniert weiter: Aufnehmen, Momente markieren, Transkribieren, Stimmen erkennen, deine Notiz schreiben und in 0-Inbox speichern laufen genau wie vorher."
+    ]
+  },
+  {
+    "version": "0.6.0",
+    "date": "2026-09-29",
+    "title": "Vom roten Knopf zu deinem Second Brain",
+    "items": [
+      "Ein Knopf, der mit dir weitergeht: Jede Aufnahme zeigt dir ihren nächsten Schritt (Transkribieren, Stimmen prüfen, In 0-Inbox speichern). Wenn du später etwas korrigierst, ersetzt „Aktualisieren“ dieselbe Datei, ohne Kopien.",
+      "Eine Notiz für dein Second Brain: Wenn alles fertig ist, schreibt die App eine Zusammenfassung mit Entscheidungen, Aufgaben und wichtigen Zitaten und speichert sie in 0-Inbox, mit dem Transkript am Ende. In den Einstellungen wählst du, ob OpenAI oder Claude sie schreibt.",
+      "★ Momente markieren: Tippe beim Aufnehmen auf ★, um Wichtiges zu markieren, auch aus der Benachrichtigung bei gesperrtem Handy. Später springst du direkt zu jedem Moment.",
+      "Aufnehmen und Lesen, übersichtlicher: Beim Aufnehmen siehst du eine große Wellenform, die Zeit und die Knöpfe, immer am selben Platz. Jede Aufnahme liest sich wie ein Dokument, mit der Wellenform des Audios zum Navigieren.",
+      "Fortschritt im Blick: In der Aufnahme, auf der Startseite und in der Bibliothek siehst du, wie viele Teile fertig sind und wie viel noch fehlt. Die Bibliothek zeigt den Anfang des Textes und wer spricht.",
+      "Bekannte Stimmen und zweite Durchgänge: Speichere deine Stimme und die der Menschen, mit denen du am meisten sprichst (bis zu 4 pro Audio), damit sie von Anfang an mit Namen erkannt werden; bearbeite oder lösche sie in den Einstellungen. Außerdem kannst du Stimmen in einem Rutsch benennen und erneut transkribieren, ohne die vorherige Version zu verlieren."
+    ]
+  },
+  {
+    "version": "0.5.0",
+    "date": "2026-09-28",
+    "title": "Stimmen, die seltener verwechselt werden",
+    "items": [
+      "Meine Stimme: Nimm in den Einstellungen 10 Sekunden auf, und beim Trennen der Stimmen erkennt dich die App ab der ersten Sekunde mit deinem Namen.",
+      "Weniger Fehler beim Trennen der Stimmen: sauberere Proben jeder Person und weniger Schnitte im Audio, damit niemand doppelt auftaucht und keine Namen vertauscht werden.",
+      "Mit einem Tipp korrigieren: Tippe bei einem Abschnitt auf den Namen, um ihn anzuhören und die richtige Person auszuwählen, oder tausche zwei Personen ab dieser Stelle.",
+      "Gleicher Name, gleiche Person: Wenn du zwei Stimmen gleich benennst, werden sie zu einer zusammengeführt, mit einer einzigen Farbe.",
+      "Du kannst immer zurück: Jede Korrektur lässt sich rückgängig machen, und du kannst zu den ursprünglichen Stimmen zurückkehren.",
+      "Leichter lesbarer Text: Die .txt-Datei fasst in einem Absatz zusammen, was eine Person am Stück sagt."
+    ]
+  },
+  {
+    "version": "0.4.4",
+    "date": "2026-09-28",
+    "title": "Transkribieren, auch bei gesperrtem Handy",
+    "items": [
+      "Bei gesperrtem Bildschirm: Die App sagt dir, wenn Android sie ausbremst, und bringt dich zur Berechtigung, mit dem Weg für die Marke deines Handys.",
+      "Nichts bleibt hängen: Wenn ein Upload nicht mehr vorankommt, bricht die App ihn ab und versucht es selbst erneut.",
+      "Aussetzer des Handys zählen nicht als Fehler: Es wird innerhalb von Sekunden erneut versucht und, sobald du entsperrst, sofort.",
+      "Schluss mit versehentlichem Tippen: Aufnahmen unter 3 Sekunden werden weder gespeichert noch gesendet."
+    ]
+  },
+  {
+    "version": "0.4.3",
+    "date": "2026-09-27",
+    "title": "Lange Audios ohne endloses Warten",
+    "items": [
+      "Schneller und zuverlässiger: Das Audio wird nicht mehr neu komprimiert, und wenn etwas schiefgeht, macht die App dort weiter, wo sie aufgehört hat, statt von vorn zu beginnen.",
+      "Wiederholungen, die nicht verloren gehen: Sie laufen weiter, auch wenn du die App schließt.",
+      "Schnell speichern: Wähle einen Ordner (zum Beispiel Drive/0-Inbox) und speichere jede Transkription mit einem Tipp.",
+      "Datum vor dem Namen: Deine Dateien sortieren sich von selbst nach Datum.",
+      "Abbrechen mit Bestätigung: Du verlierst keine Transkription mehr durch einen Tipp zu viel."
+    ]
+  },
+  {
+    "version": "0.4.2",
+    "date": "2026-09-23",
+    "title": "Schnellere Transkription, alles im Blick",
+    "items": [
+      "Ein neues Modell für Text: schneller und günstiger, wenn du keine Stimmen trennen musst.",
+      "Stimmen trennen?: Beim Transkribieren entscheidest du selbst und siehst, wie lange jede Option dauert und was sie kostet.",
+      "Lange Audios in kürzerer Zeit: Sie werden an den Pausen geteilt und mehrere Teile gleichzeitig gesendet, ohne dass Namen vertauscht werden.",
+      "Live-Zahlen: Während transkribiert wird, siehst du die verbleibende Zeit, die Geschwindigkeit und die geschätzten Kosten."
+    ]
+  },
+  {
+    "version": "0.4.1",
+    "date": "2026-09-23",
+    "title": "Transkription, die nicht anhält",
+    "items": [
+      "Läuft weiter bei gesperrtem Handy: Eine Benachrichtigung zeigt dir den Fortschritt.",
+      "Details zum Ablauf: Du siehst, bei welchem Schritt sie gerade ist, wie lange sie schon läuft und worauf sie wartet (WLAN, Ladegerät oder Akku).",
+      "Keine doppelten Kosten bei langen Audios: Die App wartet so lange wie nötig, bevor sie erneut sendet.",
+      "Aufnehmen bleibt ruhig: Der Status der Transkription erscheint als Hinweis oben, ohne dass sich der Bildschirm verschiebt."
+    ]
+  }
+]

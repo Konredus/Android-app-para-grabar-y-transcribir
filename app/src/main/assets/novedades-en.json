@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.9.4",
+    "date": "2026-10-08",
+    "title": "Verbapp now speaks German",
+    "items": [
+      "Verbapp now speaks German: the whole app, the AI note and transcription in German. Change it in Settings → Language.",
+      "Maintenance: we updated an internal Android component that Google Play asked us to renew. Everything works just as before."
+    ]
+  },
+  {
     "version": "0.9.3",
     "date": "2026-10-04",
     "title": "Less noise, more voice",

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deutsche Übersetzung von values/strings_updates.xml. -->
+<resources>
+    <string name="upd_home_available">Neue Version verfügbar</string>
+    <string name="upd_home_downloading">Neue Version wird geladen…</string>
+    <string name="upd_home_downloading_pct">Neue Version wird geladen… %1$d %%</string>
+    <string name="upd_home_ready">Neue Version bereit zur Installation</string>
+
+    <string name="upd_row_title">Nach Updates suchen</string>
+    <string name="upd_row_check">Tippe, um bei Google Play nachzusehen</string>
+    <string name="upd_row_checking">Wird geprüft…</string>
+    <string name="upd_row_latest">Du hast die neueste Version</string>
+    <string name="upd_row_available">Neue Version verfügbar · Tippe zum Herunterladen</string>
+    <string name="upd_row_downloading">Wird geladen…</string>
+    <string name="upd_row_downloading_pct">Wird geladen… %1$d %%</string>
+    <string name="upd_row_ready">Bereit · Tippe zum Installieren</string>
+    <string name="upd_row_not_play">Nur für Installationen aus Google Play</string>
+    <string name="upd_row_failed">Prüfen fehlgeschlagen. Tippe, um es erneut zu versuchen.</string>
+
+    <string name="upd_toast_downloading">Die neue Version wird geladen</string>
+    <string name="upd_install_title">Neue Version installieren</string>
+    <string name="upd_install_body">Verbapp schließt sich kurz und öffnet sich wieder, schon aktualisiert.</string>
+    <string name="upd_install_transcribing">Die laufende Transkription geht danach von selbst weiter.</string>
+    <string name="upd_install_busy">Beende zuerst die Aufnahme oder den Import: Beim Installieren schließt sich Verbapp kurz.</string>
+    <string name="upd_install_now">Installieren</string>
+    <string name="upd_later">Nicht jetzt</string>
+
+    <string name="upd_not_play_title">Updates kommen über Google Play</string>
+    <string name="upd_not_play_body">Diese Kopie von Verbapp wurde nicht aus Google Play installiert und kann sich deshalb nicht selbst aktualisieren. Für Updates installiere sie aus Google Play.\n\nAchtung: Du musst diese Kopie zuerst deinstallieren, und beim Deinstallieren werden deine Aufnahmen gelöscht. Sichere vorher, was du behalten willst.</string>
+    <string name="upd_open_play">Google Play öffnen</string>
+</resources>

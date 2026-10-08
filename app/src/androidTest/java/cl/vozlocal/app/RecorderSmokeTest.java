@@ -11,7 +11,9 @@ import java.io.File;
 public class RecorderSmokeTest extends Instrumentation {
     /** {@code -e long false} skips the one-hour import fixture in LongImportChecks. */
     private boolean longChecks = true;
-    @Override public void onCreate(Bundle args) { super.onCreate(args); longChecks = args == null || !"false".equals(args.getString("long")); start(); }
+    /** {@code -e demo es|en|pt}: en vez de probar, deja las grabaciones de muestra para las capturas de Play (StoreDemo). */
+    private String demo;
+    @Override public void onCreate(Bundle args) { super.onCreate(args); longChecks = args == null || !"false".equals(args.getString("long")); demo = args == null ? null : args.getString("demo"); start(); }
     private void check(boolean value, String message) { if (!value) throw new AssertionError(message); }
     private void command(Context context, String action) {
         runOnMainSync(() -> {
@@ -29,6 +31,11 @@ public class RecorderSmokeTest extends Instrumentation {
     @Override public void onStart() {
         Bundle report = new Bundle();
         Context c = getTargetContext();
+        if (demo != null) {
+            try { StoreDemo.seed(c, demo); report.putString("stream", "DEMO " + demo + ": " + Recording.list(c).size() + " recordings\n"); finish(Activity.RESULT_OK, report); }
+            catch (Throwable error) { report.putString("stream", "FAIL: " + android.util.Log.getStackTraceString(error)); finish(Activity.RESULT_CANCELED, report); }
+            return;
+        }
         // 0.9.0: la app tiene tres idiomas. Las comprobaciones de texto están escritas en español: se fuerza ese idioma
         // para toda la corrida (I18nChecks prueba los tres por separado).
         Lang.override(Lang.ES);

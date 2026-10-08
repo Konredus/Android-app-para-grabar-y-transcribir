@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deutsche Übersetzung von values/strings_import.xml. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Bildschirm: Datei wählen -->
+    <string name="imp_title">Audio importieren</string>
+    <string name="imp_subtitle">WhatsApp-Audios, Diktiergeräte und Sprachnotizen.</string>
+    <string name="imp_pick">Audiodatei wählen</string>
+    <string name="imp_pick_hint">Bis zu 1 GB · deine Originaldatei bleibt unverändert</string>
+    <string name="imp_whatsapp">Aus WhatsApp</string>
+    <string name="imp_step_open">Öffne den Chat und halte das Audio gedrückt.</string>
+    <string name="imp_step_share">Tippe auf Teilen (oder ⋮ → Teilen).</string>
+    <string name="imp_step_choose">Wähle Verbapp aus der App-Liste.</string>
+    <string name="imp_step_save">Prüfe den Titel und tippe auf %1$s.</string>
+    <string name="imp_step_say">Schritt %1$d: %2$s</string>
+    <string name="imp_also">Funktioniert auch mit Diktiergeräten, Telegram und jeder App, die Audio teilt.</string>
+
+    <!-- Bildschirm: Fortschritt, Titel und Abschnitt -->
+    <string name="imp_progress_note">Du kannst diesen Bildschirm verlassen oder dein Handy sperren: Der Import läuft weiter und wir sagen dir Bescheid, wenn er fertig ist.</string>
+    <string name="imp_cancel">Import abbrechen</string>
+    <string name="imp_change">Ändern</string>
+    <string name="imp_title_label">Titel</string>
+    <string name="imp_title_hint">Name der Aufnahme</string>
+    <string name="imp_range">Abschnitt (optional)</string>
+    <string name="imp_from">Von (Sek.)</string>
+    <string name="imp_to">Bis (Sek.)</string>
+    <string name="imp_end_hint">Ende</string>
+    <string name="imp_listen">Abschnitt abspielen</string>
+    <string name="imp_original_kept">Deine Originaldatei bleibt unverändert.</string>
+    <string name="imp_save">Audio speichern</string>
+    <string name="imp_auto">Nach dem Speichern wird es automatisch transkribiert.</string>
+    <string name="imp_retry">Erneut versuchen</string>
+    <string name="imp_percent">%1$d %%</string>
+    <string name="imp_duration">Dauer %1$s</string>
+    <string name="imp_range_say">Abschnitt von %1$s bis %2$s, Länge %3$s</string>
+    <string name="imp_range_desc" tools:ignore="UnusedResources">Gewählter Abschnitt von %1$s bis %2$s. Nutze die Sekundenfelder, um ihn genau anzupassen.</string>
+    <string name="imp_cancelling">Wird abgebrochen…</string>
+
+    <!-- Bildschirm: Meldungen -->
+    <string name="imp_busy">Schließe den aktuellen Import ab, bevor du ein weiteres Audio holst.</string>
+    <string name="imp_check_range">Prüfe den Abschnitt</string>
+    <string name="imp_check_range_body">Das Ende muss mindestens eine halbe Sekunde nach dem Anfang liegen und darf nicht über die Länge der Datei hinausgehen.</string>
+    <string name="imp_playing">Abschnitt wird abgespielt…</string>
+    <string name="imp_listen_title">Abspielen</string>
+    <string name="imp_listen_error">Prüfe den Abschnitt und versuch es noch mal.</string>
+    <string name="imp_import">Importieren</string>
+    <string name="imp_no_picker">Auf diesem Handy ist keine Dateiauswahl verfügbar.</string>
+    <string name="imp_cancel_title">Import abbrechen?</string>
+    <string name="imp_cancel_body">Nur die temporäre Kopie wird gelöscht. Deine Originaldatei bleibt erhalten.</string>
+    <string name="imp_continues">Der Import läuft im Hintergrund weiter. Wir sagen dir Bescheid, wenn er fertig ist.</string>
+
+    <!-- Schritte (Bildschirm und Benachrichtigung) -->
+    <string name="imp_stage_reading">Datei wird gelesen</string>
+    <string name="imp_stage_copying">Datei wird aufs Handy kopiert</string>
+    <string name="imp_stage_checking">Audio wird geprüft</string>
+    <string name="imp_stage_ready">Audio bereit</string>
+    <string name="imp_stage_resume">Audio bereit zum Fortfahren</string>
+    <string name="imp_stage_preparing">Audio wird vorbereitet</string>
+    <string name="imp_stage_saving">Audio wird gespeichert</string>
+    <string name="imp_stage_almost">Fast fertig</string>
+    <string name="imp_stage_library">Wird in der Bibliothek gespeichert</string>
+    <string name="imp_original_safe">Deine Originaldatei bleibt erhalten</string>
+    <string name="imp_progress_mb">%1$.1f MB von %2$.1f MB</string>
+    <string name="imp_progress_time">%1$s von %2$s</string>
+
+    <!-- Benachrichtigung -->
+    <string name="imp_channel">Audio-Importe</string>
+    <string name="imp_saved">Audio gespeichert</string>
+    <string name="imp_pending">Import ausstehend</string>
+    <string name="imp_ready_to_save">Audio bereit zum Speichern</string>
+    <string name="imp_in_library">In der Bibliothek verfügbar</string>
+    <string name="imp_tap_to_save">Tippen, um einen Titel zu vergeben und zu speichern</string>
+
+    <!-- Fehler -->
+    <string name="imp_err_start">Android konnte die Vorbereitung des Audios nicht starten. Öffne die App und versuch es noch mal.</string>
+    <string name="imp_err_background">Das Audio konnte im Hintergrund nicht vorbereitet werden. Versuch es noch mal bei geöffneter App.</string>
+    <string name="imp_err_cancelled">Import abgebrochen. Das Original bleibt erhalten.</string>
+    <string name="imp_err_convert">Das Audio konnte nicht vorbereitet werden. Versuch es noch mal oder wähle einen kürzeren Abschnitt.</string>
+    <string name="imp_err_read">Die Datei konnte nicht gelesen werden. Prüfe das Format, deinen freien Speicher und ob sie mindestens eine Sekunde lang ist.</string>
+    <string name="imp_err_interrupted">Die Vorbereitung wurde unterbrochen. Deine Kopie ist sicher; du kannst sie erneut speichern.</string>
+
+    <!-- Standardtitel -->
+    <string name="imp_default_name">Importiertes Audio</string>
+    <string name="imp_crop_name">%1$s · Ausschnitt</string>
+    <!-- %1$s Tag, %2$s abgekürzter Monat („WhatsApp-Audio 29. Sept.“). -->
+    <string name="imp_whatsapp_title">WhatsApp-Audio %1$s. %2$s</string>
+    <string name="imp_whatsapp_audio">WhatsApp-Audio</string>
+</resources>

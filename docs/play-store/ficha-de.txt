@@ -1,0 +1,36 @@
+Verbapp ist für dein SECOND BRAIN (zweites Gehirn) entstanden. Was du sagst, wird zu Notizen, die du direkt ablegen kannst: Nimm Meetings, Ideen und Gespräche offline auf und lass sie, wann immer du willst, mit KI transkribieren, mit jeder sprechenden Person beim Namen und einer Notiz, die direkt in deinem Obsidian-Vault oder in einem Ordner deiner Wahl landet.
+
+FÜR DEIN SECOND BRAIN GEMACHT
+• Eine KI-Notiz pro Aufnahme: Zusammenfassung, Entscheidungen, Aufgaben und wichtige Zitate, in Markdown (.md) mit Eigenschaften und Tags.
+• Speichere sie mit einem Tipp in deinem Obsidian-Vault (zum Beispiel in deiner 0-Inbox), in Google Drive oder in jedem Ordner, den du nutzt.
+• Dazu der vollständige Text (.txt), in dem steht, wer was gesagt hat, zum Durchsuchen und Verlinken, wann immer du ihn brauchst.
+
+MIT EINEM TIPP AUFNEHMEN
+• Funktioniert offline: Deine Aufnahmen bleiben auf deinem Handy.
+• Nimmt auch bei gesperrtem Bildschirm weiter auf.
+• Markiere wichtige Momente beim Aufnehmen mit ★, auch aus der Benachrichtigung.
+• Importiere Audios aus WhatsApp, von Diktiergeräten und aus anderen Apps (M4A, MP3, WAV und mehr).
+
+TRANSKRIBIEREN UND STIMMEN TRENNEN
+• Transkribiere mit den neuesten Sprache-zu-Text-Modellen über OpenRouter. Die Liste aktualisiert sich selbst, und „Automatisch“ wählt das empfohlene Modell.
+• Trennt jede Person, die spricht, und erkennt Stimmen, die du schon kennst: deine eigene und die der Menschen, mit denen du am meisten sprichst.
+• Korrigiere mit einem Tipp, wer was gesagt hat, immer mit Rückgängig.
+• Lange Aufnahmen werden in Teile aufgeteilt, die parallel gesendet werden.
+
+DEINE STATISTIKEN
+• Wie viel du sprichst, deine Serien, wann du aufnimmst und mit wem du sprichst.
+• Wie viel du für Transkriptionen ausgegeben hast, mit den echten Kosten laut OpenRouter.
+• Alles wird auf deinem Handy berechnet.
+
+DU BEHÄLTST DIE KONTROLLE ÜBER DEINE DATEN
+• Kein Konto, keine Werbung und kein Tracking.
+• Audio verlässt dein Handy nur, wenn du eine Transkription anforderst (oder die automatische Transkription aktivierst), und geht mit deinem eigenen Schlüssel an OpenRouter.
+• Sende nur über WLAN oder nutze bei Bedarf für eine einzelne Aufnahme mobile Daten.
+
+IN DEINER SPRACHE
+• Deutsch, Englisch, Spanisch und brasilianisches Portugiesisch. Verbapp startet in der Sprache deines Handys, und du kannst sie jederzeit ändern.
+
+SO FÄNGST DU AN
+Aufnehmen ist kostenlos und braucht keine Einrichtung. Zum Transkribieren brauchst du einen OpenRouter-Schlüssel (openrouter.ai): Mit einem einzigen Schlüssel transkribierst du und erstellst deine Notizen, und du zahlst OpenRouter nur, was du tatsächlich nutzt, ohne Abo. Je nach gewähltem Modell kostet eine Stunde Audio ab etwa 0,10 US$.
+
+Gemacht für alle, die ein Second Brain aufbauen und mehr reden als tippen: Meetings, Kurse, Interviews, Sprachnotizen und Gespräche.

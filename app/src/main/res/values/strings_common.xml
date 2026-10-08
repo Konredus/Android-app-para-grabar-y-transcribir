@@ -6,6 +6,7 @@
     <string name="lang_en" translatable="false">English</string>
     <string name="lang_es" translatable="false">Español</string>
     <string name="lang_pt" translatable="false">Português (Brasil)</string>
+    <string name="lang_de" translatable="false">Deutsch</string>
 
     <string name="common_ok">Got it</string>
     <string name="common_cancel">Cancel</string>

@@ -15,8 +15,8 @@ android {
         applicationId 'cl.verbapp.app'
         minSdk 26
         targetSdk 36
-        versionCode 17
-        versionName '0.9.3'
+        versionCode 18
+        versionName '0.9.4'
         testInstrumentationRunner 'cl.vozlocal.app.RecorderSmokeTest'
     }
     signingConfigs {
@@ -45,4 +45,7 @@ dependencies {
     // 0.9.2: avisar cuando Google Play tiene una versión nueva (Updates). Es la única dependencia de la app. La 2.1.0 es la
     // que funciona con Android 14+ (la antigua com.google.android.play:core no). Trae también FakeAppUpdateManager (pruebas).
     implementation 'com.google.android.play:app-update:2.1.0'
+    // 0.9.4: app-update trae (vía play-services-basement) androidx.fragment 1.0.0, que Google Play marcó como versión de
+    // SDK desactualizada. Se fija la versión actual; la app no usa fragments, así que no cambia nada en pantalla.
+    implementation 'androidx.fragment:fragment:1.9.1'
 }

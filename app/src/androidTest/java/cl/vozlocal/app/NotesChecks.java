@@ -272,6 +272,24 @@ final class NotesChecks {
                 boolean unreadable=false;try{Notes.parseAnswer("nope");}catch(Notes.BadAnswer e){unreadable=e.getMessage().startsWith(en?"The AI replied":"A IA respondeu");}
                 expect(unreadable&&new Notes.Discarded().getMessage().startsWith(en?"The transcript changed":"A transcrição mudou"),"Unreadable or discarded note messages not translated in "+lang);
             }
+            // Alemán (0.9.4): pedido y cabecera en alemán, sin español ni inglés; la nota y los errores salen de values-de.
+            Lang.override(Lang.DE);
+            Notes.Prompt p=Notes.prompt(t,r,marks());String system=Notes.system(p.lang);int cut=p.text.indexOf("\nTranskript:\n");
+            expect(p.lang.equals(Lang.DE)&&cut>0&&p.text.contains("[00:00] {S1}: Hola, partamos. con el presupuesto\n"),"Prompt not built in German:\n"+p.text);
+            String head=p.text.substring(0,cut);
+            expect(system.contains("1. Schreib in natürlichem, klarem und freundlichem Deutsch.")&&system.contains(shape),"The German instructions do not ask for German or lost the JSON shape");
+            for(String field:new String[]{"- title: ","- summary: ","- decisions: ","- tasks: ","- quotes: ","- tags: "," 60 "," 5 "})expect(system.contains(field),"The German instructions lost «"+field+"»");
+            for(String word:spanish)expect(!system.contains(word)&&!head.contains(word),"The German prompt has Spanish instructions («"+word+"»):\n"+head);
+            expect(head.contains("Aktueller Titel: „2026-09-29 Reunión de presupuesto“ (von der Person geschrieben)")&&head.contains("Datum: Dienstag, 29. September 2026, 16:05")
+                &&head.contains("Dauer: "+Ui.humanDuration(60_000))&&head.contains("Sprechende Personen: {S1}, {S2}, {S3}")&&head.contains("★ 00:07 precio\n")&&head.contains("beim Aufnehmen mit ★ markiert"),"The German prompt header is wrong:\n"+head);
+            expect(Notes.prompt(t,new Recording(r.id,Recording.defaultTitle(created),created,60_000),null).text.contains(" (automatisch)\n")&&Notes.prompt(plain,r,new JSONArray()).text.contains("Stimmen nicht getrennt"),"Automatic title or plain transcript not explained in German");
+            String md=Notes.markdown(r,note,t,marks());
+            for(String foreign:new String[]{"## Summary","## Resumen","## Resumo","## Transcript\n","date: ","fecha:","«"})expect(!md.contains(foreign),"German Markdown has «"+foreign+"»:\n"+md);
+            expect(md.contains("\n> „Yo envío la planilla“ — Konrad (00:05)\n")||md.contains("\n> “Yo envío la planilla” — Konrad (00:05)\n"),"German Markdown quote wrong:\n"+md);
+            String fix=Lang.str(R.string.key_fix_in_settings),key=rejected(401,"{\"error\":{\"code\":401,\"message\":\"No auth credentials found\"}}");
+            expect(key.endsWith(" "+fix)&&StatusText.aboutKey(key)&&!key.contains("OpenRouter key"),"401 not explained as a key problem in German: "+key);
+            String broke=rejected(402,"{\"error\":{\"code\":402,\"message\":\"Insufficient credits\"}}");
+            expect(broke.contains("openrouter.ai")&&!StatusText.aboutKey(broke)&&!broke.contains("credits"),"402 not translated to German: "+broke);
         }finally{Lang.override(Lang.ES);}
         expect(Lang.ES.equals(Lang.current())&&Notes.prompt(t,r,marks()).lang.equals(Lang.ES),"The language was not restored to Spanish");
     }

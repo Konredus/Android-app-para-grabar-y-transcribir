@@ -89,6 +89,7 @@
     <string name="set_audio_lang_en">Inglés</string>
     <string name="set_audio_lang_es">Español</string>
     <string name="set_audio_lang_pt">Portugués</string>
+    <string name="set_audio_lang_de">Alemán</string>
     <string name="set_audio_lang_hint">Indicar el idioma mejora la precisión.</string>
     <string name="set_audio_lang_detect">Detección automática</string>
     <string name="set_audio_lang_detect_sub">Para audios en otros idiomas o mezclados</string>

@@ -28,7 +28,7 @@ YOU CONTROL YOUR DATA
 • Send on Wi-Fi only, or use mobile data for a single recording when you need to.
 
 IN YOUR LANGUAGE
-• English, Spanish and Brazilian Portuguese. Verbapp starts in your phone’s language, and you can change it anytime.
+• English, Spanish, Brazilian Portuguese and German. Verbapp starts in your phone’s language, and you can change it anytime.
 
 HOW TO START
 Recording is free and needs no setup. To transcribe you need an OpenRouter key (openrouter.ai): with a single key you transcribe and create your notes, and you pay OpenRouter only for what you use, with no subscription. Depending on the model you choose, an hour of audio costs from about US$0.10.

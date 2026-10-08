@@ -1,0 +1,9 @@
+Google Play – Deutsch (de-DE)
+
+Name der App (max. 30 Zeichen, 30):
+Verbapp: Aufnahme & Transkript
+
+Kurzbeschreibung (max. 80 Zeichen, 77):
+Deine Stimme direkt in dein Second Brain: aufnehmen, KI-Transkripte, Notizen.
+
+Vollständige Beschreibung: ficha-de.txt

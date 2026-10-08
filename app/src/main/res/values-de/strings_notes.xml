@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deutsche Übersetzung von values/strings_notes.xml. Nur note_err_no_key und note_err_key nennen den Schlüssel. -->
+<resources>
+    <!-- Ersatzwerte: Markierung ohne Stimme, Stimme ohne Namen, Aufnahme ohne Titel. -->
+    <string name="note_someone">jemand</string>
+    <string name="note_person">Person</string>
+    <string name="note_untitled">Aufnahme</string>
+
+    <!-- Fußzeile der Notiz: „Erstellt mit OpenRouter · Modell · Kosten US$0.004“. -->
+    <string name="note_credit">Erstellt mit %1$s · %2$s</string>
+    <string name="note_cost_real">Kosten %1$s</string>
+
+    <!-- Protokoll der Aufnahme. -->
+    <string name="note_log_started">Notiz wird mit %1$s erstellt</string>
+    <string name="note_log_retry_simple">OpenRouter hat eine Option der Anfrage nicht akzeptiert · neuer Versuch im einfachen Modus</string>
+    <string name="note_log_ready">Notiz fertig</string>
+    <string name="note_log_took">dauerte %1$s</string>
+    <string name="note_log_titled">Titel hinzugefügt</string>
+    <string name="note_log_title_applied">Titel aus der Notiz übernommen (du kannst ihn ändern)</string>
+    <string name="note_log_discarded">Notiz verworfen: Das Transkript hat sich während der Erstellung geändert</string>
+    <string name="note_log_failed">Notiz konnte nicht erstellt werden: %1$s</string>
+
+    <!-- Fehler. %1$s ist der Dienst (OpenRouter). -->
+    <string name="note_err_no_key">Die Notiz nutzt deinen OpenRouter-Schlüssel. Füge ihn unter Einstellungen → „Deine KI (OpenRouter)“ hinzu.</string>
+    <string name="note_err_key">Dein %1$s-Schlüssel ist ungültig oder wurde widerrufen. %2$s</string>
+    <string name="note_err_no_transcript">Diese Aufnahme hat noch kein Transkript.</string>
+    <string name="note_err_demo">Die Beispielaufnahme wird nicht an die KI gesendet.</string>
+    <string name="note_err_no_speech">In dieser Aufnahme wurde keine Sprache erkannt, daher gibt es nichts zusammenzufassen.</string>
+    <string name="note_err_discarded">Das Transkript hat sich während der Erstellung der Notiz geändert. Erstelle sie erneut, sobald die neue Version fertig ist.</string>
+    <string name="note_err_timeout">%1$s hat zu lange gebraucht. Versuch es noch mal.</string>
+    <string name="note_err_offline">Keine Verbindung zu %1$s. Versuch es noch mal, wenn du online bist.</string>
+    <string name="note_err_generic">Die Notiz konnte nicht erstellt werden. Versuch es noch mal.</string>
+    <string name="note_err_format">%1$s hat in einem unerwarteten Format geantwortet. Versuch es noch mal.</string>
+    <string name="note_err_format_ai">Die KI hat in einem unerwarteten Format geantwortet. Versuch es noch mal.</string>
+    <string name="note_err_empty">%1$s hat die Notiz nicht zurückgegeben. Versuch es noch mal.</string>
+    <string name="note_err_cut">Die Antwort von %1$s wurde vor dem Ende abgeschnitten. Versuch es noch mal.</string>
+    <string name="note_err_refused">%1$s hat abgelehnt, diese Aufnahme zusammenzufassen.</string>
+    <string name="note_err_no_credits_router">Dein OpenRouter-Guthaben ist aufgebraucht. Lade auf openrouter.ai Guthaben auf und erstelle die Notiz erneut.</string>
+    <string name="note_err_no_credits">Dein %1$s-Konto hat kein Guthaben mehr. Prüfe deine API-Abrechnung.</string>
+    <string name="note_err_overloaded">%1$s ist gerade überlastet. Versuch es in ein paar Minuten noch mal.</string>
+    <string name="note_err_too_long">Das Transkript ist zu lang für das Notiz-Modell. Versuch ein anderes Modell.</string>
+    <!-- „Settings → Privacy“ ist das Menü von openrouter.ai, das auf Englisch ist. -->
+    <string name="note_err_data_policy">Kein OpenRouter-Anbieter bietet das Notiz-Modell mit den Datenschutzeinstellungen deines Kontos an. Prüfe sie auf openrouter.ai (Settings → Privacy) oder wähle in den Einstellungen ein anderes Modell.</string>
+    <string name="note_err_model_gone">Das Notiz-Modell („%1$s“) ist auf OpenRouter nicht mehr verfügbar. Wähle in den Einstellungen ein anderes.</string>
+    <string name="note_err_model_unavailable">Das Notiz-Modell („%1$s“) ist in deinem %2$s-Konto nicht verfügbar.</string>
+    <string name="note_err_rejected">%1$s hat die Anfrage für die Notiz abgelehnt (HTTP %2$d). Versuch es noch mal oder nutze ein anderes Modell.</string>
+
+    <!-- Markdown (Obsidian): Frontmatter-Eigenschaften, kleingeschrieben und ohne Umlaute. -->
+    <string name="note_md_date">datum</string>
+    <string name="note_md_time">uhrzeit</string>
+    <string name="note_md_duration">dauer</string>
+    <string name="note_md_people">personen</string>
+    <string name="note_md_source">quelle</string>
+    <string name="note_md_recording">aufnahme</string>
+    <string name="note_md_ai">ki_notiz</string>
+    <!-- Abschnitte der Notiz. -->
+    <string name="note_summary">Zusammenfassung</string>
+    <string name="note_decisions">Entscheidungen</string>
+    <string name="note_tasks">Aufgaben</string>
+    <string name="note_marks">Markierte Momente</string>
+    <string name="note_quotes">Wichtige Zitate</string>
+    <string name="note_transcript">Transkript</string>
+    <string name="note_md_quote">„%1$s“</string>
+    <!-- Hinweise zum Transkript (kursiv). -->
+    <string name="note_md_demo">Demo-Beispiel: stammt nicht aus einem echten Transkript.</string>
+    <string name="note_md_auto_voices">Stimmen automatisch getrennt: Fehler sind möglich.</string>
+    <string name="note_md_no_speech">In diesem Audio wurde keine Sprache erkannt.</string>
+</resources>

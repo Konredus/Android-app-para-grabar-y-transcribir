@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deutsche Übersetzung von values/strings_onboarding.xml -->
+<resources>
+    <!-- Lo honesto: qué sale del teléfono (paso 3) y lo que se promete de grabar (paso 1). Nunca «todo queda en el teléfono». -->
+    <string name="onb_sent">Zum Transkribieren wird dein Audio an OpenRouter und das von dir gewählte Modell gesendet; für die Notiz der Text. Dein Schlüssel zahlt nur, was du nutzt.</string>
+    <string name="onb_kept">Bleibt auf deinem Handy, bis es transkribiert wird.</string>
+    <string name="onb_unchecked">Schlüssel gespeichert. Wir konnten ihn gerade nicht prüfen: Das geht später in den Einstellungen.</string>
+
+    <!-- Revisión de la clave (también la usa Ajustes). Nunca repite la clave. Los rechazos dicen «Schlüssel» (StatusText.aboutKey). -->
+    <string name="onb_key_empty">Füge deinen Schlüssel ein, um weiterzumachen.</string>
+    <string name="onb_key_spaces">Der Schlüssel darf keine Leerzeichen oder Zeilenumbrüche enthalten. Kopiere ihn noch mal vollständig.</string>
+    <string name="onb_key_short">Dieser Schlüssel sieht unvollständig aus. Kopiere ihn ganz und füge ihn erneut ein.</string>
+    <string name="onb_key_anthropic">Dieser Schlüssel ist von Anthropic (Claude). Hier brauchst du einen OpenRouter-Schlüssel; er beginnt mit „sk-or-“.</string>
+    <string name="onb_key_openai">Dieser Schlüssel ist nicht von OpenRouter (er sieht nach OpenAI oder einem anderen Dienst aus). OpenRouter-Schlüssel beginnen mit „sk-or-“.</string>
+    <string name="onb_key_valid">Gültiger Schlüssel</string>
+    <!-- %1$s: lo que dice Ajustes del saldo (SettingsActivity.balanceText). -->
+    <string name="onb_key_valid_with">Gültiger Schlüssel · %1$s</string>
+    <string name="onb_key_failed">Der Schlüssel hat nicht funktioniert.</string>
+    <string name="onb_ready_title">Alles bereit!</string>
+    <!-- %1$s: el primer nombre de la persona. -->
+    <string name="onb_ready_title_name">Alles bereit, %1$s</string>
+
+    <!-- Marco: barra de arriba, botón principal y anuncio del paso para el lector de pantalla. -->
+    <string name="onb_back_step">Zurück zum vorherigen Schritt</string>
+    <string name="onb_skip">Überspringen</string>
+    <string name="onb_skip_desc">Begrüßung überspringen</string>
+    <string name="onb_close">Schließen</string>
+    <string name="onb_close_desc">Begrüßung schließen</string>
+    <string name="onb_later">Nicht jetzt, nur aufnehmen</string>
+    <string name="onb_start">Los geht’s</string>
+    <string name="onb_continue">Weiter</string>
+    <string name="onb_done">Fertig</string>
+    <string name="onb_first_recording">Meine erste Aufnahme machen</string>
+    <!-- Título de la ventana: «Willkommen, Schritt 1 von 4». -->
+    <string name="onb_window_title">%1$s, Schritt %2$d von %3$d</string>
+    <string name="onb_step_welcome">Willkommen</string>
+    <string name="onb_step_you">Du</string>
+    <string name="onb_step_ai">Verbinde deine KI</string>
+    <string name="onb_step_ready">Bereit</string>
+    <string name="onb_step_of">Schritt %1$d von %2$d</string>
+
+    <!-- 1. Bienvenida. El título lleva un salto de línea y se destaca su última palabra: la última línea debe tener dos. -->
+    <string name="onb_welcome_overline">Willkommen bei Verbapp</string>
+    <string name="onb_welcome_title">Deine Worte,\nfür immer</string>
+    <string name="onb_welcome_record">Offline aufnehmen</string>
+    <string name="onb_welcome_voices">Transkribieren, Stimme für Stimme</string>
+    <string name="onb_welcome_voices_detail">Damit du weißt, wer was gesagt hat.</string>
+    <string name="onb_welcome_note">Eine Notiz, bereit zum Speichern</string>
+    <string name="onb_welcome_note_detail">Direkt in dein zweites Gehirn.</string>
+    <!-- Selector de idioma; %1$s: el nombre del idioma en su propio idioma. -->
+    <string name="onb_language_desc">Sprache: %1$s</string>
+
+    <!-- 2. Tú: nombre, micrófono y pantalla bloqueada. -->
+    <string name="onb_you_overline">Schön, dich kennenzulernen,</string>
+    <string name="onb_you_title">Wie heißt du?</string>
+    <string name="onb_name_hint">Dein Name</string>
+    <string name="onb_name_desc">Dein Name, optional</string>
+    <string name="onb_name_why">Optional: um dich zu begrüßen und deinen Namen in deine Transkripte zu schreiben.</string>
+    <string name="onb_mic">Mikrofon</string>
+    <string name="onb_mic_allow">Mikrofon erlauben</string>
+    <string name="onb_mic_allowed">Mikrofon erlaubt</string>
+    <string name="onb_mic_ready">Fertig: Du kannst aufnehmen, wann du willst.</string>
+    <string name="onb_mic_use_notify">Wird nur beim Aufnehmen genutzt. Eine Benachrichtigung zeigt, dass die Aufnahme läuft.</string>
+    <string name="onb_mic_use_offline">Wird nur beim Aufnehmen genutzt und funktioniert offline.</string>
+    <string name="onb_mic_off_title">Das Mikrofon ist ausgeschaltet</string>
+    <string name="onb_mic_off_body">Schalte es in den Android-Einstellungen ein, damit du aufnehmen kannst. Das geht auch später.</string>
+    <string name="onb_open_settings">Einstellungen öffnen</string>
+    <string name="onb_settings_failed">Die Einstellungen konnten nicht geöffnet werden.</string>
+    <string name="onb_not_now">Nicht jetzt</string>
+    <string name="onb_battery_title">Bei gesperrtem Bildschirm</string>
+    <string name="onb_battery_ask">Damit deine Aufnahmen auch transkribiert werden, wenn du das Handy sperrst.</string>
+    <!-- %1$s: la marca del teléfono (vivo, Xiaomi…). -->
+    <string name="onb_battery_extra">Erlaubt. Auf %1$s-Handys gibt es noch eine Einstellung: Tippe, um sie zu sehen.</string>
+    <string name="onb_battery_done">Fertig: Verbapp transkribiert auch, wenn du das Handy sperrst.</string>
+    <!-- Para el lector de pantalla: primero qué hace el toque; %1$s: el apoyo de la fila. -->
+    <string name="onb_battery_allow_desc">Transkribieren bei gesperrtem Bildschirm erlauben. %1$s</string>
+    <string name="onb_battery_allowed">Erlaubt: Verbapp transkribiert auch, wenn du das Handy sperrst.</string>
+
+    <!-- 3. Conecta tu IA -->
+    <string name="onb_ai_overline">Ein Schlüssel für alles</string>
+    <string name="onb_ai_title">Verbinde deine KI</string>
+    <string name="onb_ai_how">So funktioniert’s</string>
+    <string name="onb_ai_key_label">OpenRouter-Schlüssel</string>
+    <string name="onb_paste">Einfügen</string>
+    <string name="onb_paste_desc">Kopierten Schlüssel einfügen</string>
+    <string name="onb_how_get_key">Wie bekomme ich einen Schlüssel?</string>
+    <!-- %1$s: el motivo del rechazo. -->
+    <string name="onb_key_rejected_paste">%1$s Füge einen anderen Schlüssel ein.</string>
+    <string name="onb_key_saved_already">Es ist schon ein Schlüssel gespeichert. Füge nur dann einen anderen ein, wenn du ihn ändern willst.</string>
+    <string name="onb_key_encrypted">Er wird verschlüsselt auf diesem Handy gespeichert.</string>
+    <string name="onb_paste_empty">Nichts kopiert. Kopiere deinen Schlüssel und tippe noch mal auf „Einfügen“.</string>
+    <string name="onb_paste_not_key">Was du kopiert hast, sieht nicht nach einem Schlüssel aus. Kopiere ihn ganz und tippe noch mal auf „Einfügen“.</string>
+    <string name="onb_paste_ok">Schlüssel eingefügt. Tippe auf „Weiter“.</string>
+    <!-- %1$s: el botón «Nicht jetzt, nur aufnehmen». -->
+    <string name="onb_key_or_later">Füge deinen Schlüssel ein oder tippe auf „%1$s“.</string>
+    <string name="onb_key_save_failed">Der Schlüssel konnte nicht auf diesem Handy gespeichert werden. Bitte versuch es noch mal.</string>
+    <string name="onb_howto_title">So bekommst du deinen Schlüssel</string>
+    <string name="onb_howto_body">Mit OpenRouter nutzt du viele KIs mit einem einzigen Schlüssel. Du zahlst nur, was du nutzt.</string>
+    <string name="onb_howto_1">Erstelle dein Konto auf openrouter.ai.</string>
+    <string name="onb_howto_2">Lade etwas Guthaben auf: Abgezogen wird nur, was du nutzt.</string>
+    <string name="onb_howto_3">Erstelle unter „Keys“ einen Schlüssel und kopiere ihn.</string>
+    <string name="onb_howto_4">Komm zurück zu Verbapp und tippe auf „Einfügen“.</string>
+    <!-- %1$s: openrouter.ai -->
+    <string name="onb_open_site">%1$s öffnen</string>
+    <string name="onb_no_browser_title">Der Browser konnte nicht geöffnet werden</string>
+    <string name="onb_no_browser_body">Öffne %1$s in einem Browser, erstelle deinen Schlüssel und komm zurück, um ihn einzufügen.</string>
+
+    <!-- 4. Listo -->
+    <string name="onb_ready_overline">Du bist bereit zum Aufnehmen</string>
+    <string name="onb_checking">Dein Schlüssel wird geprüft…</string>
+    <!-- %1$s: OpenRouter -->
+    <string name="onb_check_key_of">Prüfe deinen %1$s-Schlüssel</string>
+    <string name="onb_key_ready">Schlüssel gespeichert: bereit zum Transkribieren.</string>
+    <string name="onb_connect_ai">Verbinde deine KI</string>
+    <string name="onb_no_key">Ohne Schlüssel kannst du nur aufnehmen. Du kannst jederzeit einen hinzufügen.</string>
+    <string name="onb_voice">Deine Stimme</string>
+    <string name="onb_voice_saved">Gespeichert: Verbapp erkennt dich schon.</string>
+    <string name="onb_voice_record">Meine Stimme aufnehmen</string>
+    <string name="onb_voice_optional">Optional: 10 Sekunden, damit Verbapp dich erkennt.</string>
+    <string name="onb_inbox">Schnell speichern</string>
+    <!-- %1$s: el nombre de la carpeta elegida. -->
+    <string name="onb_inbox_set">Deine Notizen landen mit einem Tippen in „%1$s“.</string>
+    <string name="onb_inbox_pick">Meinen 0-Inbox-Ordner wählen</string>
+    <string name="onb_inbox_optional">Optional: wohin deine Notizen mit einem Tippen gehen.</string>
+
+    <!--
+      Guía del ahorro de batería propio de cada marca. Cada paso: una frase con punto final y de 110 letras como mucho.
+      %1$s: la marca (vivo, Xiaomi…) o el botón «Verbapp-Einstellungen öffnen».
+    -->
+    <string name="bat_guide_title">Noch eine %1$s-Einstellung</string>
+    <string name="bat_guide_body">%1$s hat einen eigenen Energiesparmodus, getrennt von dem von Android. Ohne diese Einstellung kann er deine Transkriptionen pausieren, wenn du das Handy sperrst.</string>
+    <string name="bat_search_tip">Nicht gefunden? Tippe in den Einstellungen auf das Suchsymbol und suche nach „Hintergrund“.</string>
+    <string name="bat_open_settings">Verbapp-Einstellungen öffnen</string>
+    <string name="bat_step_open">Tippe unten auf „%1$s“.</string>
+    <string name="bat_find_app">Suche Verbapp.</string>
+    <string name="bat_vivo_battery">Öffne „Akku“ (oder „Stromverbrauch“).</string>
+    <string name="bat_vivo_allow">Wähle die Option, die den Stromverbrauch im Hintergrund erlaubt.</string>
+    <string name="bat_vivo_autostart">Wenn du „Autostart“ siehst, schalte es auch ein.</string>
+    <string name="bat_vivo_old_path">Öffne Einstellungen → Akku → „Stromverbrauch im Hintergrund verwalten“.</string>
+    <string name="bat_vivo_old_allow">Erlaube Verbapp den Stromverbrauch im Hintergrund.</string>
+    <string name="bat_xiaomi_saver">Öffne „Akkusparmodus“ und wähle „Keine Einschränkungen“.</string>
+    <string name="bat_xiaomi_autostart">Schalte „Autostart“ ein.</string>
+    <string name="bat_huawei_path">Öffne Einstellungen → Akku → „App-Start“.</string>
+    <string name="bat_huawei_manual">Suche Verbapp und schalte „Automatisch verwalten“ aus.</string>
+    <string name="bat_huawei_background">Lass „Im Hintergrund ausführen“ eingeschaltet.</string>
+    <string name="bat_oppo_usage">Öffne „Akkunutzung“.</string>
+    <string name="bat_oppo_allow">Schalte „Hintergrundaktivität zulassen“ und „Automatischen Start zulassen“ ein.</string>
+    <!-- La misma guía en una línea, para «Trabajar con la pantalla bloqueada» (RecordingActions.allowBackground). -->
+    <string name="bat_hint_vivo">Auf %1$s-Handys außerdem: Einstellungen → Apps → Verbapp → Akku → Stromverbrauch im Hintergrund erlauben. Wenn du es nicht findest, suche in den Einstellungen nach „Hintergrund“.</string>
+    <string name="bat_hint_vivo_old">Auf %1$s-Handys außerdem: Einstellungen → Akku → Stromverbrauch im Hintergrund verwalten → Verbapp → Stromverbrauch im Hintergrund erlauben.</string>
+    <string name="bat_hint_xiaomi">Auf %1$s-Handys außerdem: Einstellungen → Apps → Verbapp → Akkusparmodus → Keine Einschränkungen, und schalte „Autostart“ ein.</string>
+    <string name="bat_hint_samsung">Auf %1$s-Handys außerdem: Einstellungen → Apps → Verbapp → Akku → Nicht eingeschränkt.</string>
+    <string name="bat_hint_huawei">Auf %1$s-Handys außerdem: Einstellungen → Akku → App-Start → Verbapp → Manuell verwalten, und schalte „Im Hintergrund ausführen“ ein.</string>
+    <string name="bat_hint_oppo">Auf %1$s-Handys außerdem: Einstellungen → Apps → Verbapp → Akkunutzung → Hintergrundaktivität zulassen.</string>
+
+    <!-- Novedades (las de cada versión van en assets/novedades*.json). %1$s: la versión («0.9.0»). -->
+    <string name="news_title">Neuigkeiten und Versionen</string>
+    <string name="news_using">Du nutzt Version %1$s.</string>
+    <string name="news_missing">Der Versionsverlauf wurde nicht gefunden.</string>
+    <string name="news_close">Schließen</string>
+    <string name="news_see_all">Alle Versionen ansehen</string>
+    <string name="news_of_version">Neu in %1$s</string>
+    <string name="news_current">Aktuell</string>
+    <string name="news_version">Version %1$s</string>
+    <string name="news_in_use">die du gerade nutzt</string>
+    <!-- Para el lector de pantalla; %1$s: «Version 0.9.0, título, fecha». -->
+    <string name="news_open">%1$s, ausgeklappt. Tippe zum Einklappen</string>
+    <string name="news_closed">%1$s, eingeklappt. Tippe, um die Neuigkeiten zu sehen</string>
+</resources>
