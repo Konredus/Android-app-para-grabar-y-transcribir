@@ -521,7 +521,7 @@ public class OnboardingActivity extends Screen {
         return t;
     }
     /** El nombre de cada idioma en su propio idioma («English», «Español», «Português (Brasil)»): cada persona encuentra el suyo. */
-    static int languageName(String lang){return Lang.ES.equals(lang)?R.string.lang_es:Lang.PT.equals(lang)?R.string.lang_pt:R.string.lang_en;}
+    static int languageName(String lang){return Lang.ES.equals(lang)?R.string.lang_es:Lang.PT.equals(lang)?R.string.lang_pt:Lang.DE.equals(lang)?R.string.lang_de:R.string.lang_en;}
     /** Los tres idiomas, con el vigente marcado (radio y «seleccionado» para el lector). Elegir el mismo no hace nada. */
     private void languageSheet(){
         if(switching)return;String now=Lang.current(this);

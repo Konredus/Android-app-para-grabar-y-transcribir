@@ -234,7 +234,7 @@ public class SettingsActivity extends Screen {
         lastShown=shown();
     }
     /** Nombre de un idioma de la app en ese mismo idioma («English», «Español», «Português (Brasil)»). */
-    private String langName(String lang){return getString(Lang.EN.equals(lang)?R.string.lang_en:Lang.ES.equals(lang)?R.string.lang_es:R.string.lang_pt);}
+    private String langName(String lang){return getString(Lang.EN.equals(lang)?R.string.lang_en:Lang.ES.equals(lang)?R.string.lang_es:Lang.DE.equals(lang)?R.string.lang_de:R.string.lang_pt);}
     /**
      * Idioma de la app (0.9.0): los tres con su nombre propio y el actual marcado. Elegir otro lo guarda y rehace la
      * pantalla (Lang.set; en Android 13+ lo hace el sistema, con todas las pantallas abiertas): onCreate vuelve a armar
@@ -247,7 +247,7 @@ public class SettingsActivity extends Screen {
     }
     /** Nombre de un idioma del audio en el idioma de la app («Spanish» en inglés, «Español» en español); otro código, tal cual. */
     private String audioLangName(String lang){
-        return Lang.EN.equals(lang)?getString(R.string.set_audio_lang_en):Lang.ES.equals(lang)?getString(R.string.set_audio_lang_es):Lang.PT.equals(lang)?getString(R.string.set_audio_lang_pt):lang;
+        return Lang.EN.equals(lang)?getString(R.string.set_audio_lang_en):Lang.ES.equals(lang)?getString(R.string.set_audio_lang_es):Lang.PT.equals(lang)?getString(R.string.set_audio_lang_pt):Lang.DE.equals(lang)?getString(R.string.set_audio_lang_de):lang;
     }
     /**
      * «Idioma del audio»: detección automática o inglés, español o portugués (los de la app). Se guarda el código que va

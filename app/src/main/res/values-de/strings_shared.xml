@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deutsche Übersetzung von values/strings_shared.xml. -->
+<resources>
+    <!-- Barra inferior y botón «Volver a …» -->
+    <string name="nav_record">Aufnehmen</string>
+    <string name="nav_library">Bibliothek</string>
+    <string name="nav_settings">Einstellungen</string>
+    <string name="nav_busy">%1$s, wird bearbeitet</string>
+    <string name="metrics_title">Deine Statistiken</string>
+
+    <!-- Título automático de una grabación -->
+    <string name="rec_default_title">Aufnahme %1$s</string>
+    <!-- Audio cuyo archivo de datos se perdió. -->
+    <string name="rec_recovered">Wiederhergestelltes Audio · bitte prüfen</string>
+
+    <!-- Voces -->
+    <string name="speaker_n">Person %1$d</string>
+    <string name="speaker_text">Text</string>
+    <string name="voice_me_default">Ich</string>
+
+    <!-- Motor -->
+    <string name="wait_wifi">wartet auf WLAN (du nutzt gerade mobile Daten; in den Details der Aufnahme kannst du sie trotzdem verwenden)</string>
+    <string name="retranscribe_choose_first">Wähle zuerst, welche Version du behalten willst.</string>
+    <string name="settings_no_server">Gib die Adresse deines Servers in den Einstellungen ein.</string>
+
+    <!-- Errores de la clave: StatusText.aboutKey reconoce key_word; la bienvenida quita key_fix_in_settings. -->
+    <string name="key_word">Schlüssel</string>
+    <string name="key_fix_in_settings">Prüf ihn in den Einstellungen.</string>
+
+    <!-- Aviso y consentimiento antes del primer envío a OpenRouter -->
+    <string name="consent_title">Dein Audio wird zum Transkribieren gesendet</string>
+    <string name="consent_body">Zum Transkribieren sendet Verbapp das Audio jeder Aufnahme, die du transkribierst, an OpenRouter und an das KI-Modell deiner Wahl. Für die Notiz wird der Text des Transkripts gesendet. Aufnahmen, die du nicht transkribierst, werden nie gesendet, und dein Schlüssel zahlt nur, was du nutzt.</string>
+    <string name="consent_accept">Einverstanden</string>
+    <string name="consent_later">Nicht jetzt</string>
+    <string name="privacy_policy">Datenschutzerklärung</string>
+    <!-- La página de la política en el idioma de la app (en GitHub Pages). -->
+    <string name="privacy_url">https://konredus.github.io/Android-app-para-grabar-y-transcribir/datenschutz.html</string>
+</resources>

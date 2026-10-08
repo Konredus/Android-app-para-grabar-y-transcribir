@@ -1,5 +1,21 @@
 # Historial de versiones
 
+## 0.9.4 — 2026-10-08 · «Verbapp ahora habla alemán»
+
+**Alemán, el cuarto idioma** (pedido del dueño, para un amigo en Austria)
+- `values-de/` con todos los textos de la app (informal, «du»), `novedades-de.json` con el historial completo y la nota de la IA en alemán (`Notes.SYSTEM_DE` y la cabecera del pedido).
+- `Lang.DE`: se elige en la bienvenida y en Ajustes, y parte solo si el teléfono está en alemán (de-DE, de-AT, de-CH). Fechas y números con `Locale.GERMANY` o la región del teléfono.
+- «Idioma del audio» suma el alemán. Sin elegir, sigue al idioma de la app, así que quien usa la app en alemán transcribe en alemán.
+- La nota entiende «niemand», «unbekannt», «nicht angegeben»… como «nadie» o «sin plazo», y quita las comillas „…“ de títulos y frases.
+- Ficha de Play en alemán (`docs/play-store/ficha-de.txt`, `ficha-de-meta.txt`) y política de privacidad en alemán (`datenschutz.html`), enlazada desde las otras tres.
+- Pruebas: `I18nChecks` revisa los cuatro idiomas (argumentos, vacíos y frases sin traducir), `NotesChecks` el pedido y la nota en alemán, y `OnboardingChecks` las novedades y la fecha en alemán.
+
+**Aviso de SDK desactualizado** (Play Console, 2026-10-06)
+- Play avisó que `androidx.fragment` 1.0.0 está desactualizado. No lo usa la app: lo trae `app-update` 2.1.0 a través de `play-services-basement`.
+- Arreglo: `app/build.gradle` fija `androidx.fragment:fragment:1.9.1`, y Gradle resuelve la 1.0.0 → 1.9.1. Arrastra versiones nuevas de `androidx.core`, `activity` y `lifecycle`. No cambia nada en pantalla.
+
+**Capturas de la ficha** en español, inglés, portugués y alemán: `StoreDemo` (`am instrument -e demo es|en|pt|de`) deja grabaciones de muestra y `docs/play-store/store_shots.py` arma las imágenes.
+
 ## 0.9.3 — 2026-10-04 · «Menos ruido, más voz»
 
 **Ruido de fondo** (Ajustes → «Ruido de fondo»; todas apagadas por defecto, para probarlas de a una, pedido del usuario)

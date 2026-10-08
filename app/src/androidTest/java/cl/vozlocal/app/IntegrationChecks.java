@@ -24,7 +24,7 @@ final class IntegrationChecks {
         Transcript cross=new Transcript(new JSONObject().put("diarized",true).put("segments",new JSONArray().put(seg("A",0,5)).put(seg("B",5,9))));
         check(cross.applyNames(Collections.singletonMap("B","Person 1"))==1&&cross.speakers().size()==1,"A label typed in another language did not merge");
         Set<String> labels=Retranscribe.allLabels();
-        check(labels.size()==12&&labels.contains("Second pass with your corrections")&&labels.contains(Retranscribe.label(Retranscribe.Mode.CORRECTIONS)),"Retranscribe labels in all languages wrong: "+labels);
+        check(labels.size()==4*Lang.SUPPORTED.length&&labels.contains("Second pass with your corrections")&&labels.contains("Zweiter Durchgang mit deinen Korrekturen")&&labels.contains(Retranscribe.label(Retranscribe.Mode.CORRECTIONS)),"Retranscribe labels in all languages wrong: "+labels);
         // Novedades: orden de versiones, titulares y fechas en español.
         check(Novedades.compare("0.4.10","0.5.0")<0&&Novedades.compare("0.6.0","0.6.0")==0,"Version compare wrong");
         check(Novedades.headline("Mi voz: x")==6&&Novedades.headline("sin titular")<0,"Novedades headline wrong");

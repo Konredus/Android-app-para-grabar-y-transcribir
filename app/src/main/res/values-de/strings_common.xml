@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deutsche Übersetzung von values/strings_common.xml. -->
+<resources>
+    <string name="common_ok">Verstanden</string>
+    <string name="common_cancel">Abbrechen</string>
+    <string name="common_back_to">Zurück zu %1$s</string>
+    <string name="common_action_available">%1$s verfügbar</string>
+    <string name="common_language">Sprache</string>
+    <string name="common_language_hint">Du kannst sie jederzeit in den Einstellungen ändern.</string>
+</resources>

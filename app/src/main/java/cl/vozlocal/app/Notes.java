@@ -119,10 +119,27 @@ final class Notes {
         +"- tasks: o que alguém ficou de fazer. text começa com um verbo; who é a marca de quem vai fazer ({S1}), o nome se for outra pessoa mencionada, ou \"\" se não se sabe; when é o prazo do jeito que foi dito (“na sexta”, “antes do dia 15”) ou \"\". Lista vazia se não houver tarefas.\n"
         +"- quotes: até 5 frases literais que valha a pena lembrar, copiadas tal como foram ditas; t é o segundo em que a linha dela começa (um número, conforme a hora [mm:ss]); who é a marca de quem a disse, ou \"\".\n"
         +"- tags: de 3 a 6 etiquetas temáticas em minúsculas, de uma palavra cada, sem “#”.";
-    /** Instrucciones para la IA en el idioma de la nota ("en", "es" o "pt"; cualquier otro, inglés, como values/). */
-    static String system(String lang){return ai(lang,SYSTEM_EN,SYSTEM_ES,SYSTEM_PT);}
-    /** El texto para la IA en el idioma de la nota, en el orden de Lang.SUPPORTED: inglés, español, portugués de Brasil. */
-    private static String ai(String lang,String en,String es,String pt){return Lang.ES.equals(lang)?es:Lang.PT.equals(lang)?pt:en;}
+    /** Alemán (0.9.4, con «du»): las mismas reglas. «Person 1» y «Aufnahme» son los textos de la app en alemán. */
+    private static final String SYSTEM_DE=
+        "Du machst Notizen aus den Aufnahmen einer Person und speicherst sie in ihrem „zweiten Gehirn“ (Obsidian). "
+        +"Du bekommst das automatische Transkript einer Aufnahme: ein Meeting, ein Gespräch oder eine Sprachnotiz.\n\n"
+        +"Regeln:\n"
+        +"1. Schreib in natürlichem, klarem und freundlichem Deutsch. Kurze Sätze, keine Füllwörter.\n"
+        +"2. Verwende nur, was im Transkript steht. Erfinde keine Fakten, Zahlen, Daten, Namen oder Aufgaben. Wenn etwas unklar ist, lass es weg.\n"
+        +"3. Für die sprechenden Personen verwende NUR ihre genaue Markierung in geschweiften Klammern, zum Beispiel {S1} oder {S2}. Schreib nie „Person 1“ oder „der Sprecher“ und rate keine Namen für die Markierungen. Andere Personen, die im Gespräch nur erwähnt werden, nennst du so, wie sie erwähnt wurden.\n"
+        +"4. Das Transkript kann falsche Wörter oder falsch zugeordnete Personen enthalten: Interpretiere es mit Urteilsvermögen und übernimm diese Fehler nicht.\n"
+        +"5. Antworte NUR mit einem gültigen JSON-Objekt, ohne Text davor oder danach, in dieser Form:\n"
+        +SHAPE
+        +"- title: kurzer, konkreter Titel zum Thema, höchstens 60 Zeichen, ohne Datum, ohne Markierungen wie {S1} und ohne das Wort „Aufnahme“.\n"
+        +"- summary: 1 bis 5 Sätze mit dem Wesentlichen.\n"
+        +"- decisions: was entschieden oder vereinbart wurde. Leere Liste, wenn es keine Entscheidungen gab.\n"
+        +"- tasks: was jemand zu tun übernommen hat. text beginnt mit einem Verb; who ist die Markierung der Person, die es erledigt ({S1}), der Name, wenn es eine andere erwähnte Person ist, oder \"\", wenn es unklar ist; when ist die Frist so, wie sie gesagt wurde („am Freitag“, „vor dem 15.“), oder \"\". Leere Liste, wenn es keine Aufgaben gibt.\n"
+        +"- quotes: bis zu 5 wörtliche Sätze, die es wert sind, sich zu merken, genau so übernommen, wie sie gesagt wurden; t ist die Sekunde, in der ihre Zeile beginnt (eine Zahl, nach der Zeit [mm:ss]); who ist die Markierung der Person, die ihn gesagt hat, oder \"\".\n"
+        +"- tags: 3 bis 6 Themen-Tags in Kleinbuchstaben, jeweils ein Wort, ohne „#“.";
+    /** Instrucciones para la IA en el idioma de la nota ("en", "es", "pt" o "de"; cualquier otro, inglés, como values/). */
+    static String system(String lang){return ai(lang,SYSTEM_EN,SYSTEM_ES,SYSTEM_PT,SYSTEM_DE);}
+    /** El texto para la IA en el idioma de la nota, en el orden de Lang.SUPPORTED: inglés, español, portugués de Brasil y alemán (0.9.4). */
+    private static String ai(String lang,String en,String es,String pt,String de){return Lang.ES.equals(lang)?es:Lang.PT.equals(lang)?pt:Lang.DE.equals(lang)?de:en;}
 
     // ---------- Consultas ----------
     static boolean exists(Context c,String id){return FilesStore.file(c,id,".note.json").isFile();}
@@ -333,22 +350,22 @@ final class Notes {
         if(diarized)for(int i=0;i<s.length();i++){String v=s.getJSONObject(i).getString("speaker");if(!byVoice.containsKey(v)){String k="S"+(byVoice.size()+1);byVoice.put(v,k);tokens.put(k,v);}}
         StringBuilder b=new StringBuilder();
         String title=r.title==null?"":r.title.trim();
-        b.append(ai(l,"Current title: “","Título actual: «","Título atual: “")).append(title).append(ai(l,"”","»","”"))
-            .append(isDefaultTitle(title,r.created)?ai(l," (automatic)"," (automático)"," (automático)"):ai(l," (written by the person)"," (lo escribió la persona)"," (escrito pela pessoa)")).append('\n');
-        b.append(ai(l,"Date: ","Fecha: ","Data: ")).append(new SimpleDateFormat(ai(l,"EEEE, MMMM d, yyyy, HH:mm","EEEE d 'de' MMMM 'de' yyyy, HH:mm","EEEE, d 'de' MMMM 'de' yyyy, HH:mm"),Lang.locale(l)).format(new Date(r.created))).append('\n');
-        b.append(ai(l,"Duration: ","Duración: ","Duração: ")).append(Ui.humanDuration(r.duration)).append('\n');
-        if(diarized){b.append(ai(l,"Speakers: ","Personas que hablan: ","Pessoas que falam: "));int n=0;for(String k:tokens.keySet())b.append(n++==0?"":", ").append('{').append(k).append('}');b.append('\n');}
-        else b.append(ai(l,"Voices were not separated in this transcript: leave who empty (\"\") unless someone is named.\n","En esta transcripción no se separaron las voces: deja who vacío (\"\") salvo que se nombre a alguien.\n","Nesta transcrição as vozes não foram separadas: deixe who vazio (\"\") a menos que alguém seja nomeado.\n"));
+        b.append(ai(l,"Current title: “","Título actual: «","Título atual: “","Aktueller Titel: „")).append(title).append(ai(l,"”","»","”","“"))
+            .append(isDefaultTitle(title,r.created)?ai(l," (automatic)"," (automático)"," (automático)"," (automatisch)"):ai(l," (written by the person)"," (lo escribió la persona)"," (escrito pela pessoa)"," (von der Person geschrieben)")).append('\n');
+        b.append(ai(l,"Date: ","Fecha: ","Data: ","Datum: ")).append(new SimpleDateFormat(ai(l,"EEEE, MMMM d, yyyy, HH:mm","EEEE d 'de' MMMM 'de' yyyy, HH:mm","EEEE, d 'de' MMMM 'de' yyyy, HH:mm","EEEE, d. MMMM yyyy, HH:mm"),Lang.locale(l)).format(new Date(r.created))).append('\n');
+        b.append(ai(l,"Duration: ","Duración: ","Duração: ","Dauer: ")).append(Ui.humanDuration(r.duration)).append('\n');
+        if(diarized){b.append(ai(l,"Speakers: ","Personas que hablan: ","Pessoas que falam: ","Sprechende Personen: "));int n=0;for(String k:tokens.keySet())b.append(n++==0?"":", ").append('{').append(k).append('}');b.append('\n');}
+        else b.append(ai(l,"Voices were not separated in this transcript: leave who empty (\"\") unless someone is named.\n","En esta transcripción no se separaron las voces: deja who vacío (\"\") salvo que se nombre a alguien.\n","Nesta transcrição as vozes não foram separadas: deixe who vazio (\"\") a menos que alguém seja nomeado.\n","In diesem Transkript wurden die Stimmen nicht getrennt: Lass who leer (\"\"), außer jemand wird beim Namen genannt.\n"));
         if(marks!=null&&marks.length()>0){
-            b.append(ai(l,"\nMoments the person marked with ★ while recording (give them weight):\n","\nMomentos que la persona marcó con ★ mientras grababa (dales importancia):\n","\nMomentos que a pessoa marcou com ★ durante a gravação (dê importância a eles):\n"));
+            b.append(ai(l,"\nMoments the person marked with ★ while recording (give them weight):\n","\nMomentos que la persona marcó con ★ mientras grababa (dales importancia):\n","\nMomentos que a pessoa marcou com ★ durante a gravação (dê importância a eles):\n","\nMomente, die die Person beim Aufnehmen mit ★ markiert hat (gib ihnen Gewicht):\n"));
             for(int i=0;i<marks.length();i++){JSONObject m=marks.optJSONObject(i);if(m==null)continue;String label=m.optString("label","").trim();b.append("★ ").append(Recording.time(m.optLong("t"))).append(label.isEmpty()?"":" "+label).append('\n');}
         }
-        b.append(ai(l,"\nTranscript:\n","\nTranscripción:\n","\nTranscrição:\n"));int header=b.length();
+        b.append(ai(l,"\nTranscript:\n","\nTranscripción:\n","\nTranscrição:\n","\nTranskript:\n"));int header=b.length();
         for(int i=0;i<s.length();){
             JSONObject seg=s.getJSONObject(i);String voice=seg.getString("speaker");StringBuilder turn=new StringBuilder(seg.getString("text").trim());double end=seg.optDouble("end",seg.getDouble("start"));int j=i+1;
             if(diarized)while(j<s.length()){JSONObject next=s.getJSONObject(j);if(!next.getString("speaker").equals(voice)||next.getDouble("start")-end>Transcript.TURN_GAP_S)break;turn.append(' ').append(next.getString("text").trim());end=Math.max(end,next.optDouble("end",end));j++;}
             String line="["+Recording.time((long)(seg.getDouble("start")*1000))+"] "+(diarized?"{"+byVoice.get(voice)+"}: ":"")+turn.toString().replaceAll("\\s+"," ")+"\n";
-            if(b.length()-header+line.length()>MAX_TRANSCRIPT_CHARS){b.append(ai(l,"[…] (transcript cut for length)\n","[…] (transcripción recortada por largo)\n","[…] (transcrição cortada por ser longa)\n"));break;}
+            if(b.length()-header+line.length()>MAX_TRANSCRIPT_CHARS){b.append(ai(l,"[…] (transcript cut for length)\n","[…] (transcripción recortada por largo)\n","[…] (transcrição cortada por ser longa)\n","[…] (Transkript wegen der Länge gekürzt)\n"));break;}
             b.append(line);i=j;
         }
         return new Prompt(b.toString(),tokens,diarized,l);
@@ -557,8 +574,8 @@ final class Notes {
      * quién («nadie», «nobody», «ninguém»…) y plazo de una tarea («no se sabe», «unknown», «não informado»…) quedan
      * vacíos. Las palabras en español son las de siempre: lo que la app hacía con ellas no cambia.
      */
-    private static final Pattern NO_WHO=Pattern.compile("(?iu)(?:null|ninguno|nadie|desconocido|no se sabe|-|—|none|nobody|no one|unknown|n/a|not stated|not specified|nenhum|nenhuma|ninguém|desconhecido|desconhecida|não se sabe|não informado|não informada)");
-    private static final Pattern NO_WHEN=Pattern.compile("(?iu)(?:null|-|—|no se sabe|none|unknown|n/a|not stated|not specified|nenhum|nenhuma|desconhecido|não se sabe|não informado|não informada)");
+    private static final Pattern NO_WHO=Pattern.compile("(?iu)(?:null|ninguno|nadie|desconocido|no se sabe|-|—|none|nobody|no one|unknown|n/a|not stated|not specified|nenhum|nenhuma|ninguém|desconhecido|desconhecida|não se sabe|não informado|não informada|niemand|keiner|keine|unbekannt|unklar|nicht angegeben|nicht genannt|k\\.\\s?a\\.)");
+    private static final Pattern NO_WHEN=Pattern.compile("(?iu)(?:null|-|—|no se sabe|none|unknown|n/a|not stated|not specified|nenhum|nenhuma|desconhecido|não se sabe|não informado|não informada|unbekannt|unklar|offen|keine|nicht angegeben|nicht genannt|k\\.\\s?a\\.)");
     /** Quién: "S1" si es una marca conocida; el nombre si es otra persona; "" si no se sabe. */
     static String who(Object value,Map<String,String> known){
         String v=value==null||value==JSONObject.NULL?"":String.valueOf(value).trim();
@@ -569,7 +586,7 @@ final class Notes {
     }
     static String cleanTitle(String title){
         String t=title==null?"":title.replaceAll("[\\r\\n\\t]+"," ").trim();
-        t=t.replaceAll("^[«»\"'“”]+|[«»\"'“”]+$","").trim().replaceFirst("^\\d{4}-\\d{2}-\\d{2}\\s*[-·:]?\\s*","").replaceAll("\\{\\s*[Ss]\\d{1,2}\\s*\\}","").replaceAll("\\s+"," ").trim();
+        t=t.replaceAll("^[«»\"'“”„]+|[«»\"'“”„]+$","").trim().replaceFirst("^\\d{4}-\\d{2}-\\d{2}\\s*[-·:]?\\s*","").replaceAll("\\{\\s*[Ss]\\d{1,2}\\s*\\}","").replaceAll("\\s+"," ").trim();
         t=t.replaceAll("[.。]+$","").trim();
         if(t.length()>60){int cut=t.lastIndexOf(' ',60);t=(cut>30?t.substring(0,cut):t.substring(0,60)).replaceAll("[\\s,;:·-]+$","");}
         return t;
@@ -615,7 +632,7 @@ final class Notes {
         n.put("tasks",tasks);
         JSONArray quotes=new JSONArray();double max=durationMs>0?durationMs/1000d:Double.MAX_VALUE;
         for(Object item:list(raw.opt("quotes"))){
-            if(quotes.length()>=5)break;String text=textOf(item,known).replaceAll("^[«\"“]+|[»\"”]+$","").trim();if(text.isEmpty())continue;
+            if(quotes.length()>=5)break;String text=textOf(item,known).replaceAll("^[«\"“„]+|[»\"”“]+$","").trim();if(text.isEmpty())continue;
             JSONObject o=item instanceof JSONObject?(JSONObject)item:new JSONObject();double t=seconds(o.opt("t"));
             JSONObject q=new JSONObject().put("text",text).put("who",who(o.opt("who"),known));if(t>=0)q.put("t",Math.round(Math.min(t,max)));
             quotes.put(q);

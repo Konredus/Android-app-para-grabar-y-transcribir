@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.9.4",
+    "date": "2026-10-08",
+    "title": "Verbapp ahora habla alemán",
+    "items": [
+      "Verbapp ahora habla alemán: toda la app, la nota de la IA y la transcripción en alemán. Cámbialo en Ajustes → Idioma.",
+      "Mantenimiento: renovamos una pieza interna de Android que Google Play pidió actualizar. Todo funciona igual que antes."
+    ]
+  },
+  {
     "version": "0.9.3",
     "date": "2026-10-04",
     "title": "Menos ruido, más voz",

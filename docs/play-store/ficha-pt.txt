@@ -28,7 +28,7 @@ VOCÊ CONTROLA SEUS DADOS
 • Envie só com Wi-Fi, ou use dados móveis para uma gravação quando precisar.
 
 NO SEU IDIOMA
-• Português do Brasil, inglês e espanhol. O Verbapp começa no idioma do seu celular, e você pode mudar quando quiser.
+• Português do Brasil, inglês, espanhol e alemão. O Verbapp começa no idioma do seu celular, e você pode mudar quando quiser.
 
 COMO COMEÇAR
 Gravar é grátis e não precisa de configuração. Para transcrever, você precisa de uma chave do OpenRouter (openrouter.ai): com uma única chave você transcreve e cria suas notas, e paga ao OpenRouter só o que usar, sem assinatura. Dependendo do modelo escolhido, uma hora de áudio custa a partir de cerca de US$ 0,10.

@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deutsche Übersetzung von values/strings_metrics.xml -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Cabecera y filtros -->
+    <string name="met_subtitle">Auf deinem Handy aus deinen Aufnahmen berechnet. Nichts wird gesendet.</string>
+    <string name="met_by_period">Nach Zeitraum</string>
+    <string name="met_chip_week">7 Tage</string>
+    <string name="met_chip_month">Dieser Monat</string>
+    <string name="met_chip_all">Gesamt</string>
+    <string name="met_period_week">Letzte 7 Tage</string>
+    <string name="met_period_all">Seit Beginn</string>
+    <string name="met_quiet_week">Du hast in den letzten 7 Tagen nichts aufgenommen</string>
+    <string name="met_quiet_month">Diesen Monat noch keine Aufnahmen</string>
+    <!-- %1$s: el nombre del filtro «Todo» (met_chip_all). -->
+    <string name="met_quiet_body">Tippe auf „%1$s“, um deinen Verlauf zu sehen, oder nimm etwas auf – es erscheint sofort hier.</string>
+
+    <!-- Tarjeta principal -->
+    <string name="met_hero_title">Deine Stimme in Verbapp</string>
+    <!-- Va bajo la cifra grande, que se muestra aparte. -->
+    <plurals name="met_hero_words">
+        <item quantity="one">Wort transkribiert</item>
+        <item quantity="other">Wörter transkribiert</item>
+    </plurals>
+    <string name="met_hero_untranscribed">aufgenommen, noch nicht transkribiert</string>
+    <string name="met_hero_saved">≈ %1$s Tipparbeit gespart</string>
+    <string name="met_hero_saved_none">Transkribiere deine Aufnahmen, dann siehst du hier deine Wortzahl.</string>
+    <plurals name="met_keep_streak">
+        <item quantity="one">Nimm heute etwas auf, damit deine Serie von %1$s Tag weiterläuft.</item>
+        <item quantity="other">Nimm heute etwas auf, damit deine Serie von %1$s Tagen weiterläuft.</item>
+    </plurals>
+    <!-- Rótulos bajo una cifra que se muestra aparte. -->
+    <plurals name="met_stat_recordings">
+        <item quantity="one">Aufnahme</item>
+        <item quantity="other">Aufnahmen</item>
+    </plurals>
+    <string name="met_stat_recorded">Aufgenommen</string>
+    <plurals name="met_stat_days">
+        <item quantity="one">Aufnahmetag</item>
+        <item quantity="other">Aufnahmetage</item>
+    </plurals>
+    <string name="met_stat_best_streak">Beste Serie</string>
+    <plurals name="met_days">
+        <item quantity="one">%1$s Tag</item>
+        <item quantity="other">%1$s Tage</item>
+    </plurals>
+    <plurals name="met_recordings">
+        <item quantity="one">%1$s Aufnahme</item>
+        <item quantity="other">%1$s Aufnahmen</item>
+    </plurals>
+    <string name="met_streak_today">Du hast heute aufgenommen</string>
+    <plurals name="met_streak_days">
+        <item quantity="one">%1$d Tag in Folge</item>
+        <item quantity="other">%1$d Tage in Folge</item>
+    </plurals>
+    <!-- TalkBack lee la tarjeta de una vez. %2$s: met_hero_saved. -->
+    <plurals name="met_say_words">
+        <item quantity="one">%1$s Wort transkribiert. %2$s.</item>
+        <item quantity="other">%1$s Wörter transkribiert. %2$s.</item>
+    </plurals>
+    <string name="met_say_recorded">%1$s aufgenommen.</string>
+    <string name="met_say_streak">Aktuelle Serie: %1$s.</string>
+    <string name="met_say_streak_keep">Aktuelle Serie: %1$s. Nimm heute etwas auf, damit sie weiterläuft.</string>
+    <string name="met_say_best">Beste Serie: %1$s.</string>
+
+    <!-- Últimas 8 semanas -->
+    <string name="met_weeks_title">Letzte 8 Wochen</string>
+    <string name="met_weeks_hint">Tippe auf eine Woche</string>
+    <string name="met_chart_minutes">Aufgenommene Minuten</string>
+    <string name="met_chart_spend">Ausgaben</string>
+    <string name="met_billed">Abgerechnet</string>
+    <string name="met_estimated">Geschätzt</string>
+    <string name="met_legend_est">≈ geschätzt</string>
+    <string name="met_weeks_no_spend">Keine Ausgaben in diesen 8 Wochen.</string>
+    <string name="met_usd_zero">US$0</string>
+    <string name="met_no_recordings">keine Aufnahmen</string>
+    <string name="met_billed_and_est_lc">abgerechnet und geschätzt</string>
+    <string name="met_est_lc">geschätzt</string>
+    <string name="met_billed_lc">abgerechnet</string>
+    <string name="met_no_spend_lc">keine Ausgaben</string>
+    <string name="met_this_week">Diese Woche</string>
+    <string name="met_last_week">Letzte Woche</string>
+    <!-- %1$s: Tag des Monats; %2$s: Monatsname («September»). -->
+    <string name="met_week_of">Woche vom %1$s. %2$s</string>
+    <!-- Achsenbeschriftung: %1$s Tag, %2$s abgekürzter Monat («21. Sept»). -->
+    <string name="met_day_month">%1$s. %2$s</string>
+    <!-- TalkBack de los gráficos de semanas -->
+    <string name="met_say_this_week">diese Woche</string>
+    <string name="met_say_last_week">letzte Woche</string>
+    <string name="met_say_week_of">die Woche vom %1$s. %2$s</string>
+    <string name="met_say_minutes_chart">Diagramm der aufgenommenen Minuten pro Woche.</string>
+    <string name="met_say_nothing">nichts</string>
+    <string name="met_say_bars_how">Stell es wie einen Schieberegler ein, nutze die Pfeiltasten oder tippe auf eine Woche, um sie auszuwählen.</string>
+    <string name="met_say_spend_chart">Diagramm der Ausgaben pro Woche.</string>
+    <string name="met_say_billed">%1$s abgerechnet</string>
+    <string name="met_say_est">etwa %1$s geschätzt</string>
+    <string name="met_say_billed_est">%1$s abgerechnet und etwa %2$s geschätzt</string>
+    <string name="met_say_about">etwa %1$s</string>
+
+    <!-- Tu voz en números -->
+    <string name="met_voice_title">Deine Stimme in Zahlen</string>
+    <string name="met_stat_words">Wörter</string>
+    <string name="met_stat_wpm">Wörter pro Minute</string>
+    <string name="met_stat_saved">Gesparte Tippzeit</string>
+    <plurals name="met_days_with_recordings">
+        <item quantity="one">%1$s Tag mit Aufnahmen</item>
+        <item quantity="other">%1$s Tage mit Aufnahmen</item>
+    </plurals>
+    <plurals name="met_marks">
+        <item quantity="one">%1$s Moment ★</item>
+        <item quantity="other">%1$s Momente ★</item>
+    </plurals>
+    <string name="met_voice_note">Wörter und Tempo zählen nur, was schon transkribiert ist.</string>
+
+    <!-- Hacia tu segundo cerebro -->
+    <string name="met_funnel_title">Auf dem Weg in dein zweites Gehirn</string>
+    <string name="met_funnel_recorded">Aufgenommen</string>
+    <string name="met_funnel_transcribed">Transkribiert</string>
+    <string name="met_funnel_note">Mit Notiz</string>
+    <string name="met_funnel_inbox">In 0-Inbox</string>
+    <string name="met_percent">%1$d %%</string>
+    <string name="met_say_funnel_step" tools:ignore="PluralsCandidate">%1$s: %2$s von %3$s, %4$d Prozent</string>
+    <string name="met_stall_failed">Fehlgeschlagen</string>
+    <string name="met_stall_failed_hint">Sieh nach, was passiert ist, und versuch es erneut</string>
+    <string name="met_stall_queued">In Arbeit</string>
+    <string name="met_stall_queued_hint">In der Warteschlange oder wird transkribiert</string>
+    <string name="met_stall_new">Nicht transkribiert</string>
+    <string name="met_stall_new_hint">Vorerst nur Audio</string>
+    <string name="met_stall_no_note">Transkribiert, ohne Notiz</string>
+    <string name="met_stall_no_note_many">Öffne die neueste</string>
+    <string name="met_stall_no_note_one">Öffne sie, um die Notiz zu erstellen</string>
+    <string name="met_stall_inbox">Noch nicht in 0-Inbox</string>
+    <string name="met_stall_inbox_hint">Speichere sie mit einem Tippen</string>
+    <string name="met_choose_inbox">Wähle deinen 0-Inbox-Ordner</string>
+    <string name="met_choose_inbox_hint">Um jede Notiz mit einem Tippen zu speichern</string>
+    <string name="met_halfway">Noch nicht am Ziel</string>
+    <string name="met_all_arrived">Alles, was du aufgenommen hast, ist in deinem zweiten Gehirn angekommen</string>
+    <!-- %1$s: la ayuda de la fila; %2$s: cuántas hay en la Biblioteca. -->
+    <string name="met_stall_total">%1$s · insgesamt %2$s in der Bibliothek</string>
+
+    <!-- Costos -->
+    <string name="met_costs_title">Kosten</string>
+    <!-- %1$s: met_when_* -->
+    <string name="met_spent">%1$s ausgegeben</string>
+    <string name="met_spent_notes">%1$s ausgegeben, inklusive Notizen</string>
+    <string name="met_no_spend_in">Keine Ausgaben %1$s.</string>
+    <string name="met_when_week">in den letzten 7 Tagen</string>
+    <string name="met_when_month">in diesem Monat</string>
+    <string name="met_when_all">seit Beginn</string>
+    <string name="met_per_audio_hour">Pro Audiostunde</string>
+    <string name="met_by_model">Nach Modell</string>
+    <string name="met_no_rate">Kein Tarif</string>
+    <plurals name="met_transcriptions">
+        <item quantity="one">%1$s Transkription</item>
+        <item quantity="other">%1$s Transkriptionen</item>
+    </plurals>
+    <string name="met_notes_title">Notizen für dein zweites Gehirn</string>
+    <string name="met_note_tokens">%1$s Eingabe-Tokens · %2$s Ausgabe</string>
+    <string name="met_no_tokens">Keine Token-Daten</string>
+    <plurals name="met_notes">
+        <item quantity="one">%1$s Notiz</item>
+        <item quantity="other">%1$s Notizen</item>
+    </plurals>
+    <!-- %2$s: la fecha (met_day_month). -->
+    <string name="met_balance">OpenRouter-Guthaben: %1$s (als du deinen Schlüssel am %2$s geprüft hast).</string>
+    <string name="met_costs_foot">Abgerechnet: was OpenRouter gemeldet hat. ≈ Geschätzt: Dauer × öffentlicher Tarif des Modells; die endgültige Abrechnung siehst du in deinem Konto.</string>
+    <plurals name="met_unknown_router">
+        <item quantity="one">%1$s OpenRouter-Transkription ohne bekannten Preis: Die Kosten wurden nicht gemeldet und das Modell hat keinen Minutentarif.</item>
+        <item quantity="other">%1$s OpenRouter-Transkriptionen ohne bekannten Preis: Die Kosten wurden nicht gemeldet und das Modell hat keinen Minutentarif.</item>
+    </plurals>
+    <plurals name="met_unknown_openai">
+        <item quantity="one">%1$s OpenAI-Transkription ohne bekannten Tarif für ihr Modell.</item>
+        <item quantity="other">%1$s OpenAI-Transkriptionen ohne bekannten Tarif für ihr Modell.</item>
+    </plurals>
+    <plurals name="met_unknown_server">
+        <item quantity="one">%1$s Transkription mit deinem Server: kein bekannter Tarif.</item>
+        <item quantity="other">%1$s Transkriptionen mit deinem Server: kein bekannter Tarif.</item>
+    </plurals>
+    <string name="met_your_server">Dein Server</string>
+    <string name="met_model_unnamed">Modell ohne Namen</string>
+
+    <!-- Cuándo grabas -->
+    <string name="met_heat_title">Wann du aufnimmst</string>
+    <!-- %1$s día; %2$s y %3$s horas («10:00»); %4$s lo grabado o met_no_recordings. -->
+    <string name="met_heat_cell">%1$s von %2$s bis %3$s · %4$s</string>
+    <string name="met_duration_in">%1$s in %2$s</string>
+    <string name="met_less">Weniger</string>
+    <string name="met_more">Mehr</string>
+    <string name="met_heat_hint">Tippe auf ein Feld, um die Details zu sehen.</string>
+    <!-- %1$s y %2$s: met_on_* («montags»); las horas, «10:00». -->
+    <string name="met_insight_same">Am meisten sprichst du %1$s, vor allem zwischen %2$s und %3$s.</string>
+    <string name="met_insight_other">Am meisten sprichst du %1$s; deine Spitzenzeit: %2$s um %3$s.</string>
+    <string name="met_on_monday">montags</string>
+    <string name="met_on_tuesday">dienstags</string>
+    <string name="met_on_wednesday">mittwochs</string>
+    <string name="met_on_thursday">donnerstags</string>
+    <string name="met_on_friday">freitags</string>
+    <string name="met_on_saturday">samstags</string>
+    <string name="met_on_sunday">sonntags</string>
+    <string name="met_say_heat_title">Karte der Tage und Uhrzeiten, zu denen du aufnimmst.</string>
+    <string name="met_say_heat_day">%1$s, meist um %2$s</string>
+    <string name="met_say_heat_how">Tippe oder nutze die Pfeiltasten, um durch die Stunden zu gehen.</string>
+    <string name="met_axis_hour">%1$d Uhr</string>
+
+    <!-- Con quién más conversas -->
+    <string name="met_people_title">Mit wem du am meisten sprichst</string>
+    <string name="met_people_empty">Benenne die Stimmen in deinen Transkripten, dann siehst du hier, mit wem du am meisten sprichst.</string>
+    <plurals name="met_audios">
+        <item quantity="one">%1$s Aufnahme</item>
+        <item quantity="other">%1$s Aufnahmen</item>
+    </plurals>
+    <plurals name="met_known_voices">
+        <item quantity="one">%1$s gespeicherte bekannte Stimme.</item>
+        <item quantity="other">%1$s gespeicherte bekannte Stimmen.</item>
+    </plurals>
+    <string name="met_people_foot">Basiert darauf, wie viel jede benannte Person spricht. Namen werden nur hier angezeigt.</string>
+
+    <!-- Pie y «¿Cómo se calcula?» (%1$d: palabras por minuto al teclear, Metrics.TYPING_WPM) -->
+    <string name="met_footer">Alles wird auf diesem Handy berechnet, aus dem, was Verbapp zu jeder Aufnahme speichert. Nichts davon wird gesendet.</string>
+    <string name="met_how_button">Wie wird das berechnet?</string>
+    <string name="met_how_title">So werden deine Statistiken berechnet</string>
+    <string name="met_how_body" tools:ignore="PluralsCandidate">Alles wird auf diesem Handy berechnet, aus dem, was Verbapp ohnehin zu jeder Aufnahme speichert. Nichts wird gesendet.\n\nAufgenommen: wie lang deine Aufnahmen sind, gezählt am Tag der Aufnahme.\nWörter: die Wörter in deinen Transkripten (aktuelle Version).\nWörter pro Minute: Wörter ÷ Minuten transkribiertes Audio.\nGesparte Tippzeit: wie lange es dauern würde, diese Wörter von Hand zu tippen, bei %1$d Wörtern pro Minute.\nSerie: aufeinanderfolgende Tage mit mindestens einer Aufnahme. Wenn du heute noch nicht aufgenommen hast, hält sie bis Mitternacht.\n\nAuf dem Weg in dein zweites Gehirn: Von dem, was du im Zeitraum aufgenommen hast, wie viel transkribiert wurde, wie viel eine Notiz hat und wie viel du in deinem 0-Inbox-Ordner gespeichert hast.\n\nKosten: gezählt am Tag, an dem die Transkription oder die Notiz erstellt wurde. „Abgerechnet“ ist, was OpenRouter gemeldet hat. „≈ Geschätzt“ ist die Dauer mal der öffentliche Tarif des Modells und kann von der Abrechnung abweichen. Wenn du neu transkribiert hast, zählen auch die Kosten der vorherigen Version, solange du sie behältst.\n\nPersonen: wie lange jede benannte Stimme spricht, ohne dich. Namen werden nur auf diesem Bildschirm angezeigt.</string>
+
+    <!-- Vacío, carga y error -->
+    <string name="met_empty_title">Hier siehst du deine Stimme in Zahlen</string>
+    <string name="met_empty_body">Sobald du aufnimmst, siehst du, wie viel du sprichst, wie viele Wörter Verbapp für dich schreibt, wie viel in deinem zweiten Gehirn ankommt und wie viel du für Transkription ausgibst.</string>
+    <string name="met_empty_words">Transkribierte Wörter und gesparte Zeit</string>
+    <string name="met_empty_streak">Deine Serie an Aufnahmetagen</string>
+    <string name="met_empty_spend">Deine Ausgaben, nach Monat und Modell</string>
+    <string name="met_empty_button">Meine erste Aufnahme machen</string>
+    <string name="met_loading">Deine Wörter werden gezählt…</string>
+    <string name="met_error_title">Deine Statistiken konnten nicht berechnet werden</string>
+    <string name="met_error_body">Deine Aufnahmen sind in Ordnung. Versuch es gleich noch mal.</string>
+    <string name="met_retry">Erneut versuchen</string>
+
+    <!-- Unidades (Metrics.hours): %1$s ya formateado con el separador del idioma. -->
+    <string name="met_unit_h">%1$s h</string>
+    <string name="met_unit_min">%1$s min</string>
+    <string name="met_under_min">&lt; 1 min</string>
+
+    <!-- Resumen de la tarjeta de Ajustes (Metrics.summary): «2,5 h aufgenommen · ≈ US$0.452 in diesem Monat». -->
+    <string name="met_summary_zero_label">Aufnahmen</string>
+    <string name="met_summary_empty">hier erscheint deine Stimme in Zahlen</string>
+    <string name="met_summary_recorded">aufgenommen</string>
+    <string name="met_summary_month">%1$s in diesem Monat</string>
+</resources>
