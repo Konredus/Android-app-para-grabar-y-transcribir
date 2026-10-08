@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datenschutzerklärung · Verbapp</title>
+<meta name="description" content="Welche Daten Verbapp verarbeitet, wohin sie gehen und welche Kontrolle du hast.">
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<main class="doc">
+  <p class="eyebrow"><a href="./">Verbapp</a> · <a href="privacy.html" hreflang="en">English</a> · <a href="privacidad.html" hreflang="es">Español</a> · <a href="privacidade.html" hreflang="pt-BR">Português</a></p>
+  <h1>Datenschutzerklärung</h1>
+  <p class="meta">Zuletzt aktualisiert: 8. Oktober 2026</p>
+
+  <p>Verbapp ist ein Sprachrekorder und Transkriptor für Android, entwickelt von Konredus. Diese Erklärung beschreibt, welche Daten die App verarbeitet, wohin sie gehen und welche Kontrolle du darüber hast.</p>
+
+  <div class="summary">
+    <p><strong>Kurz gesagt:</strong> Du nimmst offline auf, und deine Aufnahmen bleiben auf deinem Handy. Nur wenn du eine Transkription anforderst (oder die automatische Transkription aktivierst), wird das Audio mit deinem eigenen API-Schlüssel an OpenRouter gesendet, um es in Text umzuwandeln. Wir betreiben keine Server, die dein Audio oder deinen Text empfangen, wir verwenden weder Werbung noch Analysedienste, und wir verkaufen keine Daten.</p>
+  </div>
+
+  <h2>1. Wer verantwortlich ist</h2>
+  <p>Konredus, der Entwickler von Verbapp bei Google Play. Kontakt: <a href="mailto:latribumaker@gmail.com">latribumaker@gmail.com</a>.</p>
+
+  <h2>2. Daten, die die App auf deinem Handy speichert</h2>
+  <ul>
+    <li><strong>Audioaufnahmen</strong>, die du mit dem Mikrofon machst oder importierst. Sie werden im privaten Speicher der App abgelegt.</li>
+    <li><strong>Transkripte, Notizen, Titel, markierte Momente und die Namen von Personen</strong> in deinen Aufnahmen.</li>
+    <li><strong>Stimmproben</strong> („Meine Stimme“ und „Bekannte Stimmen“): Clips von bis zu 10 Sekunden, die du aufnimmst oder auswählst und die dazu dienen, zu erkennen, wer spricht.</li>
+    <li><strong>Dein OpenRouter-API-Schlüssel</strong>, verschlüsselt gespeichert mit dem Android Keystore.</li>
+    <li><strong>Technisches Diagnoseprotokoll</strong>: Betriebsereignisse (Zeiten, Größen, Fehlercodes) ohne Schlüssel, Titel, Audio oder Text. Es werden höchstens etwa 4 MB und 30 Tage aufbewahrt.</li>
+    <li><strong>Deine Statistiken</strong> (aufgenommene Zeit, Serien, Ausgaben), die auf dem Handy aus deinen Aufnahmen berechnet werden.</li>
+  </ul>
+  <p>Nichts davon wird an uns gesendet.</p>
+
+  <h2>3. Was dein Handy verlässt und an wen</h2>
+  <ul>
+    <li><strong>Wenn du transkribierst</strong>: Das Audio der Aufnahme und, wenn du Sprecher mit bekannten Stimmen trennst, bis zu 4 deiner Stimmproben werden über eine verschlüsselte Verbindung (HTTPS) an OpenRouter (openrouter.ai) gesendet. OpenRouter gibt sie an das Sprache-zu-Text-Modell weiter, das du gewählt hast (zum Beispiel von Microsoft, Deepgram, Google oder OpenAI), und liefert den Text zurück. Bevor zum ersten Mal etwas gesendet wird, erklärt die App dies und bittet dich um deine Zustimmung.</li>
+    <li><strong>Wenn du eine Notiz erstellst</strong>: Der Text des Transkripts (nicht das Audio) wird an OpenRouter und an das Sprachmodell gesendet, das du gewählt hast (zum Beispiel Claude, GPT oder Gemini).</li>
+    <li><strong>Wenn du deinen Schlüssel prüfst</strong>: Der Schlüssel wird an OpenRouter gesendet, um zu bestätigen, dass er funktioniert, und um dein Guthaben anzuzeigen.</li>
+    <li><strong>Wenn die Modellliste aktualisiert wird</strong>: Die App liest den Modellkatalog von OpenRouter, ohne deine Aufnahmen oder Texte zu senden.</li>
+    <li><strong>Wenn nach Updates gesucht wird</strong>: Um herauszufinden, ob es eine neue Version gibt, fragt die App bei Google Play nach (nur wenn du sie dort installiert hast). Google Play erhält die installierte Version und technische Angaben zum Handy und verarbeitet sie nach seinen eigenen Bedingungen. Deine Aufnahmen und Texte werden nicht gesendet.</li>
+  </ul>
+  <p>Diese Anfragen nutzen dein eigenes OpenRouter-Konto und deinen eigenen API-Schlüssel. Was OpenRouter und die einzelnen Anbieter anschließend mit diesen Daten tun, richtet sich nach ihren eigenen Richtlinien; die von OpenRouter findest du unter <a href="https://openrouter.ai/privacy">openrouter.ai/privacy</a>. Wir empfehlen dir, sie durchzulesen.</p>
+  <p>Außerdem, nur wenn du es so wählst:</p>
+  <ul>
+    <li><strong>Kopien und Exporte</strong>: Die App speichert Kopien (Text, Notizen oder Audio) in einem Ordner, den du auswählst und der zu einem Cloud-Dienst wie Google Drive gehören kann, oder teilt eine Datei über das Android-Teilen-Menü mit einer anderen App.</li>
+    <li><strong>Support-Bericht</strong>: Wenn du auf „Support-Bericht teilen“ tippst, erstellt die App eine Textdatei mit dem technischen Protokoll (ohne Schlüssel, Titel, Audio oder Text), und du entscheidest, an wen du sie sendest.</li>
+  </ul>
+
+  <h2>4. Was wir nicht tun</h2>
+  <ul>
+    <li>Wir verlangen kein Konto und keine Registrierung.</li>
+    <li>Wir betreiben keine Server, die dein Audio, deinen Text oder deinen Schlüssel empfangen.</li>
+    <li>Es gibt keine Werbung, keine Analysedienste und kein Tracking.</li>
+    <li>Wir verkaufen deine Daten nicht und geben sie nicht für Werbezwecke weiter.</li>
+  </ul>
+
+  <h2>5. Berechtigungen, die die App nutzt</h2>
+  <ul>
+    <li><strong>Mikrofon</strong>: zum Aufnehmen, nur wenn du eine Aufnahme startest.</li>
+    <li><strong>Benachrichtigungen</strong>: um den Status von Aufnahme und Transkription anzuzeigen.</li>
+    <li><strong>Vordergrunddienste</strong>: um bei gesperrtem Bildschirm weiter aufzunehmen, zu importieren oder zu transkribieren, immer mit einer sichtbaren Benachrichtigung.</li>
+    <li><strong>Internet und Netzwerkstatus</strong>: um zu transkribieren und deine Einstellung „Nur WLAN“ zu berücksichtigen.</li>
+    <li><strong>Vom Nutzer gestartete Aufgaben</strong> (Android 14 oder höher): damit eine Transkription, die du angefordert hast, weiterläuft, auch wenn du die App schließt.</li>
+  </ul>
+
+  <h2>6. Wie lange Daten aufbewahrt werden und wie du sie löschst</h2>
+  <p>Deine Daten bleiben auf deinem Handy, bis du die Aufnahme löschst oder die App deinstallierst. Das Diagnoseprotokoll löscht sich nach 30 Tagen selbst, und du kannst es vorher unter Einstellungen → Hilfe und Support löschen. Daten, die an OpenRouter und die Anbieter gesendet wurden, unterliegen deren Richtlinien und lassen sich über dein OpenRouter-Konto verwalten.</p>
+
+  <h2>7. Sicherheit</h2>
+  <p>Anfragen nutzen verschlüsselte Verbindungen (HTTPS). Dein Schlüssel wird verschlüsselt gespeichert, und Android trennt die Daten der App von anderen Apps.</p>
+
+  <h2>8. Kinder</h2>
+  <p>Verbapp richtet sich an Erwachsene und nicht an Kinder.</p>
+
+  <h2>9. Änderungen dieser Erklärung</h2>
+  <p>Wenn wir diese Erklärung ändern, veröffentlichen wir die neue Version mit ihrem Datum auf dieser Seite.</p>
+
+  <h2>10. Kontakt</h2>
+  <p>Bei Fragen zum Datenschutz schreib an <a href="mailto:latribumaker@gmail.com">latribumaker@gmail.com</a>.</p>
+</main>
+</body>
+</html>
