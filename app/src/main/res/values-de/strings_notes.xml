@@ -67,9 +67,10 @@
     <string name="note_md_no_speech">In diesem Audio wurde keine Sprache erkannt.</string>
     <!-- 0.9.5: secciones de «Sesión con cliente» -->
     <string name="note_overview">Überblick</string>
-    <string name="note_client">Was der Kunde erzählt hat</string>
+    <string name="note_client">Was der Klient erzählt hat</string>
     <string name="note_work">Woran gearbeitet wurde</string>
-    <string name="note_agreements">Hinweise und Vereinbarungen</string>
+    <string name="note_agreements">Empfehlungen und Vereinbarungen</string>
     <string name="note_next">Nächste Schritte</string>
     <string name="note_watch">Worauf achten</string>
+    <string name="note_truncated">die KI hat nur den ersten Teil gelesen (sehr lange Aufnahme)</string>
 </resources>

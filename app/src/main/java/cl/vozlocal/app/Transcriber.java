@@ -42,6 +42,11 @@ import java.util.concurrent.*;
 final class Transcriber {
     static final java.util.concurrent.locks.ReentrantLock RUNNING=new java.util.concurrent.locks.ReentrantLock();
     static final int NOTIFICATION=9,DONE_NOTIFICATION=10,PARALLEL=3;
+    /** Último 429 de OpenRouter (System.currentTimeMillis; 0 si no hubo). Ver {@link #parallel(long)}. */
+    static volatile long rateLimitedAt;
+    static final long RATE_LIMIT_CALM_MS=30*60_000L;
+    /** Partes a la vez: PARALLEL, o 1 durante 30 min después de un 429. */
+    static int parallel(long now){return rateLimitedAt>0&&now-rateLimitedAt<RATE_LIMIT_CALM_MS?1:PARALLEL;}
     /** Canal de «Transcripción lista»: importancia normal, suena una vez. */
     static final String DONE_CHANNEL="done";
     /** Duración objetivo de cada bloque sin voces. */
@@ -219,6 +224,7 @@ final class Transcriber {
         boolean cut=localCut(e);int before=st.optInt("localCuts",0),cuts=before+(cut?1:0);
         long since=before>0?st.optLong("cutSince",now):now;
         HttpApi.ServerBusy busy=cut?null:HttpApi.serverBusy(e);
+        if(busy!=null&&busy.code==429)rateLimitedAt=now;
         if(busy!=null){
             // Caída del servicio: no gasta los 5 intentos. Si desde la última caída terminó alguna parte, la cuenta empieza de nuevo.
             int blocks=st.optInt("blocksDone",0);boolean fresh=!st.has("serverSince")||st.optInt("serverBlocks",-1)!=blocks;
@@ -246,7 +252,12 @@ final class Transcriber {
      * no llegó en ese tiempo ya no va a llegar (esperar 13 min por un bloque de 12 solo demoraría el reintento).
      * Desde la 0.8.0, que el proveedor no responda a tiempo gasta un intento (salvo que Android haya congelado la app).
      */
-    static long responseLimit(String provider,long partMs){long limit=responseLimit(partMs);return "openrouter".equals(provider)?Math.min(limit,OR_RESPONSE_MAX_MS):limit;}
+    static long responseLimit(String provider,long partMs){long limit=responseLimit(partMs);return "openrouter".equals(provider)?Math.min(limit,orResponseLimit(partMs)):limit;}
+    /**
+     * 0.9.6: la espera con OpenRouter crece con el bloque (mitad de su duración más 1 min, nunca menos de 5): un bloque de
+     * 12 min con voces espera 7. Cortar antes y reenviar cuando el proveedor sí estaba por terminar podía cobrar dos veces.
+     */
+    static long orResponseLimit(long partMs){return Math.max(OR_RESPONSE_MAX_MS,Math.max(0,partMs)/2+60_000L);}
     /** Grabación que se está transcribiendo: la notificación de avance abre su detalle. */
     static volatile String currentId;
     /**
@@ -542,7 +553,10 @@ final class Transcriber {
                     }
                 }
                 if(budgetMs>0&&from<n&&System.currentTimeMillis()-started>budgetMs&&!allDone(r,from,n))throw new Yield();
-                List<String[]> refs=references;String prefix=fresh;ExecutorService pool=Executors.newFixedThreadPool(PARALLEL);List<Future<JSONObject>> futures=new ArrayList<>();
+                // 0.9.6: tras un 429 (límite de OpenRouter para la clave), de a una parte por vez durante 30 min: tres envíos
+                // juntos volvían a chocar con el mismo límite y entraban en la escala de esperas largas.
+                int parallel=parallel(System.currentTimeMillis());if(parallel<PARALLEL)Diagnostics.event("parallel_reduced",r.id,"count",parallel);
+                List<String[]> refs=references;String prefix=fresh;ExecutorService pool=Executors.newFixedThreadPool(parallel);List<Future<JSONObject>> futures=new ArrayList<>();
                 try{
                     for(int i=from;i<n;i++){int index=i;futures.add(pool.submit(()->block(r,config,settings,parts,index,refs,prefix)));}
                     Exception first=null;
@@ -550,6 +564,10 @@ final class Transcriber {
                     if(first!=null)throw first;
                 }finally{pool.shutdownNow();}
                 check(r);Transcript transcript=Transcript.fromParts(Arrays.asList(responses),offsets(parts));transcript.data.put("provider",config.provider).put("model",config.model);
+                // 0.9.6: voces de la parte 2 en adelante que no se pudieron unir con las de la parte 1 (alguien que entró más
+                // tarde, o sin muestras limpias): pueden aparecer como otra persona. Se dice dónde unirlas.
+                if(n>1&&transcript.diarized()){int loose=0;for(String v:transcript.speakers().keySet())if(v.matches("block[1-9][0-9]*:.*"))loose++;
+                    if(loose>0){Pipeline.log(c,r.id,Lang.plural(c,R.plurals.eng_log_voices_loose,loose));Diagnostics.event("voices_loose",r.id,"count",loose,"parts",n);}}
                 if(mode!=null)transcript.data.put("pass",mode.name());
                 prefillVoices(c,transcript);
                 if(!corrections.isEmpty())prefill(transcript,fixed);

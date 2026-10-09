@@ -10,7 +10,7 @@
     <!-- Botón de una grabación pedida (StatusText.working) -->
     <string name="eng_btn_working">Wird transkribiert…</string>
     <string name="eng_btn_working_again">Wird neu transkribiert…</string>
-    <string name="eng_btn_queued">In der Warteschlange…</string>
+    <string name="eng_btn_queued">Wartet…</string>
     <string name="eng_btn_wait_wifi">Wartet auf WLAN…</string>
     <string name="eng_btn_wait_charger">Wartet auf das Ladegerät…</string>
     <string name="eng_btn_wait_connection">Wartet auf Verbindung…</string>
@@ -121,8 +121,8 @@
     <string name="eng_frag_total">Gesamtzeit %1$s</string>
 
     <!-- Nota para tu segundo cerebro -->
-    <string name="eng_st_note">Notiz für dein zweites Gehirn wird geschrieben</string>
-    <string name="eng_log_note_unavailable">Die Notiz für dein zweites Gehirn ist gerade nicht verfügbar · das Transkript ist fertig</string>
+    <string name="eng_st_note">Notiz für dein Second Brain wird geschrieben</string>
+    <string name="eng_log_note_unavailable">Die Notiz für dein Second Brain ist gerade nicht verfügbar · das Transkript ist fertig</string>
     <string name="eng_log_note_failed">Die Notiz konnte nicht geschrieben werden: %1$s · das Transkript ist fertig, die Notiz kannst du später schreiben</string>
     <string name="eng_note_unavailable">Gerade nicht verfügbar</string>
 
@@ -304,4 +304,13 @@
     <string name="eng_notif_server_failed">OpenRouter hat weiterhin Probleme. Was schon transkribiert ist, bleibt gespeichert: Öffne die Aufnahme, um es erneut zu versuchen oder ein anderes Modell zu testen.</string>
     <string name="eng_log_or_prepared_reused">Das Audio dieses Teils wurde schon im vorherigen Versuch vorbereitet · wird ohne erneute Vorbereitung gesendet</string>
     <string name="eng_log_fallback_model">Anderes Modell wird getestet: Der Rest geht an %1$s; fertige Teile bleiben erhalten</string>
+    <string name="eng_rec_warn_mute">Das Mikrofon nimmt keinen Ton auf. Vielleicht nutzt ein Anruf oder eine andere App es gerade.</string>
+    <string name="eng_rec_warn_space">Wenig Speicher frei. Gib Speicher frei, damit die Aufnahme nicht abbricht.</string>
+    <string name="eng_rec_err_space">Der Speicher ist voll. Verbapp hat die Aufnahme beendet und das Aufgenommene gespeichert.</string>
+    <string name="eng_rec_recovered">Eine abgebrochene Aufnahme wurde wiederhergestellt. Du findest sie in deiner Bibliothek.</string>
+    <string name="eng_rec_silent_kept">In der Aufnahme war fast nichts zu hören, deshalb wurde sie nicht transkribiert. Hör sie dir in deiner Bibliothek an.</string>
+    <plurals name="eng_log_voices_loose">
+        <item quantity="one">%1$d Stimme aus späteren Teilen ließ sich nicht mit Teil 1 zusammenführen · wenn jemand doppelt erscheint, führe die Stimmen unter Stimmen prüfen zusammen</item>
+        <item quantity="other">%1$d Stimmen aus späteren Teilen ließen sich nicht mit Teil 1 zusammenführen · wenn jemand doppelt erscheint, führe die Stimmen unter Stimmen prüfen zusammen</item>
+    </plurals>
 </resources>

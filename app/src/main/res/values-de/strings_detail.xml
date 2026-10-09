@@ -180,13 +180,13 @@
     <string name="detail_undo_failed">Rückgängig machen fehlgeschlagen.</string>
     <string name="detail_mark_delete_failed">Der Moment ließ sich nicht löschen.</string>
 
-    <!-- Notiz für dein zweites Gehirn -->
+    <!-- Notiz für dein Second Brain -->
     <string name="detail_note_interrupted_short">wurde vor dem Ende unterbrochen</string>
     <string name="detail_note_failed_title">Notiz konnte nicht erstellt werden</string>
     <string name="detail_note_interrupted">Wurde vor dem Ende unterbrochen (zum Beispiel, weil die App geschlossen wurde). Versuch es noch einmal.</string>
     <string name="detail_retry">Wiederholen</string>
     <string name="detail_try_again_soon">Versuch es gleich noch einmal.</string>
-    <string name="detail_note_title">Notiz für dein zweites Gehirn</string>
+    <string name="detail_note_title">Notiz für dein Second Brain</string>
     <string name="detail_note_pitch">Zusammenfassung, Entscheidungen, Aufgaben und Kernzitate dieser Aufnahme, bereit zum Speichern.</string>
     <string name="detail_note_make">Notiz erstellen</string>
     <string name="detail_note_setup">Richte die KI für die Notiz in den Einstellungen ein</string>

@@ -92,9 +92,15 @@ final class AudioParts {
      * Momento más silencioso (ventanas de 250 ms) dentro de centro±margen. Decodifica solo ese tramo,
      * así que cuesta pocos segundos aunque el audio dure una hora. Ante cualquier problema devuelve el centro.
      */
-    static long quietest(File source,long centerMs,long spanMs,HttpApi http){
+    /**
+     * 0.9.6: si en ±10 s solo hubo habla, se busca una vez más hasta WIDE_BEFORE_MS ANTES del punto (nunca después: un
+     * corte más temprano deja la parte más corta, así que nunca pasa del máximo del modelo).
+     */
+    static final long WIDE_BEFORE_MS=25_000;
+    static long quietest(File source,long centerMs,long spanMs,HttpApi http){return quietest(source,centerMs,Math.max(0,centerMs-spanMs),centerMs+spanMs,http,spanMs>=10_000);}
+    private static long quietest(File source,long centerMs,long fromMs,long toMs,HttpApi http,boolean widen){
         MediaExtractor extractor=new MediaExtractor();MediaCodec decoder=null;
-        long fromMs=Math.max(0,centerMs-spanMs),toMs=centerMs+spanMs;final long window=250;
+        final long window=250;
         try{
             extractor.setDataSource(source.getPath());MediaFormat format=null;int track=-1;
             for(int i=0;i<extractor.getTrackCount();i++){MediaFormat f=extractor.getTrackFormat(i);String mime=f.getString(MediaFormat.KEY_MIME);if(mime!=null&&mime.startsWith("audio/")){track=i;format=f;break;}}
@@ -115,9 +121,14 @@ final class AudioParts {
                     boolean end=(info.flags&MediaCodec.BUFFER_FLAG_END_OF_STREAM)!=0;decoder.releaseOutputBuffer(out,false);if(end)break;
                 }
             }
-            long best=-1;double min=Double.MAX_VALUE;
-            for(Map.Entry<Long,double[]> e:energy.entrySet()){if(e.getValue()[1]<10)continue;double mean=e.getValue()[0]/e.getValue()[1];if(mean<min){min=mean;best=e.getKey();}}
-            return best<0?centerMs:best*window+window/2;
+            long best=-1;double min=Double.MAX_VALUE;List<Double> means=new ArrayList<>();
+            for(Map.Entry<Long,double[]> e:energy.entrySet()){if(e.getValue()[1]<10)continue;double mean=e.getValue()[0]/e.getValue()[1];means.add(mean);if(mean<min){min=mean;best=e.getKey();}}
+            if(best<0)return centerMs;
+            // 0.9.6: ¿es una pausa de verdad? La ventana elegida debe ser bastante más silenciosa que lo típico del tramo
+            // (menos de un cuarto de la mediana). Si es habla continua, se busca una vez más en un tramo más amplio (±25 s).
+            Collections.sort(means);double median=means.get(means.size()/2);
+            if(min>=median*0.25&&widen&&fromMs>0){extractor.release();extractor=new MediaExtractor();if(decoder!=null){try{decoder.stop();}catch(Exception ignored){}decoder.release();decoder=null;}return quietest(source,centerMs,Math.max(0,centerMs-WIDE_BEFORE_MS),toMs,http,false);}
+            return best*window+window/2;
         }catch(Exception e){return centerMs;}
         finally{extractor.release();if(decoder!=null){try{decoder.stop();}catch(Exception ignored){}decoder.release();}}
     }

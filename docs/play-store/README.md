@@ -39,6 +39,7 @@ Lo que se cargó en Play Console el 2026-10-02 (app «Verbapp: graba y transcrib
 4. Clasificación (IARC): «El resto de los tipos de app». Contenido en línea: sí (texto generado por IA a partir de lo que graba el usuario); sin violencia, sexo, lenguaje ofensivo, drogas, compras, apuestas, ubicación compartida ni interacción entre usuarios. Resultado: todas las edades (PEGI 3, ESRB Everyone).
 5. Público objetivo: mayores de 18 años.
 6. Seguridad de los datos: recopila «Grabaciones de voz o sonido» y «Otro contenido generado por usuarios»; opcionales, no efímeros, solo para funciones de la app; no se comparten; cifrados en tránsito; sin cuentas.
+   - Revisado en la auditoría de la 0.9.6: el audio y el texto van a OpenRouter solo cuando la persona pide transcribir, con su propia clave. Según las reglas de Google, una transferencia que inicia el usuario y que espera, o la que hace un proveedor que procesa por cuenta de la app, no cuenta como «compartir». Por eso la respuesta sigue siendo «no se comparten». Si Google lo objeta, se cambia a «se comparten: funcionalidad de la app».
 7. ID de publicidad: no lo usa.
 8. App gubernamental: no.
 9. Funciones financieras: ninguna.
@@ -52,6 +53,7 @@ Lo que se cargó en Play Console el 2026-10-02 (app «Verbapp: graba y transcrib
   - Versión **17 (0.9.3)**: trae la sección «Ruido de fondo» en Ajustes (cuatro opciones para probar de a una) y los arreglos del informe de ese Xiaomi.
   - Versión **18 (0.9.4)**: alemán como cuarto idioma y `androidx.fragment` 1.9.1, por el aviso de SDK desactualizado de Play. Enviada a revisión el 2026-10-08 con la ficha de-DE y las capturas nuevas de los 4 idiomas.
   - Versión **19 (0.9.5)**: Ajustes por temas, «Tu nombre», tipo de resumen («Segundo cerebro» / «Sesión con cliente») con partes configurables y menos preguntas por defecto.
+  - Versión **20 (0.9.6)**: todas las mejoras de la auditoría (`docs/auditoria-0.9.5.md`): grabación que sobrevive a un corte, avisos de micrófono mudo y de costo, IA más fiable, «Deshacer» al eliminar, búsqueda por contenido, Android 8-9 y tablets. AAB con R8: de 3,1 MB a 1,1 MB.
   - Cada AAB está en `entrega/Verbapp-<versión>.aab`, firmado con la clave de subida, con notas de la versión en es-419, en-US y pt-BR.
 - Enlace para unirse a la prueba: https://play.google.com/apps/testing/cl.verbapp.app
   - Cada tester lo abre con la cuenta de Google de su lista, acepta y luego instala desde Play.
@@ -59,7 +61,7 @@ Lo que se cargó en Play Console el 2026-10-02 (app «Verbapp: graba y transcrib
 - Países: todos (178).
 - Testers: lista «Testers Verbapp», con 10 correos al 2026-10-08 (el último, Stephan, desde Austria). Google pide **al menos 12** que la usen **14 días seguidos** antes de poder pedir producción.
 - **Permisos de servicios en primer plano** (declaración que pidió la versión): sincronización de datos (procesamiento en la red: «Otro», el envío del audio a OpenRouter para transcribir; procesamiento local: «Importación y exportación»), procesamiento multimedia («Transcodificación multimedia») y micrófono («Entrada de audio en segundo plano»). Video de demostración (no listado): https://www.youtube.com/watch?v=gdiARACfbIk
-- Advertencia sin importancia: no hay archivo de desofuscación (la app no ofusca su código).
+- Advertencia sin importancia: no hay archivo de desofuscación. Desde la 0.9.6 R8 achica la app pero no renombra clases (`-dontobfuscate`), así que los informes de error siguen legibles sin ese archivo.
 - **Política de privacidad:** desde la 0.9.2 dice que, para buscar actualizaciones, la app le pregunta a Google Play.
   - Google Play recibe la versión instalada y datos técnicos del teléfono, nunca grabaciones ni texto.
   - Según Google, la librería usa esos datos solo para saber si hay una actualización. Van cifrados y no se comparten con terceros.
@@ -67,6 +69,6 @@ Lo que se cargó en Play Console el 2026-10-02 (app «Verbapp: graba y transcrib
 - **Detalles de acceso:** la clave de prueba de OpenRouter (con tope) ya está cargada.
 
 ## Pendiente
-- Que Google apruebe la 0.9.3 y que los testers acepten la invitación desde el enlace de la prueba.
-- Juntar 12 testers y esperar 14 días; después, pedir acceso a producción.
-- Que Google apruebe la 0.9.5.
+- Juntar al menos 12 testers (hay 10) que la usen 14 días seguidos; después, pedir acceso a producción. Es lo único que falta para producción.
+- Que Google apruebe la 0.9.6.
+- Rotar la clave de prueba de OpenRouter de «Detalles de acceso» cuando termine la revisión, manteniendo su tope de gasto.

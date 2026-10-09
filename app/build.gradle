@@ -15,8 +15,8 @@ android {
         applicationId 'cl.verbapp.app'
         minSdk 26
         targetSdk 36
-        versionCode 19
-        versionName '0.9.5'
+        versionCode 20
+        versionName '0.9.6'
         testInstrumentationRunner 'cl.vozlocal.app.RecorderSmokeTest'
     }
     signingConfigs {
@@ -31,7 +31,11 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled false
+            // 0.9.6: R8 quita el código y los recursos que no se usan (AAB más chico; Play dejaba de avisar). Sin renombrar
+            // clases (-dontobfuscate en proguard-rules.pro): el informe de soporte guarda los nombres de las clases propias.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (signingFile.exists()) signingConfig signingConfigs.release
         }
     }
@@ -39,6 +43,8 @@ android {
     // El idioma se elige dentro de la app (Lang): el AAB debe llevar los tres a todos los teléfonos. Con la división por
     // idioma de Google Play, quien tiene el teléfono en español y elige inglés (o portugués) no tendría esos textos.
     bundle { language { enableSplit = false } }
+    // 0.9.6: pruebas JVM (app/src/test) de la lógica pura; las clases de Android devuelven valores por defecto.
+    testOptions { unitTests.returnDefaultValues = true }
 }
 
 dependencies {
@@ -48,4 +54,7 @@ dependencies {
     // 0.9.4: app-update trae (vía play-services-basement) androidx.fragment 1.0.0, que Google Play marcó como versión de
     // SDK desactualizada. Se fija la versión actual; la app no usa fragments, así que no cambia nada en pantalla.
     implementation 'androidx.fragment:fragment:1.9.1'
+    // 0.9.6: pruebas en la computadora (./gradlew testDebugUnitTest). org.json real: el de Android es solo una plantilla.
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
 }

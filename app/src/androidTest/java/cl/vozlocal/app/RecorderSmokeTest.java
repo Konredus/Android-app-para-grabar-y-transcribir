@@ -62,14 +62,14 @@ public class RecorderSmokeTest extends Instrumentation {
             check(RecorderService.activeId != null, "Recording stopped with screen off");
             getUiAutomation().executeShellCommand("input keyevent KEYCODE_WAKEUP").close();
             getUiAutomation().executeShellCommand("wm dismiss-keyguard").close();
-            command(c, "STOP"); long stopDeadline=System.currentTimeMillis()+20000;while(RecorderService.activeId!=null&&System.currentTimeMillis()<stopDeadline)Thread.sleep(100);
+            command(c, "STOP"); long stopDeadline=System.currentTimeMillis()+20000;while((RecorderService.activeId!=null||RecorderService.savingId!=null)&&System.currentTimeMillis()<stopDeadline)Thread.sleep(100);
             check(RecorderService.activeId == null && RecorderService.error == null, "Recorder stop failed: " + RecorderService.error);
             Recording r = Recording.list(c).stream().filter(item -> item.id.equals(id)).findFirst().orElseThrow();
             check(r.audio(c).length() > 100, "Audio file is empty");
             check(r.title.equals("Título antes de grabar"),"Pre-recording title was not saved");
-            try (MediaMetadataRetriever metadata = new MediaMetadataRetriever()) {
-                metadata.setDataSource(r.audio(c).getPath());
-                long mediaDuration = Long.parseLong(metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION));
+            check(!RecorderService.partial(c, id).exists(), "The ADTS recording was not sealed into .m4a");
+            {
+                long mediaDuration = AudioConvert.duration(r.audio(c));
                 check(mediaDuration > 2000, "Recorded audio duration invalid");
                 check(Math.abs(mediaDuration-r.duration) < 1500, "Saved duration differs from actual media");
             }
@@ -90,7 +90,7 @@ public class RecorderSmokeTest extends Instrumentation {
             // Un toque accidental (menos de 3 s) se descarta sin dejar archivo ni grabación.
             command(c, "START"); long shortDeadline=System.currentTimeMillis()+10000;while(RecorderService.activeId==null&&System.currentTimeMillis()<shortDeadline)Thread.sleep(50);
             String shortId = RecorderService.activeId; Thread.sleep(800);
-            command(c, "STOP"); stopDeadline=System.currentTimeMillis()+20000;while(RecorderService.activeId!=null&&System.currentTimeMillis()<stopDeadline)Thread.sleep(100);
+            command(c, "STOP"); stopDeadline=System.currentTimeMillis()+20000;while((RecorderService.activeId!=null||RecorderService.savingId!=null)&&System.currentTimeMillis()<stopDeadline)Thread.sleep(100);
             check(shortId != null && Recording.list(c).stream().noneMatch(item -> item.id.equals(shortId)), "Short recording was kept");
             check(!new File(Recording.directory(c), shortId + ".m4a").exists(), "Short recording audio left behind");
             FeatureChecks.run(c,r);
@@ -110,6 +110,7 @@ public class RecorderSmokeTest extends Instrumentation {
             KeyboardChecks.run(this,c,r);
             AudioCleanChecks.run(c,r);
             SessionChecks.run(this,c);
+            RobustChecks.run(this,c);
             I18nChecks.run(c);
             long longStarted = SystemClock.elapsedRealtime();
             if (longChecks) LongImportChecks.run(c,r);

@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.9.6",
+    "date": "2026-10-09",
+    "title": "Grabaciones a prueba de todo",
+    "items": [
+      "Tus grabaciones ya no se pierden: si el teléfono cierra la app, se queda sin batería o se reinicia mientras grabas, al abrir Verbapp recupera todo lo grabado hasta ese momento.",
+      "Si el micrófono deja de captar sonido (por una llamada u otra app), Verbapp te avisa en la pantalla y en la notificación. Y si una grabación casi no tiene sonido, te pregunta antes de transcribirla para que no pagues por silencio.",
+      "Antes de una transcripción cara (más de US$0,50) o mayor que tu saldo, Verbapp te muestra el costo y te pide confirmar.",
+      "Notas más fiables: la IA ya no inventa nombres ni frases, ignora instrucciones dichas dentro de la grabación, reintenta sola si OpenRouter está saturado y usa otro modelo si el tuyo falla.",
+      "Eliminar ahora tiene «Deshacer», la búsqueda encuentra también personas y texto, y puedes escribir al soporte desde Ajustes → Ayuda y soporte.",
+      "Además: el audio se pausa al desconectar los audífonos, sigue donde iba al girar el teléfono, la app ocupa menos espacio y funciona mejor en Android 8 y 9 y en tablets."
+    ]
+  },
+  {
     "version": "0.9.5",
     "date": "2026-10-09",
     "title": "Ajustes más simples y un resumen para tus sesiones",

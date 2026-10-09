@@ -15,7 +15,30 @@ final class AudioConvert {
     interface Progress { void update(String stage,long positionMs,long totalMs); }
     /** Etapas: convertir (decodificar y volver a codificar), reempaquetar un AAC completo sin reconvertir y verificar el resultado. */
     static final String CONVERT="convert",REMUX="remux",VERIFY="verify";
-    static long duration(File file)throws Exception{try(MediaMetadataRetriever m=new MediaMetadataRetriever()){m.setDataSource(file.getPath());return Long.parseLong(m.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION));}}
+    /**
+     * Duración en ms. 0.9.6: sin try-with-resources: MediaMetadataRetriever es AutoCloseable recién en Android 10 y en 8-9
+     * close() no existe (NoSuchMethodError, que ningún catch de Exception atrapa). release() existe en todas.
+     */
+    static long duration(File file)throws Exception{
+        MediaMetadataRetriever m=new MediaMetadataRetriever();
+        try{m.setDataSource(file.getPath());String d=m.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);if(d==null)throw new IOException("Unknown duration");return Long.parseLong(d);}
+        finally{try{m.release();}catch(Exception ignored){}}
+    }
+    /**
+     * 0.9.6: grabación en ADTS («id.aac», tolera cortes) → «id.m4a» sin recodificar. Se escribe a «id.m4a.tmp» y se renombra:
+     * un corte a mitad nunca deja un .m4a roto. El ADTS se borra solo cuando el .m4a quedó completo.
+     */
+    static void seal(File aac,File m4a)throws Exception{
+        File tmp=new File(m4a.getPath()+".tmp");MediaExtractor extractor=new MediaExtractor();boolean ok=false;
+        try{
+            extractor.setDataSource(aac.getPath());int track=-1;MediaFormat format=null;
+            for(int i=0;i<extractor.getTrackCount();i++){MediaFormat f=extractor.getTrackFormat(i);String mime=f.getString(MediaFormat.KEY_MIME);if(mime!=null&&mime.startsWith("audio/")){track=i;format=f;break;}}
+            if(track<0)throw new IOException("No audio track");extractor.selectTrack(track);
+            remux(extractor,format,tmp,0,new HttpApi(),(s,p,t)->{});ok=true;
+        }finally{extractor.release();if(!ok)tmp.delete();}
+        if(!tmp.renameTo(m4a)){tmp.delete();throw new IOException("Rename failed");}
+        aac.delete();
+    }
     static void convert(File source,File target,long startMs,long endMs,HttpApi cancel)throws Exception{convert(source,target,startMs,endMs,cancel,(s,p,t)->{});}
     static void convert(File source,File target,long startMs,long endMs,HttpApi cancel,Progress progress)throws Exception{convert(source,target,startMs,endMs,cancel,progress,96000);}
     /** bitrate: 96 kbps conserva la calidad; 32 kbps basta para voz y reduce ~3× el envío con datos móviles. */

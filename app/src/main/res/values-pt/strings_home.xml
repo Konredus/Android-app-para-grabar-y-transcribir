@@ -157,8 +157,8 @@
     <string name="home_save_failed">Não foi possível salvar em %1$s. Confira a pasta rápida em Ajustes.</string>
 
     <!-- ===== Biblioteca ===== -->
-    <string name="home_search_hint">Buscar por título</string>
-    <string name="home_search_spoken">Buscar gravações por título</string>
+    <string name="home_search_hint">Busque por título, pessoa ou texto</string>
+    <string name="home_search_spoken">Buscar gravações por título, pessoa ou texto</string>
     <string name="home_clear_search">Limpar busca</string>
     <string name="home_stop_save_recording">Parar e salvar a gravação</string>
     <string name="home_pill_spoken">Gravação em andamento. Toque para ir para %1$s</string>
@@ -313,4 +313,12 @@
     <string name="inbox_file_transcript">transcricao.txt</string>
     <string name="inbox_file_transcript_json">transcricao.json</string>
     <string name="inbox_file_note">nota.md</string>
+    <string name="act_silent_title">Quase não se ouve nada</string>
+    <string name="act_silent_body">O microfone quase não captou som nesta gravação. Ouça antes de transcrever para não pagar por silêncio.</string>
+    <string name="act_transcribe_anyway">Transcrever mesmo assim</string>
+    <string name="act_cost_title">Transcrever por ≈ %1$s?</string>
+    <string name="act_cost_body">É uma gravação longa (%1$s). O OpenRouter vai descontar do seu saldo.</string>
+    <string name="act_cost_over_body">Seu último saldo verificado era %1$s e pode não ser suficiente. Adicione saldo em openrouter.ai ou transcreva mesmo assim.</string>
+    <string name="act_deleted">“%1$s” excluída</string>
+    <string name="home_show_more">Ver mais</string>
 </resources>

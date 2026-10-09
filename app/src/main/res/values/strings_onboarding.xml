@@ -98,9 +98,9 @@
     <string name="onb_key_or_later">Paste your key or tap “%1$s”.</string>
     <string name="onb_key_save_failed">Couldn\'t save the key on this phone. Please try again.</string>
     <string name="onb_howto_title">How to get your key</string>
-    <string name="onb_howto_body">OpenRouter gives you access to many AIs with a single key. You pay only for what you use.</string>
+    <string name="onb_howto_body">OpenRouter is a service that brings many AIs together. With a key (like a long password), Verbapp transcribes on your behalf, and you pay only for what you use.</string>
     <string name="onb_howto_1">Create your account at openrouter.ai.</string>
-    <string name="onb_howto_2">Add a little credit: only what you use is deducted.</string>
+    <string name="onb_howto_2">Add about US$5 of credit: an hour of audio costs from US$0.10, and only what you use is deducted.</string>
     <string name="onb_howto_3">In “Keys”, create a key and copy it.</string>
     <string name="onb_howto_4">Come back to Verbapp and tap Paste.</string>
     <!-- %1$s: openrouter.ai -->

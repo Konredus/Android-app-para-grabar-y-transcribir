@@ -29,7 +29,8 @@ final class FilesStore {
     interface Change { void apply(JSONObject data) throws Exception; }
     static void update(Context c, String id, Change change) throws Exception {
         synchronized(LOCK) {
-            if (!file(c,id,".m4a").exists()) return;
+            // Sin audio no hay grabación (se borró): no se crea su estado. 0.9.6: mientras graba, el audio es «id.aac».
+            if (!file(c,id,".m4a").exists() && !file(c,id,".aac").exists()) return;
             JSONObject state = state(c,id); change.apply(state); write(file(c,id,".sync.json"),state);
         }
     }

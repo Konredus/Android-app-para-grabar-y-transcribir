@@ -256,10 +256,15 @@ final class Transcript {
                 if(segment.optString("text").trim().isEmpty())continue;
                 String speaker=segment.isNull("speaker")?"unknown":segment.getString("speaker");
                 String id=map.containsKey(speaker)?map.get(speaker):prefix+(parts.size()<=1?speaker:(p>0&&legacy.contains(speaker)?"block0:"+speaker:"block"+p+":"+speaker));
-                segments.put(new JSONObject().put("speaker",id)
-                    .put("start",segment.getDouble("start")+offsets.get(p)).put("end",segment.getDouble("end")+offsets.get(p)).put("text",segment.getString("text")));
+                // 0.9.6: tiempos dentro de su parte (un modelo puede devolver uno fuera del audio) y el fin nunca antes del inicio.
+                double from=offsets.get(p),limit=p+1<offsets.size()?offsets.get(p+1)+2:Double.MAX_VALUE;
+                double start=Math.min(limit,Math.max(from,segment.getDouble("start")+from)),end=Math.min(limit,Math.max(start,segment.getDouble("end")+from));
+                segments.put(new JSONObject().put("speaker",id).put("start",start).put("end",end).put("text",segment.getString("text")));
             }
         }
+        // En orden de tiempo (orden estable: lo que ya venía ordenado queda igual).
+        List<JSONObject> ordered=new ArrayList<>();for(int i=0;i<segments.length();i++)ordered.add(segments.getJSONObject(i));
+        ordered.sort((x,y)->Double.compare(x.optDouble("start"),y.optDouble("start")));segments=new JSONArray(ordered);
         // Con voces si ALGUNA parte vino con voces (0.8.0): con OpenRouter cada respuesta dice lo suyo, y una parte 1 en
         // silencio (sin hablantes) no debe dejar como «Texto» a las personas de las demás. Con OpenAI todas traen lo mismo.
         boolean diarized=parts.isEmpty();for(JSONObject part:parts)if(part.optBoolean("_diarized",true)){diarized=true;break;}

@@ -151,8 +151,8 @@
     <string name="home_save_failed">Speichern in %1$s fehlgeschlagen. Prüfe den Schnellordner in den Einstellungen.</string>
 
     <!-- ===== Bibliothek ===== -->
-    <string name="home_search_hint">Nach Titel suchen</string>
-    <string name="home_search_spoken">Aufnahmen nach Titel suchen</string>
+    <string name="home_search_hint">Titel, Personen oder Text suchen</string>
+    <string name="home_search_spoken">Aufnahmen nach Titel, Personen oder Text suchen</string>
     <string name="home_clear_search">Suche löschen</string>
     <string name="home_stop_save_recording">Aufnahme stoppen und speichern</string>
     <string name="home_pill_spoken">Aufnahme läuft. Tippen, um zum Tab %1$s zu wechseln</string>
@@ -305,4 +305,12 @@
     <string name="inbox_file_transcript">transkript.txt</string>
     <string name="inbox_file_transcript_json">transkript.json</string>
     <string name="inbox_file_note">notiz.md</string>
+    <string name="act_silent_title">Fast nichts zu hören</string>
+    <string name="act_silent_body">Das Mikrofon hat in dieser Aufnahme fast nichts aufgenommen. Hör sie dir vor dem Transkribieren an, damit du nicht für Stille bezahlst.</string>
+    <string name="act_transcribe_anyway">Trotzdem transkribieren</string>
+    <string name="act_cost_title">Für ≈ %1$s transkribieren?</string>
+    <string name="act_cost_body">Das ist eine lange Aufnahme (%1$s). OpenRouter zieht das von deinem Guthaben ab.</string>
+    <string name="act_cost_over_body">Dein zuletzt geprüftes Guthaben war %1$s und reicht vielleicht nicht. Lade Guthaben auf openrouter.ai auf oder transkribiere trotzdem.</string>
+    <string name="act_deleted">„%1$s“ gelöscht</string>
+    <string name="home_show_more">Mehr anzeigen</string>
 </resources>

@@ -90,7 +90,7 @@
     <string name="set_audio_lang_es">Español</string>
     <string name="set_audio_lang_pt">Portugués</string>
     <string name="set_audio_lang_de">Alemán</string>
-    <string name="set_audio_lang_hint">Indicar el idioma mejora la precisión.</string>
+    <string name="set_audio_lang_hint">Indicar el idioma mejora la precisión. Si grabas en otro idioma o mezclas idiomas, elige Detección automática.</string>
     <string name="set_audio_lang_detect">Detección automática</string>
     <string name="set_audio_lang_detect_sub">Para audios en otros idiomas o mezclados</string>
     <string name="set_ai_foot">Para transcribir, tu audio se envía a OpenRouter y al modelo que elijas; tu clave paga solo lo que usas.</string>
@@ -421,7 +421,7 @@
     <string name="set_summary_type">Tipo de resumen</string>
     <string name="set_summary_type_body">Elige qué arma la IA después de cada transcripción y qué incluye cada tipo.</string>
     <string name="set_kind_brain">Segundo cerebro</string>
-    <string name="set_kind_brain_sub">Resumen, decisiones, tareas y frases clave, para tus notas</string>
+    <string name="set_kind_brain_sub">Para tus notas personales: resumen, decisiones, tareas y frases clave</string>
     <string name="set_kind_client">Sesión con cliente</string>
     <string name="set_kind_client_sub">Un panorama completo de la sesión, para no tener que releerla</string>
     <string name="set_kind_in_use">En uso</string>
@@ -434,4 +434,9 @@
     <string name="set_questions_foot">Por defecto Verbapp no pregunta nada: separa voces y usa el título que sugiere la IA. Actívalas si prefieres que te pregunte.</string>
     <string name="set_section_advanced">Avanzado</string>
     <string name="set_advanced_foot">Los modelos que transcriben. En automático, Verbapp elige el recomendado.</string>
+    <string name="set_contact">Escribir al soporte</string>
+    <string name="set_contact_sub">%1$s · va adjunto el informe de soporte</string>
+    <string name="set_contact_subject">Verbapp %1$s · ayuda</string>
+    <string name="set_contact_body">¡Hola! Cuéntanos qué pasó y, si puedes, cuándo:\n\n</string>
+    <string name="set_contact_no_app">No hay una app de correo en este teléfono. Escribe a %1$s.</string>
 </resources>

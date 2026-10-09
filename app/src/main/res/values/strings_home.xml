@@ -174,8 +174,8 @@
     <string name="home_save_failed">Couldn\'t save to %1$s. Check the quick folder in Settings.</string>
 
     <!-- ===== Biblioteca ===== -->
-    <string name="home_search_hint">Search by title</string>
-    <string name="home_search_spoken">Search recordings by title</string>
+    <string name="home_search_hint">Search titles, people or text</string>
+    <string name="home_search_spoken">Search recordings by title, people or text</string>
     <string name="home_clear_search">Clear search</string>
     <string name="home_stop_save_recording">Stop and save the recording</string>
     <!-- %1$s: la pestaña «Record». -->
@@ -354,4 +354,12 @@
     <string name="inbox_file_transcript">transcript.txt</string>
     <string name="inbox_file_transcript_json">transcript.json</string>
     <string name="inbox_file_note">note.md</string>
+    <string name="act_silent_title">Almost nothing can be heard</string>
+    <string name="act_silent_body">The microphone picked up almost no sound in this recording. Listen to it before transcribing so you don\'t pay for silence.</string>
+    <string name="act_transcribe_anyway">Transcribe anyway</string>
+    <string name="act_cost_title">Transcribe for ≈ %1$s?</string>
+    <string name="act_cost_body">It\'s a long recording (%1$s). OpenRouter will charge this to your credit.</string>
+    <string name="act_cost_over_body">Your last checked balance was %1$s, which may not be enough. Add credit at openrouter.ai or transcribe anyway.</string>
+    <string name="act_deleted">“%1$s” deleted</string>
+    <string name="home_show_more">Show more</string>
 </resources>

@@ -1,8 +1,8 @@
 # Verbapp (antes Voz local) para Android
 
-Grabadora y transcriptor para Android 8 o posterior: graba sin internet y transcribe con **OpenRouter**, con una sola clave. Versión **0.8.0** (preliminar), licencia MIT. Letra Outfit incluida bajo la SIL Open Font License (`app/src/main/assets/fonts/OFL-Outfit.txt`).
+Grabadora y transcriptor para Android 8 o posterior: graba sin internet y transcribe con **OpenRouter**, con una sola clave. Versión **0.9.6**, en prueba cerrada de Google Play (paquete `cl.verbapp.app`), en español, inglés, portugués y alemán. Licencia MIT. Letra Outfit incluida bajo la SIL Open Font License (`app/src/main/assets/fonts/OFL-Outfit.txt`).
 
-[Descargar APKs](https://github.com/Konredus/Android-app-para-grabar-y-transcribir/releases) · [Historial](CHANGELOG.md) · [Criterios de diseño](docs/diseno/CRITERIOS.md)
+[Historial](CHANGELOG.md) · [Google Play](docs/play-store/README.md) · [Auditoría 0.9.5](docs/auditoria-0.9.5.md) · [Criterios de diseño](docs/diseno/CRITERIOS.md)
 
 <img src="docs/diseno/capturas/01-grabar.png" width="200"> <img src="docs/diseno/capturas/04-biblioteca.png" width="200"> <img src="docs/diseno/capturas/06-detalle-transcrito.png" width="200">
 
@@ -12,6 +12,7 @@ Grabadora y transcriptor para Android 8 o posterior: graba sin internet y transc
 - **Bienvenida** la primera vez: tu nombre, micrófono, permiso para transcribir con el teléfono bloqueado y tu clave de OpenRouter.
 - **Tus métricas** (Ajustes): tiempo hablado, rachas, a qué hora grabas, con quién conversas y gasto por modelo (cobrado y estimado). Se calculan en el teléfono.
 - Graba sin internet con un toque, con pausa y servicio de micrófono para continuar con la pantalla bloqueada. Onda en vivo según el volumen real.
+- Desde la 0.9.6 la grabación sobrevive a un corte: se graba en AAC (ADTS) y se pasa a M4A al detener; si Android cierra la app, se acaba la batería o se quita el permiso, lo grabado se recupera al abrirla. Avisa si el micrófono queda mudo o falta espacio, y pregunta antes de transcribir una grabación casi en silencio o cara.
 - Importa archivos de grabadoras o usa **Compartir → Verbapp** desde WhatsApp/otras apps que compartan audio. Convierte a AAC/M4A con los decodificadores de Android. M4A, MP3, WAV y OGG/Opus dependen del soporte del teléfono y del archivo.
 - Recorte no destructivo: elige inicio y final con dos manijas (o en segundos) y escucha el tramo. Se crea una grabación nueva; el archivo original queda intacto. No es un editor de ondas completo. Mantén abierta la pantalla mientras se prepara el archivo.
 - Título opcional mientras grabas o al terminar; resumen al guardar con el siguiente paso.
@@ -21,12 +22,12 @@ Grabadora y transcriptor para Android 8 o posterior: graba sin internet y transc
 - Copiar texto, compartir texto o `.txt`, y **Guardar en…** cualquier ubicación (incluida Google Drive si su app está instalada). Compartir audio M4A.
 - Carpeta elegida mediante el selector de Android, con audio, información y transcripción `.txt`/`.json`. Las carpetas por grabación usan un identificador estable; el título está en `informacion.txt`.
 - Diagnóstico local limitado, informe exportable y conteos de acciones. Sin telemetría remota.
-- Sin inicio de sesión de Google: para usar Drive se elige su carpeta en el selector de Android. No necesita servicios de Google Play.
+- Sin inicio de sesión de Google: para usar Drive se elige su carpeta en el selector de Android. Desde la 0.9.2 usa Google Play solo para avisar de versiones nuevas (`app-update`).
 
 ## Instalar y configurar
 
-1. Descarga el APK de Releases, ábrelo desde Archivos y permite la instalación si Android lo solicita.
-2. La bienvenida (o **Ajustes → Tu IA (OpenRouter)**) pide tu clave de [OpenRouter](https://openrouter.ai/keys). Se cifra con Android Keystore y deja de mostrarse al guardarla.
+1. Hazte tester con el enlace de la prueba cerrada (`https://play.google.com/apps/testing/cl.verbapp.app`) e instala Verbapp desde Google Play.
+2. La bienvenida (o **Ajustes → Conexión con la IA**) pide tu clave de [OpenRouter](https://openrouter.ai/keys). Se cifra con Android Keystore y deja de mostrarse al guardarla.
 3. **Comprobar conexión** confirma que la clave funciona y muestra el saldo de la cuenta. No prueba la carga de audio ni la calidad.
 4. Elige cuándo transcribir. Por defecto es manual, solo red no medida, sin exigir cargador. Si una transcripción espera Wi-Fi, su detalle y su notificación ofrecen **«Usar datos móviles ahora»** solo para esa grabación. Android puede retrasar las tareas automáticas; también esperan si hay poca batería o una grabación en curso. En Android 14 o más, lo que pides transcribir con un toque sigue aunque cierres la app. Para transcribir con el teléfono bloqueado, permite a Verbapp usar batería en segundo plano (en vivo y otras marcas hay un paso extra; la bienvenida lo explica).
 5. Graba/importa, entra a **Biblioteca → Transcribir audio** y luego abre el resultado.

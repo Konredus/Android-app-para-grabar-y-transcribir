@@ -316,4 +316,13 @@
     <string name="eng_notif_server_failed">OpenRouter is still having issues. What was already transcribed is saved: open the recording to retry or try another model.</string>
     <string name="eng_log_or_prepared_reused">This part\'s audio was already prepared in the previous attempt · sending it without preparing it again</string>
     <string name="eng_log_fallback_model">Trying another model: what\'s left goes to %1$s; finished parts are kept</string>
+    <string name="eng_rec_warn_mute">The microphone isn\'t picking up any sound. A call or another app may be using it.</string>
+    <string name="eng_rec_warn_space">Little space left on the phone. Free up space so the recording isn\'t cut short.</string>
+    <string name="eng_rec_err_space">The phone ran out of space. Verbapp stopped and saved what was recorded.</string>
+    <string name="eng_rec_recovered">A recording that was cut off was recovered. You\'ll find it in your Library.</string>
+    <string name="eng_rec_silent_kept">Almost nothing could be heard in the recording, so it wasn\'t sent to transcribe. Listen to it in your Library.</string>
+    <plurals name="eng_log_voices_loose">
+        <item quantity="one">%1$d voice from the later parts couldn\'t be matched with part 1 · if someone appears twice, merge them in Review voices</item>
+        <item quantity="other">%1$d voices from the later parts couldn\'t be matched with part 1 · if someone appears twice, merge them in Review voices</item>
+    </plurals>
 </resources>

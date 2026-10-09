@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.9.6",
+    "date": "2026-10-09",
+    "title": "Recordings that survive anything",
+    "items": [
+      "Your recordings are no longer lost: if the phone closes the app, runs out of battery or restarts while you record, Verbapp recovers everything recorded up to that moment the next time you open it.",
+      "If the microphone stops picking up sound (because of a call or another app), Verbapp warns you on screen and in the notification. And if a recording is almost silent, it asks before transcribing so you don't pay for silence.",
+      "Before an expensive transcription (over US$0.50) or one larger than your balance, Verbapp shows you the cost and asks you to confirm.",
+      "More reliable notes: the AI no longer makes up names or quotes, ignores instructions spoken inside the recording, retries by itself if OpenRouter is busy and switches to another model if yours fails.",
+      "Deleting now has Undo, search also finds people and text, and you can write to support from Settings → Help and support.",
+      "Also: audio pauses when you unplug your headphones, keeps its place when you rotate the phone, the app takes less space and works better on Android 8 and 9 and on tablets."
+    ]
+  },
+  {
     "version": "0.9.5",
     "date": "2026-10-09",
     "title": "Simpler settings and a summary for your sessions",

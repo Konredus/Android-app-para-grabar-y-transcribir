@@ -150,7 +150,7 @@ final class Sheet {
         if(dot!=0){View d=new View(activity);d.setBackground(oval(dot));row.addView(d,new LinearLayout.LayoutParams(ui.dp(10),ui.dp(10)));row.addView(ui.space(S3));}
         LinearLayout texts=ui.column();texts.addView(ui.text(label,Type.ITEM,ui.p.onSurface));if(detail!=null&&!detail.isEmpty()){TextView d=ui.text(detail,Type.BODY_MEDIUM,ui.p.onSurfaceVariant);d.setPadding(0,ui.dp(2),0,0);texts.addView(d);}
         row.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
-        row.setBackground(ui.ripple(null,0));row.setClickable(true);row.setContentDescription(selected?Lang.str(activity,R.string.ui_selected_item,label):label);row.setAccessibilityDelegate(Ui.buttonRole());
+        row.setBackground(ui.ripple(null,0));row.setClickable(true);row.setFocusable(true);row.setContentDescription(selected?Lang.str(activity,R.string.ui_selected_item,label):label);row.setAccessibilityDelegate(Ui.buttonRole());
         row.setOnClickListener(v->{dialog.dismiss();if(!selected)run.run();});
         list.addView(row,Ui.fill());return this;
     }

@@ -312,8 +312,10 @@ final class Ui {
     }
     /** Chip de filtro (píldora): vidrio con borde si no está elegido; tinta con ✓ si está elegido. */
     TextView filter(String value,boolean selected,View.OnClickListener click){
-        TextView t=text(value,Type.LABEL_LARGE,selected?p.onInk:p.onSurfaceVariant);t.setGravity(Gravity.CENTER_VERTICAL);t.setPadding(dp(selected?S3:S4),0,dp(S4),0);t.setMinHeight(dp(36));t.setMinimumHeight(dp(36));
-        t.setBackground(new RippleDrawable(ColorStateList.valueOf(p.ripple),selected?shape(c,p.ink,R_FULL):outline(c,p.glass,p.outlineVariant,R_FULL,false),null));
+        TextView t=text(value,Type.LABEL_LARGE,selected?p.onInk:p.onSurfaceVariant);t.setGravity(Gravity.CENTER_VERTICAL);t.setPadding(dp(selected?S3:S4),0,dp(S4),0);
+        // 0.9.6: la píldora se ve de 36 dp, pero se toca en 48 (el mínimo de accesibilidad): el fondo va con 6 dp de margen arriba y abajo.
+        t.setMinHeight(dp(48));t.setMinimumHeight(dp(48));t.setFocusable(true);
+        t.setBackground(new android.graphics.drawable.InsetDrawable(new RippleDrawable(ColorStateList.valueOf(p.ripple),selected?shape(c,p.ink,R_FULL):outline(c,p.glass,p.outlineVariant,R_FULL,false),null),0,dp(6),0,dp(6)));
         if(selected){Drawable d=c.getDrawable(R.drawable.ic_check).mutate();d.setTint(p.onInk);d.setBounds(0,0,dp(18),dp(18));t.setCompoundDrawablesRelative(d,null,null,null);t.setCompoundDrawablePadding(dp(6));}
         t.setSelected(selected);t.setOnClickListener(click);t.setAccessibilityDelegate(buttonRole());t.setContentDescription(selected?Lang.str(c,R.string.ui_selected_item,value):value);return t;
     }
@@ -345,6 +347,11 @@ final class Ui {
         SwitchRow(int iconRes,String titleText,String subtitleText,boolean initial,Toggle toggle){
             super(iconRes,titleText,subtitleText,null);
             control=new Switch(c);control.setShowText(false);control.setContentDescription(titleText);
+            // 0.9.6: TalkBack lee la fila una sola vez («título, explicación, interruptor, activado»): la fila hace de
+            // interruptor y el Switch de adentro no se anuncia aparte (antes se leía el título dos veces).
+            control.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            setAccessibilityDelegate(new View.AccessibilityDelegate(){@Override public void onInitializeAccessibilityNodeInfo(View host,android.view.accessibility.AccessibilityNodeInfo info){
+                super.onInitializeAccessibilityNodeInfo(host,info);info.setClassName(Switch.class.getName());info.setCheckable(true);info.setChecked(control.isChecked());}});
             SwitchLook look=new SwitchLook();control.setTrackDrawable(look.track);control.setThumbDrawable(look.thumb);control.setSwitchMinWidth(dp(52));
             control.setChecked(initial);
             LinearLayout.LayoutParams lp=wrap();lp.setMarginStart(dp(S3));addView(control,lp);

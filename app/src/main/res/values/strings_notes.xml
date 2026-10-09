@@ -82,7 +82,8 @@
     <string name="note_overview">Overview</string>
     <string name="note_client">What the client shared</string>
     <string name="note_work">What was worked on</string>
-    <string name="note_agreements">Guidance and agreements</string>
+    <string name="note_agreements">Recommendations and agreements</string>
     <string name="note_next">Next steps</string>
     <string name="note_watch">Points to watch</string>
+    <string name="note_truncated">the AI read only the first part (very long recording)</string>
 </resources>

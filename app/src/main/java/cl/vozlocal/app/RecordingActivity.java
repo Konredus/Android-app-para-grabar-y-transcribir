@@ -69,6 +69,11 @@ public class RecordingActivity extends Screen {
 
     // Reproductor (fijo abajo)
     private MediaPlayer player;private AudioFocusRequest focus;private boolean prepared;private float rate=1f;
+    /** 0.9.6: pausado por una pérdida breve del foco (una notificación, un audio de WhatsApp): vuelve a sonar al recuperarlo. */
+    private boolean resumeOnGain;private int restorePos=-1;private boolean restorePlaying;
+    /** Auriculares desenchufados o Bluetooth desconectado: se pausa (si no, sonaría por el altavoz). */
+    private final BroadcastReceiver noisy=new BroadcastReceiver(){@Override public void onReceive(Context c,Intent i){if(player!=null&&prepared&&player.isPlaying()){player.pause();setPlaying(false);resumeOnGain=false;Diagnostics.event("playback_noisy",id);}}};
+    private boolean noisyRegistered;
     private Scrubber scrubber;private TextView timeText,speedChip;private View speedBox;private ImageButton play;
     private Ui.Split primary;private Next next;
     /** Seguir al audio: la intervención que suena se trae a la vista, salvo que te hayas movido a mano hace poco. */
@@ -86,6 +91,8 @@ public class RecordingActivity extends Screen {
 
     @Override public void onCreate(Bundle state){
         super.onCreate(state);demo=getIntent().getBooleanExtra("demo",false);id=getIntent().getStringExtra("id");prefs=getSharedPreferences("detail",MODE_PRIVATE);if(!demo&&id!=null)Transcriber.clearDone(this,id);
+        // 0.9.6: al girar el teléfono el audio sigue donde iba, a la misma velocidad (y sonando si sonaba).
+        if(state!=null){restorePos=state.getInt("playPos",-1);restorePlaying=state.getBoolean("playing");rate=state.getFloat("playRate",1f);}
         if(state!=null){intentHandled=true;offeredKeepAt=state.getLong("offeredKeepAt",-1);markedOpened=state.getBoolean("markedOpened");correctionOpened=state.getBoolean("correcting");onlySpeaker=state.getString("onlySpeaker");saveAsNote=state.getBoolean("saveAsNote");}
         shell(getString(demo?R.string.nav_settings:R.string.nav_library),-1);
         try{
@@ -118,6 +125,8 @@ public class RecordingActivity extends Screen {
     }
     @Override protected void onResume(){
         super.onResume();handler.post(progress);
+        if(restorePlaying&&!demo&&recording!=null){restorePlaying=false;handler.post(()->{if(!isFinishing())toggle();});}
+        else if(restorePos>0&&!demo&&recording!=null)handler.post(this::ensurePlayer);
         if(!demo&&recording!=null){Pipeline.startForeground(this);
             // Al volver de Ajustes (carpeta rápida, IA de la nota, clave), lo que depende de eso se pone al día.
             if(lastSettings!=null&&!settingsKey().equals(lastSettings))reload();else refreshPrimary();}
@@ -126,7 +135,9 @@ public class RecordingActivity extends Screen {
     /** Incluye lo de OpenRouter (0.8.0): su clave y sus modelos cambian los costos, las voces conocidas y la IA de la nota. */
     private String settingsKey(){Settings s=new Settings(this);return s.inboxTree()+"|"+s.hasKey()+"|"+s.provider()+"|"+s.textModel()+"|"+Notes.provider(s)+"|"+s.hasAnthropicKey()+"|"+s.noteAuto()
         +"|"+s.hasOpenRouterKey()+"|"+s.hasOpenAiKey()+"|"+s.orSpeakersModel()+"|"+s.orTextModel();}
-    @Override protected void onPause(){handler.removeCallbacks(progress);if(player!=null&&player.isPlaying()){player.pause();setPlaying(false);}super.onPause();}
+    @Override protected void onPause(){handler.removeCallbacks(progress);if(player!=null&&player.isPlaying()){pausedForTurn=isChangingConfigurations();player.pause();setPlaying(false);}super.onPause();}
+    /** Se pausó porque la pantalla se recrea (girar): al volver, sigue sonando. */
+    private boolean pausedForTurn;
     @Override protected void onDestroy(){
         handler.removeCallbacksAndMessages(null);releasePlayer();
         // Android quita las ventanas de las hojas sin cerrarlas: sin esto, lo escrito en «Nombrar voces» se perdía y su
@@ -141,6 +152,8 @@ public class RecordingActivity extends Screen {
         out.putLong("offeredKeepAt",offerOpen?-1:offeredKeepAt);out.putBoolean("markedOpened",markedOpened);out.putBoolean("correcting",correctionOpened);if(onlySpeaker!=null)out.putString("onlySpeaker",onlySpeaker);
         // «Guardar en otra carpeta…»: el selector puede volver a una pantalla nueva; así sigue sabiendo si escribir la nota o el texto.
         out.putBoolean("saveAsNote",saveAsNote);
+        if(player!=null&&prepared){try{out.putInt("playPos",player.getCurrentPosition());out.putBoolean("playing",player.isPlaying()||resumeOnGain||pausedForTurn);}catch(IllegalStateException ignored){}}
+        out.putFloat("playRate",rate);
         super.onSaveInstanceState(out);
     }
 
@@ -397,8 +410,14 @@ public class RecordingActivity extends Screen {
         if(RecorderService.activeId!=null){message(getString(R.string.detail_recording_now),getString(R.string.detail_recording_now_body));return;}
         try{
             player=new MediaPlayer();AudioAttributes attr=new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build();player.setAudioAttributes(attr);
-            focus=new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(attr).setOnAudioFocusChangeListener(c->{if(c<0&&player!=null&&player.isPlaying()){player.pause();setPlaying(false);}}).build();
+            focus=new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(attr).setWillPauseWhenDucked(true).setOnAudioFocusChangeListener(c->{
+                if(player==null||!prepared)return;
+                if(c<0){if(player.isPlaying()){player.pause();setPlaying(false);resumeOnGain=c!=AudioManager.AUDIOFOCUS_LOSS;}}
+                else if(c==AudioManager.AUDIOFOCUS_GAIN&&resumeOnGain){resumeOnGain=false;applySpeed();player.start();setPlaying(true);}
+            }).build();
             player.setDataSource(recording.audio(this).getAbsolutePath());player.prepare();prepared=true;if(scrubber!=null)scrubber.setDuration(player.getDuration());
+            if(restorePos>0){player.seekTo(restorePos);restorePos=-1;}
+            if(Build.VERSION.SDK_INT>=33)registerReceiver(noisy,new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY),Context.RECEIVER_NOT_EXPORTED);else registerReceiver(noisy,new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY));noisyRegistered=true;
             // 0.9.3: «Realzar voces al escuchar» (VoiceBoost): solo lo que se oye; el archivo no cambia.
             boost=VoiceBoost.attach(this,player.getAudioSessionId());
             player.setOnCompletionListener(mp->{setPlaying(false);if(playUntil>0){playUntil=0;if(tramoEnded!=null)tramoEnded.run();}});
@@ -506,7 +525,7 @@ public class RecordingActivity extends Screen {
         speedChip.setText(speedLabel());speedBox.setContentDescription(getString(R.string.detail_speed_desc,speedLabel()));applySpeed();}
     private void applySpeed(){if(player!=null&&prepared)try{boolean playing=player.isPlaying();player.setPlaybackParams(player.getPlaybackParams().setSpeed(rate));if(!playing&&player.isPlaying())player.pause();}catch(Exception ignored){}}
     private VoiceBoost boost;
-    private void releasePlayer(){prepared=false;if(boost!=null){boost.release();boost=null;}if(player!=null){player.release();player=null;}if(focus!=null){getSystemService(AudioManager.class).abandonAudioFocusRequest(focus);focus=null;}setPlaying(false);}
+    private void releasePlayer(){prepared=false;resumeOnGain=false;if(noisyRegistered){try{unregisterReceiver(noisy);}catch(IllegalArgumentException ignored){}noisyRegistered=false;}if(boost!=null){boost.release();boost=null;}if(player!=null){player.release();player=null;}if(focus!=null){getSystemService(AudioManager.class).abandonAudioFocusRequest(focus);focus=null;}setPlaying(false);}
     /** La envolvente guardada se dibuja al tiro; si no existe, se calcula en segundo plano y la onda aparece al terminar. */
     private void loadWave(){
         if(scrubber==null)return;

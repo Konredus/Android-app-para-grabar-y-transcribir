@@ -209,7 +209,7 @@ final class MediaChecks {
         return RecorderService.activeId;
     }
     private static void stop(Context c)throws Exception{
-        send(c,new Intent("STOP"));waitFor(()->RecorderService.activeId==null,20000);
+        send(c,new Intent("STOP"));waitFor(()->RecorderService.activeId==null&&RecorderService.savingId==null,20000);
         check(RecorderService.activeId==null,"Recorder did not stop");
     }
     private static void send(Context c,Intent action){c.startService(new Intent(action).setClass(c,RecorderService.class));}

@@ -90,7 +90,7 @@
     <string name="set_audio_lang_es">Espanhol</string>
     <string name="set_audio_lang_pt">Português</string>
     <string name="set_audio_lang_de">Alemão</string>
-    <string name="set_audio_lang_hint">Indicar o idioma melhora a precisão.</string>
+    <string name="set_audio_lang_hint">Indicar o idioma melhora a precisão. Se você grava em outro idioma ou mistura idiomas, escolha Detecção automática.</string>
     <string name="set_audio_lang_detect">Detecção automática</string>
     <string name="set_audio_lang_detect_sub">Para áudios em outros idiomas ou misturados</string>
     <string name="set_ai_foot">Para transcrever, seu áudio é enviado ao OpenRouter e ao modelo que você escolher; sua chave paga só o que você usar.</string>
@@ -421,7 +421,7 @@
     <string name="set_summary_type">Tipo de resumo</string>
     <string name="set_summary_type_body">Escolha o que a IA monta depois de cada transcrição e o que cada tipo inclui.</string>
     <string name="set_kind_brain">Segundo cérebro</string>
-    <string name="set_kind_brain_sub">Resumo, decisões, tarefas e frases-chave, para as suas notas</string>
+    <string name="set_kind_brain_sub">Para as suas notas pessoais: resumo, decisões, tarefas e frases-chave</string>
     <string name="set_kind_client">Sessão com cliente</string>
     <string name="set_kind_client_sub">Um panorama completo da sessão, para não precisar relê-la</string>
     <string name="set_kind_in_use">Em uso</string>
@@ -434,4 +434,9 @@
     <string name="set_questions_foot">Por padrão o Verbapp não pergunta nada: separa as vozes e usa o título sugerido pela IA. Ative se preferir que ele pergunte.</string>
     <string name="set_section_advanced">Avançado</string>
     <string name="set_advanced_foot">Os modelos que transcrevem. No automático, o Verbapp escolhe o recomendado.</string>
+    <string name="set_contact">Escrever ao suporte</string>
+    <string name="set_contact_sub">%1$s · o relatório de suporte vai anexado</string>
+    <string name="set_contact_subject">Verbapp %1$s · ajuda</string>
+    <string name="set_contact_body">Olá! Conte o que aconteceu e, se puder, quando:\n\n</string>
+    <string name="set_contact_no_app">Não há app de e-mail neste celular. Escreva para %1$s.</string>
 </resources>

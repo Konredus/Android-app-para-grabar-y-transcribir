@@ -189,6 +189,8 @@ public class MainActivity extends Screen {
         super.onResume();lastState="";if(search!=null&&search.hasFocus()){search.clearFocus();root.requestFocus();}
         boolean fromWelcome=welcoming&&welcomeLeft;if(fromWelcome)endWelcome();
         handler.post(tick);load();if(!Pipeline.startForeground(this))Pipeline.schedule(this,false);renderChip();renderGreeting();
+        // 0.9.6: se eliminó una grabación desde su detalle: aquí aparece «Deshacer».
+        RecordingActions.offerUndo(this);
         // 0.9.2: ¿hay una versión nueva en Google Play? (Updates espacia estas revisiones; la respuesta redibuja la píldora.)
         Updates.onChange=updatesChanged;Updates.check(this,false);
         // Novedades de la versión: nunca junto con la bienvenida (ni mientras se abre ni al volver de ella).
@@ -560,6 +562,7 @@ public class MainActivity extends Screen {
                 // tiempo con la pantalla apagada o la app atrás, del que no hay niveles.
                 long gap=elapsed-levelsLast;if(levelsLast>=0&&gap>0&&gap<1000)levelsMs+=gap;levelsLast=elapsed;
             }
+            if(!Objects.equals(RecorderService.micWarning,shownWarning))renderHint(paused);
             int marks=RecorderService.marksCount();if(marks!=shownMarks){boolean added=marks>shownMarks;shownMarks=marks;if(added)wave.mark();renderMarks(added);}
             String t=RecorderService.activeTitle;if(!Objects.equals(t,shownTitle)){shownTitle=t;renderRecTitle(t);}
             if(recPill.getVisibility()==View.VISIBLE){setText(pillTime,pillText(elapsed,paused));pillDot.setAlpha(paused?1f:beat);}
@@ -633,8 +636,12 @@ public class MainActivity extends Screen {
         requestFit();
     }
     /** Línea de ayuda al grabar. Sin marcas también explica la ★ (en 0.6 llevaba el rótulo «Marcar»; ahora es solo un ícono). */
+    private String shownWarning;
     private void renderHint(boolean paused){
         // Los botones se nombran igual que se ven («Reanudar», «Detener»).
+        // 0.9.6: si el micrófono no capta nada (o queda poco espacio), el aviso reemplaza la ayuda y se anuncia.
+        String warning=RecorderService.micWarning;shownWarning=warning;
+        if(warning!=null){setText(hint,"⚠ "+warning);hint.announceForAccessibility(warning);return;}
         String text=paused?getString(R.string.home_hint_paused,getString(R.string.home_resume),getString(R.string.home_stop))
             :shownMarks>0?getString(R.string.home_hint_marks,quantity(R.plurals.home_marks,shownMarks))
             :getString(R.string.home_hint_idle);
@@ -978,7 +985,8 @@ public class MainActivity extends Screen {
         failedId=failed==null?null:failed.r.id;reviewId=review==null?null:review.r.id;reviewTitle=review==null?"":review.r.title;renderChip();
         nav.badge(1,counts[2]>0);renderLast();renderWeek();renderGreeting();
         // Biblioteca (solo se rearma si cambió algo: no salta mientras se actualiza el avance de otra grabación).
-        String sig=signature();if(sig.equals(rendered))return;rendered=sig;
+        String key=filter+"|"+query;if(!key.equals(limitKey)){limitKey=key;shownLimit=PAGE;}
+        String sig=signature()+"|"+shownLimit;if(sig.equals(rendered))return;rendered=sig;
         libraryCount.setText(items.isEmpty()?getString(R.string.home_library_subtitle):quantity(R.plurals.home_count_recordings,items.size())+" · "+(inboxOn&&counts[1]>0?getString(R.string.home_count_unsaved,counts[1]):quantity(R.plurals.home_count_transcribed,done)));
         filters.removeAllViews();String[] names={getString(R.string.home_filter_all),getString(inboxOn?R.string.home_unsaved:R.string.home_filter_transcribed),getString(R.string.act_state_queued),getString(R.string.act_not_transcribed),getString(R.string.home_filter_failed)};
         if(filter>0&&counts[filter]==0)filter=0;
@@ -986,13 +994,30 @@ public class MainActivity extends Screen {
             // Tocar el filtro activo lo desactiva (vuelve a «Todas»).
             TextView chip=ui.filter(names[f]+(f>0?" "+counts[f]:""),f==filter,v->{filter=filter==index?0:index;Ui.haptic(v);render();});LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginEnd(ui.dp(S2));filters.addView(chip,lp);}
         ((View)filters.getParent()).setVisibility(items.isEmpty()?View.GONE:View.VISIBLE);
-        Locale locale=Lang.locale(this);list.removeAllViews();String q=query.toLowerCase(locale).trim();String currentSection=null;LinearLayout group=null;int visible=0;
+        list.removeAllViews();String q=Notes.fold(query).trim();String currentSection=null;LinearLayout group=null;int visible=0;Locale locale=Lang.locale(this);
         for(Item i:items){
-            if(!matches(i,filter)||!i.r.title.toLowerCase(locale).contains(q))continue;visible++;
+            if(!matches(i,filter)||!(q.isEmpty()||searchable(i).contains(q)))continue;visible++;
+            // 0.9.6: con cientos de grabaciones no se arman todas las filas de una vez: de a PAGE, con «Ver más» al final.
+            if(visible>shownLimit){list.addView(more(),Ui.fill());break;}
             String sec=dateSection(i.r.created,locale);if(!sec.equals(currentSection)){currentSection=sec;TextView h=ui.section(sec);h.setPadding(ui.dp(S1),ui.dp(S5),0,ui.dp(S2));list.addView(h);group=ui.group();list.addView(group,Ui.fill());}
             addRow(group,row(i));
         }
         if(visible==0)list.addView(empty(items.isEmpty()));
+    }
+    /** Filas de la Biblioteca que se arman por vez (0.9.6). Buscar o filtrar vuelve a empezar. */
+    static final int PAGE=40;private int shownLimit=PAGE;private String limitKey="";
+    /**
+     * 0.9.6: se busca en el título, en el comienzo de la transcripción y en los nombres de las personas, sin importar
+     * tildes ni mayúsculas («jose» encuentra «José»).
+     */
+    private static String searchable(Item i){
+        StringBuilder b=new StringBuilder(i.r.title==null?"":i.r.title).append('\n').append(i.state.optString("snippet",""));
+        Meta m=i.meta;if(m!=null){b.append('\n').append(m.snippet);for(String n:m.names)b.append('\n').append(n);}
+        return Notes.fold(b.toString());
+    }
+    private View more(){
+        Ui.Btn b=ui.button(getString(R.string.home_show_more),0,Ui.Style.SECONDARY,v->{shownLimit+=PAGE;rendered="";render();});
+        LinearLayout box=ui.column();box.setGravity(Gravity.CENTER_HORIZONTAL);box.setPadding(0,ui.dp(S4),0,ui.dp(S4));box.addView(b);return box;
     }
     private void addRow(LinearLayout group,View row){if(group.getChildCount()>0)group.addView(ui.separator(S4+40+S4));group.addView(row,Ui.fill());}
     /** Estado vacío: un círculo menta grande con su ícono dentro de un halo suave (el mismo gesto del micrófono). */

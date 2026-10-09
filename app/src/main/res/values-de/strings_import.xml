@@ -84,4 +84,7 @@
     <!-- %1$s Tag, %2$s abgekürzter Monat („WhatsApp-Audio 29. Sept.“). -->
     <string name="imp_whatsapp_title">WhatsApp-Audio %1$s. %2$s</string>
     <string name="imp_whatsapp_audio">WhatsApp-Audio</string>
+    <string name="imp_err_space">Auf dem Handy ist nicht genug Speicher frei, um dieses Audio vorzubereiten. Gib Speicher frei und versuch es noch einmal.</string>
+    <string name="imp_err_short">Das Audio ist zu kurz: Es muss mindestens eine halbe Sekunde dauern.</string>
+    <string name="imp_err_format">Dieses Handy kann dieses Audioformat nicht lesen. Exportiere es als M4A, MP3 oder WAV.</string>
 </resources>

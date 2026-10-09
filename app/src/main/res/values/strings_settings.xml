@@ -94,7 +94,7 @@
     <string name="set_audio_lang_es">Spanish</string>
     <string name="set_audio_lang_pt">Portuguese</string>
     <string name="set_audio_lang_de">German</string>
-    <string name="set_audio_lang_hint">Setting the language improves accuracy.</string>
+    <string name="set_audio_lang_hint">Choosing the language improves accuracy. If you record in another language or mix languages, choose Automatic detection.</string>
     <string name="set_audio_lang_detect">Automatic detection</string>
     <string name="set_audio_lang_detect_sub">For audio in other languages or mixed</string>
     <string name="set_ai_foot">To transcribe, your audio is sent to OpenRouter and to the model you choose; your key pays only for what you use.</string>
@@ -420,7 +420,7 @@
     <string name="set_summary_type">Summary type</string>
     <string name="set_summary_type_body">Choose what the AI writes after each transcription, and what each type includes.</string>
     <string name="set_kind_brain">Second brain</string>
-    <string name="set_kind_brain_sub">Summary, decisions, tasks and key quotes, for your notes</string>
+    <string name="set_kind_brain_sub">For your personal notes: summary, decisions, tasks and key quotes</string>
     <string name="set_kind_client">Client session</string>
     <string name="set_kind_client_sub">A full overview of the session, so you don\'t have to reread it</string>
     <string name="set_kind_in_use">In use</string>
@@ -433,4 +433,9 @@
     <string name="set_questions_foot">By default Verbapp doesn\'t ask: it separates voices and uses the title the AI suggests. Turn these on if you\'d rather be asked.</string>
     <string name="set_section_advanced">Advanced</string>
     <string name="set_advanced_foot">The models that transcribe. With automatic, Verbapp picks the recommended one.</string>
+    <string name="set_contact">Write to support</string>
+    <string name="set_contact_sub">%1$s · the support report goes attached</string>
+    <string name="set_contact_subject">Verbapp %1$s · help</string>
+    <string name="set_contact_body">Hi! Tell us what happened and, if you can, when:\n\n</string>
+    <string name="set_contact_no_app">There\'s no email app on this phone. Write to %1$s.</string>
 </resources>

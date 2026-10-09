@@ -84,9 +84,9 @@
     <string name="onb_key_or_later">Cole sua chave ou toque em “%1$s”.</string>
     <string name="onb_key_save_failed">Não foi possível salvar a chave neste celular. Tente de novo.</string>
     <string name="onb_howto_title">Como conseguir sua chave</string>
-    <string name="onb_howto_body">O OpenRouter dá acesso a muitas IAs com uma só chave. Você paga só o que usar.</string>
+    <string name="onb_howto_body">O OpenRouter é um serviço que reúne muitas IAs. Com uma chave (como uma senha longa), o Verbapp transcreve em seu nome e você paga só o que usar.</string>
     <string name="onb_howto_1">Crie sua conta em openrouter.ai.</string>
-    <string name="onb_howto_2">Adicione um pouco de crédito: só é descontado o que você usar.</string>
+    <string name="onb_howto_2">Adicione uns US$ 5 de crédito: uma hora de áudio custa a partir de US$ 0,10 e só é descontado o que você usar.</string>
     <string name="onb_howto_3">Em “Keys”, crie uma chave e copie.</string>
     <string name="onb_howto_4">Volte ao Verbapp e toque em Colar.</string>
     <string name="onb_open_site">Abrir %1$s</string>

@@ -128,7 +128,7 @@
     <string name="home_queue_running">Transcribiendo «%1$s»</string>
     <string name="home_queue_parts">%1$d de %2$d</string>
     <string name="home_queue_behind">%1$d en cola</string>
-    <string name="home_queue_count">%1$d audios en cola</string>
+    <string name="home_queue_count">En cola: %1$d grabaciones</string>
     <string name="home_queue_one">«%1$s» · %2$s</string>
     <string name="home_transcribing">Transcribiendo</string>
     <string name="home_transcribing_dots">Transcribiendo…</string>
@@ -156,12 +156,12 @@
     <string name="home_save_failed">No se pudo guardar en %1$s. Revisa la carpeta rápida en Ajustes.</string>
 
     <!-- ===== Biblioteca ===== -->
-    <string name="home_search_hint">Buscar por título</string>
-    <string name="home_search_spoken">Buscar grabaciones por título</string>
+    <string name="home_search_hint">Busca por título, persona o texto</string>
+    <string name="home_search_spoken">Buscar grabaciones por título, persona o texto</string>
     <string name="home_clear_search">Borrar búsqueda</string>
     <string name="home_stop_save_recording">Detener y guardar la grabación</string>
     <string name="home_pill_spoken">Grabación en curso. Toca para ir a %1$s</string>
-    <string name="home_library_subtitle">Tus audios y transcripciones</string>
+    <string name="home_library_subtitle">Tus grabaciones y transcripciones</string>
     <string name="home_count_unsaved">%1$d por guardar</string>
     <plurals name="home_count_transcribed">
         <item quantity="one">%1$d transcrita</item>
@@ -310,4 +310,12 @@
     <string name="inbox_file_transcript">transcripcion.txt</string>
     <string name="inbox_file_transcript_json">transcripcion.json</string>
     <string name="inbox_file_note">nota.md</string>
+    <string name="act_silent_title">Casi no se oye nada</string>
+    <string name="act_silent_body">El micrófono casi no captó sonido en esta grabación. Escúchala antes de transcribir para no pagar por silencio.</string>
+    <string name="act_transcribe_anyway">Transcribir igual</string>
+    <string name="act_cost_title">¿Transcribir por ≈ %1$s?</string>
+    <string name="act_cost_body">Es una grabación larga (%1$s). OpenRouter lo descontará de tu saldo.</string>
+    <string name="act_cost_over_body">Tu último saldo comprobado era %1$s y puede no alcanzar. Carga saldo en openrouter.ai o transcribe igual.</string>
+    <string name="act_deleted">«%1$s» eliminada</string>
+    <string name="home_show_more">Ver más</string>
 </resources>
