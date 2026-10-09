@@ -62,7 +62,7 @@
     <string name="set_section_flow">Your workflow</string>
     <string name="set_quick_save">Quick save</string>
     <string name="set_quick_save_sub">Where the button on each recording saves</string>
-    <string name="set_note_title">Note for your second brain</string>
+    <string name="set_note_title">AI summary</string>
     <string name="set_note_auto_on">Created automatically after each transcription</string>
     <string name="set_note_auto_off">One tap away, from each recording</string>
     <string name="set_auto_title">Transcribe automatically</string>
@@ -404,4 +404,33 @@
     <string name="set_play_boost_sub">Only on playback: more voice, less bass. The file doesn\'t change</string>
     <string name="set_noise_foot">Try them one at a time. Each recording\'s details show which ones were used.</string>
     <string name="set_noise_more">Each option does something different:\n\n• Record with the phone\'s noise reduction: uses the microphone mode for calls, the one that cleans up noise when you talk on the phone. It works very well with one person close to the phone, but it can turn down people who speak from farther away (in a meeting, for example), and every brand does it its own way. It applies to new recordings.\n\n• Remove hum and level the volume: before sending to transcribe, it removes the low sounds that aren\'t voice (engine, air conditioning, bumps) and evens out the volume so quiet or distant voices come up.\n\n• Reduce background noise (experimental): before sending, it lowers steady noise, like a fan or traffic. It\'s gentle on purpose: a strong filter can also affect the voice.\n\n• Enhance voices when listening: it only changes how recordings sound in Verbapp\'s player.\n\nThe last three never change your recording: they work on a copy. To compare, transcribe the same recording again (“Transcribe again…”) with an option on, then with it off.</string>
+    <!-- 0.9.5: Ajustes por temas, «Tu nombre», tipo de resumen y preguntas -->
+    <string name="set_topic_general">General</string>
+    <string name="set_topic_record">Record and transcribe</string>
+    <string name="set_topic_save">Saving and copies</string>
+    <string name="set_topic_ai">AI connection</string>
+    <string name="set_topic_noise_sum">%1$d of 4 on</string>
+    <string name="set_topic_auto">Automatic</string>
+    <string name="set_topic_manual">Manual</string>
+    <string name="set_topic_key_ready">Key ready</string>
+    <string name="set_topic_key_missing">Key missing</string>
+    <string name="set_topic_version">Version %1$s</string>
+    <string name="set_name_unset">Not set · used in the greeting and for your voice</string>
+    <string name="set_name_sheet_body">Verbapp greets you by this name and uses it for your voice in transcripts.</string>
+    <string name="set_summary_type">Summary type</string>
+    <string name="set_summary_type_body">Choose what the AI writes after each transcription, and what each type includes.</string>
+    <string name="set_kind_brain">Second brain</string>
+    <string name="set_kind_brain_sub">Summary, decisions, tasks and key quotes, for your notes</string>
+    <string name="set_kind_client">Client session</string>
+    <string name="set_kind_client_sub">A full overview of the session, so you don\'t have to reread it</string>
+    <string name="set_kind_in_use">In use</string>
+    <string name="set_kind_includes">What “%1$s” includes</string>
+    <string name="set_kind_always">The summary and the title are always included.</string>
+    <string name="set_kind_foot">Changes apply to new notes. To redo a note, open its recording and use the note\'s ⋮ menu.</string>
+    <string name="set_part_tags">Tags</string>
+    <string name="set_part_client_quotes">Client quotes</string>
+    <string name="set_section_questions">Questions</string>
+    <string name="set_questions_foot">By default Verbapp doesn\'t ask: it separates voices and uses the title the AI suggests. Turn these on if you\'d rather be asked.</string>
+    <string name="set_section_advanced">Advanced</string>
+    <string name="set_advanced_foot">The models that transcribe. With automatic, Verbapp picks the recommended one.</string>
 </resources>

@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.9.5",
+    "date": "2026-10-09",
+    "title": "Ajustes más simples y un resumen para tus sesiones",
+    "items": [
+      "Ajustes por temas: General, Grabar y transcribir, Guardar y copias, Conexión con la IA, Ruido de fondo, Energía y red, y Ayuda. Cada tema abre su propia pantalla y dice cómo está.",
+      "Tipo de resumen: elige «Segundo cerebro» o el nuevo «Sesión con cliente», un panorama completo de la sesión para no tener que releerla. En Ajustes → Grabar y transcribir eliges qué incluye cada uno.",
+      "Tu nombre: en Ajustes → General. Verbapp te saluda con él y lo usa para tu voz en las transcripciones.",
+      "Menos preguntas: por defecto Verbapp separa voces y usa el título que sugiere la IA, sin preguntarte. Si prefieres que te pregunte, actívalo en Grabar y transcribir."
+    ]
+  },
+  {
     "version": "0.9.4",
     "date": "2026-10-08",
     "title": "Verbapp ahora habla alemán",

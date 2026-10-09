@@ -58,7 +58,7 @@
     <string name="set_section_flow">Seu fluxo</string>
     <string name="set_quick_save">Salvamento rápido</string>
     <string name="set_quick_save_sub">Onde o botão de cada gravação salva</string>
-    <string name="set_note_title">Nota para o seu segundo cérebro</string>
+    <string name="set_note_title">Resumo com IA</string>
     <string name="set_note_auto_on">Gerada automaticamente ao fim de cada transcrição</string>
     <string name="set_note_auto_off">Com um toque, em cada gravação</string>
     <string name="set_auto_title">Transcrever automaticamente</string>
@@ -405,4 +405,33 @@
     <string name="set_play_boost_sub">Só ao reproduzir: mais voz e menos graves. O arquivo não muda</string>
     <string name="set_noise_foot">Teste uma de cada vez. Os detalhes de cada gravação mostram quais foram usadas.</string>
     <string name="set_noise_more">Cada opção faz uma coisa diferente:\n\n• Gravar com a redução de ruído do celular: usa o modo de microfone das chamadas, o que limpa o ruído quando você fala ao telefone. Funciona muito bem com uma pessoa perto do celular, mas pode abaixar quem fala mais longe (numa reunião, por exemplo), e cada marca faz do seu jeito. Vale para as gravações novas.\n\n• Tirar zumbidos e nivelar o volume: antes de enviar para transcrever, tira os sons graves que não são voz (motor, ar-condicionado, batidas) e iguala o volume para que as vozes baixas ou distantes subam.\n\n• Reduzir o ruído de fundo (experimental): antes de enviar, diminui o ruído constante, como um ventilador ou o trânsito. É suave de propósito: um filtro forte também pode afetar a voz.\n\n• Realçar vozes ao ouvir: só muda como as gravações soam no player do Verbapp.\n\nAs três últimas nunca alteram a sua gravação: trabalham sobre uma cópia. Para comparar, transcreva de novo a mesma gravação (“Transcrever de novo…”) com uma opção ligada e depois desligada.</string>
+    <!-- 0.9.5: Ajustes por temas, «Tu nombre», tipo de resumen y preguntas -->
+    <string name="set_topic_general">Geral</string>
+    <string name="set_topic_record">Gravar e transcrever</string>
+    <string name="set_topic_save">Salvar e cópias</string>
+    <string name="set_topic_ai">Conexão com a IA</string>
+    <string name="set_topic_noise_sum">%1$d de 4 ativas</string>
+    <string name="set_topic_auto">Automático</string>
+    <string name="set_topic_manual">Manual</string>
+    <string name="set_topic_key_ready">Chave pronta</string>
+    <string name="set_topic_key_missing">Falta a chave</string>
+    <string name="set_topic_version">Versão %1$s</string>
+    <string name="set_name_unset">Não definido · usado na saudação e na sua voz</string>
+    <string name="set_name_sheet_body">O Verbapp cumprimenta você por esse nome e o usa para a sua voz nas transcrições.</string>
+    <string name="set_summary_type">Tipo de resumo</string>
+    <string name="set_summary_type_body">Escolha o que a IA monta depois de cada transcrição e o que cada tipo inclui.</string>
+    <string name="set_kind_brain">Segundo cérebro</string>
+    <string name="set_kind_brain_sub">Resumo, decisões, tarefas e frases-chave, para as suas notas</string>
+    <string name="set_kind_client">Sessão com cliente</string>
+    <string name="set_kind_client_sub">Um panorama completo da sessão, para não precisar relê-la</string>
+    <string name="set_kind_in_use">Em uso</string>
+    <string name="set_kind_includes">O que “%1$s” inclui</string>
+    <string name="set_kind_always">O resumo e o título vão sempre.</string>
+    <string name="set_kind_foot">As mudanças valem para as próximas notas. Para refazer uma nota, abra a gravação e use o menu ⋮ da nota.</string>
+    <string name="set_part_tags">Etiquetas</string>
+    <string name="set_part_client_quotes">Frases do cliente</string>
+    <string name="set_section_questions">Perguntas</string>
+    <string name="set_questions_foot">Por padrão o Verbapp não pergunta nada: separa as vozes e usa o título sugerido pela IA. Ative se preferir que ele pergunte.</string>
+    <string name="set_section_advanced">Avançado</string>
+    <string name="set_advanced_foot">Os modelos que transcrevem. No automático, o Verbapp escolhe o recomendado.</string>
 </resources>

@@ -467,4 +467,6 @@
     <string name="detail_audio_rec_noise">mit der Rauschunterdrückung des Handys aufgenommen</string>
     <string name="detail_audio_clean_level">Brummen entfernt und Lautstärke angeglichen</string>
     <string name="detail_audio_clean_noise">weniger Hintergrundrauschen</string>
+    <!-- 0.9.5: título de la nota de «Sesión con cliente» -->
+    <string name="detail_note_client_title">Zusammenfassung der Sitzung</string>
 </resources>
