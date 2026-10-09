@@ -315,4 +315,13 @@
     <string name="eng_notif_server_failed">O OpenRouter continua com problemas. O que já foi transcrito está salvo: abra a gravação para tentar de novo ou testar outro modelo.</string>
     <string name="eng_log_or_prepared_reused">O áudio desta parte já estava preparado da tentativa anterior · enviado sem preparar de novo</string>
     <string name="eng_log_fallback_model">Testar outro modelo: o que falta vai para %1$s e as partes prontas são mantidas</string>
+    <string name="eng_rec_warn_mute">O microfone não está captando som. Uma chamada ou outro app pode estar usando.</string>
+    <string name="eng_rec_warn_space">Pouco espaço no celular. Libere espaço para a gravação não ser interrompida.</string>
+    <string name="eng_rec_err_space">O celular ficou sem espaço. O Verbapp parou e salvou o que foi gravado.</string>
+    <string name="eng_rec_recovered">Uma gravação interrompida foi recuperada. Ela está na sua Biblioteca.</string>
+    <string name="eng_rec_silent_kept">Quase não se ouvia nada na gravação, então ela não foi enviada para transcrever. Ouça na sua Biblioteca.</string>
+    <plurals name="eng_log_voices_loose">
+        <item quantity="one">%1$d voz das partes seguintes não pôde ser unida à parte 1 · se alguém aparecer duas vezes, una em Revisar vozes</item>
+        <item quantity="other">%1$d vozes das partes seguintes não puderam ser unidas à parte 1 · se alguém aparecer duas vezes, una em Revisar vozes</item>
+    </plurals>
 </resources>

@@ -11,7 +11,9 @@ try {
     if (-not (Test-Path $gradle)) { throw 'Abre el proyecto en Android Studio o prepara Java 17, Gradle 8.11.1 y Android SDK 36. Consulta README.md.' }
     & $gradle --no-daemon assembleDebug lintDebug
     if ($LASTEXITCODE -ne 0) { throw 'La compilación o la revisión de Android falló.' }
+    # 0.9.6: el nombre del APK sale de versionName (app/build.gradle); antes decía 0.9.3 fijo.
+    $version = ([regex]::Match((Get-Content -Raw (Join-Path $projectPath 'app/build.gradle')), "versionName '([^']+)'")).Groups[1].Value
     New-Item -ItemType Directory -Force (Join-Path $projectPath 'entrega') | Out-Null
-    Copy-Item -LiteralPath (Join-Path $projectPath 'app/build/outputs/apk/debug/app-debug.apk') -Destination (Join-Path $projectPath 'entrega/Verbapp-0.9.3.apk') -Force
-    Get-FileHash -LiteralPath (Join-Path $projectPath 'entrega/Verbapp-0.9.3.apk') -Algorithm SHA256
+    Copy-Item -LiteralPath (Join-Path $projectPath 'app/build/outputs/apk/debug/app-debug.apk') -Destination (Join-Path $projectPath "entrega/Verbapp-$version.apk") -Force
+    Get-FileHash -LiteralPath (Join-Path $projectPath "entrega/Verbapp-$version.apk") -Algorithm SHA256
 } finally { Pop-Location }

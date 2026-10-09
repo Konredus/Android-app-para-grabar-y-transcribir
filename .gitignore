@@ -21,3 +21,8 @@ entrega/*.png
 diagnostics/
 recordings/
 reports-private/
+
+# 0.9.6: carpetas personales del dueño (notas, ideas y el video de promoción): viven en esta carpeta pero no van al repositorio.
+/2026_09_20 Mejoras proyecto App grabador de voz y transcriptor/
+/2026_09_23 Mas Mejores/
+/Video de Promocion de la App/

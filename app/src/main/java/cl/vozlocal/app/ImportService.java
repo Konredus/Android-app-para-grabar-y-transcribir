@@ -36,12 +36,23 @@ public class ImportService extends Service {
         }catch(RuntimeException e){running.set(false);s.busy=false;s.error=Lang.str(this,R.string.imp_err_background);s.persist();stopSelf(startId);return START_NOT_STICKY;}
         new Thread(()->{long started=SystemClock.elapsedRealtime();try{
             if("LOAD".equals(intent.getAction()))read(s,intent.getData(),intent.getStringExtra("sourceId"));else convert(s);
-        }catch(Exception e){s.error=Lang.str(this,s.cancelled?R.string.imp_err_cancelled:s.ready?R.string.imp_err_convert:R.string.imp_err_read);Diagnostics.event(s.cancelled?"import_cancelled":"import_failed",s.id,"error_class",e.getClass().getSimpleName(),"elapsed_ms",SystemClock.elapsedRealtime()-started);s.encoded.delete();if(!s.ready)s.source.delete();
+        }catch(Exception e){s.error=Lang.str(this,s.cancelled?R.string.imp_err_cancelled:failure(e,s.ready));Diagnostics.event(s.cancelled?"import_cancelled":"import_failed",s.id,"error_class",e.getClass().getSimpleName(),"elapsed_ms",SystemClock.elapsedRealtime()-started);s.encoded.delete();if(!s.ready)s.source.delete();
         }finally{new Handler(Looper.getMainLooper()).post(()->{s.openStream=null;running.set(false);if(wake!=null&&wake.isHeld())wake.release();stopForeground(STOP_FOREGROUND_REMOVE);s.busy=false;if(s.cancelled)s.clean();else s.persist();
             // Aviso final (el de avance se quitó con stopForeground): guardado, pendiente o —tras copiar— listo para guardar.
             // «Listo» solo si no estás mirando la pantalla de Importar (ahí ya se ve el formulario).
             if(!s.cancelled&&(s.done||!s.error.isEmpty()||(s.ready&&!ImportActivity.inFront)))try{getSystemService(NotificationManager.class).notify(NOTIFICATION,notification(s,true));}catch(SecurityException ignored){}stopSelf(startId);});}},"Voz-import").start();
         return START_NOT_STICKY;
+    }
+    /**
+     * 0.9.6: el aviso dice qué pasó: sin espacio, audio demasiado corto, formato que el teléfono no sabe leer, o el error
+     * general de antes. Se decide por el mensaje técnico (en inglés, nunca se muestra).
+     */
+    static int failure(Exception e,boolean ready){
+        String m=e.getMessage()==null?"":e.getMessage();
+        if(m.contains("Not enough local storage"))return R.string.imp_err_space;
+        if(m.contains("Audio too short"))return R.string.imp_err_short;
+        if(!ready&&(e instanceof RuntimeException||m.contains("Unknown duration")||m.contains("No audio track")))return R.string.imp_err_format;
+        return ready?R.string.imp_err_convert:R.string.imp_err_read;
     }
     private void read(ImportSession s,Uri uri,String localId)throws Exception{
         long expected=-1;InputStream stream;

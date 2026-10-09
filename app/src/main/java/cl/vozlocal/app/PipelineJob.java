@@ -33,8 +33,9 @@ public class PipelineJob extends JobService {
         HttpApi http=new HttpApi();actives.put(params.getJobId(),http);
         new Thread(()->{
             boolean retry;String waiting;
-            if(!Transcriber.RUNNING.tryLock()){new Handler(getMainLooper()).post(()->jobFinished(params,true));return;}
+            if(!Transcriber.RUNNING.tryLock()){actives.remove(params.getJobId(),http);new Handler(getMainLooper()).post(()->jobFinished(params,true));return;}
             try{Diagnostics.event("runner_round",null,"runner","job","net",Pipeline.networkName(this));Transcriber t=new Transcriber(this,http,Transcriber.JOB_BUDGET_MS);retry=t.runAll();waiting=t.waitingForeground();}
+            catch(Throwable e){Diagnostics.crash(e);retry=true;waiting=null;}
             finally{Transcriber.RUNNING.unlock();}
             boolean again=retry;String needsApp=waiting;actives.remove(params.getJobId(),http);
             // Se programa una tarea nueva (sin espera exponencial) en vez de pedir reintento con backoff.
@@ -66,7 +67,7 @@ public class PipelineJob extends JobService {
             try{android.net.wifi.WifiManager wm=getApplicationContext().getSystemService(android.net.wifi.WifiManager.class);if(wm!=null){wifi=wm.createWifiLock(android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY,"VozLocal:TranscribeUser");wifi.setReferenceCounted(false);wifi.acquire();}}catch(RuntimeException ignored){wifi=null;}
             try{
                 boolean locked=false;try{locked=Transcriber.RUNNING.tryLock(60,java.util.concurrent.TimeUnit.SECONDS);}catch(InterruptedException ignored){}
-                if(locked){try{retry=TranscribeService.rounds(this,http,"uij",new java.util.concurrent.atomic.AtomicBoolean());}finally{Transcriber.RUNNING.unlock();}}
+                if(locked){try{retry=TranscribeService.rounds(this,http,"uij",new java.util.concurrent.atomic.AtomicBoolean());}catch(Throwable e){Diagnostics.crash(e);retry=true;}finally{Transcriber.RUNNING.unlock();}}
             }finally{try{if(wifi!=null&&wifi.isHeld())wifi.release();}catch(RuntimeException ignored){}}
             // onStopJob saca la entrada antes de cortar: si sigue aquí, Android no detuvo esta transferencia. Antes se miraba
             // http.cancelled, que también queda en true cuando la persona cancela la grabación que se enviaba (Pipeline.cancel):

@@ -58,9 +58,71 @@ public class RecorderService extends Service {
      */
     static final long WAKE_MS = 10 * 60_000L, WAKE_RENEW_MS = 5 * 60_000L;
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final Runnable keepAwake = new Runnable() { @Override public void run() { PowerManager.WakeLock w = wakeLock; if (recorder != null && w != null) { w.acquire(WAKE_MS); handler.postDelayed(this, WAKE_RENEW_MS); } } };
+    private final Runnable keepAwake = new Runnable() { @Override public void run() { PowerManager.WakeLock w = wakeLock; if (recorder != null && w != null) { if (!paused) w.acquire(WAKE_MS); handler.postDelayed(this, WAKE_RENEW_MS); } } };
     private static RecorderService instance;
-    static int amplitude() { try { return instance != null && instance.recorder != null && !paused ? instance.recorder.getMaxAmplitude() : 0; } catch (RuntimeException e) { return 0; } }
+
+    /*
+     * 0.9.6: medidor del micrófono. El servicio es el único que lee getMaxAmplitude() (cada lectura reinicia el pico: si la
+     * pantalla también leía, se robaban los picos). Cada segundo cuenta silencio y saturación, y avisa si el micrófono quedó
+     * mudo (una llamada, otra app con prioridad o el interruptor de privacidad de Android 12+ lo dejan en ceros sin error).
+     */
+    /** Pico del micrófono (0-32767) de la última lectura; la pantalla dibuja la onda con esto. */
+    private static volatile int level;
+    /** Aviso para la pantalla y la notificación mientras el micrófono no capta nada (null si está bien). */
+    static volatile String micWarning;
+    /** Bajo esto, el segundo cuenta como «casi no se oye». Una voz a un par de metros pasa de 1000. */
+    static final int QUIET_LEVEL = 300, CLIP_LEVEL = 32000;
+    /** Segundos seguidos en cero absoluto (no es silencio de la sala: el micrófono no entrega nada) antes de avisar. */
+    static final int MUTE_WARN_S = 15;
+    /** Espacio libre: bajo el primero se avisa; bajo el segundo se detiene y se guarda lo grabado. */
+    static final long LOW_SPACE = 50L * 1024 * 1024, STOP_SPACE = 15L * 1024 * 1024;
+    static final long METER_MS = 60;
+    private int seconds, quietSeconds, clipSeconds, muteRun, secondPeak; private long secondStart, lastDiskCheck; private boolean silenced, warned, lowSpace;
+    private final Runnable meter = new Runnable() { @Override public void run() { tick(); if (recorder != null) handler.postDelayed(this, METER_MS); } };
+    static int amplitude() { return instance != null && instance.recorder != null && !paused ? level : 0; }
+    private void tick() {
+        MediaRecorder r = recorder; if (r == null) return;
+        if (paused) { level = 0; secondStart = SystemClock.elapsedRealtime(); return; }
+        int a; try { a = r.getMaxAmplitude(); } catch (RuntimeException e) { a = 0; }
+        level = a; secondPeak = Math.max(secondPeak, a);
+        long now = SystemClock.elapsedRealtime(); if (secondStart == 0) secondStart = now;
+        if (now - secondStart < 1000) return;
+        secondStart = now; seconds++;
+        if (secondPeak < QUIET_LEVEL) quietSeconds++;
+        if (secondPeak >= CLIP_LEVEL) clipSeconds++;
+        muteRun = secondPeak == 0 ? muteRun + 1 : 0; secondPeak = 0;
+        if (Build.VERSION.SDK_INT >= 29) { try { android.media.AudioRecordingConfiguration conf = r.getActiveRecordingConfiguration(); silenced = conf != null && conf.isClientSilenced(); } catch (RuntimeException e) { silenced = false; } }
+        if (now - lastDiskCheck >= 60_000) { lastDiskCheck = now; checkSpace(); if (recorder == null) return; }
+        String warning = silenced || muteRun >= MUTE_WARN_S ? Lang.str(this, R.string.eng_rec_warn_mute) : lowSpace ? Lang.str(this, R.string.eng_rec_warn_space) : null;
+        if (!java.util.Objects.equals(warning, micWarning)) {
+            micWarning = warning; refresh();
+            if (warning != null && !warned) { warned = true; alert(); Diagnostics.event("recording_warning", activeId, "reason", silenced ? "silenced" : lowSpace ? "space" : "mute", "elapsed_ms", elapsed()); }
+            if (warning == null) warned = false;
+        }
+    }
+    /** Poco espacio: avisa; casi nada: detiene y guarda lo grabado (mejor que un archivo cortado a la mitad). */
+    private void checkSpace() {
+        long free = Recording.directory(this).getUsableSpace();
+        lowSpace = free < LOW_SPACE;
+        if (free < STOP_SPACE) { Diagnostics.event("recording_warning", activeId, "reason", "space_stop", "free", free); error = Lang.str(this, R.string.eng_rec_err_space); finishRecording(); stopSelf(); }
+    }
+    /** Vibración más larga que la de ★: algo anda mal con la grabación. */
+    private void alert() {
+        try {
+            Vibrator v = Build.VERSION.SDK_INT >= 31 ? getSystemService(VibratorManager.class).getDefaultVibrator() : getSystemService(Vibrator.class);
+            if (v != null && v.hasVibrator()) v.vibrate(VibrationEffect.createWaveform(new long[]{0, 180, 120, 180}, -1));
+        } catch (RuntimeException ignored) { }
+    }
+    /** Lo que midió el medidor, para avisar antes de gastar en transcribir una grabación muda. */
+    private JSONObject meterJson() {
+        try { return new JSONObject().put("seconds", seconds).put("quiet", quietSeconds).put("clip", clipSeconds); } catch (Exception e) { return new JSONObject(); }
+    }
+    /** ¿Casi todo es silencio? Necesita al menos 10 s medidos (una grabación importada no tiene medición). */
+    static boolean mostlySilent(JSONObject state) {
+        JSONObject m = state == null ? null : state.optJSONObject("level");
+        if (m == null) return false;
+        int s = m.optInt("seconds", 0); return s >= 10 && m.optInt("quiet", 0) >= s * 0.9;
+    }
     static long elapsed() { return accumulated + (activeId != null && !paused ? SystemClock.elapsedRealtime() - started : 0); }
     @Override public IBinder onBind(Intent i) { return null; }
     @Override public void onCreate() {
@@ -82,14 +144,16 @@ public class RecorderService extends Service {
         else if ("RESUME".equals(action) && recorder != null) resume();
         else if ("MARK".equals(action)) mark(intent, fromNotification);
         else if ("TITLE".equals(action) && recording != null) { String t = intent.getStringExtra("title"); if (t != null && !t.trim().isEmpty()) { recording.title = t.trim().substring(0, Math.min(120, t.trim().length())); activeTitle = recording.title; } }
-        else if ("STOP".equals(action)) { finishRecording(); stopSelf(); }
+        else if ("STOP".equals(action)) { finishRecording(); if (savingId == null) stopSelf(); }
         // Un toque que llega sin grabación en curso (p. ej. ★ desde una notificación vieja) no deja el servicio vivo.
-        if (recorder == null && !"STOP".equals(action)) stopSelf(startId);
+        if (recorder == null && savingId == null && !"STOP".equals(action)) stopSelf(startId);
         return START_NOT_STICKY;
     }
 
     /** Notificación de grabación: tiempo en vivo, Pausar/Reanudar, ★ Marcar y Detener, también en la pantalla de bloqueo. */
-    static Notification notification(Context c, boolean isPaused, long elapsedMs, int marks) {
+    static Notification notification(Context c, boolean isPaused, long elapsedMs, int marks) { return notification(c, isPaused, elapsedMs, marks, null); }
+    /** warning: el micrófono no capta nada o queda poco espacio (0.9.6); reemplaza el texto y se ve en la pantalla bloqueada. */
+    static Notification notification(Context c, boolean isPaused, long elapsedMs, int marks, String warning) {
         PendingIntent open = PendingIntent.getActivity(c, 0, new Intent(c, MainActivity.class), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         PendingIntent stop = command(c, 1, new Intent(c, RecorderService.class).setAction("STOP"));
         PendingIntent toggle = isPaused ? command(c, 3, new Intent(c, RecorderService.class).setAction("RESUME"))
@@ -103,11 +167,11 @@ public class RecorderService extends Service {
             .setContentText(marked != null ? marked : Lang.str(c, R.string.eng_rec_paused_text))
             .setUsesChronometer(false).setShowWhen(false);
         else b.setContentTitle(Lang.str(c, R.string.eng_rec_title))
-            .setContentText(marked != null ? marked : Lang.str(c, R.string.eng_rec_text))
+            .setContentText(warning != null ? warning : marked != null ? marked : Lang.str(c, R.string.eng_rec_text))
             .setUsesChronometer(true).setShowWhen(true).setWhen(System.currentTimeMillis() - Math.max(0, elapsedMs));
         b.addAction(action(c, isPaused ? cl.vozlocal.app.R.drawable.ic_play : cl.vozlocal.app.R.drawable.ic_pause, Lang.str(c, isPaused ? R.string.eng_rec_resume : R.string.eng_rec_pause), toggle))
-            .addAction(action(c, drawable(c, "ic_star"), Lang.str(c, R.string.eng_rec_mark), mark))
-            .addAction(action(c, drawable(c, "ic_stop"), Lang.str(c, R.string.eng_rec_stop), stop));
+            .addAction(action(c, R.drawable.ic_star, Lang.str(c, R.string.eng_rec_mark), mark))
+            .addAction(action(c, R.drawable.ic_stop, Lang.str(c, R.string.eng_rec_stop), stop));
         if (Build.VERSION.SDK_INT >= 31) b.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
         return b.build();
     }
@@ -120,17 +184,14 @@ public class RecorderService extends Service {
         if (Build.VERSION.SDK_INT >= 31) a.setAuthenticationRequired(false);
         return a.build();
     }
-    /** Ícono opcional (lo puede agregar la parte de diseño); 0 si no existe. */
-    @SuppressWarnings("DiscouragedApi")
-    private static int drawable(Context c, String name) { try { return c.getResources().getIdentifier(name, "drawable", c.getPackageName()); } catch (RuntimeException e) { return 0; } }
-    private Notification notification() { return notification(this, paused, elapsed(), marksCount()); }
+    private Notification notification() { return notification(this, paused, elapsed(), marksCount(), micWarning); }
     private void refresh() {
         if (recorder == null) return;
         try { getSystemService(NotificationManager.class).notify(7, notification()); } catch (RuntimeException ignored) { }
     }
 
     private void startRecording(String title) {
-        error = null; paused = false; accumulated = 0; clearMarks();
+        error = null; paused = false; accumulated = 0; clearMarks(); resetMeter();
         try {
             if (Build.VERSION.SDK_INT >= 30) startForeground(7, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
             else startForeground(7, notification());
@@ -146,6 +207,7 @@ public class RecorderService extends Service {
             catch (Exception e) { if (!quietMic) throw e; if (recorder != null) recorder.release(); quietMic = false; recorder = newRecorder(false); recorder.prepare(); Diagnostics.event("recording_mic_fallback", activeId, "error_class", e.getClass().getSimpleName()); }
             recorder.start(); started = SystemClock.elapsedRealtime(); startedAtMs = started;Diagnostics.event("recording_started",activeId,"mic",quietMic?"voice":"default");
             refresh(); // el cronómetro de la notificación parte ahora, no al preparar el micrófono
+            handler.postDelayed(meter, METER_MS);
             getSystemService(android.app.job.JobScheduler.class).cancel(Pipeline.JOB_ID);
             wakeLock = getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "VozLocal:Recording");
             wakeLock.setReferenceCounted(false); wakeLock.acquire(WAKE_MS); handler.postDelayed(keepAwake, WAKE_RENEW_MS);
@@ -158,12 +220,12 @@ public class RecorderService extends Service {
     }
     private void pause() {
         if (paused) return;
-        try { long duration = elapsed(); recorder.pause(); accumulated = duration; paused = true; refresh(); }
+        try { long duration = elapsed(); recorder.pause(); accumulated = duration; paused = true; refresh(); if (wakeLock != null && wakeLock.isHeld()) wakeLock.release(); }
         catch (RuntimeException e) { error = Lang.str(this, R.string.eng_rec_err_pause); }
     }
     private void resume() {
         if (!paused) return;
-        try { recorder.resume(); started = SystemClock.elapsedRealtime(); paused = false; refresh(); }
+        try { recorder.resume(); started = SystemClock.elapsedRealtime(); paused = false; refresh(); if (wakeLock != null) wakeLock.acquire(WAKE_MS); }
         catch (RuntimeException e) { error = Lang.str(this, R.string.eng_rec_err_pause); }
     }
 
@@ -228,39 +290,120 @@ public class RecorderService extends Service {
     private MediaRecorder newRecorder(boolean quiet) {
         MediaRecorder m = Build.VERSION.SDK_INT >= 31 ? new MediaRecorder(this) : new MediaRecorder();
         m.setAudioSource(audioSource(quiet));
-        m.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+        // 0.9.6: AAC en ADTS, no MPEG-4. Un .m4a guarda su índice (moov) recién al detener: si Android mataba el proceso a
+        // la hora de grabar, el archivo quedaba sin índice y no se podía oír. ADTS son cuadros sueltos que sirven hasta el
+        // último escrito; al detener (o al abrir la app, si quedó uno a medias) se pasa a .m4a sin recodificar (seal).
+        m.setOutputFormat(MediaRecorder.OutputFormat.AAC_ADTS);
         m.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
         m.setAudioEncodingBitRate(96000); m.setAudioSamplingRate(44100); m.setAudioChannels(1);
-        m.setOutputFile(recording.audio(this).getAbsolutePath());
-        m.setOnErrorListener((r,w,e) -> { error = Lang.str(this, R.string.eng_rec_err_mic); finishRecording(); stopSelf(); });
+        m.setOutputFile(partial(this, recording.id).getAbsolutePath());
+        m.setOnErrorListener((r,w,e) -> { error = Lang.str(this, R.string.eng_rec_err_mic); Diagnostics.event("recorder_failure", activeId, "what", w, "extra", e); finishRecording(); if (savingId == null) stopSelf(); });
         return m;
     }
 
+    private void resetMeter() { level = 0; micWarning = null; seconds = quietSeconds = clipSeconds = muteRun = secondPeak = 0; secondStart = 0; lastDiskCheck = SystemClock.elapsedRealtime(); silenced = warned = lowSpace = false; }
+    /** Audio en curso (ADTS) de una grabación: «id.aac». Al terminar pasa a «id.m4a». */
+    static File partial(Context c, String id) { return new File(Recording.directory(c), id + ".aac"); }
+    /** Grabación que se está pasando a .m4a tras detener (unos segundos para una hora). La pantalla y las pruebas la esperan. */
+    static volatile String savingId;
+    /** Grabaciones que alguien está sellando ahora (este servicio o la recuperación al abrir): nadie más las toca. */
+    private static final java.util.Set<String> SEALING = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+    /** Menos que esto no es una grabación aprovechable (cabeceras y un par de segundos a 96 kb/s). */
+    static final long MIN_BYTES = 32 * 1024;
+
     private void finishRecording() {
         if (recorder == null) return;
-        long duration = elapsed(); boolean valid = false;
-        try { recorder.stop(); valid = true; }
-        catch (RuntimeException e) { error = Lang.str(this, R.string.eng_rec_err_short); }
-        finally { recorder.release(); recorder = null; handler.removeCallbacks(keepAwake); if (wakeLock != null && wakeLock.isHeld()) wakeLock.release(); }
+        long duration = elapsed(); boolean stopped = false;
+        try { recorder.stop(); stopped = true; }
+        catch (RuntimeException e) { Diagnostics.event("recorder_stop_failed", activeId, "error_class", e.getClass().getSimpleName()); }
+        finally { recorder.release(); recorder = null; handler.removeCallbacks(keepAwake); handler.removeCallbacks(meter); if (wakeLock != null && wakeLock.isHeld()) wakeLock.release(); }
+        File audio = recording == null ? null : partial(this, recording.id);
+        boolean hasData = audio != null && audio.length() > MIN_BYTES;
+        // 0.9.6: si stop() falla (micrófono tomado por otra app, servidor de medios reiniciado…) ya no se borra lo grabado:
+        // el ADTS sirve hasta el último cuadro. Solo se descarta si de verdad no hay audio.
+        boolean valid = stopped || hasData;
+        if (!stopped) error = hasData ? Lang.str(this, R.string.eng_rec_err_mic) : Lang.str(this, R.string.eng_rec_err_short);
         // Un toque accidental (menos de 3 s) no se guarda ni se envía a transcribir: es un error, no una grabación. Sus ★ se van con ella.
         if (valid && recording != null && duration < MIN_MS) {
             valid = false; discard(recording.id); notice = Lang.str(this, R.string.eng_rec_too_short);
             Diagnostics.event("recording_discarded", recording.id, "duration_ms", duration);
         }
-        else if (recording != null) {
-            if (valid) {
-                recording.duration = duration; try { recording.save(this); } catch (Exception e) { error = Lang.str(this, R.string.eng_rec_err_title); }
-                if (quietMic) { try { FilesStore.update(this, recording.id, s -> s.put("recNoise", true)); } catch (Exception ignored) { } }
-                JSONArray marks = marksJson();
-                if (marks.length() > 0) { try { Marks.setAll(this, recording.id, marks); } catch (Exception ignored) { } Diagnostics.event("recording_marks", recording.id, "count", marks.length()); }
+        else if (recording != null && !valid) discard(recording.id);
+        final Recording saved = valid ? recording : null;
+        // Antes de soltar activeId: quien espera que termine (pantalla, pruebas) ve «guardando» sin un instante en blanco.
+        if (saved != null) { savingId = saved.id; SEALING.add(saved.id); }
+        final boolean quiet = quietMic; final JSONArray marks = marksJson(); final JSONObject measured = meterJson();
+        clearMarks(); activeId = null; activeTitle = null; paused = false; recording = null; micWarning = null; level = 0;
+        if (saved == null) { stopForeground(STOP_FOREGROUND_REMOVE); Pipeline.schedule(this, false); return; }
+        // El paso a .m4a lee todo el archivo: fuera del hilo principal (es el mismo de la pantalla). Mientras, la notificación
+        // sigue y el servicio vive; al terminar se avisa a la pantalla (lastSavedId) y se encola la transcripción.
+        new Thread(() -> {
+            try { saved.duration = duration; store(this, saved, quiet, marks, measured); }
+            catch (Throwable e) { Diagnostics.crash(e); error = Lang.str(this, R.string.eng_rec_err_title); }
+            finally {
+                SEALING.remove(saved.id);
+                handler.post(() -> {
+                    savingId = null; lastSavedId = saved.id; FilesStore.version.incrementAndGet();
+                    Pipeline.afterRecording(this, saved.id); WaveData.warm(this, saved); Pipeline.schedule(this, false);
+                    if (recorder == null) { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); }
+                });
             }
-            else discard(recording.id);
+        }, "VozLocal-seal").start();
+    }
+    /** Pasa el ADTS a .m4a, ajusta la duración a la del archivo y guarda datos, ★, micrófono y medición. */
+    private static void store(Context c, Recording r, boolean quiet, JSONArray marks, JSONObject measured) {
+        long fileMs = seal(c, r.id);
+        // La duración sale del reloj (sin pausas); si el archivo dice otra cosa (más de 2 s), manda el archivo: es lo que se oye.
+        if (fileMs > 0 && Math.abs(fileMs - r.duration) > 2000) { Diagnostics.event("recording_duration_fixed", r.id, "clock_ms", r.duration, "file_ms", fileMs); r.duration = fileMs; }
+        try { r.save(c); } catch (Exception e) { error = Lang.str(c, R.string.eng_rec_err_title); }
+        try { FilesStore.update(c, r.id, s -> { if (quiet) s.put("recNoise", true); if (measured.length() > 0) s.put("level", measured); }); } catch (Exception e) { Diagnostics.event("recording_state_failed", r.id, "error_class", e.getClass().getSimpleName()); }
+        if (marks.length() > 0) { try { Marks.setAll(c, r.id, marks); } catch (Exception ignored) { } Diagnostics.event("recording_marks", r.id, "count", marks.length()); }
+    }
+    /**
+     * «id.aac» → «id.m4a» sin recodificar. Si el paso falla, el ADTS se renombra igual a .m4a (Android lo reproduce y lo
+     * transcribe por su contenido, no por la extensión): nunca se pierde el audio. Devuelve la duración del archivo (0 si no se sabe).
+     */
+    static long seal(Context c, String id) {
+        File aac = partial(c, id), m4a = new File(Recording.directory(c), id + ".m4a");
+        if (!aac.exists()) return m4a.exists() ? safeDuration(m4a) : 0;
+        long began = SystemClock.elapsedRealtime();
+        try { AudioConvert.seal(aac, m4a); Diagnostics.event("recording_sealed", id, "bytes", m4a.length(), "elapsed_ms", SystemClock.elapsedRealtime() - began); }
+        catch (Exception e) {
+            Diagnostics.event("recording_seal_failed", id, "error_class", e.getClass().getSimpleName());
+            synchronized (FilesStore.LOCK) { if (!m4a.exists() && !aac.renameTo(m4a)) Diagnostics.event("recording_seal_failed", id, "reason", "rename"); }
         }
-        Recording saved = valid ? recording : null;
-        if (saved != null) lastSavedId = saved.id;
-        clearMarks(); activeId = null; activeTitle = null; paused = false; recording = null; stopForeground(STOP_FOREGROUND_REMOVE);
-        if (saved != null) { Pipeline.afterRecording(this, saved.id); WaveData.warm(this, saved); }
-        Pipeline.schedule(this,false);
+        return safeDuration(m4a);
+    }
+    private static long safeDuration(File f) { try { return AudioConvert.duration(f); } catch (Exception e) { return 0; } }
+    /**
+     * Grabaciones que quedaron a medias (Android mató el proceso, se acabó la batería, se quitó el permiso del micrófono):
+     * se pasan a .m4a con lo que alcanzó a grabarse y aparecen en la Biblioteca. Corre al abrir la app, en segundo plano.
+     */
+    static void recoverOrphans(Context c) {
+        File[] files = Recording.directory(c).listFiles((dir, name) -> name.endsWith(".aac"));
+        if (files == null) return;
+        for (File f : files) {
+            String id = f.getName().substring(0, f.getName().length() - 4);
+            // La grabación en curso (o una que se está sellando) escribe su .aac ahora mismo: no se toca.
+            if (id.equals(activeId) || id.equals(savingId) || System.currentTimeMillis() - f.lastModified() < 5000 || !SEALING.add(id)) continue;
+            try {
+                if (f.length() <= MIN_BYTES) {
+                    synchronized (FilesStore.LOCK) { File[] rest = Recording.directory(c).listFiles((dir, name) -> name.startsWith(id + ".")); if (rest != null) for (File x : rest) x.delete(); }
+                    Diagnostics.event("recording_orphan_dropped", id, "bytes", f.length()); continue;
+                }
+                long modified = f.lastModified(), ms = seal(c, id);
+                if (!new File(Recording.directory(c), id + ".json").exists()) {
+                    long created = modified - ms;
+                    Recording r = new Recording(id, Recording.defaultTitle(created), created, ms);
+                    try { r.save(c); } catch (Exception ignored) { }
+                }
+                FilesStore.version.incrementAndGet();
+                Diagnostics.event("recording_recovered", id, "duration_ms", ms);
+                notice = Lang.str(c, R.string.eng_rec_recovered);
+                Pipeline.afterRecording(c, id);
+            } catch (Throwable e) { Diagnostics.crash(e); }
+            finally { SEALING.remove(id); }
+        }
     }
     @Override public void onDestroy() { finishRecording(); instance = null; super.onDestroy(); }
 }

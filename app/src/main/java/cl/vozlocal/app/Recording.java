@@ -1,7 +1,6 @@
 package cl.vozlocal.app;
 
 import android.content.Context;
-import android.media.MediaMetadataRetriever;
 import org.json.JSONObject;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -48,22 +47,39 @@ final class Recording {
         catch (Exception e) { if (out != null) f.failWrite(out); throw e; }
         FilesStore.version.incrementAndGet();
     }
+    /** Grabaciones eliminadas que esperan el «Deshacer» (RecordingActions.trash): no se muestran ni se procesan. */
+    static final Set<String> HIDDEN = Collections.synchronizedSet(new HashSet<>());
+    /*
+     * 0.9.6: la lista se guarda en memoria y se vuelve a leer solo si algo cambió: FilesStore.version (cada guardado o
+     * borrado), la fecha de la carpeta (un archivo nuevo, renombrado o borrado la cambia) o lo oculto. Antes cada pantalla
+     * leía un JSON por grabación varias veces por segundo en el hilo de la pantalla. Siempre se entregan copias: quien
+     * cambia un título no toca la lista guardada.
+     */
+    private static final Object CACHE_LOCK = new Object();
+    private static String cacheKey; private static ArrayList<Recording> cache;
     static ArrayList<Recording> list(Context c) {
+        File dir = directory(c);
+        String key = FilesStore.version.get() + ":" + dir.lastModified() + ":" + HIDDEN.size() + ":" + RecorderService.activeId;
+        synchronized (CACHE_LOCK) { if (key.equals(cacheKey) && cache != null) return copy(cache); }
+        ArrayList<Recording> all = read(c);
+        synchronized (CACHE_LOCK) { cacheKey = key; cache = all; }
+        return copy(all);
+    }
+    private static ArrayList<Recording> copy(ArrayList<Recording> from) { ArrayList<Recording> out = new ArrayList<>(from.size()); for (Recording r : from) out.add(new Recording(r.id, r.title, r.created, r.duration)); return out; }
+    private static ArrayList<Recording> read(Context c) {
         ArrayList<Recording> all = new ArrayList<>();
         File[] files = directory(c).listFiles((dir, name) -> name.endsWith(".m4a"));
         if (files == null) return all;
         for (File file : files) {
             String id = file.getName().replace(".m4a", "");
-            if (id.equals(RecorderService.activeId)) continue;
+            if (id.equals(RecorderService.activeId) || HIDDEN.contains(id)) continue;
             Recording r = new Recording(id, defaultTitle(file.lastModified()), file.lastModified(), 0);
             try {
                 JSONObject j = FilesStore.read(new File(directory(c), id + ".json"));
                 r.title = j.getString("title"); r.created = j.getLong("created"); r.duration = j.getLong("duration");
             } catch (Exception ignored) {
                 // Keep audio visible even if metadata was lost during interruption.
-                try (MediaMetadataRetriever m = new MediaMetadataRetriever()) {
-                    m.setDataSource(file.getPath()); r.duration = Long.parseLong(m.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION));
-                } catch (Exception unavailable) { r.title = recoveredTitle(); }
+                try { r.duration = AudioConvert.duration(file); } catch (Exception unavailable) { r.title = recoveredTitle(); }
             }
             all.add(r);
         }

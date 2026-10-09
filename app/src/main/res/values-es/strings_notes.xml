@@ -32,7 +32,7 @@
     <string name="note_err_cut">La respuesta de %1$s se cortó antes de terminar. Vuelve a intentarlo.</string>
     <string name="note_err_refused">%1$s no quiso resumir esta grabación.</string>
     <string name="note_err_no_credits_router">No queda saldo en OpenRouter. Carga créditos en openrouter.ai y vuelve a armar la nota.</string>
-    <string name="note_err_no_credits">Tu cuenta de %1$s no tiene saldo. Revisa la facturación de tu API.</string>
+    <string name="note_err_no_credits">Tu cuenta de %1$s no tiene saldo. Revisa tu saldo en openrouter.ai.</string>
     <string name="note_err_overloaded">%1$s está saturado en este momento. Vuelve a intentarlo en unos minutos.</string>
     <string name="note_err_too_long">La transcripción es demasiado larga para el modelo de la nota. Prueba con otro modelo.</string>
     <string name="note_err_data_policy">OpenRouter no tiene un proveedor para el modelo de la nota con la privacidad que elegiste en tu cuenta. Revísala en openrouter.ai (Settings → Privacy) o elige otro modelo en Ajustes.</string>
@@ -61,7 +61,8 @@
     <string name="note_overview">Panorama general</string>
     <string name="note_client">Lo que contó el cliente</string>
     <string name="note_work">Lo que se trabajó</string>
-    <string name="note_agreements">Indicaciones y acuerdos</string>
+    <string name="note_agreements">Recomendaciones y acuerdos</string>
     <string name="note_next">Próximos pasos</string>
     <string name="note_watch">Puntos a vigilar</string>
+    <string name="note_truncated">la IA leyó solo la primera parte (grabación muy larga)</string>
 </resources>

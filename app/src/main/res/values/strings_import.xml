@@ -92,4 +92,7 @@
     <!-- Nota de voz de WhatsApp: %1$s día, %2$s mes abreviado («WhatsApp audio Sep 29»). -->
     <string name="imp_whatsapp_title">WhatsApp audio %2$s %1$s</string>
     <string name="imp_whatsapp_audio">WhatsApp audio</string>
+    <string name="imp_err_space">There isn\'t enough free space on the phone to prepare this audio. Free up space and try again.</string>
+    <string name="imp_err_short">The audio is too short: it must last at least half a second.</string>
+    <string name="imp_err_format">This phone can\'t read this audio format. Try exporting it as M4A, MP3 or WAV.</string>
 </resources>

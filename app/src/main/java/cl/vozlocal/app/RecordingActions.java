@@ -274,11 +274,42 @@ final class RecordingActions {
     static void transcribe(Screen s,Recording r,Runnable changed){
         if(Transcript.exists(s,r.id)){RetranscribeSheet.show(s,r,changed);return;}
         if(!new Settings(s).hasKey()){missingKey(s);return;}
-        Consent.ensure(s,()->{
+        Consent.ensure(s,()->guard(s,r,()->{
             Settings settings=new Settings(s);
             if(settings.canSeparate()&&settings.speakersMode().equals("ask")){askSpeakers(s,r,changed,settings);return;}
             start(s,r,changed,settings.defaultSpeakers());
-        });
+        }));
+    }
+    /** 0.9.6: sobre este costo estimado (US$) se pide confirmar antes de enviar. Lo normal (una hora, sin voces) cuesta menos. */
+    static final double CONFIRM_USD=0.50;
+    /**
+     * 0.9.6: antes de gastar. Una grabación casi muda (el micrófono no captó nada) pregunta si transcribir igual; después,
+     * un costo alto o mayor que el último saldo comprobado pide confirmar. Con «Preguntar cada vez» el costo ya se ve en
+     * las opciones, así que ahí solo se mira el silencio.
+     */
+    static void guard(Screen s,Recording r,Runnable go){
+        if(RecorderService.mostlySilent(FilesStore.state(s,r.id))){
+            Diagnostics.event("transcribe_guard",r.id,"reason","silent");
+            Sheet sheet=s.sheet(Lang.str(s,R.string.act_silent_title),Lang.str(s,R.string.act_silent_body));
+            sheet.primary(Lang.str(s,R.string.act_transcribe_anyway),()->costGuard(s,r,go)).secondary(Lang.str(s,R.string.common_cancel),null).show();return;
+        }
+        costGuard(s,r,go);
+    }
+    private static void costGuard(Screen s,Recording r,Runnable go){
+        double cost=-1,balance=Double.NaN;Settings settings=new Settings(s);
+        try{
+            if(!(settings.canSeparate()&&settings.speakersMode().equals("ask"))){
+                boolean speakers=settings.defaultSpeakers();
+                cost=Pricing.estimate(s,settings.provider(),settings.config(speakers).model,Pricing.orBilledMs(s,r.duration,speakers));
+            }
+            balance=Double.parseDouble(settings.prefs.getString("verifyBalance",""));
+        }catch(Exception ignored){}
+        boolean over=cost>0&&!Double.isNaN(balance)&&cost>balance;
+        if(cost<CONFIRM_USD&&!over){go.run();return;}
+        Diagnostics.event("transcribe_guard",r.id,"reason",over?"balance":"cost");
+        String price=Pricing.usd(cost);
+        Sheet sheet=s.sheet(Lang.str(s,R.string.act_cost_title,price),over?Lang.str(s,R.string.act_cost_over_body,Pricing.usd(balance)):Lang.str(s,R.string.act_cost_body,Ui.humanDuration(r.duration)));
+        sheet.primary(Lang.str(s,R.string.act_transcribe),go).secondary(Lang.str(s,R.string.common_cancel),null).show();
     }
     /**
      * Falta la clave de OpenRouter: el error trae su salida («Configurar ahora», que abre directo el campo de la clave).
@@ -392,9 +423,38 @@ final class RecordingActions {
         Sheet sheet=s.sheet(Lang.str(s,R.string.act_delete_title,r.title),Lang.str(s,R.string.act_delete_body));
         SheetParts.hero(sheet,R.drawable.ic_trash,true);
         sheet.primary(Lang.str(s,R.string.act_delete),Ui.Style.DESTRUCTIVE,()->{
-            if(before!=null)before.run();if(!r.delete(s))s.message(Lang.str(s,R.string.act_delete),Lang.str(s,R.string.act_delete_failed));else{Diagnostics.event("recording_deleted",r.id);if(after!=null)after.run();}
+            if(before!=null)before.run();trash(s,r);if(after!=null)after.run();offerUndo(s);
             return true;
         }).secondary(Lang.str(s,R.string.common_cancel),null).show();
+    }
+
+    /*
+     * 0.9.6: eliminar se puede deshacer. La grabación se oculta al instante (Recording.HIDDEN) y sus archivos se borran
+     * UNDO_MS después; mientras, «Grabación eliminada · Deshacer» la devuelve tal cual. Si la app se cierra antes, no se
+     * borra nada (vuelve a aparecer): nunca se pierde por un toque. Un segundo borrado confirma el anterior.
+     */
+    static final long UNDO_MS=10_000;
+    private static final android.os.Handler TRASH=new android.os.Handler(android.os.Looper.getMainLooper());
+    private static Recording trashed;private static Context trashApp;private static java.lang.ref.WeakReference<Screen> shownOn;
+    static void trash(Context c,Recording r){
+        commitTrash();trashed=r;trashApp=c.getApplicationContext();Recording.HIDDEN.add(r.id);FilesStore.version.incrementAndGet();
+        TRASH.postDelayed(RecordingActions::commitTrash,UNDO_MS);Diagnostics.event("recording_trashed",r.id);
+    }
+    /** Borra de verdad lo que estaba esperando el «Deshacer». */
+    static void commitTrash(){
+        TRASH.removeCallbacksAndMessages(null);Recording r=trashed;if(r==null)return;trashed=null;Context c=trashApp;
+        Screen shown=shownOn==null?null:shownOn.get();shownOn=null;if(shown!=null&&!shown.isFinishing())shown.hideSnackbar();
+        new Thread(()->{boolean ok=false;try{ok=r.delete(c);}catch(Exception e){Diagnostics.crash(e);}
+            Recording.HIDDEN.remove(r.id);FilesStore.version.incrementAndGet();Diagnostics.event(ok?"recording_deleted":"recording_delete_failed",r.id);},"VozLocal-delete").start();
+    }
+    static void undoTrash(){
+        TRASH.removeCallbacksAndMessages(null);Recording r=trashed;trashed=null;shownOn=null;if(r==null)return;
+        Recording.HIDDEN.remove(r.id);FilesStore.version.incrementAndGet();Diagnostics.event("recording_restored",r.id);
+    }
+    /** «Grabación eliminada · Deshacer» en esta pantalla, si hay un borrado esperando (también al volver del detalle). */
+    static void offerUndo(Screen s){
+        Recording r=trashed;if(r==null||s.isFinishing())return;shownOn=new java.lang.ref.WeakReference<>(s);
+        s.snackbar(Lang.str(s,R.string.act_deleted,r.title),Lang.str(s,R.string.detail_undo),RecordingActions::undoTrash);
     }
     private RecordingActions(){}
 }

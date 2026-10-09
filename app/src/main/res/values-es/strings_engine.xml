@@ -34,7 +34,7 @@
     <string name="eng_note_not_started">Android aún no la empieza. Se hará sola, o toca «Empezar ahora».</string>
 
     <!-- Pedir, cancelar, detener -->
-    <string name="eng_err_demo">El ejemplo no se envía a la API.</string>
+    <string name="eng_err_demo">El ejemplo no se envía a OpenRouter.</string>
     <string name="eng_log_again">Volver a transcribir: «%1$s» · la versión anterior queda guardada</string>
     <plurals name="eng_log_again_people">
         <item quantity="one">Volver a transcribir: «%1$s» · muestras de %2$d persona · la versión anterior queda guardada</item>
@@ -238,7 +238,7 @@
     <string name="eng_err_or_privacy">OpenRouter no tiene un proveedor para ese modelo con la privacidad que elegiste en tu cuenta. Revísala en openrouter.ai (Ajustes → Privacidad) o elige otro modelo en Ajustes.</string>
     <string name="eng_err_or_model_gone">Ese modelo ya no está disponible en OpenRouter. Elige otro en Ajustes.</string>
     <string name="eng_err_forbidden">Sin permiso en %1$s. Revisa la cuenta y la configuración del servicio.</string>
-    <string name="eng_err_no_quota">El proveedor no tiene saldo o cuota disponible. Revisa la facturación de tu API.</string>
+    <string name="eng_err_no_quota">El proveedor no tiene saldo o cuota disponible. Revisa tu saldo en openrouter.ai.</string>
     <string name="eng_err_or_rate_limited">OpenRouter pidió esperar: demasiadas solicitudes seguidas (429).</string>
     <string name="eng_err_unavailable">%1$s no está disponible temporalmente (%2$d).</string>
     <string name="eng_err_http">%1$s · HTTP %2$d. %3$s</string>
@@ -315,4 +315,13 @@
     <string name="eng_notif_server_failed">OpenRouter sigue con problemas. Lo ya transcrito quedó guardado: abre la grabación para reintentar o probar con otro modelo.</string>
     <string name="eng_log_or_prepared_reused">El audio de esta parte ya estaba preparado del intento anterior · se envía sin prepararlo de nuevo</string>
     <string name="eng_log_fallback_model">Probar con otro modelo: lo que falta se envía con %1$s y lo ya listo se conserva</string>
+    <string name="eng_rec_warn_mute">El micrófono no está captando sonido. Puede que una llamada u otra app lo esté usando.</string>
+    <string name="eng_rec_warn_space">Queda poco espacio en el teléfono. Libera espacio para que la grabación no se corte.</string>
+    <string name="eng_rec_err_space">El teléfono se quedó sin espacio. Verbapp detuvo y guardó lo grabado.</string>
+    <string name="eng_rec_recovered">Se recuperó una grabación que quedó cortada. La encuentras en tu Biblioteca.</string>
+    <string name="eng_rec_silent_kept">Casi no se oía nada en la grabación, así que no se envió a transcribir. Escúchala en tu Biblioteca.</string>
+    <plurals name="eng_log_voices_loose">
+        <item quantity="one">%1$d voz de las partes siguientes no se pudo unir con la parte 1 · si alguien aparece dos veces, únelo en Revisar voces</item>
+        <item quantity="other">%1$d voces de las partes siguientes no se pudieron unir con la parte 1 · si alguien aparece dos veces, únelo en Revisar voces</item>
+    </plurals>
 </resources>

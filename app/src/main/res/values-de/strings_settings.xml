@@ -74,7 +74,7 @@
     <string name="set_voices_sub">Um jede Person beim Trennen der Stimmen zu erkennen</string>
     <string name="set_voices_unavailable">Das Modell mit Stimmen, das du bei OpenRouter gewählt hast, trennt keine Stimmen und würde deine Probe daher nicht nutzen. Wähle unter „Modell mit Stimmen“ die Option „Automatisch“ oder ein anderes Modell, das Stimmen trennt.</string>
     <string name="set_flow_foot">Speichere die Notiz oder den Text mit einem Tipp aus jeder Aufnahme.</string>
-    <string name="set_flow_more">Schnellspeichern: der Ordner, in den der Button an jeder Aufnahme die Notiz (.md) oder den Text (.txt) legt, zum Beispiel deine 0-Inbox in Google Drive. Wenn du später Stimmen oder Namen korrigierst, ersetzt „Aktualisieren“ dieselbe Datei, ohne Kopien anzulegen.\n\nNotiz für dein zweites Gehirn: Eine KI von OpenRouter schreibt aus dem Text des Transkripts eine Zusammenfassung mit Entscheidungen, Aufgaben und wichtigen Zitaten (das Audio wird nicht noch einmal gesendet). Im Automatikmodus entsteht sie nach jeder Transkription; wenn du das ausschaltest, forderst du sie mit einem Tipp in der Aufnahme an. Prüfe sie vor dem Speichern: Sie kann Fehler enthalten. Das Modell wählst du unter „KI für Notizen“.\n\nBekannte Stimmen: 10-Sekunden-Proben deiner Stimme und der Personen, mit denen du am meisten sprichst, damit die App beim Trennen der Stimmen jede Person mit Namen erkennt. Pro Audio werden bis zu %1$d genutzt. Du kannst die Stimme einer Person auch aus einer Aufnahme speichern: Tippe auf ihren Namen und speichere dort ihre Stimme.</string>
+    <string name="set_flow_more">Schnellspeichern: der Ordner, in den der Button an jeder Aufnahme die Notiz (.md) oder den Text (.txt) legt, zum Beispiel deine 0-Inbox in Google Drive. Wenn du später Stimmen oder Namen korrigierst, ersetzt „Aktualisieren“ dieselbe Datei, ohne Kopien anzulegen.\n\nNotiz für dein Second Brain: Eine KI von OpenRouter schreibt aus dem Text des Transkripts eine Zusammenfassung mit Entscheidungen, Aufgaben und wichtigen Zitaten (das Audio wird nicht noch einmal gesendet). Im Automatikmodus entsteht sie nach jeder Transkription; wenn du das ausschaltest, forderst du sie mit einem Tipp in der Aufnahme an. Prüfe sie vor dem Speichern: Sie kann Fehler enthalten. Das Modell wählst du unter „KI für Notizen“.\n\nBekannte Stimmen: 10-Sekunden-Proben deiner Stimme und der Personen, mit denen du am meisten sprichst, damit die App beim Trennen der Stimmen jede Person mit Namen erkennt. Pro Audio werden bis zu %1$d genutzt. Du kannst die Stimme einer Person auch aus einer Aufnahme speichern: Tippe auf ihren Namen und speichere dort ihre Stimme.</string>
 
     <!-- Tu IA (OpenRouter) -->
     <string name="set_section_ai">Deine KI (OpenRouter)</string>
@@ -91,7 +91,7 @@
     <string name="set_audio_lang_es">Spanisch</string>
     <string name="set_audio_lang_pt">Portugiesisch</string>
     <string name="set_audio_lang_de">Deutsch</string>
-    <string name="set_audio_lang_hint">Mit festgelegter Sprache wird die Transkription genauer.</string>
+    <string name="set_audio_lang_hint">Die Sprache anzugeben verbessert die Genauigkeit. Wenn du in einer anderen Sprache aufnimmst oder Sprachen mischst, wähle Automatische Erkennung.</string>
     <string name="set_audio_lang_detect">Automatische Erkennung</string>
     <string name="set_audio_lang_detect_sub">Für Audio in anderen Sprachen oder gemischt</string>
     <string name="set_ai_foot">Zum Transkribieren wird dein Audio an OpenRouter und das gewählte Modell gesendet; dein Schlüssel zahlt nur, was du nutzt.</string>
@@ -416,18 +416,23 @@
     <string name="set_name_sheet_body">Verbapp begrüßt dich mit diesem Namen und verwendet ihn für deine Stimme in den Transkripten.</string>
     <string name="set_summary_type">Art der Zusammenfassung</string>
     <string name="set_summary_type_body">Wähle, was die KI nach jeder Transkription schreibt und was jede Art enthält.</string>
-    <string name="set_kind_brain">Zweites Gehirn</string>
-    <string name="set_kind_brain_sub">Zusammenfassung, Entscheidungen, Aufgaben und Zitate für deine Notizen</string>
-    <string name="set_kind_client">Kundensitzung</string>
+    <string name="set_kind_brain">Second Brain</string>
+    <string name="set_kind_brain_sub">Für deine persönlichen Notizen: Zusammenfassung, Entscheidungen, Aufgaben und Zitate</string>
+    <string name="set_kind_client">Klientensitzung</string>
     <string name="set_kind_client_sub">Ein vollständiger Überblick über die Sitzung, damit du sie nicht noch einmal lesen musst</string>
     <string name="set_kind_in_use">Aktiv</string>
     <string name="set_kind_includes">Was „%1$s“ enthält</string>
     <string name="set_kind_always">Zusammenfassung und Titel sind immer dabei.</string>
     <string name="set_kind_foot">Änderungen gelten für neue Notizen. Um eine Notiz neu zu erstellen, öffne ihre Aufnahme und nutze das Menü ⋮ der Notiz.</string>
     <string name="set_part_tags">Tags</string>
-    <string name="set_part_client_quotes">Zitate des Kunden</string>
+    <string name="set_part_client_quotes">Zitate des Klienten</string>
     <string name="set_section_questions">Rückfragen</string>
     <string name="set_questions_foot">Standardmäßig fragt Verbapp nichts: Es trennt die Stimmen und nutzt den Titel, den die KI vorschlägt. Schalte das ein, wenn du lieber gefragt werden möchtest.</string>
     <string name="set_section_advanced">Erweitert</string>
     <string name="set_advanced_foot">Die Modelle, die transkribieren. Automatisch wählt Verbapp das empfohlene.</string>
+    <string name="set_contact">Support kontaktieren</string>
+    <string name="set_contact_sub">%1$s · der Support-Bericht wird angehängt</string>
+    <string name="set_contact_subject">Verbapp %1$s · Hilfe</string>
+    <string name="set_contact_body">Hallo! Erzähl uns, was passiert ist und, wenn möglich, wann:\n\n</string>
+    <string name="set_contact_no_app">Auf diesem Handy ist keine E-Mail-App. Schreib an %1$s.</string>
 </resources>

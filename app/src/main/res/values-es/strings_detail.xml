@@ -142,7 +142,7 @@
     <string name="detail_previous_title">Versión anterior</string>
     <string name="detail_previous_failed">No se pudo recuperar la versión anterior.</string>
 
-    <string name="detail_demo_note">Texto de demostración: no proviene de la API. Prueba a nombrar las voces.</string>
+    <string name="detail_demo_note">Texto de demostración: no proviene de OpenRouter. Prueba a nombrar las voces.</string>
     <string name="detail_auto_voices_note">Voces separadas automáticamente: pueden tener errores. Toca el nombre de una intervención para escuchar y corregir quién habla.</string>
     <string name="detail_parts_note">Audio procesado en partes: los tiempos indican el inicio de cada parte.</string>
     <string name="detail_transcript">Transcripción</string>

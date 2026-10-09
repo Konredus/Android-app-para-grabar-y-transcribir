@@ -1,11 +1,24 @@
 [
   {
+    "version": "0.9.6",
+    "date": "2026-10-09",
+    "title": "Aufnahmen, die alles überstehen",
+    "items": [
+      "Deine Aufnahmen gehen nicht mehr verloren: Wenn das Handy die App schließt, der Akku leer ist oder es beim Aufnehmen neu startet, stellt Verbapp beim nächsten Öffnen alles bis zu diesem Moment Aufgenommene wieder her.",
+      "Wenn das Mikrofon keinen Ton mehr aufnimmt (wegen eines Anrufs oder einer anderen App), warnt dich Verbapp auf dem Bildschirm und in der Benachrichtigung. Und wenn eine Aufnahme fast stumm ist, fragt es vor dem Transkribieren, damit du nicht für Stille bezahlst.",
+      "Vor einer teuren Transkription (über 0,50 US$) oder einer, die dein Guthaben übersteigt, zeigt dir Verbapp die Kosten und fragt nach.",
+      "Zuverlässigere Notizen: Die KI erfindet keine Namen oder Zitate mehr, ignoriert Anweisungen, die in der Aufnahme gesprochen werden, versucht es von selbst noch einmal, wenn OpenRouter überlastet ist, und nimmt ein anderes Modell, wenn deins ausfällt.",
+      "Löschen lässt sich jetzt rückgängig machen, die Suche findet auch Personen und Text, und unter Einstellungen → Hilfe und Support kannst du dem Support schreiben.",
+      "Außerdem: Das Audio pausiert, wenn du die Kopfhörer abziehst, macht beim Drehen des Handys an derselben Stelle weiter, die App braucht weniger Platz und läuft besser auf Android 8 und 9 und auf Tablets."
+    ]
+  },
+  {
     "version": "0.9.5",
     "date": "2026-10-09",
     "title": "Einfachere Einstellungen und eine Zusammenfassung für deine Sitzungen",
     "items": [
       "Einstellungen nach Themen: Allgemein, Aufnehmen und transkribieren, Speichern und Kopien, KI-Verbindung, Hintergrundgeräusche, Akku und Netzwerk sowie Hilfe. Jedes Thema öffnet einen eigenen Bildschirm und zeigt, wie es eingestellt ist.",
-      "Art der Zusammenfassung: Wähle „Zweites Gehirn“ oder die neue „Kundensitzung“, einen vollständigen Überblick über die Sitzung, damit du sie nicht noch einmal lesen musst. Unter Einstellungen → Aufnehmen und transkribieren legst du fest, was jede enthält.",
+      "Art der Zusammenfassung: Wähle „Second Brain“ oder die neue „Klientensitzung“, einen vollständigen Überblick über die Sitzung, damit du sie nicht noch einmal lesen musst. Unter Einstellungen → Aufnehmen und transkribieren legst du fest, was jede enthält.",
       "Dein Name: unter Einstellungen → Allgemein. Verbapp begrüßt dich damit und verwendet ihn für deine Stimme in den Transkripten.",
       "Weniger Rückfragen: Standardmäßig trennt Verbapp die Stimmen und nutzt den Titel, den die KI vorschlägt, ohne zu fragen. Wenn du lieber gefragt werden möchtest, schalte es unter Aufnehmen und transkribieren ein."
     ]

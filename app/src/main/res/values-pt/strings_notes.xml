@@ -60,7 +60,8 @@
     <string name="note_overview">Panorama geral</string>
     <string name="note_client">O que o cliente contou</string>
     <string name="note_work">O que foi trabalhado</string>
-    <string name="note_agreements">Orientações e combinados</string>
+    <string name="note_agreements">Recomendações e combinados</string>
     <string name="note_next">Próximos passos</string>
     <string name="note_watch">Pontos de atenção</string>
+    <string name="note_truncated">a IA leu só a primeira parte (gravação muito longa)</string>
 </resources>
