@@ -57,4 +57,11 @@
     <string name="note_md_demo">Ejemplo de demostración: no proviene de una transcripción real.</string>
     <string name="note_md_auto_voices">Voces separadas automáticamente: pueden tener errores.</string>
     <string name="note_md_no_speech">No se detectó habla en este audio.</string>
+    <!-- 0.9.5: secciones de «Sesión con cliente» -->
+    <string name="note_overview">Panorama general</string>
+    <string name="note_client">Lo que contó el cliente</string>
+    <string name="note_work">Lo que se trabajó</string>
+    <string name="note_agreements">Indicaciones y acuerdos</string>
+    <string name="note_next">Próximos pasos</string>
+    <string name="note_watch">Puntos a vigilar</string>
 </resources>

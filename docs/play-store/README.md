@@ -50,7 +50,8 @@ Lo que se cargó en Play Console el 2026-10-02 (app «Verbapp: graba y transcrib
   - Versión **15 (0.9.1)**: enviada a revisión y publicada el 2026-10-03. Trae reintentos que esperan cuando OpenRouter falla y «Probar con otro modelo».
   - Versión **16 (0.9.2)**: enviada a revisión el 2026-10-03 y publicada. Avisa cuando Google Play tiene una versión nueva (librería oficial `app-update`) y abre el teclado solo en las hojas con un campo. Un tester con un Xiaomi confirmó que el aviso revisa Play («al día»).
   - Versión **17 (0.9.3)**: trae la sección «Ruido de fondo» en Ajustes (cuatro opciones para probar de a una) y los arreglos del informe de ese Xiaomi.
-  - Versión **18 (0.9.4)**: alemán como cuarto idioma y `androidx.fragment` 1.9.1, por el aviso de SDK desactualizado de Play.
+  - Versión **18 (0.9.4)**: alemán como cuarto idioma y `androidx.fragment` 1.9.1, por el aviso de SDK desactualizado de Play. Enviada a revisión el 2026-10-08 con la ficha de-DE y las capturas nuevas de los 4 idiomas.
+  - Versión **19 (0.9.5)**: Ajustes por temas, «Tu nombre», tipo de resumen («Segundo cerebro» / «Sesión con cliente») con partes configurables y menos preguntas por defecto.
   - Cada AAB está en `entrega/Verbapp-<versión>.aab`, firmado con la clave de subida, con notas de la versión en es-419, en-US y pt-BR.
 - Enlace para unirse a la prueba: https://play.google.com/apps/testing/cl.verbapp.app
   - Cada tester lo abre con la cuenta de Google de su lista, acepta y luego instala desde Play.
@@ -68,4 +69,4 @@ Lo que se cargó en Play Console el 2026-10-02 (app «Verbapp: graba y transcrib
 ## Pendiente
 - Que Google apruebe la 0.9.3 y que los testers acepten la invitación desde el enlace de la prueba.
 - Juntar 12 testers y esperar 14 días; después, pedir acceso a producción.
-- 0.9.5: Ajustes en secciones plegables, «Tu nombre» y el resumen «Sesión con cliente».
+- Que Google apruebe la 0.9.5.

@@ -59,7 +59,7 @@
     <string name="set_section_flow">Dein Ablauf</string>
     <string name="set_quick_save">Schnellspeichern</string>
     <string name="set_quick_save_sub">Wohin der Button an jeder Aufnahme speichert</string>
-    <string name="set_note_title">Notiz für dein zweites Gehirn</string>
+    <string name="set_note_title">KI-Zusammenfassung</string>
     <string name="set_note_auto_on">Wird nach jeder Transkription automatisch erstellt</string>
     <string name="set_note_auto_off">Mit einem Tipp, bei jeder Aufnahme</string>
     <string name="set_auto_title">Automatisch transkribieren</string>
@@ -401,4 +401,33 @@
     <string name="set_play_boost_sub">Nur bei der Wiedergabe: mehr Stimme, weniger Bass. Die Datei bleibt unverändert</string>
     <string name="set_noise_foot">Probiere sie einzeln aus. In den Details jeder Aufnahme siehst du, welche genutzt wurden.</string>
     <string name="set_noise_more">Jede Option macht etwas anderes:\n\n• Mit der Rauschunterdrückung des Handys aufnehmen: nutzt den Mikrofonmodus für Anrufe, der beim Telefonieren Geräusche herausfiltert. Das klappt sehr gut mit einer Person nah am Handy, kann aber Personen leiser machen, die weiter weg sprechen (zum Beispiel in einer Besprechung), und jede Marke macht es auf ihre Weise. Gilt für neue Aufnahmen.\n\n• Brummen entfernen und Lautstärke angleichen: Vor dem Senden zum Transkribieren entfernt es tiefe Töne, die keine Stimme sind (Motor, Klimaanlage, Stöße), und gleicht die Lautstärke an, damit leise oder entfernte Stimmen lauter werden.\n\n• Hintergrundgeräusche reduzieren (experimentell): Vor dem Senden senkt es gleichmäßige Geräusche wie einen Ventilator oder Verkehr. Es ist absichtlich sanft: Ein starker Filter kann auch die Stimme beeinträchtigen.\n\n• Stimmen beim Anhören verstärken: ändert nur, wie Aufnahmen im Player von Verbapp klingen.\n\nDie letzten drei ändern nie deine Aufnahme: Sie arbeiten mit einer Kopie. Zum Vergleichen transkribiere dieselbe Aufnahme noch einmal („Neu transkribieren…“) mit eingeschalteter Option und dann mit ausgeschalteter.</string>
+    <!-- 0.9.5: Ajustes por temas, «Tu nombre», tipo de resumen y preguntas -->
+    <string name="set_topic_general">Allgemein</string>
+    <string name="set_topic_record">Aufnehmen und transkribieren</string>
+    <string name="set_topic_save">Speichern und Kopien</string>
+    <string name="set_topic_ai">KI-Verbindung</string>
+    <string name="set_topic_noise_sum">%1$d von 4 aktiv</string>
+    <string name="set_topic_auto">Automatisch</string>
+    <string name="set_topic_manual">Manuell</string>
+    <string name="set_topic_key_ready">Schlüssel bereit</string>
+    <string name="set_topic_key_missing">Schlüssel fehlt</string>
+    <string name="set_topic_version">Version %1$s</string>
+    <string name="set_name_unset">Nicht festgelegt · für die Begrüßung und deine Stimme</string>
+    <string name="set_name_sheet_body">Verbapp begrüßt dich mit diesem Namen und verwendet ihn für deine Stimme in den Transkripten.</string>
+    <string name="set_summary_type">Art der Zusammenfassung</string>
+    <string name="set_summary_type_body">Wähle, was die KI nach jeder Transkription schreibt und was jede Art enthält.</string>
+    <string name="set_kind_brain">Zweites Gehirn</string>
+    <string name="set_kind_brain_sub">Zusammenfassung, Entscheidungen, Aufgaben und Zitate für deine Notizen</string>
+    <string name="set_kind_client">Kundensitzung</string>
+    <string name="set_kind_client_sub">Ein vollständiger Überblick über die Sitzung, damit du sie nicht noch einmal lesen musst</string>
+    <string name="set_kind_in_use">Aktiv</string>
+    <string name="set_kind_includes">Was „%1$s“ enthält</string>
+    <string name="set_kind_always">Zusammenfassung und Titel sind immer dabei.</string>
+    <string name="set_kind_foot">Änderungen gelten für neue Notizen. Um eine Notiz neu zu erstellen, öffne ihre Aufnahme und nutze das Menü ⋮ der Notiz.</string>
+    <string name="set_part_tags">Tags</string>
+    <string name="set_part_client_quotes">Zitate des Kunden</string>
+    <string name="set_section_questions">Rückfragen</string>
+    <string name="set_questions_foot">Standardmäßig fragt Verbapp nichts: Es trennt die Stimmen und nutzt den Titel, den die KI vorschlägt. Schalte das ein, wenn du lieber gefragt werden möchtest.</string>
+    <string name="set_section_advanced">Erweitert</string>
+    <string name="set_advanced_foot">Die Modelle, die transkribieren. Automatisch wählt Verbapp das empfohlene.</string>
 </resources>

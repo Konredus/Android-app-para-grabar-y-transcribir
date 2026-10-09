@@ -260,7 +260,7 @@ public class RecordingActivity extends Screen {
     private String metaText(){return dayLabel(recording.created)+" · "+clock(recording.created)+" · "+Ui.humanDuration(recording.duration);}
     /** «29 sept» («Sep 29» en inglés, «29 de set» en portugués); con el año si no es el actual. */
     private String dayLabel(long ms){Calendar now=Calendar.getInstance(),c=Calendar.getInstance();c.setTimeInMillis(ms);
-        return new SimpleDateFormat(getString(now.get(Calendar.YEAR)==c.get(Calendar.YEAR)?R.string.detail_date_day:R.string.detail_date_day_year),Lang.locale(this)).format(new Date(ms)).replace(".","");}
+        return new SimpleDateFormat(getString(now.get(Calendar.YEAR)==c.get(Calendar.YEAR)?R.string.detail_date_day:R.string.detail_date_day_year),Lang.locale(this)).format(new Date(ms)).replaceAll("(?<=\\p{L})\\.","");}
     /**
      * Hora del día: «16:05» con el reloj de 24 horas del teléfono; con el de 12 horas, la del idioma (detail_time_12h:
      * «4:05 PM» en inglés). En español siempre «16:05», como antes.
@@ -1068,7 +1068,12 @@ public class RecordingActivity extends Screen {
     /** Ajustes con la hoja «IA de la nota» abierta; Atrás vuelve aquí. */
     private void openNoteAi(){startActivity(new Intent(this,SettingsActivity.class).putExtra("back",true).putExtra("noteAi",true));}
     /** Título de la nota con el destello ✦ verde del logo: lo que armó la IA lleva la misma chispa que la marca. */
-    private LinearLayout noteHeader(LinearLayout card,String subtitle){return cardHeader(card,new Spark(this,p.primary),getString(R.string.detail_note_title),subtitle);}
+    private LinearLayout noteHeader(LinearLayout card,String subtitle){return noteHeader(card,subtitle,null);}
+    /** 0.9.5: «Resumen de la sesión» si la nota (o, mientras se arma, Ajustes) es de «Sesión con cliente». */
+    private LinearLayout noteHeader(LinearLayout card,String subtitle,JSONObject note){
+        String kind=note!=null?note.optString("kind",Notes.BRAIN):new Settings(this).noteKind();
+        return cardHeader(card,new Spark(this,p.primary),getString(Notes.CLIENT.equals(kind)?R.string.detail_note_client_title:R.string.detail_note_title),subtitle);
+    }
     private LinearLayout noteSurface(){LinearLayout card=ui.card();card.setPadding(ui.dp(S4),ui.dp(S2),ui.dp(S2),ui.dp(S4));card.setLayoutParams(gap());return card;}
     private View noteSkeleton(){
         LinearLayout card=noteSurface();noteHeader(card,null);
@@ -1096,12 +1101,14 @@ public class RecordingActivity extends Screen {
     }
     private View noteFull(JSONObject note,Map<String,String> names,String error){
         Map<String,String> who=noteNames(note,names);
-        LinearLayout card=noteSurface();LinearLayout head=noteHeader(card,getString(R.string.detail_note_ai));
+        LinearLayout card=noteSurface();LinearLayout head=noteHeader(card,getString(R.string.detail_note_ai),note);
         ImageButton more=ui.iconButton(R.drawable.ic_more,getString(R.string.detail_note_options),p.onSurfaceVariant,0,48);more.setOnClickListener(v->noteMenu());head.addView(more);
         ImageButton fold=ui.iconButton(R.drawable.ic_chevron_down,getString(R.string.detail_note_collapse),p.onSurfaceVariant,0,48);head.addView(fold);
         LinearLayout body=ui.column();body.setPadding(0,0,ui.dp(S2),0);
         String summary=Notes.resolve(note.optString("summary",""),who).trim();
         if(!summary.isEmpty()){TextView s=ui.text(summary,Type.BODY_LARGE,p.onSurface);s.setLineSpacing(ui.dp(3),1f);s.setTextIsSelectable(true);s.setPadding(0,ui.dp(S1),0,0);body.addView(s,Ui.fill());}
+        // 0.9.5, «Sesión con cliente»: lo que contó el cliente, lo que se trabajó, acuerdos, próximos pasos y puntos a vigilar.
+        for(int k=0;k<Notes.CLIENT_LISTS.length;k++)bullets(body,getString(Notes.CLIENT_TITLES[k]),note.optJSONArray(Notes.CLIENT_LISTS[k]),who);
         bullets(body,getString(R.string.detail_note_decisions),note.optJSONArray("decisions"),who);
         tasks(body,note.optJSONArray("tasks"),who);
         quotes(body,note.optJSONArray("quotes"),who);

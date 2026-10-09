@@ -110,10 +110,22 @@ public class SettingsActivity extends Screen {
         // Deja leída la lista de modelos guardada: la tarjeta de estado nombra el modelo de OpenRouter antes de armar sus filas.
         Models.cached(this);
         Intent in=getIntent();voiceFlow=in.getBooleanExtra("voice",false);returnOnBack=in.getBooleanExtra("back",false);inboxFlow=in.getBooleanExtra("inbox",false);
+        section=state!=null?state.getString("section"):topicFor(in);
         render();
         if(state==null)page.post(()->openFrom(in));
     }
-    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);if(intent.getBooleanExtra("voice",false))voiceFlow=true;if(intent.getBooleanExtra("inbox",false))inboxFlow=true;openFrom(intent);}
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);if(intent.getBooleanExtra("voice",false))voiceFlow=true;if(intent.getBooleanExtra("inbox",false))inboxFlow=true;
+        String to=topicFor(intent);if(to!=null&&!to.equals(section)){section=to;render();}
+        openFrom(intent);
+    }
+    /** El tema donde vive lo que pidió otra pantalla (0.9.5): tu voz → Grabar y transcribir; carpeta → Guardar; clave o IA → Conexión. */
+    private String topicFor(Intent in){
+        if(in.getBooleanExtra("voice",false))return RECORD;
+        if(in.getBooleanExtra("inbox",false))return SAVE;
+        if(in.getBooleanExtra("focusKey",false)||in.getBooleanExtra("noteAi",false))return AI;
+        return null;
+    }
     /** Abre directo la hoja que pidió otra pantalla (p. ej. «Elegir carpeta rápida» desde una grabación). */
     private void openFrom(Intent intent){
         if(isFinishing())return;
@@ -129,69 +141,213 @@ public class SettingsActivity extends Screen {
     }
     /** Abierta desde otra pantalla para un paso puntual (grabar tu voz, carpeta rápida): Atrás (o terminar) vuelve ahí, no a Inicio. */
     private boolean voiceFlow,returnOnBack,inboxFlow;
-    @Override public void onBackPressed(){if(voiceFlow||returnOnBack||inboxFlow){finish();return;}navigate(0);}
+    @Override public void onBackPressed(){
+        if(voiceFlow||returnOnBack||inboxFlow){finish();return;}
+        if(section!=null){open(SUMMARY.equals(section)?RECORD:null);return;}
+        navigate(0);
+    }
+
+    /**
+     * 0.9.5: Ajustes por temas (pedido del dueño: «demasiado largo para encontrar lo que necesito»), como lo hace Android y
+     * como ya funcionaba «Tus métricas». La pantalla principal es corta: estado, métricas y siete temas, cada uno con una
+     * línea que dice cómo está; cada tema abre su propia página. null = la lista de temas.
+     */
+    private String section;
+    static final String GENERAL="general",RECORD="record",SUMMARY="summary",SAVE="save",AI="ai",NOISE="noise",ENERGY="energy",HELP="help";
+    /** Abre un tema (o vuelve a la lista con null) desde arriba. */
+    private void open(String to){if(scroll!=null)scroll.scrollTo(0,0);section=to;render();}
+    @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putString("section",section);}
 
     private void render(){
         // Solo OpenRouter: si quedó guardado otro proveedor (un camino que no pasó por la migración del esquema 5, o algo que
         // lo cambió mientras esta pantalla estaba detrás), se pasa a OpenRouter igual que en la migración. Así lo que
         // muestra esta pantalla es lo que de verdad se usa al transcribir.
         if(!settings.openRouter()){VozApp.openRouterOnly(settings,settings.prefs.edit()).apply();Diagnostics.event("setting_changed",null,"action","provider","result","openrouter","source","settings");}
+        // Las filas que se actualizan solas existen solo en su tema.
+        folderRow=saveRow=batteryRow=voiceRow=verifyRow=updateRow=null;
+        if(section==null)renderTopics();else renderTopic(section);
+        lastShown=shown();
+    }
+    /** La pantalla principal: estado, «Tus métricas» y los siete temas. */
+    private void renderTopics(){
         shell(null,2);largeTitle(page,getString(R.string.nav_settings),null);
         page.addView(statusCard(),Ui.fill());
         // Tus métricas (0.8.0): cerca del inicio, como «Tu semana» en Grabar. El resumen se calcula aparte (loadMetrics).
         page.addView(metricsCard(),ui.top(S3));
-        // Idioma de la app (0.9.0): arriba, a mano también para quien la abrió en un idioma que no lee bien. Va con el globo
-        // (el ícono de traducir es de «Idioma del audio») y el nombre del idioma en ese mismo idioma.
-        LinearLayout language=ui.group();page.addView(language,ui.top(S3));
-        add(language,row(R.drawable.ic_globe,getString(R.string.common_language),null,langName(Lang.current(this))).onClick(v->appLanguageSheet()));
+        LinearLayout topics=ui.group();page.addView(topics,ui.top(S3));
+        String name=myName();
+        topic(topics,GENERAL,R.drawable.ic_person,R.string.set_topic_general,(name.isEmpty()?"":name+" · ")+langName(Lang.current(this)),false);
+        topic(topics,RECORD,R.drawable.ic_mic,R.string.set_topic_record,getString(settings.automatic()?R.string.set_topic_auto:R.string.set_topic_manual)+" · "+kindName(settings.noteKind()),false);
+        topic(topics,SAVE,R.drawable.ic_folder,R.string.set_topic_save,inboxValue(),false);
+        boolean hasKey=settings.hasOpenRouterKey(),trouble=!hasKey||verifyFailed()||noBalance()||noCredits();
+        topic(topics,AI,R.drawable.ic_sparkle,R.string.set_topic_ai,hasKey?getString(R.string.set_topic_key_ready)+" · "+modelName(settings):getString(R.string.set_topic_key_missing),trouble);
+        int noiseOn=(settings.recordNoise()?1:0)+(settings.cleanLevel()?1:0)+(settings.cleanNoise()?1:0)+(settings.playBoost()?1:0);
+        topic(topics,NOISE,R.drawable.ic_waveform,R.string.set_section_noise,getString(R.string.set_topic_noise_sum,noiseOn),false);
+        topic(topics,ENERGY,R.drawable.ic_battery,R.string.set_section_energy,getString(settings.wifiOnly()?R.string.set_network_wifi:R.string.set_network_any),false);
+        topic(topics,HELP,R.drawable.ic_lifebuoy,R.string.set_section_help,getString(R.string.set_topic_version,versionName()),false);
+        page.addView(footer(versionName()),Ui.fill());
+    }
+    /** Una fila de tema: ícono, nombre y cómo está (en rojo si pide atención, p. ej. falta la clave). */
+    private void topic(LinearLayout group,String key,int icon,int title,String summary,boolean attention){
+        Ui.Row r=row(icon,getString(title),summary,null);r.onClick(v->open(key));
+        if(attention&&r.subtitle!=null)r.subtitle.setTextColor(p.error);
+        add(group,r);
+    }
+    /** Título de un tema y la página con sus filas. */
+    private void renderTopic(String key){
+        shell(getString(SUMMARY.equals(key)?R.string.set_topic_record:R.string.nav_settings),2);
+        switch(key){
+            case GENERAL:renderGeneral();break;
+            case RECORD:renderRecord();break;
+            case SUMMARY:renderSummary();break;
+            case SAVE:renderSave();break;
+            case AI:renderAi();break;
+            case NOISE:renderNoise();break;
+            case ENERGY:renderEnergy();break;
+            default:renderHelp();
+        }
+    }
+    /** El nombre de «Mi voz» es «Tu nombre» (0.9.5): el mismo que usan el saludo de Grabar y las transcripciones. */
+    private String myName(){String n=settings.prefs.getString("myVoiceName","").trim();return Voices.isDefaultMeName(n)?"":n;}
+    /** «Segundo cerebro» o «Sesión con cliente», en el idioma de la app. */
+    private String kindName(String kind){return getString(Notes.CLIENT.equals(kind)?R.string.set_kind_client:R.string.set_kind_brain);}
 
-        // 1. Tu flujo: lo que pasa con cada grabación, de principio a fin.
-        page.addView(ui.section(getString(R.string.set_section_flow)));LinearLayout flow=ui.group();page.addView(flow,Ui.fill());
-        saveRow=row(R.drawable.ic_inbox,getString(R.string.set_quick_save),getString(R.string.set_quick_save_sub),inboxValue());saveRow.onClick(v->saveSheet());add(flow,saveRow);
+    /** General: tu nombre, el idioma de la app y la apariencia. */
+    private void renderGeneral(){
+        largeTitle(page,getString(R.string.set_topic_general),null);
+        LinearLayout group=ui.group();page.addView(group,Ui.fill());
+        String name=myName();
+        add(group,row(R.drawable.ic_person,getString(R.string.set_your_name),name.isEmpty()?getString(R.string.set_name_unset):null,name.isEmpty()?null:name).onClick(v->nameSheet()));
+        // Idioma de la app (0.9.0): va con el globo (el ícono de traducir es de «Idioma del audio») y el nombre del idioma en ese mismo idioma.
+        add(group,row(R.drawable.ic_globe,getString(R.string.common_language),null,langName(Lang.current(this))).onClick(v->appLanguageSheet()));
+        // Apariencia: el tema se elige mirando cómo queda. «Colores de tu fondo de pantalla» se quitó en 0.7.0: Verbapp
+        // tiene su propio verde (AppTheme.dynamicColor ya devuelve false) y la preferencia antigua queda guardada, sin leerse.
+        page.addView(ui.section(getString(R.string.set_section_appearance)));page.addView(themePicker(),Ui.fill());
+        page.addView(ui.footnote(getString(R.string.set_theme_foot)));
+    }
+    /** «Tu nombre»: el saludo de Grabar y el nombre de tu voz. Vacío lo quita. */
+    private void nameSheet(){
+        Sheet s=sheet(getString(R.string.set_your_name),getString(R.string.set_name_sheet_body));
+        EditText name=nameField(getString(R.string.set_your_name_hint),getString(R.string.set_your_name),myName());s.add(name);
+        s.primary(getString(R.string.set_save),Ui.Style.PRIMARY,()->{
+            String n=Voices.clean(name.getText().toString());
+            Voices.Voice same=n.isEmpty()?null:Voices.findByName(this,n);if(same!=null&&!same.me){name.setError(getString(R.string.set_name_taken_other));return false;}
+            Voices.setName(this,n);Diagnostics.event("setting_changed",null,"action","my_name","result",!n.isEmpty());
+            if(!n.isEmpty())toast(getString(R.string.set_name_saved));render();return true;});
+        s.secondary(getString(R.string.common_cancel),null).keyboard(name).show();
+    }
+
+    /** Grabar y transcribir: lo que pasa con cada grabación, de principio a fin, y las preguntas (apagadas por defecto). */
+    private void renderRecord(){
+        largeTitle(page,getString(R.string.set_topic_record),null);
+        LinearLayout group=ui.group();page.addView(group,Ui.fill());
         View[] note={null};
         note[0]=toggleRow(R.drawable.ic_doc,getString(R.string.set_note_title),noteSubtitle(settings.noteAuto()),settings.noteAuto(),on->{
             settings.prefs.edit().putBoolean("noteAuto",on).apply();Diagnostics.event("setting_changed",null,"action","note_auto","result",on);
             subtitle(note[0],noteSubtitle(on));if(on&&!noteReady())page.post(this::noteMissingKey);});
-        add(flow,note[0]);
-        add(flow,toggleRow(R.drawable.ic_bolt,getString(R.string.set_auto_title),getString(R.string.set_auto_sub),settings.automatic(),on->{toggle("automatic",on);if(on&&Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},101);}));
-        add(flow,toggleRow(R.drawable.ic_title,getString(R.string.set_ask_title),getString(R.string.set_ask_title_sub),settings.askTitle(),on->toggle("askTitle",on)));
+        add(group,note[0]);
+        add(group,row(R.drawable.ic_summarize,getString(R.string.set_summary_type),null,kindName(settings.noteKind())).onClick(v->open(SUMMARY)));
+        add(group,toggleRow(R.drawable.ic_bolt,getString(R.string.set_auto_title),getString(R.string.set_auto_sub),settings.automatic(),on->{toggle("automatic",on);if(on&&Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},101);}));
         Ui.Row dates=row(R.drawable.ic_edit,getString(R.string.set_dates_existing),getString(R.string.set_dates_existing_sub),null);dates.onClick(v->offerDatesForExisting());
-        add(flow,toggleRow(R.drawable.ic_calendar,getString(R.string.set_date_prefix),getString(R.string.set_date_prefix_example,Recording.isoDate(System.currentTimeMillis())),settings.datePrefix(),on->{settings.prefs.edit().putBoolean("datePrefix",on).apply();Diagnostics.event("setting_changed",null,"action","date_prefix","result",on);showRow(dates,on);if(on)offerDatesForExisting();}));
-        add(flow,dates);showRow(dates,settings.datePrefix());
+        add(group,toggleRow(R.drawable.ic_calendar,getString(R.string.set_date_prefix),getString(R.string.set_date_prefix_example,Recording.isoDate(System.currentTimeMillis())),settings.datePrefix(),on->{settings.prefs.edit().putBoolean("datePrefix",on).apply();Diagnostics.event("setting_changed",null,"action","date_prefix","result",on);showRow(dates,on);if(on)offerDatesForExisting();}));
+        add(group,dates);showRow(dates,settings.datePrefix());
         voiceRow=null;
         // La misma compuerta del motor (TranscribeClient.knowsVoices): con OpenRouter las muestras van delante del audio,
         // solo si el modelo con voces elegido separa voces (canSeparate).
-        if(TranscribeClient.knowsVoices(settings.provider())&&settings.canSeparate()){voiceRow=row(R.drawable.ic_voice,getString(R.string.set_voices_title),getString(R.string.set_voices_sub),voiceValue());voiceRow.onClick(v->voiceSheet());add(flow,voiceRow);}
-        page.addView(more(getString(R.string.set_flow_foot),getString(R.string.set_section_flow),getString(R.string.set_flow_more,Transcriber.MAX_KNOWN)));
+        if(TranscribeClient.knowsVoices(settings.provider())&&settings.canSeparate()){voiceRow=row(R.drawable.ic_voice,getString(R.string.set_voices_title),getString(R.string.set_voices_sub),voiceValue());voiceRow.onClick(v->voiceSheet());add(group,voiceRow);}
+        // Preguntas (0.9.5, pedido del dueño: «que no pregunten tanto»): por defecto no se pregunta nada; quien quiera, las prende.
+        page.addView(ui.section(getString(R.string.set_section_questions)));LinearLayout ask=ui.group();page.addView(ask,Ui.fill());
+        add(ask,toggleRow(R.drawable.ic_title,getString(R.string.set_ask_title),getString(R.string.set_ask_title_sub),settings.askTitle(),on->toggle("askTitle",on)));
+        if(settings.canSeparate())add(ask,row(R.drawable.ic_people,getString(R.string.set_speakers_title),null,getString(SPEAKER_NAMES[Math.max(0,Arrays.asList(SPEAKER_MODES).indexOf(settings.speakersMode()))])).onClick(v->speakersSheet()));
+        page.addView(ui.footnote(getString(R.string.set_questions_foot)));
+    }
+    /**
+     * Tipo de resumen (0.9.5): «Segundo cerebro» (la nota de siempre) o «Sesión con cliente» (un panorama completo de una
+     * sesión), y qué partes incluye cada uno. Lo que se quita, la IA lo deja vacío y la nota no lo muestra.
+     */
+    private void renderSummary(){
+        largeTitle(page,getString(R.string.set_summary_type),getString(R.string.set_summary_type_body));
+        LinearLayout kinds=ui.group();page.addView(kinds,Ui.fill());
+        String current=settings.noteKind();
+        for(String kind:new String[]{Notes.BRAIN,Notes.CLIENT}){
+            boolean on=kind.equals(current);
+            Ui.Row r=row(on?R.drawable.ic_radio_on:R.drawable.ic_radio_off,kindName(kind),getString(Notes.CLIENT.equals(kind)?R.string.set_kind_client_sub:R.string.set_kind_brain_sub),on?getString(R.string.set_kind_in_use):null);
+            r.onClick(v->{if(kind.equals(settings.noteKind()))return;settings.prefs.edit().putString("noteKind",kind).apply();Diagnostics.event("setting_changed",null,"action","note_kind","result",kind);render();});
+            add(kinds,r);
+        }
+        for(String kind:new String[]{Notes.BRAIN,Notes.CLIENT}){
+            page.addView(ui.section(getString(R.string.set_kind_includes,kindName(kind))));LinearLayout parts=ui.group();page.addView(parts,Ui.fill());
+            for(String part:Notes.parts(kind)){
+                String key="note_"+kind+"_"+part;
+                add(parts,ui.switchRow(0,partName(kind,part),null,settings.notePart(kind,part),on->toggle(key,on)));
+            }
+        }
+        page.addView(ui.footnote(getString(R.string.set_kind_always)+" "+getString(R.string.set_kind_foot)));
+    }
+    /** Nombre de una parte de la nota, como sale en la nota. */
+    private String partName(String kind,String part){
+        switch(part){
+            case "decisions":return getString(R.string.note_decisions);
+            case "tasks":return getString(R.string.note_tasks);
+            case "quotes":return getString(Notes.CLIENT.equals(kind)?R.string.set_part_client_quotes:R.string.note_quotes);
+            case "tags":return getString(R.string.set_part_tags);
+            default:for(int i=0;i<Notes.CLIENT_LISTS.length;i++)if(Notes.CLIENT_LISTS[i].equals(part))return getString(Notes.CLIENT_TITLES[i]);return part;
+        }
+    }
 
-        // 2. Tu IA (OpenRouter), segunda ronda de la 0.8.0: una sola clave para transcribir y para la nota. Primero lo que
-        // hace falta para empezar (la clave y si funciona); después lo que se puede afinar. Sin elección de proveedor.
-        page.addView(ui.section(getString(R.string.set_section_ai)));LinearLayout ai=ui.group();page.addView(ai,Ui.fill());
+    /** Guardar y copias: el guardado rápido de cada grabación y la carpeta de copias automáticas. */
+    private void renderSave(){
+        largeTitle(page,getString(R.string.set_topic_save),null);
+        LinearLayout group=ui.group();page.addView(group,Ui.fill());
+        saveRow=row(R.drawable.ic_inbox,getString(R.string.set_quick_save),getString(R.string.set_quick_save_sub),inboxValue());saveRow.onClick(v->saveSheet());add(group,saveRow);
+        // «Más información» del guardado rápido: también cuenta la nota y las voces conocidas (el recorrido de cada grabación).
+        page.addView(more(getString(R.string.set_flow_foot),getString(R.string.set_quick_save),getString(R.string.set_flow_more,Transcriber.MAX_KNOWN)));
+        page.addView(ui.section(getString(R.string.set_section_copies)));group=ui.group();page.addView(group,Ui.fill());
+        folderRow=row(R.drawable.ic_folder,getString(R.string.set_copies_title),null,getString(R.string.set_copies_off));folderRow.onClick(v->folderSheet());add(group,folderRow);refreshFolder();
+        page.addView(more(getString(R.string.set_copies_foot),getString(R.string.set_copies_title),getString(R.string.set_copies_more)));
+    }
+
+    /**
+     * Conexión con la IA (OpenRouter): una sola clave para transcribir y para la nota. Primero lo que hace falta para
+     * empezar (la clave y si funciona); después lo que se puede afinar; los modelos de transcripción, en «Avanzado».
+     */
+    private void renderAi(){
+        largeTitle(page,getString(R.string.set_topic_ai),null);
+        LinearLayout ai=ui.group();page.addView(ai,Ui.fill());
         boolean hasKey=settings.hasOpenRouterKey();
         add(ai,row(R.drawable.ic_key,getString(R.string.set_key_title),hasKey?null:getString(R.string.set_key_sub),getString(hasKey?R.string.set_key_set:R.string.set_key_missing)).onClick(v->keySheet()));
         verifyRow=row(R.drawable.ic_network_check,getString(R.string.set_verify_title),verifyText(),null);verifyRow.subtitle.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);verifyRow.onClick(v->verify());add(ai,verifyRow);paintVerify();
-        add(ai,orModelRow(true));add(ai,orModelRow(false));
-        if(settings.canSeparate())add(ai,row(R.drawable.ic_people,getString(R.string.set_speakers_title),null,getString(SPEAKER_NAMES[Math.max(0,Arrays.asList(SPEAKER_MODES).indexOf(settings.speakersMode()))])).onClick(v->speakersSheet()));
         add(ai,row(R.drawable.ic_sparkle,getString(R.string.set_note_ai_title),noteAiHint(),noteRouterModel(false)).onClick(v->noteAiSheet()));
-        // Idioma del audio (0.9.0): detección automática o uno de los tres idiomas de la app, con su nombre en el idioma de la
+        // Idioma del audio (0.9.0): detección automática o uno de los idiomas de la app, con su nombre en el idioma de la
         // app («Spanish» en inglés). Sin elegir, el de la app (Settings.language).
         String audio=settings.language();
         add(ai,row(R.drawable.ic_translate,getString(R.string.set_audio_lang_title),null,audio.isEmpty()?getString(R.string.set_audio_lang_auto):audioLangName(audio)).onClick(v->audioLanguageSheet()));
         // Explicación honesta de qué viaja y a dónde (SPEC-0.8b): grabar no usa internet, transcribir sí.
         Ui.Btn how=ui.button(getString(R.string.set_how_key),0,Ui.Style.PLAIN,v->howToKey());how.setMinimumHeight(ui.dp(48));
-        page.addView(more(getString(R.string.set_ai_foot),getString(R.string.set_section_ai),getString(R.string.set_ai_more),how));
+        page.addView(more(getString(R.string.set_ai_foot),getString(R.string.set_topic_ai),getString(R.string.set_ai_more),how));
+        page.addView(ui.section(getString(R.string.set_section_advanced)));LinearLayout advanced=ui.group();page.addView(advanced,Ui.fill());
+        add(advanced,orModelRow(true));add(advanced,orModelRow(false));
+        page.addView(ui.footnote(getString(R.string.set_advanced_foot)));
+    }
 
-        // 3. Ruido de fondo (0.9.3, pedido del usuario): opciones para probar de a una, todas apagadas por defecto. Solo la
-        // primera cambia cómo graba el micrófono; las demás trabajan sobre una copia y nunca tocan la grabación.
-        page.addView(ui.section(getString(R.string.set_section_noise)));LinearLayout noise=ui.group();page.addView(noise,Ui.fill());
+    /**
+     * Ruido de fondo (0.9.3, pedido del usuario): opciones para probar de a una, todas apagadas por defecto. Solo la
+     * primera cambia cómo graba el micrófono; las demás trabajan sobre una copia y nunca tocan la grabación.
+     */
+    private void renderNoise(){
+        largeTitle(page,getString(R.string.set_section_noise),null);
+        LinearLayout noise=ui.group();page.addView(noise,Ui.fill());
         add(noise,toggleRow(R.drawable.ic_voice,getString(R.string.set_rec_noise),getString(R.string.set_rec_noise_sub),settings.recordNoise(),on->toggle("recordNoise",on)));
         add(noise,toggleRow(R.drawable.ic_waveform,getString(R.string.set_clean_level),getString(R.string.set_clean_level_sub),settings.cleanLevel(),on->toggle("cleanLevel",on)));
         add(noise,toggleRow(R.drawable.ic_filter,getString(R.string.set_clean_noise),getString(R.string.set_clean_noise_sub),settings.cleanNoise(),on->toggle("cleanNoise",on)));
         add(noise,toggleRow(R.drawable.ic_headphones,getString(R.string.set_play_boost),getString(R.string.set_play_boost_sub),settings.playBoost(),on->toggle("playBoost",on)));
         page.addView(more(getString(R.string.set_noise_foot),getString(R.string.set_section_noise),getString(R.string.set_noise_more)));
+    }
 
-        // 4. Energía y red: cuándo se envía el audio.
-        page.addView(ui.section(getString(R.string.set_section_energy)));LinearLayout energy=ui.group();page.addView(energy,Ui.fill());
+    /** Energía y red: cuándo se envía el audio. */
+    private void renderEnergy(){
+        largeTitle(page,getString(R.string.set_section_energy),null);
+        LinearLayout energy=ui.group();page.addView(energy,Ui.fill());
         // «Solo Wi-Fi» viene activado y, con datos móviles, la transcripción espera sin que se note (diagnóstico del
         // 2026-10-01: 27 min esperando Wi-Fi). Desde la tercera ronda de la 0.8.0, cada transcripción que espera ofrece
         // «Usar datos móviles ahora» (en su detalle y en la notificación), solo para esa grabación: la fila lo dice, así
@@ -204,19 +360,12 @@ public class SettingsActivity extends Screen {
         add(energy,toggleRow(R.drawable.ic_battery,getString(R.string.set_charging),null,settings.charging(),on->toggle("charging",on)));
         batteryRow=row(R.drawable.ic_battery,getString(R.string.set_locked),null,batteryValue());batteryRow.onClick(v->RecordingActions.allowBackground(this));add(energy,batteryRow);
         page.addView(more(getString(R.string.set_energy_foot),getString(R.string.set_section_energy),getString(R.string.set_energy_more)));
+    }
 
-        // 4. Copias
-        page.addView(ui.section(getString(R.string.set_section_copies)));LinearLayout storage=ui.group();page.addView(storage,Ui.fill());
-        folderRow=row(R.drawable.ic_folder,getString(R.string.set_copies_title),null,getString(R.string.set_copies_off));folderRow.onClick(v->folderSheet());add(storage,folderRow);refreshFolder();
-        page.addView(more(getString(R.string.set_copies_foot),getString(R.string.set_copies_title),getString(R.string.set_copies_more)));
-
-        // 5. Apariencia: el tema se elige mirando cómo queda. «Colores de tu fondo de pantalla» se quitó en 0.7.0: Verbapp
-        // tiene su propio verde (AppTheme.dynamicColor ya devuelve false) y la preferencia antigua queda guardada, sin leerse.
-        page.addView(ui.section(getString(R.string.set_section_appearance)));page.addView(themePicker(),Ui.fill());
-        page.addView(ui.footnote(getString(R.string.set_theme_foot)));
-
-        // 6. Ayuda y soporte
-        page.addView(ui.section(getString(R.string.set_section_help)));LinearLayout help=ui.group();page.addView(help,Ui.fill());
+    /** Ayuda y soporte. */
+    private void renderHelp(){
+        largeTitle(page,getString(R.string.set_section_help),null);
+        LinearLayout help=ui.group();page.addView(help,Ui.fill());
         String version=versionName();
         Ui.Row news=row(R.drawable.ic_info,getString(R.string.set_news),null,version).onClick(v->Novedades.showAll(this));versionPill(news.value);add(help,news);
         // 0.9.2: versiones nuevas desde Google Play (Updates): tocar revisa, descarga o instala, según en qué va.
@@ -231,7 +380,6 @@ public class SettingsActivity extends Screen {
         add(help,row(R.drawable.ic_trash,getString(R.string.set_clear_logs),null,null).onClick(v->confirm(getString(R.string.set_clear_logs_q),getString(R.string.set_clear_logs_body),getString(R.string.set_delete),true,()->{Diagnostics.clear(this);toast(getString(R.string.set_clear_logs_done));})));
         page.addView(ui.footnote(getString(R.string.set_logs_foot)));
         page.addView(footer(version),Ui.fill());
-        lastShown=shown();
     }
     /** Nombre de un idioma de la app en ese mismo idioma («English», «Español», «Português (Brasil)»). */
     private String langName(String lang){return getString(Lang.EN.equals(lang)?R.string.lang_en:Lang.ES.equals(lang)?R.string.lang_es:Lang.DE.equals(lang)?R.string.lang_de:R.string.lang_pt);}
@@ -1068,7 +1216,7 @@ public class SettingsActivity extends Screen {
     private String folderName(Uri uri){String name=getString(R.string.set_folder_chosen);try(android.database.Cursor c=getContentResolver().query(DocumentsContract.buildDocumentUriUsingTree(uri,DocumentsContract.getTreeDocumentId(uri)),new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst()&&c.getString(0)!=null)name=c.getString(0);}catch(Exception ignored){}return name;}
     /** Muestra el nombre real de la carpeta (y si es Drive) en vez del identificador interno. */
     private void refreshFolder(){
-        String tree=settings.prefs.getString("localTree","");if(tree.isEmpty()){folderRow.setValue(getString(R.string.set_copies_off));return;}
+        if(folderRow==null)return;String tree=settings.prefs.getString("localTree","");if(tree.isEmpty()){folderRow.setValue(getString(R.string.set_copies_off));return;}
         folderRow.setValue("…");Ui.Row row=folderRow;io.execute(()->{Uri uri=Uri.parse(tree);String name=folderName(uri);
             String authority=uri.getAuthority()==null?"":uri.getAuthority();String label=(authority.contains("google.android.apps.docs")?"Drive · ":"")+name;
             runOnUiThread(()->{if(!isDestroyed())row.setValue(label);});});

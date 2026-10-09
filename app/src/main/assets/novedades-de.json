@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.9.5",
+    "date": "2026-10-09",
+    "title": "Einfachere Einstellungen und eine Zusammenfassung für deine Sitzungen",
+    "items": [
+      "Einstellungen nach Themen: Allgemein, Aufnehmen und transkribieren, Speichern und Kopien, KI-Verbindung, Hintergrundgeräusche, Akku und Netzwerk sowie Hilfe. Jedes Thema öffnet einen eigenen Bildschirm und zeigt, wie es eingestellt ist.",
+      "Art der Zusammenfassung: Wähle „Zweites Gehirn“ oder die neue „Kundensitzung“, einen vollständigen Überblick über die Sitzung, damit du sie nicht noch einmal lesen musst. Unter Einstellungen → Aufnehmen und transkribieren legst du fest, was jede enthält.",
+      "Dein Name: unter Einstellungen → Allgemein. Verbapp begrüßt dich damit und verwendet ihn für deine Stimme in den Transkripten.",
+      "Weniger Rückfragen: Standardmäßig trennt Verbapp die Stimmen und nutzt den Titel, den die KI vorschlägt, ohne zu fragen. Wenn du lieber gefragt werden möchtest, schalte es unter Aufnehmen und transkribieren ein."
+    ]
+  },
+  {
     "version": "0.9.4",
     "date": "2026-10-08",
     "title": "Verbapp spricht jetzt Deutsch",

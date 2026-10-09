@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.9.5",
+    "date": "2026-10-09",
+    "title": "Simpler settings and a summary for your sessions",
+    "items": [
+      "Settings by topic: General, Record and transcribe, Saving and copies, AI connection, Background noise, Power and network, and Help. Each topic opens its own screen and shows how it’s set.",
+      "Summary type: choose “Second brain” or the new “Client session”, a full overview of the session so you don’t have to reread it. In Settings → Record and transcribe you choose what each one includes.",
+      "Your name: in Settings → General. Verbapp greets you by it and uses it for your voice in transcripts.",
+      "Fewer questions: by default Verbapp separates voices and uses the title the AI suggests, without asking. If you’d rather be asked, turn it on in Record and transcribe."
+    ]
+  },
+  {
     "version": "0.9.4",
     "date": "2026-10-08",
     "title": "Verbapp now speaks German",

@@ -15,7 +15,11 @@ final class Settings {
     boolean automatic() { return prefs.getBoolean("automatic", false); }
     boolean wifiOnly() { return prefs.getBoolean("wifi", true); }
     boolean charging() { return prefs.getBoolean("charging", false); }
-    boolean askTitle() { return prefs.getBoolean("askTitle", true); }
+    /**
+     * Pedir un nombre al terminar de grabar. 0.9.5 (pedido del dueño: «que no pregunten tanto»): apagado por defecto; la
+     * grabación toma el título que sugiere la nota de la IA y se puede cambiar después. Quien lo quiera lo prende en Ajustes.
+     */
+    boolean askTitle() { return prefs.getBoolean("askTitle", false); }
     /**
      * Idioma del audio al transcribir: "en", "es", "pt" o "" (que el modelo lo detecte). Sin elegir (0.9.0), el idioma de
      * la app: quien la usa en inglés habla, lo más probable, en inglés. Antes partía siempre en "es" (la app era solo en
@@ -39,8 +43,21 @@ final class Settings {
     boolean hasKey() { return prefs.contains(prefix()+"keyEncrypted"); }
     /** Agregar la fecha (2026-09-27) delante de cada nombre. Activado por defecto (pedido del usuario, 0.4.3). */
     boolean datePrefix(){return prefs.getBoolean("datePrefix",true);}
-    /** "ask" (preguntar cada vez), "always" o "never". */
-    String speakersMode(){return prefs.getString("speakersMode","ask");}
+    /**
+     * "ask" (preguntar cada vez), "always" o "never". 0.9.5: por defecto "always" (antes "ask"): transcribir no pregunta
+     * nada; «Preguntar cada vez» sigue en Ajustes → Grabar y transcribir para quien lo quiera.
+     */
+    String speakersMode(){return prefs.getString("speakersMode","always");}
+
+    // ---------- 0.9.5: tipo de resumen (Ajustes → Grabar y transcribir → Tipo de resumen) ----------
+    /** Qué arma la IA después de transcribir: Notes.BRAIN («Segundo cerebro», el de siempre) o Notes.CLIENT («Sesión con cliente»). */
+    String noteKind(){String k=prefs.getString("noteKind",Notes.BRAIN);return Notes.CLIENT.equals(k)?Notes.CLIENT:Notes.BRAIN;}
+    /** ¿Ese tipo de resumen incluye esa parte? Todas vienen activadas; el resumen general va siempre. */
+    boolean notePart(String kind,String part){return prefs.getBoolean("note_"+kind+"_"+part,true);}
+    /** Las partes que la persona quitó de ese tipo de resumen (la IA las deja vacías y la nota no las muestra). */
+    java.util.Set<String> skippedParts(String kind){
+        java.util.Set<String> out=new java.util.LinkedHashSet<>();for(String part:Notes.parts(kind))if(!notePart(kind,part))out.add(part);return out;
+    }
     /** Modelo para transcribir sin separar voces (OpenAI). */
     String textModel(){return prefs.getString("openaiTextModel","gpt-transcribe");}
     /** ¿El proveedor configurado puede separar voces? */

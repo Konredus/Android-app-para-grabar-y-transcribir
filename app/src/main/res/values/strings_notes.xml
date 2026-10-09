@@ -78,4 +78,11 @@
     <string name="note_md_demo">Demo sample: not from a real transcript.</string>
     <string name="note_md_auto_voices">Voices separated automatically: they may contain errors.</string>
     <string name="note_md_no_speech">No speech was detected in this audio.</string>
+    <!-- 0.9.5: secciones de «Sesión con cliente» -->
+    <string name="note_overview">Overview</string>
+    <string name="note_client">What the client shared</string>
+    <string name="note_work">What was worked on</string>
+    <string name="note_agreements">Guidance and agreements</string>
+    <string name="note_next">Next steps</string>
+    <string name="note_watch">Points to watch</string>
 </resources>

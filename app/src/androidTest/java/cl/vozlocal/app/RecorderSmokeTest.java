@@ -109,6 +109,7 @@ public class RecorderSmokeTest extends Instrumentation {
             UpdatesChecks.run(c,activity);
             KeyboardChecks.run(this,c,r);
             AudioCleanChecks.run(c,r);
+            SessionChecks.run(this,c);
             I18nChecks.run(c);
             long longStarted = SystemClock.elapsedRealtime();
             if (longChecks) LongImportChecks.run(c,r);

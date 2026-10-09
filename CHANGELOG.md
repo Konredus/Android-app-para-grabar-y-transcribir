@@ -1,5 +1,39 @@
 # Historial de versiones
 
+## 0.9.5 — 2026-10-09 · «Ajustes más simples y un resumen para tus sesiones»
+
+**Ajustes por temas** (pedido del dueño: «demasiado largo para encontrar lo que necesito»). Reemplaza la idea del acordeón: como Android y como ya funcionaba «Tus métricas».
+- La pantalla principal es corta: estado, «Tus métricas» y siete temas. Cada tema dice en una línea cómo está; Conexión con la IA va en rojo si falta la clave o falló.
+- Los temas:
+  - **General:** Tu nombre, Idioma y Apariencia.
+  - **Grabar y transcribir:** nota, tipo de resumen, automático, fecha y voces conocidas, y las preguntas en su propio grupo.
+  - **Guardar y copias:** Guardado rápido y Carpeta de copias.
+  - **Conexión con la IA:** clave, comprobar, IA de la nota e idioma del audio. Los modelos de transcripción van en «Avanzado».
+  - **Ruido de fondo**, **Energía y red** y **Ayuda y soporte**.
+- Atrás vuelve a la lista. Las otras pantallas abren directo su tema: grabar tu voz va a Grabar y transcribir, la carpeta rápida a Guardar y copias, y la clave o la IA de la nota a Conexión con la IA.
+- El tema abierto se conserva al recrear la pantalla (por ejemplo, al cambiar el idioma).
+
+**Tipo de resumen** (`Notes.BRAIN` / `Notes.CLIENT`, Ajustes → Grabar y transcribir → Tipo de resumen)
+- **Segundo cerebro:** la nota de siempre, letra por letra.
+- **Sesión con cliente:** panorama general (4 a 8 oraciones) más estas secciones, en los cuatro idiomas (`SYSTEM_CLIENT_*`):
+  - lo que contó el cliente;
+  - lo que se trabajó;
+  - indicaciones y acuerdos;
+  - próximos pasos;
+  - puntos a vigilar;
+  - frases del cliente.
+- La IA deduce quién es el profesional y quién el cliente. El texto es genérico (coach, asesor, entrenador, profesor): nada de salud.
+- Cada tipo tiene sus partes configurables (`note_<tipo>_<parte>`):
+  - lo que se quita, la IA lo deja vacío y la nota no lo muestra;
+  - el resumen y el título van siempre.
+- La nota guarda su tipo (`kind`). El detalle y el Markdown muestran las secciones de «Sesión con cliente», y el encabezado dice «Resumen de la sesión».
+
+**Tu nombre** (Ajustes → General): es el nombre de «Mi voz» (`myVoiceName`), el mismo que usan el saludo de Grabar y las transcripciones.
+
+**Menos preguntas.** Por defecto, separar voces es «Siempre» (antes «Preguntar cada vez») y «Nombrar al terminar» queda apagado (antes encendido). Quien lo prefiera lo activa en Grabar y transcribir → Preguntas.
+
+**Arreglo:** en alemán la fecha del detalle sale «8. Okt» (antes «8 Okt»). Se quita solo el punto que va después de una letra.
+
 ## 0.9.4 — 2026-10-08 · «Verbapp ahora habla alemán»
 
 **Alemán, el cuarto idioma** (pedido del dueño, para un amigo en Austria)

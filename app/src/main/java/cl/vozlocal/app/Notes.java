@@ -119,6 +119,108 @@ final class Notes {
         +"- tasks: o que alguém ficou de fazer. text começa com um verbo; who é a marca de quem vai fazer ({S1}), o nome se for outra pessoa mencionada, ou \"\" se não se sabe; when é o prazo do jeito que foi dito (“na sexta”, “antes do dia 15”) ou \"\". Lista vazia se não houver tarefas.\n"
         +"- quotes: até 5 frases literais que valha a pena lembrar, copiadas tal como foram ditas; t é o segundo em que a linha dela começa (um número, conforme a hora [mm:ss]); who é a marca de quem a disse, ou \"\".\n"
         +"- tags: de 3 a 6 etiquetas temáticas em minúsculas, de uma palavra cada, sem “#”.";
+    // ---------- 0.9.5: tipos de resumen (Ajustes → Grabar y transcribir → Tipo de resumen) ----------
+    /** «Segundo cerebro» (la nota de siempre) y «Sesión con cliente» (pedido del dueño para un profesional que atiende clientes). */
+    static final String BRAIN="brain",CLIENT="client";
+    /** Partes que se pueden quitar de cada tipo; el resumen general y el título van siempre. */
+    private static final String[] BRAIN_PARTS={"decisions","tasks","quotes","tags"};
+    private static final String[] CLIENT_PARTS={"client","work","agreements","next","watch","quotes","tags"};
+    static String[] parts(String kind){return (CLIENT.equals(kind)?CLIENT_PARTS:BRAIN_PARTS).clone();}
+    /** Listas propias de «Sesión con cliente», en el orden en que se muestran, y el título de cada una. */
+    static final String[] CLIENT_LISTS={"client","work","agreements","next","watch"};
+    static final int[] CLIENT_TITLES={R.string.note_client,R.string.note_work,R.string.note_agreements,R.string.note_next,R.string.note_watch};
+    private static final String SHAPE_CLIENT="{\"title\":\"…\",\"summary\":\"…\",\"client\":[\"…\"],\"work\":[\"…\"],\"agreements\":[\"…\"],\"next\":[\"…\"],\"watch\":[\"…\"],\"quotes\":[{\"t\":192,\"text\":\"…\",\"who\":\"{S2}\"}],\"tags\":[\"…\"]}\n";
+    /**
+     * «Sesión con cliente»: un panorama completo para no tener que releer la conversación. Genérico a propósito (coach,
+     * asesor, entrenador, profesor…): Verbapp es una app de productividad y no se presenta como herramienta de salud.
+     */
+    private static final String SYSTEM_CLIENT_ES=
+        "Tomas notas de sesiones entre un profesional y su cliente (por ejemplo, un coach, un asesor, un entrenador o un profesor con la persona que atiende) "
+        +"para que el profesional no tenga que releer la conversación. Recibes la transcripción automática de una sesión.\n\n"
+        +"Reglas:\n"
+        +"1. Escribe en español neutro, claro y profesional. Frases completas, sin relleno.\n"
+        +"2. Usa solo lo que está en la transcripción. No inventes hechos, cifras, fechas, conclusiones, nombres ni indicaciones. Si algo no queda claro, déjalo fuera.\n"
+        +"3. Para referirte a quienes hablan usa SOLO su marca exacta entre llaves, por ejemplo {S1} o {S2}. Nunca escribas «Persona 1» ni «el hablante», y no adivines nombres para las marcas. Deduce por la conversación quién es el profesional (quien guía la sesión, pregunta y da indicaciones) y quién es el cliente, y dilo una vez en summary, por ejemplo «{S1} (profesional) y {S2} (cliente)». A otras personas que solo se mencionan sí las nombras como se dijo.\n"
+        +"4. La transcripción puede traer errores de palabras o de quién habla: interpreta con criterio y no los copies.\n"
+        +"5. Responde SOLO con un objeto JSON válido, sin texto antes ni después, con esta forma:\n"
+        +SHAPE_CLIENT
+        +"- title: título breve y específico de la sesión, de máximo 60 caracteres, sin fecha, sin marcas como {S1} y sin la palabra «Grabación».\n"
+        +"- summary: panorama general de la sesión en 4 a 8 oraciones: de qué se habló, cómo llegó el cliente y cómo terminó la sesión.\n"
+        +"- client: lo que contó el cliente: su situación, lo que le preocupa, cambios o avances desde la última vez. Cada punto, una oración completa.\n"
+        +"- work: lo que se trabajó o se hizo en la sesión, en el orden en que pasó.\n"
+        +"- agreements: indicaciones, recomendaciones y acuerdos: lo que el cliente quedó de hacer o tener en cuenta, con frecuencia o plazo si se dijeron.\n"
+        +"- next: próximos pasos: la próxima sesión (día u hora si se dijo) y lo que hay que preparar o revisar.\n"
+        +"- watch: puntos a vigilar o pendientes para la próxima vez: dudas sin resolver, señales que observar, temas que quedaron abiertos.\n"
+        +"- quotes: hasta 3 frases textuales del cliente que valga la pena recordar, copiadas tal cual; t es el segundo en que empieza su línea (número, según la hora [mm:ss]); who es la marca de quien la dijo o \"\".\n"
+        +"- tags: de 3 a 6 etiquetas temáticas en minúsculas, de una palabra cada una, sin «#».\n"
+        +"Cada lista puede quedar vacía si en la sesión no hubo nada de eso.";
+    private static final String SYSTEM_CLIENT_EN=
+        "You take notes from sessions between a professional and their client (for example, a coach, an advisor, a trainer or a teacher with the person they work with) "
+        +"so the professional doesn't have to reread the conversation. You receive the automatic transcript of a session.\n\n"
+        +"Rules:\n"
+        +"1. Write in clear, natural and professional English. Complete sentences, no filler.\n"
+        +"2. Use only what is in the transcript. Do not invent facts, figures, dates, conclusions, names or recommendations. If something is unclear, leave it out.\n"
+        +"3. To refer to the speakers, use ONLY their exact marker in braces, for example {S1} or {S2}. Never write “Person 1” or “the speaker”, and do not guess names for the markers. Work out from the conversation who the professional is (the one who leads the session, asks and gives guidance) and who the client is, and say it once in summary, for example “{S1} (professional) and {S2} (client)”. Other people who are only mentioned should be named the way they were mentioned.\n"
+        +"4. The transcript may have wrong words or the wrong speaker: interpret it with judgment and do not copy those errors.\n"
+        +"5. Reply ONLY with a valid JSON object, with no text before or after it, in this shape:\n"
+        +SHAPE_CLIENT
+        +"- title: a short, specific title for the session, at most 60 characters, with no date, no markers like {S1} and without the word “Recording”.\n"
+        +"- summary: an overview of the session in 4 to 8 sentences: what was discussed, how the client arrived and how the session ended.\n"
+        +"- client: what the client shared: their situation, what worries them, changes or progress since last time. Each point, one complete sentence.\n"
+        +"- work: what was worked on or done in the session, in the order it happened.\n"
+        +"- agreements: guidance, recommendations and agreements: what the client committed to do or keep in mind, with frequency or deadline if they were said.\n"
+        +"- next: next steps: the next session (day or time if it was said) and what needs to be prepared or reviewed.\n"
+        +"- watch: points to watch or open items for next time: unresolved questions, signs to look out for, topics left open.\n"
+        +"- quotes: up to 3 verbatim lines from the client worth remembering, copied exactly as said; t is the second at which its line starts (a number, from the [mm:ss] time); who is the marker of the person who said it, or \"\".\n"
+        +"- tags: 3 to 6 topic tags in lowercase, one word each, without “#”.\n"
+        +"Any list can be empty if the session had nothing of that kind.";
+    private static final String SYSTEM_CLIENT_PT=
+        "Você faz anotações de sessões entre um profissional e seu cliente (por exemplo, um coach, um consultor, um treinador ou um professor com a pessoa que atende) "
+        +"para que o profissional não precise reler a conversa. Você recebe a transcrição automática de uma sessão.\n\n"
+        +"Regras:\n"
+        +"1. Escreva em português do Brasil claro, natural e profissional. Frases completas, sem rodeios.\n"
+        +"2. Use só o que está na transcrição. Não invente fatos, números, datas, conclusões, nomes nem orientações. Se algo não ficar claro, deixe de fora.\n"
+        +"3. Para se referir a quem fala, use SÓ a marca exata entre chaves, por exemplo {S1} ou {S2}. Nunca escreva “Pessoa 1” nem “o falante”, e não adivinhe nomes para as marcas. Descubra pela conversa quem é o profissional (quem conduz a sessão, pergunta e orienta) e quem é o cliente, e diga isso uma vez em summary, por exemplo “{S1} (profissional) e {S2} (cliente)”. Já as outras pessoas que só são mencionadas, nomeie do jeito que foram citadas.\n"
+        +"4. A transcrição pode ter erros de palavras ou de quem fala: interprete com critério e não copie esses erros.\n"
+        +"5. Responda SÓ com um objeto JSON válido, sem texto antes nem depois, neste formato:\n"
+        +SHAPE_CLIENT
+        +"- title: título curto e específico da sessão, com no máximo 60 caracteres, sem data, sem marcas como {S1} e sem a palavra “Gravação”.\n"
+        +"- summary: panorama geral da sessão em 4 a 8 frases: do que se falou, como o cliente chegou e como a sessão terminou.\n"
+        +"- client: o que o cliente contou: a situação dele, o que o preocupa, mudanças ou avanços desde a última vez. Cada ponto, uma frase completa.\n"
+        +"- work: o que foi trabalhado ou feito na sessão, na ordem em que aconteceu.\n"
+        +"- agreements: orientações, recomendações e combinados: o que o cliente ficou de fazer ou levar em conta, com frequência ou prazo se foram ditos.\n"
+        +"- next: próximos passos: a próxima sessão (dia ou hora se foi dito) e o que é preciso preparar ou revisar.\n"
+        +"- watch: pontos de atenção ou pendências para a próxima vez: dúvidas sem resposta, sinais a observar, assuntos que ficaram em aberto.\n"
+        +"- quotes: até 3 frases literais do cliente que valha a pena lembrar, copiadas tal como foram ditas; t é o segundo em que a linha dela começa (um número, conforme a hora [mm:ss]); who é a marca de quem a disse, ou \"\".\n"
+        +"- tags: de 3 a 6 etiquetas temáticas em minúsculas, de uma palavra cada, sem “#”.\n"
+        +"Qualquer lista pode ficar vazia se na sessão não houve nada disso.";
+    private static final String SYSTEM_CLIENT_DE=
+        "Du machst Notizen aus Sitzungen zwischen einer Fachperson und ihrem Kunden (zum Beispiel ein Coach, eine Beraterin, ein Trainer oder eine Lehrerin mit der Person, die sie begleiten), "
+        +"damit die Fachperson das Gespräch nicht noch einmal lesen muss. Du bekommst das automatische Transkript einer Sitzung.\n\n"
+        +"Regeln:\n"
+        +"1. Schreib in klarem, natürlichem und professionellem Deutsch. Vollständige Sätze, keine Füllwörter.\n"
+        +"2. Verwende nur, was im Transkript steht. Erfinde keine Fakten, Zahlen, Daten, Schlussfolgerungen, Namen oder Empfehlungen. Wenn etwas unklar ist, lass es weg.\n"
+        +"3. Für die sprechenden Personen verwende NUR ihre genaue Markierung in geschweiften Klammern, zum Beispiel {S1} oder {S2}. Schreib nie „Person 1“ oder „der Sprecher“ und rate keine Namen für die Markierungen. Erschließe aus dem Gespräch, wer die Fachperson ist (wer die Sitzung leitet, fragt und Hinweise gibt) und wer der Kunde ist, und sag es einmal in summary, zum Beispiel „{S1} (Fachperson) und {S2} (Kunde)“. Andere Personen, die nur erwähnt werden, nennst du so, wie sie erwähnt wurden.\n"
+        +"4. Das Transkript kann falsche Wörter oder falsch zugeordnete Personen enthalten: Interpretiere es mit Urteilsvermögen und übernimm diese Fehler nicht.\n"
+        +"5. Antworte NUR mit einem gültigen JSON-Objekt, ohne Text davor oder danach, in dieser Form:\n"
+        +SHAPE_CLIENT
+        +"- title: kurzer, konkreter Titel der Sitzung, höchstens 60 Zeichen, ohne Datum, ohne Markierungen wie {S1} und ohne das Wort „Aufnahme“.\n"
+        +"- summary: Gesamtüberblick über die Sitzung in 4 bis 8 Sätzen: worüber gesprochen wurde, wie der Kunde ankam und wie die Sitzung endete.\n"
+        +"- client: was der Kunde erzählt hat: seine Situation, was ihn beschäftigt, Veränderungen oder Fortschritte seit dem letzten Mal. Jeder Punkt ein vollständiger Satz.\n"
+        +"- work: woran in der Sitzung gearbeitet oder was gemacht wurde, in der Reihenfolge, in der es passiert ist.\n"
+        +"- agreements: Hinweise, Empfehlungen und Vereinbarungen: was der Kunde tun oder beachten soll, mit Häufigkeit oder Frist, wenn sie genannt wurden.\n"
+        +"- next: nächste Schritte: die nächste Sitzung (Tag oder Uhrzeit, wenn genannt) und was vorzubereiten oder zu prüfen ist.\n"
+        +"- watch: Punkte, auf die man achten sollte, oder Offenes für das nächste Mal: ungeklärte Fragen, Anzeichen, die man beobachten sollte, offen gebliebene Themen.\n"
+        +"- quotes: bis zu 3 wörtliche Sätze des Kunden, die es wert sind, sich zu merken, genau so übernommen, wie sie gesagt wurden; t ist die Sekunde, in der ihre Zeile beginnt (eine Zahl, nach der Zeit [mm:ss]); who ist die Markierung der Person, die ihn gesagt hat, oder \"\".\n"
+        +"- tags: 3 bis 6 Themen-Tags in Kleinbuchstaben, jeweils ein Wort, ohne „#“.\n"
+        +"Jede Liste darf leer bleiben, wenn es in der Sitzung nichts davon gab.";
+    /** Las instrucciones de ese tipo de resumen, en ese idioma; si se quitaron partes, se pide dejarlas vacías. */
+    static String system(String lang,String kind,java.util.Set<String> skip){
+        String base=CLIENT.equals(kind)?ai(lang,SYSTEM_CLIENT_EN,SYSTEM_CLIENT_ES,SYSTEM_CLIENT_PT,SYSTEM_CLIENT_DE):system(lang);
+        if(skip==null||skip.isEmpty())return base;
+        return base+ai(lang,"\n\nLeave these lists empty (the person does not want them in this note): ","\n\nDeja vacías estas listas (la persona no las quiere en esta nota): ",
+            "\n\nDeixe vazias estas listas (a pessoa não as quer nesta nota): ","\n\nLass diese Listen leer (die Person möchte sie in dieser Notiz nicht): ")+String.join(", ",skip)+".";
+    }
     /** Alemán (0.9.4, con «du»): las mismas reglas. «Person 1» y «Aufnahme» son los textos de la app en alemán. */
     private static final String SYSTEM_DE=
         "Du machst Notizen aus den Aufnahmen einer Person und speicherst sie in ihrem „zweiten Gehirn“ (Obsidian). "
@@ -248,7 +350,9 @@ final class Notes {
             if(t.segments().length()==0)throw new HttpApi.UserAction(Lang.str(c,R.string.note_err_no_speech));
             Recording latest=FilesStore.recording(c,id);if(latest!=null){r.title=latest.title;r.created=latest.created;r.duration=latest.duration;}
             // La nota sale en el idioma de la app (0.9.0): el pedido entero va en ese idioma.
-            Prompt prompt=prompt(t,r,Marks.list(c,id),Lang.current(c));
+            // 0.9.5: el tipo de resumen y sus partes salen de Ajustes → Grabar y transcribir → Tipo de resumen.
+            Settings chosen=new Settings(c);String kind=chosen.noteKind();
+            Prompt prompt=prompt(t,r,Marks.list(c,id),Lang.current(c)).as(kind,chosen.skippedParts(kind));
             log(c,id,Lang.str(c,R.string.note_log_started,service));Diagnostics.event("note_started",id,"provider",provider,"model",model);
             // La respuesta llega completa al final: la espera crece con el largo del audio (2 min como mínimo, 5 como máximo).
             http.readTimeoutMs=(int)Math.min(300_000,Math.max(120_000,60_000+r.duration/60_000*2_000));
@@ -257,6 +361,9 @@ final class Notes {
                 :"openrouter".equals(provider)?openrouter(http,key,model,prompt,()->{log(c,id,Lang.str(c,R.string.note_log_retry_simple));Diagnostics.event("note_retry_simple",id,"provider",provider,"model",model,"http",400);})
                 :openai(http,key,model,prompt);
             JSONObject note=normalize(parseAnswer(answer.text),prompt.tokens,r.duration);
+            // Lo que se quitó no se muestra aunque la IA lo haya escrito igual.
+            for(String part:prompt.skip)note.put(part,new JSONArray());
+            note.put("kind",prompt.kind);
             // "lang" (0.9.0): en qué idioma se pidió la nota ("en", "es" o "pt").
             note.put("version",1).put("provider",provider).put("model",model).put("createdAt",System.currentTimeMillis()).put("speakers",new JSONObject(prompt.tokens)).put("lang",prompt.lang);
             // "model" es el que se pidió (puede ser un alias); "modelUsed", la versión que respondió de verdad (0.8.0).
@@ -334,7 +441,13 @@ final class Notes {
      * Texto que se envía, marca → id de voz (S1 → "A") y el idioma del pedido ("en", "es" o "pt"; 0.9.0): las
      * instrucciones van en ese mismo idioma ({@link #system}), aunque la app cambie de idioma mientras se envía.
      */
-    static final class Prompt{final String text,lang;final LinkedHashMap<String,String> tokens;final boolean diarized;Prompt(String text,LinkedHashMap<String,String> tokens,boolean diarized,String lang){this.text=text;this.tokens=tokens;this.diarized=diarized;this.lang=lang;}}
+    static final class Prompt{final String text,lang;final LinkedHashMap<String,String> tokens;final boolean diarized;Prompt(String text,LinkedHashMap<String,String> tokens,boolean diarized,String lang){this.text=text;this.tokens=tokens;this.diarized=diarized;this.lang=lang;}
+        /** 0.9.5: tipo de resumen (BRAIN o CLIENT) y partes que la persona quitó; por defecto, la nota de siempre completa. */
+        String kind=BRAIN;java.util.Set<String> skip=java.util.Collections.emptySet();
+        Prompt as(String kind,java.util.Set<String> skip){this.kind=CLIENT.equals(kind)?CLIENT:BRAIN;this.skip=skip==null?java.util.Collections.emptySet():skip;return this;}
+        /** Las instrucciones que van con este pedido (las de siempre si es «Segundo cerebro» completo). */
+        String system(){return Notes.system(lang,kind,skip);}
+    }
 
     /** Arma el pedido compacto en el idioma de la app: cabecera, momentos ★ y una línea por intervención «[mm:ss] {S1}: texto». */
     static Prompt prompt(Transcript t,Recording r,JSONArray marks)throws Exception{return prompt(t,r,marks,Lang.current());}
@@ -386,7 +499,7 @@ final class Notes {
     /** Cuerpo del pedido a OpenAI (Chat Completions, respuesta JSON). Las instrucciones, en el idioma del pedido. */
     static JSONObject openaiBody(String model,Prompt prompt)throws JSONException{
         JSONObject body=new JSONObject().put("model",model)
-            .put("messages",new JSONArray().put(new JSONObject().put("role","system").put("content",system(prompt.lang))).put(new JSONObject().put("role","user").put("content",prompt.text)))
+            .put("messages",new JSONArray().put(new JSONObject().put("role","system").put("content",prompt.system())).put(new JSONObject().put("role","user").put("content",prompt.text)))
             .put("response_format",new JSONObject().put("type","json_object")).put("max_completion_tokens",8000);
         // Solo los modelos que razonan aceptan reasoning_effort; «low» basta para ordenar una conversación.
         if(model.matches("^(gpt-[5-9]|o[1-9]).*"))body.put("reasoning_effort","low");
@@ -428,7 +541,7 @@ final class Notes {
      */
     static JSONObject openrouterBody(String model,Prompt prompt,boolean simple)throws JSONException{
         JSONObject body=new JSONObject().put("model",model)
-            .put("messages",new JSONArray().put(new JSONObject().put("role","system").put("content",system(prompt.lang))).put(new JSONObject().put("role","user").put("content",prompt.text)))
+            .put("messages",new JSONArray().put(new JSONObject().put("role","system").put("content",prompt.system())).put(new JSONObject().put("role","user").put("content",prompt.text)))
             .put("max_tokens",8000);
         if(simple)return body;
         body.put("response_format",new JSONObject().put("type","json_object"));
@@ -497,7 +610,7 @@ final class Notes {
 
     /** Cuerpo del pedido a Anthropic (Messages API). */
     static JSONObject anthropicBody(String model,Prompt prompt)throws JSONException{
-        JSONObject body=new JSONObject().put("model",model).put("max_tokens",16000).put("system",system(prompt.lang))
+        JSONObject body=new JSONObject().put("model",model).put("max_tokens",16000).put("system",prompt.system())
             .put("messages",new JSONArray().put(new JSONObject().put("role","user").put("content",prompt.text)));
         // El esfuerzo solo existe desde Sonnet/Opus 5 (Haiku 4.5 lo rechaza). «medium»: buena redacción sin pensar de más.
         if(model.matches("^claude-(sonnet|opus|fable)-[5-9].*"))body.put("output_config",new JSONObject().put("effort","medium"));
@@ -639,6 +752,8 @@ final class Notes {
         }
         n.put("quotes",quotes);
         n.put("tags",cleanTags(raw.opt("tags")));
+        // 0.9.5, «Sesión con cliente»: listas de frases (solo si vienen, así la nota de siempre queda igual).
+        for(String key:CLIENT_LISTS)if(raw.has(key)){JSONArray out=new JSONArray();for(Object item:list(raw.opt(key))){String v=textOf(item,known);if(!v.isEmpty()&&out.length()<12)out.put(v);}n.put(key,out);}
         return n;
     }
 
@@ -745,7 +860,10 @@ final class Notes {
         if(note!=null)property(md,R.string.note_md_ai,q(service(note.optString("provider"))+" · "+modelShown(note)));
         md.append("---\n\n# ").append(line(heading(r.title))).append("\n\n");
         if(note!=null){
-            section(md,R.string.note_summary);md.append(resolve(note.optString("summary").trim(),names)).append("\n\n");
+            boolean client=CLIENT.equals(note.optString("kind"));
+            section(md,client?R.string.note_overview:R.string.note_summary);md.append(resolve(note.optString("summary").trim(),names)).append("\n\n");
+            for(int k=0;k<CLIENT_LISTS.length;k++){JSONArray items=note.optJSONArray(CLIENT_LISTS[k]);
+                if(items!=null&&items.length()>0){section(md,CLIENT_TITLES[k]);for(int i=0;i<items.length();i++)md.append("- ").append(line(resolve(items.optString(i),names))).append('\n');md.append('\n');}}
             JSONArray decisions=note.optJSONArray("decisions");
             if(decisions!=null&&decisions.length()>0){section(md,R.string.note_decisions);for(int i=0;i<decisions.length();i++)md.append("- ").append(line(resolve(decisions.optString(i),names))).append('\n');md.append('\n');}
             JSONArray tasks=note.optJSONArray("tasks");
