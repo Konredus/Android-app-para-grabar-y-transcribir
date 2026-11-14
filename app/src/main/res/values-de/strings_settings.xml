@@ -440,4 +440,33 @@
     <string name="set_auto_inbox">Nach dem Transkribieren automatisch speichern</string>
     <string name="set_auto_inbox_sub">Wenn die Transkription fertig ist, landet die Notiz ohne Tippen auf Speichern in diesem Ordner. Änderst du später Namen oder den Titel, wird dieselbe Datei aktualisiert.</string>
     <string name="set_auto_inbox_need">Wähle zuerst einen Ordner</string>
+    <string name="set_trash">Papierkorb</string>
+    <string name="set_trash_empty">Leer</string>
+    <string name="set_trash_foot">Was du löschst, bleibt %1$d Tage hier, außerhalb deiner Bibliothek, und wird dann von selbst gelöscht.</string>
+    <string name="set_trash_body">Gelöschte Aufnahmen bleiben %1$d Tage hier. Tippe auf eine, um sie wiederherzustellen oder endgültig zu löschen.</string>
+    <string name="set_trash_none">Es gibt keine gelöschten Aufnahmen.</string>
+    <string name="set_trash_item">%1$s · wird in %2$s gelöscht</string>
+    <string name="set_trash_item_body">%1$s · %2$s. Beim Wiederherstellen kommt sie unverändert in deine Bibliothek zurück.</string>
+    <string name="set_trash_restore">Wiederherstellen</string>
+    <string name="set_trash_restored">Aufnahme in deiner Bibliothek wiederhergestellt</string>
+    <string name="set_trash_restore_failed">Die Aufnahme konnte nicht vollständig wiederhergestellt werden. Prüfe den freien Speicher und versuch es noch einmal.</string>
+    <string name="set_trash_delete">Endgültig löschen</string>
+    <string name="set_trash_delete_q">Endgültig löschen?</string>
+    <string name="set_trash_delete_body">Audio und Transkript werden von diesem Handy gelöscht. Das lässt sich nicht rückgängig machen.</string>
+    <string name="set_trash_deleted">Endgültig gelöscht</string>
+    <string name="set_trash_empty_action">Papierkorb leeren</string>
+    <string name="set_trash_empty_q">Papierkorb leeren?</string>
+    <string name="set_trash_emptied">Der Papierkorb ist leer</string>
+    <plurals name="set_trash_count">
+        <item quantity="one">%1$d Aufnahme</item>
+        <item quantity="other">%1$d Aufnahmen</item>
+    </plurals>
+    <plurals name="set_trash_days">
+        <item quantity="one">%1$d Tag</item>
+        <item quantity="other">%1$d Tagen</item>
+    </plurals>
+    <plurals name="set_trash_empty_body">
+        <item quantity="one">%1$d Aufnahme wird endgültig gelöscht. Das lässt sich nicht rückgängig machen.</item>
+        <item quantity="other">%1$d Aufnahmen werden endgültig gelöscht. Das lässt sich nicht rückgängig machen.</item>
+    </plurals>
 </resources>

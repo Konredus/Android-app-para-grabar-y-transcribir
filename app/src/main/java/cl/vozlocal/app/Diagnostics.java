@@ -81,6 +81,7 @@ final class Diagnostics {
             int total=0,transcribed=0,saved=0,failed=0;long audioMs=0;
             for(Recording r:Recording.list(c)){total++;audioMs+=r.duration;JSONObject st=FilesStore.state(c,r.id);if(Transcript.exists(c,r.id))transcribed++;if(st.optLong("inboxAt",0)>0)saved++;if(st.optBoolean("inboxAutoFailed"))failed++;}
             d.append("Grabaciones: ").append(total).append(" (").append(Recording.time(audioMs)).append(" de audio) · transcritas ").append(transcribed).append(" · guardadas en la carpeta ").append(saved).append(" · guardado automático fallido ").append(failed).append("\n");
+            d.append("Papelera: ").append(Trash.count(c)).append(" grabaciones, ").append(Trash.bytes(c)/(1024*1024)).append(" MB\n");
         }catch(Exception e){d.append("(no se pudieron leer: ").append(e.getClass().getSimpleName()).append(")\n");}
         return d.append("\n").toString();
     }

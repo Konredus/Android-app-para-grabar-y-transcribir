@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.9.8",
+    "date": "2026-11-14",
+    "title": "Exclua na hora e recupere quando quiser",
+    "items": [
+      "Excluir ao terminar de gravar: em Dê um nome a esta gravação agora há uma lixeira vermelha ao lado dos botões. Se a gravação saiu errada ou curta demais, você a exclui ali mesmo (sempre pede confirmação).",
+      "Lixeira: o que você exclui não é mais apagado na hora. Fica 30 dias em Ajustes → Salvar e cópias → Lixeira, fora da sua Biblioteca, e de lá você restaura ou apaga para sempre.",
+      "Esvaziar a Lixeira: se quiser recuperar espaço, você a esvazia com um toque. Depois de 30 dias ela se esvazia sozinha."
+    ]
+  },
+  {
     "version": "0.9.7",
     "date": "2026-11-14",
     "title": "Um toque só e cada voz no seu lugar",

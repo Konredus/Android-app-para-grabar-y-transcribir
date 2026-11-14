@@ -324,7 +324,7 @@
     <string name="act_previous_version">Previous version</string>
     <string name="act_restore_failed">Couldn\'t restore the previous version. Your audio is untouched.</string>
     <string name="act_delete_title">Delete “%1$s”?</string>
-    <string name="act_delete_body">The audio and transcript will be deleted from this phone. Copies in your chosen folder are kept. This can\'t be undone.</string>
+    <string name="act_delete_body">The audio and the transcript leave your Library and go to the Trash, where they stay for 30 days (Settings → Saving and copies). Copies in your chosen folder are kept.</string>
     <string name="act_delete_failed">Couldn\'t delete the audio.</string>
 
     <!-- ===== Kit de interfaz (Ui, Sheet) ===== -->
@@ -372,4 +372,7 @@
         <item quantity="other">%1$d people</item>
     </plurals>
     <string name="home_inbox_lost">Verbapp lost access to “%1$s”. Choose it again so notes keep saving by themselves.</string>
+    <string name="home_delete_recording">Delete this recording</string>
+    <string name="home_delete_q">Delete this recording?</string>
+    <string name="home_delete_body">It goes to the Trash and is erased by itself after %1$d days. You can get it back in Settings → Saving and copies → Trash.</string>
 </resources>

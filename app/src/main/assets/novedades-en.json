@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.9.8",
+    "date": "2026-11-14",
+    "title": "Delete right away, recover whenever you want",
+    "items": [
+      "Delete right after recording: Name this recording now has a red bin next to the buttons. If the recording went wrong or is too short, you delete it right there (it always asks you to confirm).",
+      "Trash: what you delete is no longer erased immediately. It stays for 30 days in Settings → Saving and copies → Trash, out of your Library, and from there you restore it or erase it forever.",
+      "Empty the Trash: if you want the space back, you empty it with one tap. After 30 days it empties by itself."
+    ]
+  },
+  {
     "version": "0.9.7",
     "date": "2026-11-14",
     "title": "One tap, and every voice in its place",

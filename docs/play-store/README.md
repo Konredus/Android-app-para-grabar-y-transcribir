@@ -55,6 +55,7 @@ Lo que se cargó en Play Console el 2026-10-02 (app «Verbapp: graba y transcrib
   - Versión **19 (0.9.5)**: Ajustes por temas, «Tu nombre», tipo de resumen («Segundo cerebro» / «Sesión con cliente») con partes configurables y menos preguntas por defecto.
   - Versión **20 (0.9.6)**: todas las mejoras de la auditoría (`docs/auditoria-0.9.5.md`): grabación que sobrevive a un corte, avisos de micrófono mudo y de costo, IA más fiable, «Deshacer» al eliminar, búsqueda por contenido, Android 8-9 y tablets. AAB con R8: de 3,1 MB a 1,1 MB.
   - Versión **21 (0.9.7)**: la nota se guarda sola en la carpeta rápida al terminar, «¿Cuántas personas hablan?» antes de transcribir y unión de voces repetidas en el teléfono (`VoiceMatch`). Pedido del dueño a partir de su informe de soporte del 2026-11-14.
+  - Versión **22 (0.9.8)**: tarro rojo para eliminar al terminar de grabar y Papelera (30 días) en Ajustes → Guardar y copias.
   - Cada AAB está en `entrega/Verbapp-<versión>.aab`, firmado con la clave de subida, con notas de la versión en es-419, en-US y pt-BR.
 - Enlace para unirse a la prueba: https://play.google.com/apps/testing/cl.verbapp.app
   - Cada tester lo abre con la cuenta de Google de su lista, acepta y luego instala desde Play.
@@ -71,5 +72,5 @@ Lo que se cargó en Play Console el 2026-10-02 (app «Verbapp: graba y transcrib
 
 ## Pendiente
 - Juntar al menos 12 testers (hay 10) que la usen 14 días seguidos; después, pedir acceso a producción. Es lo único que falta para producción.
-- Que Google apruebe la 0.9.7.
+- Que Google apruebe la 0.9.8.
 - Rotar la clave de prueba de OpenRouter de «Detalles de acceso» cuando termine la revisión, manteniendo su tope de gasto.

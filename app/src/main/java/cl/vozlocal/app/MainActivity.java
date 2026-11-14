@@ -734,11 +734,24 @@ public class MainActivity extends Screen {
         String detail=getString(R.string.home_saved_on_phone)+(marks>0?" · "+quantity(R.plurals.home_marks,marks):"")+(auto?" · "+getString(R.string.home_will_auto_transcribe):"");
         TextView d=ui.text(detail,Type.BODY_SMALL,p.onSurfaceVariant);d.setPadding(ui.dp(S1),ui.dp(S2),ui.dp(S1),0);s.body.addView(d,Ui.fill());
         String date=prefix;
+        // 0.9.8: eliminada desde esta misma hoja (el tarro rojo): ya no hay título que guardar.
+        boolean[] deleted={false};
         Runnable saveTitle=()->{
+            if(deleted[0])return;
             String t=input.getText().toString().trim();if(t.isEmpty())return;
             String full=date.isEmpty()||DATE.matcher(t).find()?t:date+" "+t;if(full.equals(r.title))return;
             r.title=full;try{r.save(this);Pipeline.edited(this,r.id);Diagnostics.event("title_edited",r.id);}catch(Exception ignored){}load();
         };
+        // 0.9.8 (pedido del dueño): un tarro chico y rojo junto a los botones, para eliminar al tiro una grabación que salió
+        // mal o muy corta. Siempre confirma; va a la Papelera (se puede recuperar) y aquí queda «Deshacer».
+        ImageButton bin=ui.iconButton(R.drawable.ic_trash,getString(R.string.home_delete_recording),p.error,withAlpha(p.error,p.dark?0x33:0x1F),52);
+        bin.setOnClickListener(v->confirm(getString(R.string.home_delete_q),getString(R.string.home_delete_body,Trash.KEEP_DAYS),getString(R.string.act_delete),true,()->{
+            np.release();
+            if(!RecordingActions.trash(this,r)){message(getString(R.string.act_delete),getString(R.string.act_delete_failed));return;}
+            deleted[0]=true;Diagnostics.event("ui_action",r.id,"screen","MainActivity","action","delete_after_recording");
+            s.dismiss();load();RecordingActions.offerUndo(this);
+        }));
+        s.lead(bin);
         s.closable(saveTitle).primary(getString(R.string.home_view_recording),()->{saveTitle.run();open(r.id);}).secondary(getString(R.string.home_done),saveTitle).onDismiss(()->{np.release();if(namePlayer==np)namePlayer=null;saveTitle.run();}).show();
         input.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_DONE){s.dismiss();return true;}return false;});
         s.keyboard(input);

@@ -124,14 +124,28 @@ final class RobustChecks {
         try{
             Recording a=FilesStore.recording(c,r.id);check(a!=null,"New recording not listed");a.title="cambiado en memoria";
             check(FilesStore.recording(c,r.id).title.equals("Para borrar"),"The cached list must hand out copies");
-            inst.runOnMainSync(()->RecordingActions.trash(c,r));
-            check(FilesStore.recording(c,r.id)==null&&r.audio(c).exists(),"Trashed recording must hide but keep its files until the undo time passes");
+            // 0.9.8: eliminar manda a la Papelera; «Deshacer» la devuelve tal cual.
+            java.nio.file.Files.write(FilesStore.file(c,r.id,".transcript.json").toPath(),"{\"segments\":[]}".getBytes());
+            boolean[] moved={false};inst.runOnMainSync(()->moved[0]=RecordingActions.trash(c,r));
+            check(moved[0]&&FilesStore.recording(c,r.id)==null&&!r.audio(c).exists()&&!FilesStore.file(c,r.id,".transcript.json").exists(),"A deleted recording must leave the Library with all its files");
+            check(Trash.count(c)>=1&&new java.io.File(Trash.dir(c),r.id+".m4a").exists()&&new java.io.File(Trash.dir(c),r.id+".transcript.json").exists(),"The deleted recording must be in the Trash");
+            Trash.Item item=null;for(Trash.Item i:Trash.list(c))if(i.r.id.equals(r.id))item=i;
+            check(item!=null&&item.r.title.equals("Para borrar")&&item.r.duration==5_000&&item.bytes>=1024&&item.daysLeft(System.currentTimeMillis())==Trash.KEEP_DAYS,"Trash item wrong");
             inst.runOnMainSync(RecordingActions::undoTrash);
-            check(FilesStore.recording(c,r.id)!=null,"Undo must bring the recording back");
+            check(FilesStore.recording(c,r.id)!=null&&r.audio(c).exists()&&FilesStore.file(c,r.id,".transcript.json").exists()&&!new java.io.File(Trash.dir(c),r.id+".m4a").exists(),"Undo must bring the recording back with its files");
+            String[] left=Trash.dir(c).list((d,name)->name.startsWith(r.id+"."));check(left==null||left.length==0,"Restore left files in the Trash: "+java.util.Arrays.toString(left));
+            // Pasado el «Deshacer» sigue en la Papelera: se restaura desde Ajustes, o se borra para siempre.
             inst.runOnMainSync(()->RecordingActions.trash(c,r));inst.runOnMainSync(RecordingActions::commitTrash);
-            long deadline=System.currentTimeMillis()+5000;while(r.audio(c).exists()&&System.currentTimeMillis()<deadline)Thread.sleep(50);
-            check(!r.audio(c).exists()&&FilesStore.recording(c,r.id)==null&&!Recording.HIDDEN.contains(r.id),"Committed delete must remove the files");
-        }finally{Recording.HIDDEN.remove(r.id);if(r.audio(c).exists())r.delete(c);}
+            inst.runOnMainSync(RecordingActions::undoTrash);
+            check(FilesStore.recording(c,r.id)==null&&new java.io.File(Trash.dir(c),r.id+".m4a").exists(),"After the undo time the recording stays in the Trash");
+            check(Trash.restore(c,r.id)&&FilesStore.recording(c,r.id)!=null,"Restore from the Trash failed");
+            // A los 30 días se borra sola; antes, no.
+            check(Trash.move(c,r),"Move to Trash failed");
+            check(Trash.expire(c,System.currentTimeMillis()+29L*86_400_000)==0&&new java.io.File(Trash.dir(c),r.id+".m4a").exists(),"Trash must keep recordings for 30 days");
+            check(Trash.expire(c,System.currentTimeMillis()+31L*86_400_000)>=1&&!new java.io.File(Trash.dir(c),r.id+".m4a").exists(),"Trash must erase after 30 days");
+            left=Trash.dir(c).list((d,name)->name.startsWith(r.id+"."));check(left==null||left.length==0,"Expired recording left files behind");
+            check(!Trash.restore(c,r.id)&&!Trash.move(c,r),"Nothing to restore or move once erased");
+        }finally{Trash.purge(c,r.id);if(r.audio(c).exists())r.delete(c);}
     }
 
     /** Importar: el aviso dice qué pasó. */

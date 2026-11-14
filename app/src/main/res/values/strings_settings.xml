@@ -443,4 +443,33 @@
     <string name="set_auto_inbox">Save by itself when done</string>
     <string name="set_auto_inbox_sub">When the transcription is ready, the note goes to this folder without tapping Save. If you later change names or the title, the same file is updated.</string>
     <string name="set_auto_inbox_need">Choose a folder first</string>
+    <string name="set_trash">Trash</string>
+    <string name="set_trash_empty">Empty</string>
+    <string name="set_trash_foot">What you delete stays here for %1$d days, out of your Library, and is then erased by itself.</string>
+    <string name="set_trash_body">Deleted recordings stay here for %1$d days. Tap one to restore it or erase it forever.</string>
+    <string name="set_trash_none">There are no deleted recordings.</string>
+    <string name="set_trash_item">%1$s · erased in %2$s</string>
+    <string name="set_trash_item_body">%1$s · %2$s. Restoring it brings it back to your Library just as it was.</string>
+    <string name="set_trash_restore">Restore</string>
+    <string name="set_trash_restored">Recording restored to your Library</string>
+    <string name="set_trash_restore_failed">Couldn\'t restore the whole recording. Check the free space and try again.</string>
+    <string name="set_trash_delete">Erase forever</string>
+    <string name="set_trash_delete_q">Erase forever?</string>
+    <string name="set_trash_delete_body">The audio and its transcript are erased from this phone. This can\'t be undone.</string>
+    <string name="set_trash_deleted">Erased forever</string>
+    <string name="set_trash_empty_action">Empty the Trash</string>
+    <string name="set_trash_empty_q">Empty the Trash?</string>
+    <string name="set_trash_emptied">The Trash is empty</string>
+    <plurals name="set_trash_count">
+        <item quantity="one">%1$d recording</item>
+        <item quantity="other">%1$d recordings</item>
+    </plurals>
+    <plurals name="set_trash_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+    <plurals name="set_trash_empty_body">
+        <item quantity="one">%1$d recording will be erased forever. This can\'t be undone.</item>
+        <item quantity="other">%1$d recordings will be erased forever. This can\'t be undone.</item>
+    </plurals>
 </resources>

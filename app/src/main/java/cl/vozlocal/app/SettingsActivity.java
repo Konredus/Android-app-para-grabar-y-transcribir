@@ -309,6 +309,37 @@ public class SettingsActivity extends Screen {
         page.addView(ui.section(getString(R.string.set_section_copies)));group=ui.group();page.addView(group,Ui.fill());
         folderRow=row(R.drawable.ic_folder,getString(R.string.set_copies_title),null,getString(R.string.set_copies_off));folderRow.onClick(v->folderSheet());add(group,folderRow);refreshFolder();
         page.addView(more(getString(R.string.set_copies_foot),getString(R.string.set_copies_title),getString(R.string.set_copies_more)));
+        // 0.9.8: Papelera. Lo eliminado queda aquí 30 días, fuera de la Biblioteca; se restaura o se borra para siempre.
+        page.addView(ui.section(getString(R.string.set_trash)));group=ui.group();page.addView(group,Ui.fill());
+        trashRow=row(R.drawable.ic_trash,getString(R.string.set_trash),null,getString(R.string.set_trash_empty));trashRow.onClick(v->trashSheet());add(group,trashRow);refreshTrash();
+        page.addView(ui.footnote(getString(R.string.set_trash_foot,Trash.KEEP_DAYS)));
+    }
+    private Ui.Row trashRow;
+    /** «Vacía» o «3 grabaciones · 12 MB» en la fila de la Papelera (se cuenta en segundo plano). */
+    private void refreshTrash(){
+        Ui.Row row=trashRow;if(row==null)return;
+        io.execute(()->{int n=Trash.count(this);long bytes=Trash.bytes(this);
+            runOnUiThread(()->{if(isDestroyed()||trashRow!=row)return;row.setValue(n==0?getString(R.string.set_trash_empty):getResources().getQuantityString(R.plurals.set_trash_count,n,n)+" · "+android.text.format.Formatter.formatShortFileSize(this,bytes));});});
+    }
+    /** La Papelera: cada grabación eliminada, con cuándo se borra sola. Tocar una ofrece restaurarla o borrarla para siempre. */
+    private void trashSheet(){
+        java.util.List<Trash.Item> items=Trash.list(this);long now=System.currentTimeMillis();
+        Sheet s=sheet(getString(R.string.set_trash),getString(items.isEmpty()?R.string.set_trash_none:R.string.set_trash_body,Trash.KEEP_DAYS));
+        for(Trash.Item item:items){
+            int days=item.daysLeft(now);
+            s.option(R.drawable.ic_doc,item.r.title,getString(R.string.set_trash_item,Ui.humanDuration(item.r.duration),getResources().getQuantityString(R.plurals.set_trash_days,days,days)),()->trashItem(item));
+        }
+        if(!items.isEmpty())s.action(R.drawable.ic_trash,getString(R.string.set_trash_empty_action),true,()->confirm(getString(R.string.set_trash_empty_q),getResources().getQuantityString(R.plurals.set_trash_empty_body,items.size(),items.size()),getString(R.string.set_trash_empty_action),true,()->{
+            Trash.empty(this);toast(getString(R.string.set_trash_emptied));refreshTrash();}));
+        s.secondary(getString(R.string.ui_close),null).show();
+    }
+    private void trashItem(Trash.Item item){
+        Sheet s=sheet(item.r.title,getString(R.string.set_trash_item_body,Ui.humanDuration(item.r.duration),android.text.format.Formatter.formatShortFileSize(this,item.bytes)));
+        s.action(R.drawable.ic_trash,getString(R.string.set_trash_delete),true,()->confirm(getString(R.string.set_trash_delete_q),getString(R.string.set_trash_delete_body),getString(R.string.set_trash_delete),true,()->{
+            Trash.purge(this,item.r.id);toast(getString(R.string.set_trash_deleted));refreshTrash();}));
+        s.primary(getString(R.string.set_trash_restore),()->{
+            boolean ok=Trash.restore(this,item.r.id);toast(getString(ok?R.string.set_trash_restored:R.string.set_trash_restore_failed));refreshTrash();});
+        s.secondary(getString(R.string.common_cancel),null).show();
     }
 
     /**

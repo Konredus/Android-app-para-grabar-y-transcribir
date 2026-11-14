@@ -444,4 +444,33 @@
     <string name="set_auto_inbox">Salvar sozinha ao terminar</string>
     <string name="set_auto_inbox_sub">Ao terminar de transcrever, a nota vai para esta pasta sem tocar em Salvar. Se depois você mudar nomes ou o título, o mesmo arquivo é atualizado.</string>
     <string name="set_auto_inbox_need">Primeiro escolha uma pasta</string>
+    <string name="set_trash">Lixeira</string>
+    <string name="set_trash_empty">Vazia</string>
+    <string name="set_trash_foot">O que você exclui fica aqui por %1$d dias, fora da sua Biblioteca, e depois é apagado sozinho.</string>
+    <string name="set_trash_body">As gravações excluídas ficam aqui por %1$d dias. Toque em uma para restaurá-la ou apagá-la para sempre.</string>
+    <string name="set_trash_none">Não há gravações excluídas.</string>
+    <string name="set_trash_item">%1$s · apagada em %2$s</string>
+    <string name="set_trash_item_body">%1$s · %2$s. Ao restaurar, ela volta para a sua Biblioteca como estava.</string>
+    <string name="set_trash_restore">Restaurar</string>
+    <string name="set_trash_restored">Gravação restaurada na sua Biblioteca</string>
+    <string name="set_trash_restore_failed">Não foi possível restaurar a gravação inteira. Verifique o espaço livre e tente de novo.</string>
+    <string name="set_trash_delete">Apagar para sempre</string>
+    <string name="set_trash_delete_q">Apagar para sempre?</string>
+    <string name="set_trash_delete_body">O áudio e a transcrição são apagados deste celular. Não dá para desfazer.</string>
+    <string name="set_trash_deleted">Apagada para sempre</string>
+    <string name="set_trash_empty_action">Esvaziar a Lixeira</string>
+    <string name="set_trash_empty_q">Esvaziar a Lixeira?</string>
+    <string name="set_trash_emptied">A Lixeira ficou vazia</string>
+    <plurals name="set_trash_count">
+        <item quantity="one">%1$d gravação</item>
+        <item quantity="other">%1$d gravações</item>
+    </plurals>
+    <plurals name="set_trash_days">
+        <item quantity="one">%1$d dia</item>
+        <item quantity="other">%1$d dias</item>
+    </plurals>
+    <plurals name="set_trash_empty_body">
+        <item quantity="one">%1$d gravação será apagada para sempre. Não dá para desfazer.</item>
+        <item quantity="other">%1$d gravações serão apagadas para sempre. Não dá para desfazer.</item>
+    </plurals>
 </resources>

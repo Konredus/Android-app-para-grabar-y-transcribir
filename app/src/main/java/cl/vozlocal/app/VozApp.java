@@ -33,7 +33,8 @@ public class VozApp extends Application {
         Pricing.attach(this);
         Models.refreshIfStale(this);
         // 0.9.6: una grabación que quedó a medias (Android mató la app, se acabó la batería) se recupera al abrir.
-        new Thread(()->{try{RecorderService.recoverOrphans(this);}catch(Throwable e){Diagnostics.crash(e);}},"VozLocal-recover").start();
+        // 0.9.8: de paso se borra lo que lleva más de 30 días en la Papelera.
+        new Thread(()->{try{RecorderService.recoverOrphans(this);Trash.expire(this,System.currentTimeMillis());}catch(Throwable e){Diagnostics.crash(e);}},"VozLocal-recover").start();
         Thread.UncaughtExceptionHandler prior=Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread,error)->{Diagnostics.crash(error);if(prior!=null)prior.uncaughtException(thread,error);});
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks(){
