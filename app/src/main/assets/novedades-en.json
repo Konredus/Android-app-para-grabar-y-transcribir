@@ -1,5 +1,30 @@
 [
   {
+    "version": "0.9.7",
+    "date": "2026-11-14",
+    "title": "One tap, and every voice in its place",
+    "items": [
+      "It saves by itself: when the transcription is ready, the note goes to your quick folder without tapping Save. If you later change names or the title, the same file updates by itself. Turn it off in Settings → Saving and copies.",
+      "How many people are speaking?: before transcribing you pick the number with one tap. Verbapp compares the voices on your phone and joins the repeated ones, also in long recordings that are sent in parts.",
+      "Who is who with one tap: Name voices now suggests the names of your known voices, and you can change the number of people whenever you want, without transcribing again.",
+      "Folder warning: if Drive removes its permission, Verbapp tells you when you open it and, once you choose it again, saves what was left pending.",
+      "Fixes: filter pills got their side margin back, and the support report now includes your settings (no keys or names) to find problems faster."
+    ]
+  },
+  {
+    "version": "0.9.6",
+    "date": "2026-10-09",
+    "title": "Recordings that survive anything",
+    "items": [
+      "Your recordings are no longer lost: if the phone closes the app, runs out of battery or restarts while you record, Verbapp recovers everything recorded up to that moment the next time you open it.",
+      "If the microphone stops picking up sound (because of a call or another app), Verbapp warns you on screen and in the notification. And if a recording is almost silent, it asks before transcribing so you don't pay for silence.",
+      "Before an expensive transcription (over US$0.50) or one larger than your balance, Verbapp shows you the cost and asks you to confirm.",
+      "More reliable notes: the AI no longer makes up names or quotes, ignores instructions spoken inside the recording, retries by itself if OpenRouter is busy and switches to another model if yours fails.",
+      "Deleting now has Undo, search also finds people and text, and you can write to support from Settings → Help and support.",
+      "Also: audio pauses when you unplug your headphones, keeps its place when you rotate the phone, the app takes less space and works better on Android 8 and 9 and on tablets."
+    ]
+  },
+  {
     "version": "0.9.5",
     "date": "2026-10-09",
     "title": "Simpler settings and a summary for your sessions",

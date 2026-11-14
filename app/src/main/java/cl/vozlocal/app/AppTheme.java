@@ -67,7 +67,7 @@ final class AppTheme {
                 secondaryContainer=0xFF25352F;onSecondaryContainer=0xFFD6E7DF;
                 surface=0xFF0E1412;surfaceContainerLowest=0xFF0A0F0D;surfaceContainerLow=0xFF151C19;surfaceContainer=0xFF19211E;surfaceContainerHigh=0xFF212B27;surfaceContainerHighest=0xFF2A3530;
                 onSurface=0xFFE1EAE6;onSurfaceVariant=0xFFB4C3BC;outline=0xFF82918A;outlineVariant=0xFF36433E;
-                ink=0xFFE3F0EA;onInk=0xFF0F1714;brand=0xFF4C9A7F;brandDeep=0xFF1F4E40;onBrand=0xFFFFFFFF;
+                ink=0xFFE3F0EA;onInk=0xFF0F1714;brand=0xFF3F8A6F;brandDeep=0xFF1F4E40;onBrand=0xFFFFFFFF;
                 glass=0x17FFFFFF;glassStroke=0x26FFFFFF;glassOnVivid=0x1FFFFFFF;glassOnVividStroke=0x40FFFFFF;onVivid=0xFFF2F7F4;onVividVariant=0xCCF2F7F4;
                 highlight=0xFF28503F;gradTop=0xFF0D1311;gradMid=0xFF101B17;gradBottom=0xFF1F4A3D;softMid=0xFF0F1714;softBottom=0xFF14241E;
                 dotGrid=0x14FFFFFF;waveIdle=0xFF55635D;shadow=0xFF000000;

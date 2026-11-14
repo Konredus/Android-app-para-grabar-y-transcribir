@@ -138,7 +138,7 @@ final class NotesChecks {
         expect(messages.getJSONObject(0).getString("role").equals("system")&&messages.getJSONObject(0).getString("content").contains("JSON")&&messages.getJSONObject(1).getString("role").equals("user")&&messages.getJSONObject(1).getString("content").equals(p.text),"OpenAI messages wrong");
         expect(!Notes.openaiBody("gpt-4.1-mini",p).has("reasoning_effort"),"reasoning_effort sent to a non-reasoning model");
         JSONObject claude=Notes.anthropicBody(Notes.ANTHROPIC_MODEL,p);
-        expect(claude.getString("model").equals("claude-sonnet-5-5")&&claude.getInt("max_tokens")>=4000&&claude.getString("system").equals(Notes.system(Lang.ES))&&claude.getJSONArray("messages").length()==1&&claude.getJSONArray("messages").getJSONObject(0).getString("role").equals("user")&&claude.getJSONObject("output_config").getString("effort").equals("medium"),"Anthropic body wrong: "+claude);
+        expect(claude.getString("model").equals("claude-sonnet-5-5")&&claude.getInt("max_tokens")>=4000&&claude.getString("system").equals(Notes.system(Lang.ES,Notes.BRAIN,null))&&claude.getJSONArray("messages").length()==1&&claude.getJSONArray("messages").getJSONObject(0).getString("role").equals("user")&&claude.getJSONObject("output_config").getString("effort").equals("medium"),"Anthropic body wrong: "+claude);
         expect(!Notes.anthropicBody("claude-haiku-4-5-20251001",p).has("output_config"),"Effort sent to Haiku");
         Map<String,String> headers=Notes.anthropicHeaders("ak-test");
         expect(headers.get("x-api-key").equals("ak-test")&&headers.get("anthropic-version").equals("2023-06-01")&&!headers.containsKey("Authorization"),"Anthropic headers wrong");
@@ -147,10 +147,10 @@ final class NotesChecks {
         // defecto, el mínimo. El modo simple (reintento tras un 400) lleva solo el modelo y los mensajes.
         expect(Notes.OPENROUTER_URL.equals("https://openrouter.ai/api/v1/chat/completions")&&Notes.OPENAI_URL.equals("https://api.openai.com/v1/chat/completions"),"Note endpoints changed");
         JSONObject routerBody=Notes.openrouterBody(Models.NOTE_DEFAULT,p,false);
-        expect(routerBody.getString("model").equals("~anthropic/claude-sonnet-latest")&&routerBody.getJSONObject("response_format").getString("type").equals("json_object")&&routerBody.getInt("max_tokens")>=4000
+        expect(routerBody.getString("model").equals("~anthropic/claude-sonnet-latest")&&routerBody.getJSONObject("response_format").getString("type").equals("json_schema")&&routerBody.getInt("max_tokens")>=4000
             &&!routerBody.has("reasoning")&&!routerBody.has("reasoning_effort")&&!routerBody.has("max_completion_tokens"),"OpenRouter body wrong: "+routerBody.names());
         JSONArray routerMessages=routerBody.getJSONArray("messages");
-        expect(routerMessages.length()==2&&routerMessages.getJSONObject(0).getString("role").equals("system")&&routerMessages.getJSONObject(0).getString("content").equals(Notes.system(Lang.ES))
+        expect(routerMessages.length()==2&&routerMessages.getJSONObject(0).getString("role").equals("system")&&routerMessages.getJSONObject(0).getString("content").equals(Notes.system(Lang.ES,Notes.BRAIN,null))
             &&routerMessages.getJSONObject(1).getString("role").equals("user")&&routerMessages.getJSONObject(1).getString("content").equals(p.text),"OpenRouter messages wrong");
         expect(Notes.openrouterBody("~openai/gpt-luna-latest",p,false).getJSONObject("reasoning").getString("effort").equals("low")&&Notes.openrouterBody("~google/gemini-flash-latest",p,false).has("reasoning"),"Reasoning effort not lowered for models that reason by default");
         // El modo simple conserva el tope de salida (0.8.0, segunda ronda): sin max_tokens OpenRouter reserva el máximo del
@@ -165,9 +165,9 @@ final class NotesChecks {
         // La nota muestra el modelo que respondió (con un alias, la versión concreta) y el costo: real con OpenRouter, estimado si no.
         JSONObject routed=new JSONObject(n.toString()).put("provider","openrouter").put("model",Models.NOTE_DEFAULT).put("modelUsed","anthropic/claude-sonnet-5.5").put("costUsd",0.0042).put("costReal",true).put("speakers",new JSONObject(p.tokens));
         expect(Notes.modelShown(routed).equals("anthropic/claude-sonnet-5.5")&&Notes.modelShown(note).equals("gpt-6-luna")&&Notes.modelShown(null).isEmpty()&&Notes.modelShown(new JSONObject()).isEmpty(),"modelShown() wrong");
-        expect(Notes.credit(routed).equals("Armada con OpenRouter · anthropic/claude-sonnet-5.5 · costó US$0,004"),"Note credit wrong: "+Notes.credit(routed));
-        expect(Notes.credit(note).equals("Armada con OpenAI · gpt-6-luna")&&Notes.credit(new JSONObject(note.toString()).put("costUsd",0.0123)).equals("Armada con OpenAI · gpt-6-luna · ≈ US$0,012")
-            &&Notes.credit(new JSONObject(note.toString()).put("costUsd",0.0002)).equals("Armada con OpenAI · gpt-6-luna · < US$0,001")&&Notes.credit(new JSONObject()).isEmpty()&&Notes.credit(null).isEmpty(),"Note credit for estimated costs wrong");
+        expect(Notes.credit(routed).equals("Armada con OpenRouter · Claude Sonnet 5.5 · costó US$0,004"),"Note credit wrong: "+Notes.credit(routed));
+        expect(Notes.credit(note).equals("Armada con OpenAI · GPT 6 Luna")&&Notes.credit(new JSONObject(note.toString()).put("costUsd",0.0123)).equals("Armada con OpenAI · GPT 6 Luna · ≈ US$0,012")
+            &&Notes.credit(new JSONObject(note.toString()).put("costUsd",0.0002)).equals("Armada con OpenAI · GPT 6 Luna · < US$0,001")&&Notes.credit(new JSONObject()).isEmpty()&&Notes.credit(null).isEmpty(),"Note credit for estimated costs wrong");
         expect(md.contains("nota_ia: \"OpenAI · gpt-6-luna\"\n")&&Notes.markdown(r,routed,t,marks()).contains("nota_ia: \"OpenRouter · anthropic/claude-sonnet-5.5\"\n"),"nota_ia must name the model that answered");
 
         // Título automático: solo el de la app (con o sin fecha), nunca uno escrito por la persona.
@@ -224,11 +224,11 @@ final class NotesChecks {
             for(String lang:new String[]{Lang.EN,Lang.PT}){
                 Lang.override(lang);boolean en=Lang.EN.equals(lang);
                 // Pedido: instrucciones y cabecera en el idioma de la app, sin nada en español (la transcripción va tal cual se dijo).
-                Notes.Prompt p=Notes.prompt(t,r,marks());String system=Notes.system(p.lang);
+                Notes.Prompt p=Notes.prompt(t,r,marks());String system=Notes.system(p.lang,Notes.BRAIN,null);
                 int cut=p.text.indexOf(en?"\nTranscript:\n":"\nTranscrição:\n");
                 expect(p.lang.equals(lang)&&cut>0&&p.text.contains("[00:00] {S1}: Hola, partamos. con el presupuesto\n"),"Prompt not built in "+lang+":\n"+p.text);
                 String head=p.text.substring(0,cut);
-                expect(system.contains(en?"1. Write in natural, clear and friendly English.":"1. Escreva em português do Brasil natural, claro e próximo.")&&system.contains(shape)&&!system.equals(Notes.system(Lang.ES)),"The "+lang+" instructions do not ask for "+lang+" or lost the JSON shape");
+                expect(system.contains(en?"1. Write in natural, clear and friendly English.":"1. Escreva em português do Brasil natural, claro e próximo.")&&system.contains(shape)&&!system.equals(Notes.system(Lang.ES,Notes.BRAIN,null)),"The "+lang+" instructions do not ask for "+lang+" or lost the JSON shape");
                 for(String field:new String[]{"- title: ","- summary: ","- decisions: ","- tasks: ","- quotes: ","- tags: "," 60 "," 5 "})expect(system.contains(field),"The "+lang+" instructions lost «"+field+"»");
                 for(String word:spanish)expect(!system.contains(word)&&!head.contains(word),"The "+lang+" prompt has Spanish instructions («"+word+"»):\n"+head);
                 expect(head.contains(en?"Current title: “2026-09-29 Reunión de presupuesto” (written by the person)":"Título atual: “2026-09-29 Reunión de presupuesto” (escrito pela pessoa)")
@@ -242,7 +242,7 @@ final class NotesChecks {
                 Lang.override(lang);
 
                 // Lo que muestra la app: pie de la nota, nombres de respaldo y Markdown.
-                expect(Notes.credit(routed).equals((en?"Created with OpenRouter · anthropic/claude-sonnet-5.5 · cost ":"Criada com OpenRouter · anthropic/claude-sonnet-5.5 · custou ")+Pricing.usd(0.0042)),"Note credit not translated: "+Notes.credit(routed));
+                expect(Notes.credit(routed).equals((en?"Created with OpenRouter · Claude Sonnet 5.5 · cost ":"Criada com OpenRouter · Claude Sonnet 5.5 · custou ")+Pricing.usd(0.0042)),"Note credit not translated: "+Notes.credit(routed));
                 note.getJSONObject("speakers").put("S4","Z");Map<String,String> names=Notes.names(note,t);note.getJSONObject("speakers").remove("S4");
                 expect(names.get("S3").equals(en?"Person 3":"Pessoa 3")&&names.get("S4").equals(en?"Person 4":"Pessoa 4")&&Notes.resolve("{S1} y {S9}",names).equals(en?"Fran y someone":"Fran y alguém")&&Notes.heading("").equals(en?"Recording":"Gravação"),"Fallback names not translated: "+names);
                 String md=Notes.markdown(r,note,t,marks());
@@ -274,7 +274,7 @@ final class NotesChecks {
             }
             // Alemán (0.9.4): pedido y cabecera en alemán, sin español ni inglés; la nota y los errores salen de values-de.
             Lang.override(Lang.DE);
-            Notes.Prompt p=Notes.prompt(t,r,marks());String system=Notes.system(p.lang);int cut=p.text.indexOf("\nTranskript:\n");
+            Notes.Prompt p=Notes.prompt(t,r,marks());String system=Notes.system(p.lang,Notes.BRAIN,null);int cut=p.text.indexOf("\nTranskript:\n");
             expect(p.lang.equals(Lang.DE)&&cut>0&&p.text.contains("[00:00] {S1}: Hola, partamos. con el presupuesto\n"),"Prompt not built in German:\n"+p.text);
             String head=p.text.substring(0,cut);
             expect(system.contains("1. Schreib in natürlichem, klarem und freundlichem Deutsch.")&&system.contains(shape),"The German instructions do not ask for German or lost the JSON shape");
@@ -336,7 +336,7 @@ final class NotesChecks {
         JSONObject note=Notes.load(c,a.id);
         expect(note!=null&&note.getInt("version")==1&&note.getString("provider").equals("openai")&&note.getString("model").equals("gpt-6-luna")&&note.getJSONObject("speakers").getString("S1").equals("B")&&note.getJSONObject("usage").getLong("input_tokens")==1000&&note.getDouble("costUsd")>0&&note.getLong("createdAt")>0,"Saved note wrong: "+note);
         // OpenAI directo sigue igual en la 0.8.0: no informa costo real ni (en esta respuesta) el modelo que respondió.
-        expect(!note.has("modelUsed")&&!note.has("costReal")&&Notes.credit(note).equals("Armada con OpenAI · gpt-6-luna · < US$0,001"),"OpenAI note gained OpenRouter-only fields: "+Notes.credit(note));
+        expect(!note.has("modelUsed")&&!note.has("costReal")&&Notes.credit(note).equals("Armada con OpenAI · GPT 6 Luna · < US$0,001"),"OpenAI note gained OpenRouter-only fields: "+Notes.credit(note));
         JSONObject st=FilesStore.state(c,a.id);
         expect(st.optString("noteState").equals("ready")&&!st.has("noteError")&&st.optString("suggestedTitle").equals(suggestion),"Note state wrong: "+st);
         Recording afterA=FilesStore.recording(c,a.id);
@@ -363,7 +363,7 @@ final class NotesChecks {
             expect(method.equals("POST")&&url.equals("https://api.anthropic.com/v1/messages")&&token!=null&&token.isEmpty()&&"application/json".equals(type),"Anthropic request line wrong (token must be empty: no Authorization)");
             expect(extra!=null&&"ak-test-notes".equals(extra.get("x-api-key"))&&"2023-06-01".equals(extra.get("anthropic-version"))&&!extra.containsKey("Authorization"),"Anthropic headers wrong: "+extra);
             ByteArrayOutputStream out=new ByteArrayOutputStream();body.write(out);JSONObject sent=new JSONObject(out.toString(StandardCharsets.UTF_8.name()));
-            expect(sent.getString("model").equals("claude-sonnet-5-5")&&sent.getString("system").equals(Notes.system(Lang.ES))&&sent.getInt("max_tokens")>0&&sent.getJSONArray("messages").getJSONObject(0).getString("content").contains("(lo escribió la persona)"),"Anthropic body wrong");
+            expect(sent.getString("model").equals("claude-sonnet-5-5")&&sent.getString("system").equals(Notes.system(Lang.ES,Notes.BRAIN,null))&&sent.getInt("max_tokens")>0&&sent.getJSONArray("messages").getJSONObject(0).getString("content").contains("(lo escribió la persona)"),"Anthropic body wrong");
             JSONObject reply=new JSONObject().put("type","message").put("stop_reason","end_turn")
                 .put("content",new JSONArray().put(new JSONObject().put("type","thinking").put("thinking","…")).put(new JSONObject().put("type","text").put("text","```json\n"+answer().put("title","Metas del trimestre")+"\n```")))
                 .put("usage",new JSONObject().put("input_tokens",900).put("output_tokens",300));
@@ -469,9 +469,9 @@ final class NotesChecks {
             expect(FilesStore.state(c,a.id).optString("noteState").equals("working"),"noteState not working during the OpenRouter request");
             ByteArrayOutputStream out=new ByteArrayOutputStream();body.write(out);expect(out.size()==body.length(),"Body length mismatch");
             String raw=out.toString(StandardCharsets.UTF_8.name());JSONObject sent=new JSONObject(raw);
-            expect(sent.getString("model").equals("~anthropic/claude-sonnet-latest")&&sent.getJSONObject("response_format").getString("type").equals("json_object")&&!sent.has("reasoning"),"OpenRouter body fields wrong");
+            expect(sent.getString("model").equals("~anthropic/claude-sonnet-latest")&&sent.getJSONObject("response_format").getString("type").equals("json_schema")&&!sent.has("reasoning"),"OpenRouter body fields wrong");
             JSONArray messages=sent.getJSONArray("messages");
-            expect(messages.getJSONObject(0).getString("content").equals(Notes.system(Lang.ES))&&messages.getJSONObject(1).getString("content").contains("{S1}: Hola, partamos.")&&messages.getJSONObject(1).getString("content").contains("(lo escribió la persona)"),"OpenRouter prompt wrong");
+            expect(messages.getJSONObject(0).getString("content").equals(Notes.system(Lang.ES,Notes.BRAIN,null))&&messages.getJSONObject(1).getString("content").contains("{S1}: Hola, partamos.")&&messages.getJSONObject(1).getString("content").contains("(lo escribió la persona)"),"OpenRouter prompt wrong");
             expect(!raw.contains(ROUTER_KEY)&&!raw.contains("Fran")&&!raw.contains("Konrad"),"The key or the speakers' names travelled in the note request");
             return new Response(200,routerReply("Metas del trimestre","anthropic/claude-sonnet-5.5",0.0123),null);
         }};
@@ -484,7 +484,7 @@ final class NotesChecks {
         JSONObject st=FilesStore.state(c,a.id);
         expect(st.optString("noteState").equals("ready")&&!st.has("noteError")&&st.optString("suggestedTitle").equals("Metas del trimestre")&&FilesStore.recording(c,a.id).title.equals(userTitle),"OpenRouter note state wrong, or user title overwritten");
         expect(logged(c,a.id,"Armando la nota con OpenRouter")&&!st.toString().contains(ROUTER_KEY)&&!note.toString().contains(ROUTER_KEY),"Log does not name OpenRouter, or the key leaked into the state or the note");
-        expect(Notes.credit(note).equals("Armada con OpenRouter · anthropic/claude-sonnet-5.5 · costó US$0,012")&&Notes.markdown(c,FilesStore.recording(c,a.id)).contains("nota_ia: \"OpenRouter · anthropic/claude-sonnet-5.5\"\n"),"The model that answered is not shown: "+Notes.credit(note));
+        expect(Notes.credit(note).equals("Armada con OpenRouter · Claude Sonnet 5.5 · costó US$0,012")&&Notes.markdown(c,FilesStore.recording(c,a.id)).contains("nota_ia: \"OpenRouter · anthropic/claude-sonnet-5.5\"\n"),"The model that answered is not shown: "+Notes.credit(note));
 
         // Respuesta sin costo y con un «modelo» que no parece un id (nada de esto está confirmado con la API real): la
         // nota se guarda igual, sin inventar el costo y sin guardar texto libre como modelo.
@@ -494,7 +494,7 @@ final class NotesChecks {
         Notes.generate(c,b,bare,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);
         JSONObject noteB=Notes.load(c,b.id);
         expect(noteB!=null&&!noteB.has("modelUsed")&&!noteB.has("costUsd")&&!noteB.has("costReal")&&noteB.getJSONObject("usage").getLong("input_tokens")==1500,"Missing cost or model was made up: "+noteB);
-        expect(Notes.modelShown(noteB).equals(Models.NOTE_DEFAULT)&&Notes.credit(noteB).equals("Armada con OpenRouter · ~anthropic/claude-sonnet-latest"),"Fallback to the requested model wrong: "+Notes.credit(noteB));
+        expect(Notes.modelShown(noteB).equals(Models.NOTE_DEFAULT)&&Notes.credit(noteB).equals("Armada con OpenRouter · Claude Sonnet (el más nuevo)"),"Fallback to the requested model wrong: "+Notes.credit(noteB));
 
         // 402: sin saldo. Se explica con su salida, no se reintenta y la nota anterior se conserva.
         int[] broke={0};
@@ -538,7 +538,7 @@ final class NotesChecks {
         Notes.generate(c,d,picky,"openrouter","~openai/gpt-luna-latest",ROUTER_KEY);
         JSONObject noteD=Notes.load(c,d.id);
         expect(tries[0]==2&&noteD!=null&&noteD.getString("model").equals("~openai/gpt-luna-latest")&&noteD.getString("modelUsed").equals("openai/gpt-6-luna")&&logged(c,d.id,"modo simple"),"400 for an option was not retried once in simple mode (tries: "+tries[0]+")");
-        expect(Notes.credit(noteD).equals("Armada con OpenRouter · openai/gpt-6-luna · costó < US$0,001"),"Tiny real cost shown wrong: "+Notes.credit(noteD));
+        expect(Notes.credit(noteD).equals("Armada con OpenRouter · GPT 6 Luna · costó < US$0,001"),"Tiny real cost shown wrong: "+Notes.credit(noteD));
 
         // Un 400 por largo no se reintenta (el modo simple no lo arregla) y dice qué hacer.
         int[] longTries={0};
@@ -573,8 +573,8 @@ final class NotesChecks {
         HttpApi english=new HttpApi(){@Override Response request(String method,String url,String token,String type,Body body,Map<String,String> extra)throws Exception{
             ByteArrayOutputStream out=new ByteArrayOutputStream();body.write(out);JSONArray messages=new JSONObject(out.toString(StandardCharsets.UTF_8.name())).getJSONArray("messages");
             String system=messages.getJSONObject(0).getString("content"),user=messages.getJSONObject(1).getString("content");
-            expect(system.equals(Notes.system(Lang.EN))&&system.contains("English")&&!system.contains("español")&&user.startsWith("Current title: “")&&user.contains("” (written by the person)\nDate: ")
-                &&user.contains("\nTranscript:\n[00:00] {S1}: Hola, partamos.")&&!user.contains("Transcripción")&&!user.contains("Fecha:"),"English note request not in English:\n"+user);
+            expect(system.equals(Notes.system(Lang.EN,Notes.BRAIN,null))&&system.contains("English")&&!system.contains("español")&&user.startsWith("Current title: “")&&user.contains("” (written by the person)\nDate: ")
+                &&user.contains("\nTranscript:\n<transcript>\n[00:00] {S1}: Hola, partamos.")&&!user.contains("Transcripción")&&!user.contains("Fecha:"),"English note request not in English:\n"+user);
             return new Response(200,routerReply("Budget review","anthropic/claude-sonnet-5.5",0.002),null);
         }};
         try{Lang.override(Lang.EN);Notes.generate(c,eng,english,"openrouter",Models.NOTE_DEFAULT,ROUTER_KEY);}

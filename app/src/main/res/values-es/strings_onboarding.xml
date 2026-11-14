@@ -59,7 +59,7 @@
     <string name="onb_settings_failed">No se pudieron abrir los ajustes.</string>
     <string name="onb_not_now">Ahora no</string>
     <string name="onb_battery_title">Con la pantalla bloqueada</string>
-    <string name="onb_battery_ask">Para que tus audios se transcriban aunque bloquees el teléfono.</string>
+    <string name="onb_battery_ask">Para que tus grabaciones se transcriban aunque bloquees el teléfono.</string>
     <string name="onb_battery_extra">Permitido. En %1$s hay un ajuste más: toca para verlo.</string>
     <string name="onb_battery_done">Listo: Verbapp transcribe aunque bloquees el teléfono.</string>
     <string name="onb_battery_allow_desc">Permitir transcribir con la pantalla bloqueada. %1$s</string>
@@ -81,9 +81,9 @@
     <string name="onb_key_or_later">Pega tu clave o toca «%1$s».</string>
     <string name="onb_key_save_failed">No se pudo guardar la clave en este teléfono. Inténtalo de nuevo.</string>
     <string name="onb_howto_title">Cómo conseguir tu clave</string>
-    <string name="onb_howto_body">OpenRouter te da acceso a muchas IA con una sola clave. Pagas solo lo que usas.</string>
+    <string name="onb_howto_body">OpenRouter es un servicio que reúne muchas IA. Con una clave (como una contraseña larga), Verbapp transcribe a tu nombre y pagas solo lo que usas.</string>
     <string name="onb_howto_1">Crea tu cuenta en openrouter.ai.</string>
-    <string name="onb_howto_2">Carga un poco de crédito: se descuenta solo lo que usas.</string>
+    <string name="onb_howto_2">Carga unos US$5 de crédito: una hora de audio cuesta desde US$0,10 y se descuenta solo lo que usas.</string>
     <string name="onb_howto_3">En «Keys», crea una clave y cópiala.</string>
     <string name="onb_howto_4">Vuelve a Verbapp y toca Pegar.</string>
     <string name="onb_open_site">Abrir %1$s</string>

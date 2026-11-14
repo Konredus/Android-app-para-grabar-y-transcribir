@@ -34,7 +34,7 @@
 
     <!-- Aviso y consentimiento antes del primer envío a OpenRouter (Google Play: divulgación destacada). -->
     <string name="consent_title">Your audio is sent to be transcribed</string>
-    <string name="consent_body">To transcribe, Verbapp sends the audio of each recording you transcribe to OpenRouter and to the AI model you choose. To write the note, it sends the transcript text. Recordings you don\'t transcribe are never sent, and your key pays only for what you use.</string>
+    <string name="consent_body">To transcribe, Verbapp sends the audio of each recording you transcribe to OpenRouter and to the AI model you choose. If you saved known voices, their short samples go along with it so the AI can recognize them. To write the note, it sends the transcript text. Recordings you don\'t transcribe are never sent, and your key pays only for what you use.</string>
     <string name="consent_accept">I agree</string>
     <string name="consent_later">Not now</string>
     <string name="privacy_policy">Privacy policy</string>

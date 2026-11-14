@@ -60,9 +60,13 @@ abstract class Screen extends Activity {
         scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setClipToPadding(false);scroll.setVerticalScrollBarEnabled(false);
         // Lo que se desplaza se desvanece en los bordes (sobre todo abajo, junto a la barra flotante) en vez de cortarse en seco.
         scroll.setVerticalFadingEdgeEnabled(true);scroll.setFadingEdgeLength(ui.dp(S8));
-        page=ui.column();page.setPadding(ui.dp(S4),ui.dp(back==null?S4:0),ui.dp(S4),ui.dp(S8));scroll.addView(page,new FrameLayout.LayoutParams(-1,-2));
+        page=ui.column();page.setPadding(ui.dp(S4),ui.dp(back==null?S4:0),ui.dp(S4),ui.dp(S8));
+        // 0.9.6: en tablet (o el teléfono acostado) el contenido no pasa de MAX_WIDTH_DP, centrado: tarjetas y líneas de
+        // lectura de 1500 px cansan. En el teléfono vertical no cambia nada.
+        int width=maxWidth();scroll.addView(page,new FrameLayout.LayoutParams(width,-2,Gravity.CENTER_HORIZONTAL));
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        bottom=ui.column();bottom.setVisibility(View.GONE);bottom.setPadding(ui.dp(S4),ui.dp(S2),ui.dp(S4),ui.dp(S3));bottom.setClipToPadding(false);root.addView(bottom,Ui.fill());
+        bottom=ui.column();bottom.setVisibility(View.GONE);bottom.setPadding(ui.dp(S4),ui.dp(S2),ui.dp(S4),ui.dp(S3));bottom.setClipToPadding(false);
+        LinearLayout.LayoutParams blp=new LinearLayout.LayoutParams(width,-2);blp.gravity=Gravity.CENTER_HORIZONTAL;root.addView(bottom,blp);
         if(tab>=0){nav=new BottomNav(this,p,tab,this::navigate);root.addView(nav,Ui.fill());}
         setContentView(root);
         root.setOnApplyWindowInsetsListener((v,insets)->{
@@ -115,7 +119,7 @@ abstract class Screen extends Activity {
     }
 
     // ---------- Mensajes ----------
-    Sheet sheet(String title,String message){return new Sheet(this,ui,title,message);}
+    Sheet sheet(String title,String message){Sheet s=new Sheet(this,ui,title,message);sheets.add(new java.lang.ref.WeakReference<>(s));return s;}
     void message(String title,String value){sheet(title,value).primary(getString(R.string.common_ok),()->{}).show();}
     void confirm(String title,String value,String action,boolean destructive,Runnable run){
         sheet(title,value).primary(action,destructive?Ui.Style.DESTRUCTIVE:Ui.Style.PRIMARY,()->{run.run();return true;}).secondary(getString(R.string.common_cancel),null).show();
@@ -129,6 +133,13 @@ abstract class Screen extends Activity {
      * Va sobre la zona inferior fija, sin tapar el contenido (colores invertidos, ver CRITERIOS.md → Componentes).
      * Entra deslizándose hacia arriba con la curva emphasized y sale hacia abajo, más rápido.
      */
+    /** Hojas abiertas desde esta pantalla (Screen.sheet): se cierran al destruirla, sin dejar una ventana filtrada (0.9.6). */
+    final java.util.List<java.lang.ref.WeakReference<Sheet>> sheets=new java.util.ArrayList<>();
+    @Override protected void onDestroy(){for(java.lang.ref.WeakReference<Sheet> w:sheets){Sheet s=w.get();if(s!=null)try{s.dialog.dismiss();}catch(RuntimeException ignored){}}sheets.clear();super.onDestroy();}
+    /** Ancho máximo del contenido (0.9.6). */
+    static final int MAX_WIDTH_DP=680;
+    /** -1 (todo el ancho) si la pantalla es angosta; si no, MAX_WIDTH_DP en píxeles. */
+    int maxWidth(){return getResources().getConfiguration().screenWidthDp>MAX_WIDTH_DP+64?ui.dp(MAX_WIDTH_DP):-1;}
     void snackbar(String text,String action,Runnable run){
         removeSnackbar();
         LinearLayout s=ui.row();s.setBackground(shape(this,p.inverseSurface,R_FULL));s.setPadding(ui.dp(S5),ui.dp(S1),ui.dp(S2),ui.dp(S1));s.setMinimumHeight(ui.dp(52));s.setElevation(ui.dp(4));

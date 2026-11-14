@@ -29,7 +29,7 @@
 
     <!-- Aviso y consentimiento antes del primer envío a OpenRouter -->
     <string name="consent_title">Dein Audio wird zum Transkribieren gesendet</string>
-    <string name="consent_body">Zum Transkribieren sendet Verbapp das Audio jeder Aufnahme, die du transkribierst, an OpenRouter und an das KI-Modell deiner Wahl. Für die Notiz wird der Text des Transkripts gesendet. Aufnahmen, die du nicht transkribierst, werden nie gesendet, und dein Schlüssel zahlt nur, was du nutzt.</string>
+    <string name="consent_body">Zum Transkribieren sendet Verbapp das Audio jeder Aufnahme, die du transkribierst, an OpenRouter und an das KI-Modell deiner Wahl. Wenn du bekannte Stimmen gespeichert hast, gehen ihre kurzen Proben mit, damit die KI sie erkennt. Für die Notiz wird der Text des Transkripts gesendet. Aufnahmen, die du nicht transkribierst, werden nie gesendet, und dein Schlüssel zahlt nur, was du nutzt.</string>
     <string name="consent_accept">Einverstanden</string>
     <string name="consent_later">Nicht jetzt</string>
     <string name="privacy_policy">Datenschutzerklärung</string>

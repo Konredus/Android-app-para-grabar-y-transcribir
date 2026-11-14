@@ -39,6 +39,8 @@ final class OpenRouterClient implements TranscribeClient {
     /** Página pública de la app: OpenRouter la pide para identificar de qué app viene cada llamada (no lleva datos del usuario). */
     static final String REFERER="https://github.com/Konredus/Android-app-para-grabar-y-transcribir";
     /** Encabezados que identifican a Verbapp ante OpenRouter. «X-Title» es el nombre anterior del mismo encabezado. */
+    /** Respuestas 200 ilegibles por grabación, en esta sesión del proceso (0.9.6). */
+    private static final java.util.concurrent.ConcurrentHashMap<String,Integer> UNREADABLE=new java.util.concurrent.ConcurrentHashMap<>();
     static Map<String,String> headers(){Map<String,String> h=new LinkedHashMap<>();h.put("HTTP-Referer",REFERER);h.put("X-OpenRouter-Title","Verbapp");h.put("X-Title","Verbapp");return h;}
     /** Una pausa más larga que esto (s) corta el tramo al agrupar palabras. */
     static final double PAUSE_S=1.2;
@@ -120,7 +122,13 @@ final class OpenRouterClient implements TranscribeClient {
                 long[] size={0};HttpApi.Response response=send(built,config,body(config.model,built.format,language,recipe,ask,verbose),size);
                 JSONObject json=null;int code=response.code;
                 if(code>=200&&code<300){
-                    try{json=response.json();}catch(JSONException e){throw new IOException(Lang.str(c,R.string.eng_err_or_unreadable));}
+                    try{json=response.json();}catch(JSONException e){
+                        // 0.9.6: un 200 que no es JSON (una página HTML de un intermediario) rara vez se arregla solo: la segunda
+                        // vez para la misma grabación ya no se reintenta (cada reintento vuelve a enviar y a cobrar el audio).
+                        String key=http.jobId==null?"":http.jobId;int seen=UNREADABLE.merge(key,1,Integer::sum);
+                        Diagnostics.event("or_unreadable",http.jobId,"count",seen);
+                        if(seen>=2){UNREADABLE.remove(key);throw new HttpApi.UserAction(Lang.str(c,R.string.eng_err_or_unreadable));}
+                        throw new IOException(Lang.str(c,R.string.eng_err_or_unreadable));}
                     // OpenRouter a veces responde 200 con el error del proveedor adentro: se trata como el error que es.
                     JSONObject error=json.optJSONObject("error");
                     if(error!=null&&!json.has("text")&&!json.has("segments")){int inner=error.optInt("code",502);code=inner>=400&&inner<600?inner:502;}

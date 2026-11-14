@@ -274,11 +274,80 @@ final class RecordingActions {
     static void transcribe(Screen s,Recording r,Runnable changed){
         if(Transcript.exists(s,r.id)){RetranscribeSheet.show(s,r,changed);return;}
         if(!new Settings(s).hasKey()){missingKey(s);return;}
-        Consent.ensure(s,()->{
+        Consent.ensure(s,()->guard(s,r,()->{
             Settings settings=new Settings(s);
+            // 0.9.7: una sola pregunta, «¿Cuántas personas hablan?». Reemplaza a «¿Separar voces?» (1 = sin separar).
+            JSONObject state=FilesStore.state(s,r.id);
+            // Ya respondida para esta grabación (p. ej. falló y se toca «Reintentar»): sigue con lo que se dijo.
+            if(state.optBoolean("peopleAsked")&&settings.canSeparate()){start(s,r,changed,state.optBoolean("speakers",settings.defaultSpeakers()));return;}
+            if(settings.defaultSpeakers()&&settings.askPeople()){askPeople(s,r,changed,settings);return;}
             if(settings.canSeparate()&&settings.speakersMode().equals("ask")){askSpeakers(s,r,changed,settings);return;}
             start(s,r,changed,settings.defaultSpeakers());
-        });
+        }));
+    }
+    /** Hasta cuántas personas se ofrecen con un toque; más que eso es «No sé» (la app une solo las voces claramente iguales). */
+    static final int PEOPLE_MAX=8;
+    /**
+     * 0.9.7: «¿Cuántas personas hablan?», un toque y empieza. Con la cantidad, la app une las voces repetidas (en un
+     * audio largo cada parte vuelve con etiquetas nuevas) y deja Persona 1…N para nombrarlas después. «Solo yo» no separa
+     * voces (más rápido y más barato). La última cantidad elegida queda marcada. Se apaga en Ajustes → Grabar y transcribir.
+     */
+    static void askPeople(Screen s,Recording r,Runnable changed,Settings settings){
+        try{
+            Ui ui=s.ui;int last=settings.lastPeople();
+            Sheet sheet=s.sheet(Lang.str(s,R.string.act_people_title),Lang.str(s,R.string.act_people_body));
+            SheetParts.hero(sheet,R.drawable.ic_people,false);
+            java.util.function.IntConsumer go=n->{
+                sheet.dismiss();settings.prefs.edit().putInt("lastPeople",n).apply();
+                Diagnostics.event("people_chosen",r.id,"people",n);
+                try{Pipeline.people(s,r.id,n<=1?0:n);}catch(Exception ignored){}
+                start(s,r,changed,n!=1);
+            };
+            for(int row=0;row<2;row++){
+                LinearLayout line=ui.row();
+                for(int i=0;i<PEOPLE_MAX/2;i++){
+                    int n=row*(PEOPLE_MAX/2)+i+1;
+                    Ui.Btn b=ui.button(String.valueOf(n),0,n==last?Ui.Style.PRIMARY:Ui.Style.TONAL,v->go.accept(n));
+                    b.setContentDescription(n==1?Lang.str(s,R.string.act_people_one_spoken):Lang.plural(s,R.plurals.act_people_n_spoken,n));
+                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,ui.dp(56),1);if(i>0)lp.setMarginStart(ui.dp(S2));line.addView(b,lp);
+                }
+                sheet.body.addView(line,ui.top(row==0?S5:S2));
+            }
+            TextView hint=ui.text(Lang.str(s,R.string.act_people_one_hint),Type.BODY_SMALL,s.p.onSurfaceVariant);hint.setGravity(android.view.Gravity.CENTER);
+            sheet.body.addView(hint,ui.top(S3));
+            sheet.secondary(Lang.str(s,R.string.act_people_unknown),()->go.accept(0)).show();
+        }catch(Exception e){start(s,r,changed,settings.defaultSpeakers());}
+    }
+    /** 0.9.6: sobre este costo estimado (US$) se pide confirmar antes de enviar. Lo normal (una hora, sin voces) cuesta menos. */
+    static final double CONFIRM_USD=0.50;
+    /**
+     * 0.9.6: antes de gastar. Una grabación casi muda (el micrófono no captó nada) pregunta si transcribir igual; después,
+     * un costo alto o mayor que el último saldo comprobado pide confirmar. Con «Preguntar cada vez» el costo ya se ve en
+     * las opciones, así que ahí solo se mira el silencio.
+     */
+    static void guard(Screen s,Recording r,Runnable go){
+        if(RecorderService.mostlySilent(FilesStore.state(s,r.id))){
+            Diagnostics.event("transcribe_guard",r.id,"reason","silent");
+            Sheet sheet=s.sheet(Lang.str(s,R.string.act_silent_title),Lang.str(s,R.string.act_silent_body));
+            sheet.primary(Lang.str(s,R.string.act_transcribe_anyway),()->costGuard(s,r,go)).secondary(Lang.str(s,R.string.common_cancel),null).show();return;
+        }
+        costGuard(s,r,go);
+    }
+    private static void costGuard(Screen s,Recording r,Runnable go){
+        double cost=-1,balance=Double.NaN;Settings settings=new Settings(s);
+        try{
+            if(!(settings.canSeparate()&&settings.speakersMode().equals("ask"))){
+                boolean speakers=settings.defaultSpeakers();
+                cost=Pricing.estimate(s,settings.provider(),settings.config(speakers).model,Pricing.orBilledMs(s,r.duration,speakers));
+            }
+            balance=Double.parseDouble(settings.prefs.getString("verifyBalance",""));
+        }catch(Exception ignored){}
+        boolean over=cost>0&&!Double.isNaN(balance)&&cost>balance;
+        if(cost<CONFIRM_USD&&!over){go.run();return;}
+        Diagnostics.event("transcribe_guard",r.id,"reason",over?"balance":"cost");
+        String price=Pricing.usd(cost);
+        Sheet sheet=s.sheet(Lang.str(s,R.string.act_cost_title,price),over?Lang.str(s,R.string.act_cost_over_body,Pricing.usd(balance)):Lang.str(s,R.string.act_cost_body,Ui.humanDuration(r.duration)));
+        sheet.primary(Lang.str(s,R.string.act_transcribe),go).secondary(Lang.str(s,R.string.common_cancel),null).show();
     }
     /**
      * Falta la clave de OpenRouter: el error trae su salida («Configurar ahora», que abre directo el campo de la clave).
@@ -392,9 +461,38 @@ final class RecordingActions {
         Sheet sheet=s.sheet(Lang.str(s,R.string.act_delete_title,r.title),Lang.str(s,R.string.act_delete_body));
         SheetParts.hero(sheet,R.drawable.ic_trash,true);
         sheet.primary(Lang.str(s,R.string.act_delete),Ui.Style.DESTRUCTIVE,()->{
-            if(before!=null)before.run();if(!r.delete(s))s.message(Lang.str(s,R.string.act_delete),Lang.str(s,R.string.act_delete_failed));else{Diagnostics.event("recording_deleted",r.id);if(after!=null)after.run();}
+            if(before!=null)before.run();trash(s,r);if(after!=null)after.run();offerUndo(s);
             return true;
         }).secondary(Lang.str(s,R.string.common_cancel),null).show();
+    }
+
+    /*
+     * 0.9.6: eliminar se puede deshacer. La grabación se oculta al instante (Recording.HIDDEN) y sus archivos se borran
+     * UNDO_MS después; mientras, «Grabación eliminada · Deshacer» la devuelve tal cual. Si la app se cierra antes, no se
+     * borra nada (vuelve a aparecer): nunca se pierde por un toque. Un segundo borrado confirma el anterior.
+     */
+    static final long UNDO_MS=10_000;
+    private static final android.os.Handler TRASH=new android.os.Handler(android.os.Looper.getMainLooper());
+    private static Recording trashed;private static Context trashApp;private static java.lang.ref.WeakReference<Screen> shownOn;
+    static void trash(Context c,Recording r){
+        commitTrash();trashed=r;trashApp=c.getApplicationContext();Recording.HIDDEN.add(r.id);FilesStore.version.incrementAndGet();
+        TRASH.postDelayed(RecordingActions::commitTrash,UNDO_MS);Diagnostics.event("recording_trashed",r.id);
+    }
+    /** Borra de verdad lo que estaba esperando el «Deshacer». */
+    static void commitTrash(){
+        TRASH.removeCallbacksAndMessages(null);Recording r=trashed;if(r==null)return;trashed=null;Context c=trashApp;
+        Screen shown=shownOn==null?null:shownOn.get();shownOn=null;if(shown!=null&&!shown.isFinishing())shown.hideSnackbar();
+        new Thread(()->{boolean ok=false;try{ok=r.delete(c);}catch(Exception e){Diagnostics.crash(e);}
+            Recording.HIDDEN.remove(r.id);FilesStore.version.incrementAndGet();Diagnostics.event(ok?"recording_deleted":"recording_delete_failed",r.id);},"VozLocal-delete").start();
+    }
+    static void undoTrash(){
+        TRASH.removeCallbacksAndMessages(null);Recording r=trashed;trashed=null;shownOn=null;if(r==null)return;
+        Recording.HIDDEN.remove(r.id);FilesStore.version.incrementAndGet();Diagnostics.event("recording_restored",r.id);
+    }
+    /** «Grabación eliminada · Deshacer» en esta pantalla, si hay un borrado esperando (también al volver del detalle). */
+    static void offerUndo(Screen s){
+        Recording r=trashed;if(r==null||s.isFinishing())return;shownOn=new java.lang.ref.WeakReference<>(s);
+        s.snackbar(Lang.str(s,R.string.act_deleted,r.title),Lang.str(s,R.string.detail_undo),RecordingActions::undoTrash);
     }
     private RecordingActions(){}
 }

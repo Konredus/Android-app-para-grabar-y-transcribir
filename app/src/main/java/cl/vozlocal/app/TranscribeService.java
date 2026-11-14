@@ -48,7 +48,9 @@ public class TranscribeService extends Service {
     static final long WAKE_MS=10*60_000L,WAKE_RENEW_MS=5*60_000L;
     private volatile HttpApi http;private PowerManager.WakeLock wake;private android.net.wifi.WifiManager.WifiLock wifi;
     private final Handler handler=new Handler(Looper.getMainLooper());
-    private final Runnable keepAwake=new Runnable(){@Override public void run(){PowerManager.WakeLock w=wake;if(running&&w!=null){w.acquire(WAKE_MS);handler.postDelayed(this,WAKE_RENEW_MS);}}};
+    private final Runnable keepAwake=new Runnable(){@Override public void run(){PowerManager.WakeLock w=wake;if(running&&w!=null){w.acquire(WAKE_MS);Pipeline.backup(TranscribeService.this,Pipeline.BACKUP_MS);handler.postDelayed(this,WAKE_RENEW_MS);}}};
+    /** 0.9.6: la app se barrió de Recientes. Si el teléfono además mata el servicio, la tarea de respaldo retoma en 1 min. */
+    @Override public void onTaskRemoved(Intent rootIntent){if(running){Diagnostics.event("task_removed",null,"runner","fgs");Pipeline.backup(this,60_000);}super.onTaskRemoved(rootIntent);}
     private final java.util.concurrent.atomic.AtomicBoolean nudged=new java.util.concurrent.atomic.AtomicBoolean();
     /** Pantalla encendida o desbloqueada: buen momento para reintentar (Android deja de frenar la app). */
     private final BroadcastReceiver screen=new BroadcastReceiver(){@Override public void onReceive(Context c,Intent i){nudged.set(true);}};
@@ -70,9 +72,12 @@ public class TranscribeService extends Service {
             boolean retry=true;
             // Si una tarea de fondo estaba trabajando, se detiene y este servicio toma el relevo (sin perder bloques listos).
             getSystemService(android.app.job.JobScheduler.class).cancel(Pipeline.JOB_ID);
+            Pipeline.backup(this,Pipeline.BACKUP_MS);
             boolean locked=false;try{locked=Transcriber.RUNNING.tryLock(60,TimeUnit.SECONDS);}catch(InterruptedException ignored){}
             if(locked){
+                // 0.9.6: también un Error (sin memoria…): antes dejaba running=true, el wake lock renovándose y la notificación pegada.
                 try{retry=rounds(this,http,"fgs",nudged);}
+                catch(Throwable e){Diagnostics.crash(e);retry=true;}
                 finally{Transcriber.RUNNING.unlock();}
             }
             // Tras «Cancelar» (o eliminar) la grabación que se enviaba, lo demás pedido lo retoma la tarea de fondo, como en la
@@ -80,7 +85,8 @@ public class TranscribeService extends Service {
             // que Pipeline.cancel acababa de programar llegaba con este servicio aún andando, se descartaba, y lo demás quedaba
             // pedido sin trabajo hasta abrir una pantalla.
             boolean again=retry||http.cancelled;
-            new Handler(Looper.getMainLooper()).post(()->{running=false;current=null;releaseLocks();stopForeground(STOP_FOREGROUND_REMOVE);if(again)Pipeline.schedule(this,true);stopSelf();});
+            // schedule(…, true) también quita la tarea de respaldo si ya no queda nada pedido.
+            new Handler(Looper.getMainLooper()).post(()->{running=false;current=null;releaseLocks();stopForeground(STOP_FOREGROUND_REMOVE);Pipeline.schedule(this,true);if(!again)Diagnostics.event("runner_done",null,"runner","fgs");stopSelf();});
         },"VozLocal-transcribe-fg").start();
         return START_NOT_STICKY;
     }

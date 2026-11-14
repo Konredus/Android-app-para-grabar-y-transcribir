@@ -258,6 +258,8 @@ public class SettingsActivity extends Screen {
         // Preguntas (0.9.5, pedido del dueño: «que no pregunten tanto»): por defecto no se pregunta nada; quien quiera, las prende.
         page.addView(ui.section(getString(R.string.set_section_questions)));LinearLayout ask=ui.group();page.addView(ask,Ui.fill());
         add(ask,toggleRow(R.drawable.ic_title,getString(R.string.set_ask_title),getString(R.string.set_ask_title_sub),settings.askTitle(),on->toggle("askTitle",on)));
+        // 0.9.7 (pedido del dueño): «¿Cuántas personas hablan?» antes de transcribir; encendida por defecto.
+        if(settings.canSeparate())add(ask,toggleRow(R.drawable.ic_people,getString(R.string.set_ask_people),getString(R.string.set_ask_people_sub),settings.askPeople(),on->toggle("askPeople",on)));
         if(settings.canSeparate())add(ask,row(R.drawable.ic_people,getString(R.string.set_speakers_title),null,getString(SPEAKER_NAMES[Math.max(0,Arrays.asList(SPEAKER_MODES).indexOf(settings.speakersMode()))])).onClick(v->speakersSheet()));
         page.addView(ui.footnote(getString(R.string.set_questions_foot)));
     }
@@ -300,6 +302,8 @@ public class SettingsActivity extends Screen {
         largeTitle(page,getString(R.string.set_topic_save),null);
         LinearLayout group=ui.group();page.addView(group,Ui.fill());
         saveRow=row(R.drawable.ic_inbox,getString(R.string.set_quick_save),getString(R.string.set_quick_save_sub),inboxValue());saveRow.onClick(v->saveSheet());add(group,saveRow);
+        // 0.9.7 («un solo botón»): al terminar de transcribir se guarda sola en esa carpeta (AutoSave).
+        add(group,toggleRow(R.drawable.ic_save,getString(R.string.set_auto_inbox),getString(R.string.set_auto_inbox_sub),settings.autoInbox(),on->{toggle("autoInbox",on);if(on&&!Inbox.configured(this))toast(getString(R.string.set_auto_inbox_need));}));
         // «Más información» del guardado rápido: también cuenta la nota y las voces conocidas (el recorrido de cada grabación).
         page.addView(more(getString(R.string.set_flow_foot),getString(R.string.set_quick_save),getString(R.string.set_flow_more,Transcriber.MAX_KNOWN)));
         page.addView(ui.section(getString(R.string.set_section_copies)));group=ui.group();page.addView(group,Ui.fill());
@@ -376,6 +380,8 @@ public class SettingsActivity extends Screen {
         add(help,row(R.drawable.ic_people,getString(R.string.set_demo),getString(R.string.set_demo_sub),null).onClick(v->startActivity(new Intent(this,RecordingActivity.class).putExtra("demo",true))));
         // 0.9.0: la política de privacidad (Google Play), en el idioma de la app, junto al informe y los registros.
         add(help,row(R.drawable.ic_open_in_new,getString(R.string.privacy_policy),null,null).onClick(v->Consent.openPolicy(this)));
+        // 0.9.6: escribir al soporte directo, con el informe (redactado) adjunto; la persona ve el correo antes de enviarlo.
+        add(help,row(R.drawable.ic_chat,getString(R.string.set_contact),getString(R.string.set_contact_sub,SUPPORT_EMAIL),null).onClick(v->contact()));
         add(help,row(R.drawable.ic_lifebuoy,getString(R.string.set_report),getString(R.string.set_report_sub),null).onClick(v->report()));
         add(help,row(R.drawable.ic_trash,getString(R.string.set_clear_logs),null,null).onClick(v->confirm(getString(R.string.set_clear_logs_q),getString(R.string.set_clear_logs_body),getString(R.string.set_delete),true,()->{Diagnostics.clear(this);toast(getString(R.string.set_clear_logs_done));})));
         page.addView(ui.footnote(getString(R.string.set_logs_foot)));
@@ -892,7 +898,7 @@ public class SettingsActivity extends Screen {
         call.readTimeoutMs=30000;
         checks.execute(()->{
             // Si mientras esperaba su turno cambió la clave, esta comprobación ya no corresponde: se descarta sin enviar nada.
-            if(call.cancelled||!target.equals(verifyTarget())){runOnUiThread(()->{if(http==call){verifying=false;paintVerify();}});return;}
+            if(call.cancelled||!target.equals(verifyTarget())){runOnUiThread(()->{if(isDestroyed())return;if(http==call){verifying=false;paintVerify();}});return;}
             String reason=null;long started=SystemClock.elapsedRealtime(),ms=0;double balance=Double.NaN;boolean free=false;
             try{
                 // GET /key dice si la clave vale y cuánto le queda a la clave (si tiene tope); el saldo de la cuenta se pide
@@ -1203,7 +1209,7 @@ public class SettingsActivity extends Screen {
     private void offerDatesForExisting(){
         confirm(getString(R.string.set_dates_q),getString(R.string.set_dates_body),getString(R.string.set_dates_all),false,()->io.execute(()->{int n=0;
             for(Recording r:Recording.list(this)){String before=r.title;try{r.save(this);if(!before.equals(r.title)){Pipeline.edited(this,r.id);n++;}}catch(Exception ignored){}}
-            int changed=n;runOnUiThread(()->toast(getResources().getQuantityString(R.plurals.set_names_updated,changed,changed)));}));
+            int changed=n;runOnUiThread(()->{if(!isDestroyed())toast(getResources().getQuantityString(R.plurals.set_names_updated,changed,changed));});}));
     }
     private void saveSheet(){
         boolean has=!settings.inboxTree().isEmpty();
@@ -1221,13 +1227,24 @@ public class SettingsActivity extends Screen {
             String authority=uri.getAuthority()==null?"":uri.getAuthority();String label=(authority.contains("google.android.apps.docs")?"Drive · ":"")+name;
             runOnUiThread(()->{if(!isDestroyed())row.setValue(label);});});
     }
-    private void report(){toast(getString(R.string.set_report_preparing));io.execute(()->{try{java.io.File f=Diagnostics.export(this);runOnUiThread(()->shareFile(f.getName(),getString(R.string.set_report_share_title)));}catch(Exception e){runOnUiThread(()->message(getString(R.string.set_report_title),getString(R.string.set_report_failed)));}});}
+    /** Correo público de soporte (el mismo de la ficha de Google Play). */
+    static final String SUPPORT_EMAIL="latribumaker@gmail.com";
+    /** Un correo a soporte con el informe adjunto, en la app de correo de la persona: ella lo revisa y lo envía. */
+    private void contact(){toast(getString(R.string.set_report_preparing));io.execute(()->{java.io.File f=null;try{f=Diagnostics.export(this);}catch(Exception ignored){}java.io.File report=f;
+        runOnUiThread(()->{if(isDestroyed())return;
+            Intent mail=new Intent(Intent.ACTION_SEND).setType("message/rfc822").putExtra(Intent.EXTRA_EMAIL,new String[]{SUPPORT_EMAIL})
+                .putExtra(Intent.EXTRA_SUBJECT,getString(R.string.set_contact_subject,versionName())).putExtra(Intent.EXTRA_TEXT,getString(R.string.set_contact_body));
+            if(report!=null){android.net.Uri uri=AudioProvider.uri(this,report.getName());mail.putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);mail.setClipData(android.content.ClipData.newRawUri(report.getName(),uri));}
+            try{startActivity(Intent.createChooser(mail,getString(R.string.set_contact)));Diagnostics.event("ui_action",null,"action","contact_support");}
+            catch(Exception e){message(getString(R.string.set_contact),getString(R.string.set_contact_no_app,SUPPORT_EMAIL));}});});}
+    private void report(){toast(getString(R.string.set_report_preparing));io.execute(()->{try{java.io.File f=Diagnostics.export(this);runOnUiThread(()->{if(!isDestroyed())shareFile(f.getName(),getString(R.string.set_report_share_title));});}catch(Exception e){runOnUiThread(()->{if(!isDestroyed())message(getString(R.string.set_report_title),getString(R.string.set_report_failed));});}});}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==PICK_SAVE&&result==RESULT_OK&&data!=null&&data.getData()!=null){
             Uri tree=data.getData();
             try{getContentResolver().takePersistableUriPermission(tree,Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                 io.execute(()->{String name=folderName(tree);settings.prefs.edit().putString("saveTree",tree.toString()).putString("saveTreeName",name).apply();Diagnostics.event("setting_changed",null,"action","save_tree","result",tree.getAuthority()!=null&&tree.getAuthority().contains("google.android.apps.docs")?"drive":"device");
+                    AutoSave.retryFailed(this);
                     runOnUiThread(()->{if(isDestroyed())return;if(saveRow!=null)saveRow.setValue(name);toast(getString(R.string.set_quick_save_in,name));if(inboxFlow)finish();});});}
             catch(Exception e){message(getString(R.string.set_quick_save),getString(R.string.set_quick_save_no_perm));}
         }

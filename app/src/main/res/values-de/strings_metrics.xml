@@ -112,7 +112,7 @@
     <string name="met_voice_note">Wörter und Tempo zählen nur, was schon transkribiert ist.</string>
 
     <!-- Hacia tu segundo cerebro -->
-    <string name="met_funnel_title">Auf dem Weg in dein zweites Gehirn</string>
+    <string name="met_funnel_title">Auf dem Weg in dein Second Brain</string>
     <string name="met_funnel_recorded">Aufgenommen</string>
     <string name="met_funnel_transcribed">Transkribiert</string>
     <string name="met_funnel_note">Mit Notiz</string>
@@ -133,7 +133,7 @@
     <string name="met_choose_inbox">Wähle deinen 0-Inbox-Ordner</string>
     <string name="met_choose_inbox_hint">Um jede Notiz mit einem Tippen zu speichern</string>
     <string name="met_halfway">Noch nicht am Ziel</string>
-    <string name="met_all_arrived">Alles, was du aufgenommen hast, ist in deinem zweiten Gehirn angekommen</string>
+    <string name="met_all_arrived">Alles, was du aufgenommen hast, ist in deinem Second Brain angekommen</string>
     <!-- %1$s: la ayuda de la fila; %2$s: cuántas hay en la Biblioteca. -->
     <string name="met_stall_total">%1$s · insgesamt %2$s in der Bibliothek</string>
 
@@ -153,7 +153,7 @@
         <item quantity="one">%1$s Transkription</item>
         <item quantity="other">%1$s Transkriptionen</item>
     </plurals>
-    <string name="met_notes_title">Notizen für dein zweites Gehirn</string>
+    <string name="met_notes_title">Notizen für dein Second Brain</string>
     <string name="met_note_tokens">%1$s Eingabe-Tokens · %2$s Ausgabe</string>
     <string name="met_no_tokens">Keine Token-Daten</string>
     <plurals name="met_notes">
@@ -218,11 +218,11 @@
     <string name="met_footer">Alles wird auf diesem Handy berechnet, aus dem, was Verbapp zu jeder Aufnahme speichert. Nichts davon wird gesendet.</string>
     <string name="met_how_button">Wie wird das berechnet?</string>
     <string name="met_how_title">So werden deine Statistiken berechnet</string>
-    <string name="met_how_body" tools:ignore="PluralsCandidate">Alles wird auf diesem Handy berechnet, aus dem, was Verbapp ohnehin zu jeder Aufnahme speichert. Nichts wird gesendet.\n\nAufgenommen: wie lang deine Aufnahmen sind, gezählt am Tag der Aufnahme.\nWörter: die Wörter in deinen Transkripten (aktuelle Version).\nWörter pro Minute: Wörter ÷ Minuten transkribiertes Audio.\nGesparte Tippzeit: wie lange es dauern würde, diese Wörter von Hand zu tippen, bei %1$d Wörtern pro Minute.\nSerie: aufeinanderfolgende Tage mit mindestens einer Aufnahme. Wenn du heute noch nicht aufgenommen hast, hält sie bis Mitternacht.\n\nAuf dem Weg in dein zweites Gehirn: Von dem, was du im Zeitraum aufgenommen hast, wie viel transkribiert wurde, wie viel eine Notiz hat und wie viel du in deinem 0-Inbox-Ordner gespeichert hast.\n\nKosten: gezählt am Tag, an dem die Transkription oder die Notiz erstellt wurde. „Abgerechnet“ ist, was OpenRouter gemeldet hat. „≈ Geschätzt“ ist die Dauer mal der öffentliche Tarif des Modells und kann von der Abrechnung abweichen. Wenn du neu transkribiert hast, zählen auch die Kosten der vorherigen Version, solange du sie behältst.\n\nPersonen: wie lange jede benannte Stimme spricht, ohne dich. Namen werden nur auf diesem Bildschirm angezeigt.</string>
+    <string name="met_how_body" tools:ignore="PluralsCandidate">Alles wird auf diesem Handy berechnet, aus dem, was Verbapp ohnehin zu jeder Aufnahme speichert. Nichts wird gesendet.\n\nAufgenommen: wie lang deine Aufnahmen sind, gezählt am Tag der Aufnahme.\nWörter: die Wörter in deinen Transkripten (aktuelle Version).\nWörter pro Minute: Wörter ÷ Minuten transkribiertes Audio.\nGesparte Tippzeit: wie lange es dauern würde, diese Wörter von Hand zu tippen, bei %1$d Wörtern pro Minute.\nSerie: aufeinanderfolgende Tage mit mindestens einer Aufnahme. Wenn du heute noch nicht aufgenommen hast, hält sie bis Mitternacht.\n\nAuf dem Weg in dein Second Brain: Von dem, was du im Zeitraum aufgenommen hast, wie viel transkribiert wurde, wie viel eine Notiz hat und wie viel du in deinem 0-Inbox-Ordner gespeichert hast.\n\nKosten: gezählt am Tag, an dem die Transkription oder die Notiz erstellt wurde. „Abgerechnet“ ist, was OpenRouter gemeldet hat. „≈ Geschätzt“ ist die Dauer mal der öffentliche Tarif des Modells und kann von der Abrechnung abweichen. Wenn du neu transkribiert hast, zählen auch die Kosten der vorherigen Version, solange du sie behältst.\n\nPersonen: wie lange jede benannte Stimme spricht, ohne dich. Namen werden nur auf diesem Bildschirm angezeigt.</string>
 
     <!-- Vacío, carga y error -->
     <string name="met_empty_title">Hier siehst du deine Stimme in Zahlen</string>
-    <string name="met_empty_body">Sobald du aufnimmst, siehst du, wie viel du sprichst, wie viele Wörter Verbapp für dich schreibt, wie viel in deinem zweiten Gehirn ankommt und wie viel du für Transkription ausgibst.</string>
+    <string name="met_empty_body">Sobald du aufnimmst, siehst du, wie viel du sprichst, wie viele Wörter Verbapp für dich schreibt, wie viel in deinem Second Brain ankommt und wie viel du für Transkription ausgibst.</string>
     <string name="met_empty_words">Transkribierte Wörter und gesparte Zeit</string>
     <string name="met_empty_streak">Deine Serie an Aufnahmetagen</string>
     <string name="met_empty_spend">Deine Ausgaben, nach Monat und Modell</string>

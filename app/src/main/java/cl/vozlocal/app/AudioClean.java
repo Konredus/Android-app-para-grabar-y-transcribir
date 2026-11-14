@@ -9,7 +9,7 @@ import java.util.Arrays;
  * de las anclas siguen exactos. La grabación original no se toca: esto va solo a la copia que se envía.
  * - LEVEL («Quitar zumbidos y nivelar el volumen»): un pasa-altos Butterworth de 4.º orden a 100 Hz (zumbido de la red de
  *   50/60 Hz −24/−18 dB, motor, aire acondicionado, golpes al teléfono; la voz casi no se toca: −3 dB en 100 Hz)
- *   y un nivelador lento que lleva la voz hacia −20 dBFS: sube hasta 12 dB a quien habla bajo o lejos y baja hasta 6 dB a
+ *   y un nivelador lento que lleva la voz hacia −20 dBFS: sube hasta 6 dB (0.9.6; antes 12, subía también el ruido del que habla lejos) a quien habla bajo o lejos y baja hasta 6 dB a
  *   quien habla muy fuerte. Solo se ajusta mientras hay voz; en las pausas el volumen se queda quieto, así el ruido no sube.
  * - NOISE («Reducir el ruido de fondo», experimental): filtro de Wiener por bandas sobre ventanas de 32 ms (FFT de 512, la
  *   mitad de solape, ventanas raíz de Hann: sin cambios, la salida es idéntica a la entrada). El ruido de cada banda es el
@@ -30,9 +30,9 @@ final class AudioClean implements OrAudio.Sink {
     private final double[][] hp=new double[2][];private final double[][] hpState=new double[2][4];
 
     // ---------- Nivelador ----------
-    /** Tramos de 20 ms para medir; objetivo −20 dBFS (RMS); la ganancia va de −6 a +12 dB. */
+    /** Tramos de 20 ms para medir; objetivo −20 dBFS (RMS); la ganancia va de −6 a +6 dB (0.9.6). */
     private static final int FRAME=OrAudio.RATE/50;
-    private static final double TARGET=3277,MIN_GAIN=0.5,MAX_GAIN=4.0;
+    private static final double TARGET=3277,MIN_GAIN=0.5,MAX_GAIN=2.0;
     /** El piso de ruido baja al tiro y sube 2 dB/s; hay voz si un tramo supera el piso en ~10 dB y los −55 dBFS. */
     private static final double FLOOR_RISE=Math.pow(10,0.2/50),VOICE_OVER_FLOOR=3.0,VOICE_MIN=60;
     /** El nivel de la voz sigue a los tramos con voz en ~1 s; la ganancia sube en ~0,5 s y baja en ~0,1 s. */

@@ -32,6 +32,8 @@ public class VozApp extends Application {
         // así la primera pantalla que muestre un costo ya lo tiene (antes dependía de que el motor o Transcript pasaran primero).
         Pricing.attach(this);
         Models.refreshIfStale(this);
+        // 0.9.6: una grabación que quedó a medias (Android mató la app, se acabó la batería) se recupera al abrir.
+        new Thread(()->{try{RecorderService.recoverOrphans(this);}catch(Throwable e){Diagnostics.crash(e);}},"VozLocal-recover").start();
         Thread.UncaughtExceptionHandler prior=Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread,error)->{Diagnostics.crash(error);if(prior!=null)prior.uncaughtException(thread,error);});
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks(){

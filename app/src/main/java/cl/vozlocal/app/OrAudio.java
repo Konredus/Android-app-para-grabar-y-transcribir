@@ -325,6 +325,80 @@ final class OrAudio {
             return done[0];
         }finally{extractor.release();if(codec!=null){try{codec.stop();}catch(Exception ignored){}codec.release();}}
     }
+    /** Recibe el audio (16 kHz mono) de cada tramo pedido a {@link #decodeRanges}: el índice del tramo y sus muestras. */
+    interface RangeSink{void write(int range,short[] data,int count)throws Exception;}
+    /**
+     * 0.9.7 (unir voces repetidas, VoiceMatch): decodifica SOLO los tramos pedidos (en microsegundos, ordenados por inicio),
+     * saltando en el archivo de uno a otro, y los entrega a 16 kHz mono. Comparar las voces de una reunión de una hora
+     * necesita unos 20 min de audio repartidos en cientos de tramos: así no se decodifica la hora entera. Cada tramo parte
+     * 60 ms antes (el decodificador AAC necesita el cuadro anterior) y se recorta por tiempo.
+     */
+    static void decodeRanges(File source,long[] startUs,long[] endUs,HttpApi cancel,RangeSink sink)throws Exception{
+        MediaExtractor extractor=new MediaExtractor();MediaCodec codec=null;
+        try{
+            extractor.setDataSource(source.getPath());int track=-1;MediaFormat format=null;
+            for(int i=0;i<extractor.getTrackCount();i++){MediaFormat f=extractor.getTrackFormat(i);String mime=f.getString(MediaFormat.KEY_MIME);if(mime!=null&&mime.startsWith("audio/")){track=i;format=f;break;}}
+            if(track<0)throw new NoTrack();extractor.selectTrack(track);
+            codec=MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME));codec.configure(format,null,null,0);codec.start();
+            int rate=number(format,MediaFormat.KEY_SAMPLE_RATE,0),channels=number(format,MediaFormat.KEY_CHANNEL_COUNT,0),encoding=number(format,MediaFormat.KEY_PCM_ENCODING,AudioFormat.ENCODING_PCM_16BIT);
+            Mixer mixer=new Mixer();MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();
+            for(int r=0;r<startUs.length;r++){
+                alive(cancel);
+                final int index=r;final long from=startUs[r],to=endUs[r];if(to<=from)continue;
+                Sink out=(data,count)->sink.write(index,data,count);
+                extractor.seekTo(Math.max(0,from-60_000),MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
+                // Tras el fin de un tramo (se le avisó «fin de datos») el decodificador vuelve a servir con flush().
+                if(r>0)codec.flush();
+                Resampler resampler=null;boolean inputDone=false,outputDone=false;Stall stall=new Stall(STALL_MS);
+                while(!outputDone){
+                    alive(cancel);boolean fed=false;
+                    while(!inputDone){
+                        int in=codec.dequeueInputBuffer(0);if(in<0)break;
+                        ByteBuffer buffer=codec.getInputBuffer(in);int size=buffer==null?-1:extractor.readSampleData(buffer,0);long at=extractor.getSampleTime();
+                        if(size<0||at>to+100_000){codec.queueInputBuffer(in,0,0,0,MediaCodec.BUFFER_FLAG_END_OF_STREAM);inputDone=true;}
+                        else{codec.queueInputBuffer(in,0,size,Math.max(0,at),0);extractor.advance();}
+                        fed=true;
+                    }
+                    if(fed)stall.moved();
+                    long waitUs=fed?0:CODEC_WAIT_US,asked=waitUs>0?SystemClock.elapsedRealtimeNanos():0;
+                    int o=codec.dequeueOutputBuffer(info,waitUs);
+                    if(o==MediaCodec.INFO_TRY_AGAIN_LATER&&waitUs>0&&stall.waited(waitUs,SystemClock.elapsedRealtimeNanos()-asked))throw new IOException("Audio decoder stopped advancing");
+                    while(o!=MediaCodec.INFO_TRY_AGAIN_LATER){
+                        if(o==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED){
+                            stall.moved();MediaFormat f=codec.getOutputFormat();int newRate=number(f,MediaFormat.KEY_SAMPLE_RATE,rate);
+                            channels=number(f,MediaFormat.KEY_CHANNEL_COUNT,channels);encoding=number(f,MediaFormat.KEY_PCM_ENCODING,AudioFormat.ENCODING_PCM_16BIT);
+                            if(resampler!=null&&newRate!=rate){resampler.finish(out);resampler=null;}
+                            rate=newRate;
+                        }else if(o>=0){
+                            stall.moved();boolean past=false;
+                            if(info.size>0&&(info.flags&MediaCodec.BUFFER_FLAG_CODEC_CONFIG)==0){
+                                ByteBuffer data=codec.getOutputBuffer(o);
+                                if(data!=null){
+                                    if(rate<=0||channels<=0){codec.releaseOutputBuffer(o,false);throw new IOException("Unknown PCM format");}
+                                    data.position(info.offset);data.limit(info.offset+info.size);
+                                    int frames=mixer.mix(data.slice().order(ByteOrder.nativeOrder()),encoding,channels);
+                                    long pts=info.presentationTimeUs;
+                                    // Solo lo que cae dentro del tramo: se salta lo anterior a «from» y se corta en «to».
+                                    int skip=pts<from?(int)Math.min(frames,(from-pts)*rate/1_000_000L):0;
+                                    int keep=(int)Math.min(frames,Math.max(0,(to-pts)*rate/1_000_000L))-skip;
+                                    if(keep>0){
+                                        if(skip>0)System.arraycopy(mixer.mono,skip,mixer.mono,0,keep);
+                                        if(resampler==null)resampler=new Resampler(rate);
+                                        resampler.push(mixer.mono,keep,out);
+                                    }
+                                    past=pts+frames*1_000_000L/rate>=to;
+                                }
+                            }
+                            boolean end=(info.flags&MediaCodec.BUFFER_FLAG_END_OF_STREAM)!=0;codec.releaseOutputBuffer(o,false);
+                            if(end||past){outputDone=true;break;}
+                        }
+                        o=codec.dequeueOutputBuffer(info,0);
+                    }
+                }
+                if(resampler!=null)resampler.finish(out);
+            }
+        }finally{extractor.release();if(codec!=null){try{codec.stop();}catch(Exception ignored){}codec.release();}}
+    }
     private static int number(MediaFormat f,String key,int fallback){return f.containsKey(key)?f.getInteger(key):fallback;}
     private static void alive(HttpApi cancel)throws InterruptedIOException{
         if(cancel!=null)cancel.check();else if(Thread.currentThread().isInterrupted())throw new InterruptedIOException("Trabajo pausado");

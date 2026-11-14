@@ -13,7 +13,8 @@ public class RecorderSmokeTest extends Instrumentation {
     private boolean longChecks = true;
     /** {@code -e demo es|en|pt}: en vez de probar, deja las grabaciones de muestra para las capturas de Play (StoreDemo). */
     private String demo;
-    @Override public void onCreate(Bundle args) { super.onCreate(args); longChecks = args == null || !"false".equals(args.getString("long")); demo = args == null ? null : args.getString("demo"); start(); }
+    private String meeting;
+    @Override public void onCreate(Bundle args) { super.onCreate(args); longChecks = args == null || !"false".equals(args.getString("long")); demo = args == null ? null : args.getString("demo"); meeting = args == null ? null : args.getString("meeting"); start(); }
     private void check(boolean value, String message) { if (!value) throw new AssertionError(message); }
     private void command(Context context, String action) {
         runOnMainSync(() -> {
@@ -31,6 +32,13 @@ public class RecorderSmokeTest extends Instrumentation {
     @Override public void onStart() {
         Bundle report = new Bundle();
         Context c = getTargetContext();
+        // 0.9.7: «-e meeting <nombre>» mide la unión de voces con una reunión real copiada a la caché de la app
+        // (cache/ami/<nombre>.wav y .rttm, del corpus AMI). No es parte de la suite: los audios no van en el repositorio.
+        if (meeting != null) {
+            try { report.putString("stream", VoiceChecks.meeting(c, meeting)); finish(Activity.RESULT_OK, report); }
+            catch (Throwable error) { report.putString("stream", "FAIL: " + android.util.Log.getStackTraceString(error)); finish(Activity.RESULT_CANCELED, report); }
+            return;
+        }
         if (demo != null) {
             try { StoreDemo.seed(c, demo); report.putString("stream", "DEMO " + demo + ": " + Recording.list(c).size() + " recordings\n"); finish(Activity.RESULT_OK, report); }
             catch (Throwable error) { report.putString("stream", "FAIL: " + android.util.Log.getStackTraceString(error)); finish(Activity.RESULT_CANCELED, report); }
@@ -46,6 +54,9 @@ public class RecorderSmokeTest extends Instrumentation {
             new Settings(c).prefs.edit().putBoolean("welcomed", true).commit();
             // 0.9.0: el aviso de envío a OpenRouter (Consent) se da por aceptado; OnboardingChecks prueba el aviso en sí.
             Consent.accept(c);
+            // 0.9.7: las novedades de la versión también se dan por vistas (OnboardingChecks prueba la hoja en sí): al
+            // actualizar desde otra versión la hoja quedaba encima de Grabar y la corrida se detenía ahí.
+            new Settings(c).setLastSeenVersion(Integer.MAX_VALUE);
             Activity activity = startActivitySync(new Intent(c, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             waitForIdleSync(); Thread.sleep(700);
             command(c, "START"); Thread.sleep(3000);
@@ -62,14 +73,14 @@ public class RecorderSmokeTest extends Instrumentation {
             check(RecorderService.activeId != null, "Recording stopped with screen off");
             getUiAutomation().executeShellCommand("input keyevent KEYCODE_WAKEUP").close();
             getUiAutomation().executeShellCommand("wm dismiss-keyguard").close();
-            command(c, "STOP"); long stopDeadline=System.currentTimeMillis()+20000;while(RecorderService.activeId!=null&&System.currentTimeMillis()<stopDeadline)Thread.sleep(100);
+            command(c, "STOP"); long stopDeadline=System.currentTimeMillis()+20000;while((RecorderService.activeId!=null||RecorderService.savingId!=null)&&System.currentTimeMillis()<stopDeadline)Thread.sleep(100);
             check(RecorderService.activeId == null && RecorderService.error == null, "Recorder stop failed: " + RecorderService.error);
             Recording r = Recording.list(c).stream().filter(item -> item.id.equals(id)).findFirst().orElseThrow();
             check(r.audio(c).length() > 100, "Audio file is empty");
             check(r.title.equals("Título antes de grabar"),"Pre-recording title was not saved");
-            try (MediaMetadataRetriever metadata = new MediaMetadataRetriever()) {
-                metadata.setDataSource(r.audio(c).getPath());
-                long mediaDuration = Long.parseLong(metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION));
+            check(!RecorderService.partial(c, id).exists(), "The ADTS recording was not sealed into .m4a");
+            {
+                long mediaDuration = AudioConvert.duration(r.audio(c));
                 check(mediaDuration > 2000, "Recorded audio duration invalid");
                 check(Math.abs(mediaDuration-r.duration) < 1500, "Saved duration differs from actual media");
             }
@@ -90,7 +101,7 @@ public class RecorderSmokeTest extends Instrumentation {
             // Un toque accidental (menos de 3 s) se descarta sin dejar archivo ni grabación.
             command(c, "START"); long shortDeadline=System.currentTimeMillis()+10000;while(RecorderService.activeId==null&&System.currentTimeMillis()<shortDeadline)Thread.sleep(50);
             String shortId = RecorderService.activeId; Thread.sleep(800);
-            command(c, "STOP"); stopDeadline=System.currentTimeMillis()+20000;while(RecorderService.activeId!=null&&System.currentTimeMillis()<stopDeadline)Thread.sleep(100);
+            command(c, "STOP"); stopDeadline=System.currentTimeMillis()+20000;while((RecorderService.activeId!=null||RecorderService.savingId!=null)&&System.currentTimeMillis()<stopDeadline)Thread.sleep(100);
             check(shortId != null && Recording.list(c).stream().noneMatch(item -> item.id.equals(shortId)), "Short recording was kept");
             check(!new File(Recording.directory(c), shortId + ".m4a").exists(), "Short recording audio left behind");
             FeatureChecks.run(c,r);
@@ -110,6 +121,8 @@ public class RecorderSmokeTest extends Instrumentation {
             KeyboardChecks.run(this,c,r);
             AudioCleanChecks.run(c,r);
             SessionChecks.run(this,c);
+            RobustChecks.run(this,c);
+            VoiceChecks.run(c);
             I18nChecks.run(c);
             long longStarted = SystemClock.elapsedRealtime();
             if (longChecks) LongImportChecks.run(c,r);

@@ -1,5 +1,122 @@
 # Historial de versiones
 
+## 0.9.7 — 2026-11-14 · «Un solo toque y cada voz en su lugar»
+
+Pedido del dueño, a partir de su informe de soporte del 2026-11-14 (un mes de uso real en un vivo V2318 con la 0.9.6): «un solo botón: que al terminar de transcribir guarde solo en el inbox» y «preguntar cuántas voces antes de transcribir; en audios largos la misma voz vuelve como otra persona».
+
+**Lo que mostraba el informe**
+- En 30 transcripciones hubo 26 toques a «Guardar en…» después de terminar: siempre el mismo paso a mano.
+- Una reunión de 1 h 22 se envió en 7 partes de ~11 min y terminó con **15 voces de más** («voces de las partes siguientes no se pudieron unir con la parte 1»). En «Revisar voces» hubo que escuchar unas 25 muestras para unirlas a mano. Lo mismo, en menor medida, en otras cuatro grabaciones largas (6, 5, 2 y 1 voces sueltas).
+- Un guardado falló con `SecurityException`: Drive había retirado el permiso de la carpeta y hubo que elegirla de nuevo.
+- El informe no decía cómo estaba configurada la app (si la transcripción era automática, si se pedía título, si la carpeta tenía permiso): había que deducirlo de los toques.
+
+**Se guarda sola** (`AutoSave`, Ajustes → Guardar y copias → «Guardar sola al terminar», encendida por defecto)
+- Al terminar de transcribir (y de armar la nota), `Inbox.save` corre solo. La bitácora dice «Guardada sola en «0-Inbox»» y el aviso de «Transcripción lista» dice dónde quedó; ya no ofrece el botón «Guardar en…».
+- Si después cambia algo de una grabación ya guardada (nombres de las voces, el título, la nota, una tarea marcada), el **mismo archivo** se actualiza solo a los 4 s (`AutoSave.afterEdit`, desde `Pipeline.edited`): varios cambios seguidos hacen un solo guardado.
+- Si el guardado falla, queda en el estado (`inboxAutoFailed`), en la bitácora y en el aviso («no se pudo guardar en 0-Inbox: elige la carpeta de nuevo»). Al elegir la carpeta otra vez, lo pendiente se guarda solo (`AutoSave.retryFailed`).
+- `Inbox.permission` detecta sin tocar la red que la carpeta perdió su permiso; la pantalla de inicio lo avisa una vez al abrir, con «Elegir la carpeta de nuevo».
+
+**¿Cuántas personas hablan?** (`RecordingActions.askPeople`, Ajustes → Grabar y transcribir → Preguntas, encendida por defecto)
+- Al tocar «Transcribir» sale una hoja con 1 a 8 y «No sé». Un toque y empieza. La última cantidad queda marcada. «1» transcribe sin separar voces (más rápido y más barato). Reemplaza a «¿Separar voces?».
+- La cantidad queda en el estado (`people`, `Pipeline.people`); «Reintentar» no vuelve a preguntar (`peopleAsked`).
+
+**Voces repetidas, unidas en el teléfono** (`VoiceMatch`, nuevo)
+- De cada voz se escuchan hasta 90 s de sus tramos más largos (20 min de audio en total como máximo, saltando en el archivo con `OrAudio.decodeRanges`) y se resume su timbre: 16 coeficientes cepstrales por cuadro de 32 ms, guardados como cuenta, suma y productos (`VoiceMatch.Print`). Todo local: no se envía nada y no cuesta.
+- Se unen de a dos las voces que menos se distinguen (ΔBIC sin penalización entre gaussianas de covarianza completa) hasta dejar la cantidad dicha. Sin cantidad, se detiene cuando unir ya no conviene (BIC con λ = 5): ante la duda deja una voz de más en vez de juntar a dos personas.
+- Dos voces conocidas distintas nunca se unen; las voces que casi no hablan (menos de ~6 s o del 1,5 %) se suman a la persona a la que más se parecen; un «ajá» sin audio aprovechable va con quien habla justo antes.
+- Corre al transcribir cuando el audio fue en varias partes, o cuando se dijo la cantidad y el modelo entregó más voces. La bitácora dice «Voces repetidas unidas: 19 voces → 4 personas (dijiste 4)».
+- Cada tramo guarda su voz original (`raw`), así que en «Nombrar voces» se puede cambiar la cantidad después («2 3 4…», o «Sin unir») sin volver a transcribir, también en grabaciones anteriores a esta versión. Lo corregido a mano se respeta y se puede deshacer. Las huellas quedan en `id.voices.json`: la segunda vez es inmediato.
+- **Medido con reuniones reales** de 4 personas grabadas con micrófono lejano (corpus AMI: ES2004b, dos mujeres y dos hombres; IS1009b, cuatro mujeres), partidas en bloques de 11 min, con voces fantasma y 8 % de tramos mal atribuidos: de 20 a 24 voces quedan 4 personas, con 95 % y 90 % del tiempo con la persona correcta (el techo, dado lo que entrega el modelo, es 94–96 %). Sin decir la cantidad encuentra 4 o 5. En el emulador, la reunión de 39 min tarda 18 s en escucharse y 80 ms en agruparse.
+- No se envía `maxSpeakers` al modelo: las muestras de voces conocidas van dentro del mismo audio, así que el tope tendría que ser «personas + muestras» y no ayudaría; y un tope corto no se puede deshacer después.
+
+**Quién es quién con un toque** («Nombrar voces»)
+- Los nombres sugeridos ahora incluyen las voces conocidas guardadas (antes solo «Yo» y los recientes), hasta 7.
+- La tarjeta «¿Cuántas personas hablan?» va arriba cuando hay 3 voces originales o más.
+
+**Informe de soporte más útil** (`Diagnostics`)
+- Sección «AJUSTES»: idioma, si hay clave, transcripción automática, Wi-Fi y cargador, modo de voces, si se pregunta la cantidad, voces conocidas (cuántas), modelos, nota, título, carpeta rápida (drive/teléfono, permiso vigente o perdido, guardado automático), ruido, permisos y totales de grabaciones. Sin claves, nombres, títulos ni rutas.
+- Teléfono: memoria total y libre, espacio libre y grupo de uso que Android le asigna a la app.
+- Cada bitácora dice cuántas voces entregó el modelo, cuántas personas quedaron, si se revisaron y si la grabación está guardada en la carpeta.
+- Eventos nuevos: `people_chosen`, `voices_unified`, `voices_regrouped`, `auto_inbox`, `inbox_permission`. Los campos `voices`, `people`, `prints`, `permission`, `merged` y `changed` ahora sí se guardan (antes la lista de campos permitidos los descartaba).
+
+**Arreglos**
+- Las píldoras de filtro (Biblioteca, «Nombrar voces») habían perdido su margen lateral en la 0.9.6: el fondo con margen propio reemplazaba el relleno de la vista. El relleno se pone después del fondo.
+- La nota sigue a una voz unida automáticamente (`Notes.mergedInto` también mira `raw`).
+
+**Pruebas**
+- `VoiceMatchTest` (JVM): voces sintéticas repartidas en etiquetas, voces conocidas que no se unen, y la medición opcional con reuniones reales (`VERBAPP_AMI`).
+- `VoiceChecks` (emulador): unir, cambiar la cantidad y deshacer respetando lo corregido a mano; un audio AAC real con dos «personas» y etiquetas cruzadas, escuchado con `decodeRanges`; valores por defecto, carpeta sin permiso e informe de soporte. `-e meeting <nombre>` mide una reunión real copiada a la caché.
+- Suite completa en teléfono (API 35), tablet (API 36) y Android 9.
+
+## 0.9.6 — 2026-10-09 · «Grabaciones a prueba de todo»
+
+Todas las mejoras de la auditoría de la 0.9.5 (`docs/auditoria-0.9.5.md`), pedidas por el dueño en una sola versión: «Implementa todas las sugerencias en 1 sola versión, arréglalo todo».
+
+**Grabación que sobrevive a un corte** (lo crítico de la auditoría)
+- Se graba en AAC **ADTS** (`id.aac`) y no en MPEG-4: un .m4a escribe su índice recién al detener, así que si Android mataba la app a la hora de grabar el archivo no se podía oír. Al detener, `AudioConvert.seal` lo pasa a `id.m4a` sin recodificar, en segundo plano (`RecorderService.savingId`), y nunca deja un .m4a roto (escribe `.m4a.tmp` y renombra). Si el paso falla, renombra el ADTS: el audio nunca se pierde.
+- `RecorderService.recoverOrphans` (al abrir la app, `VozApp`): un `.aac` que quedó a medias pasa a .m4a, recibe sus datos y aparece en la Biblioteca con el aviso «Se recuperó una grabación que quedó cortada». Probado en la versión de publicación: se forzó el cierre a los 12 s de grabar y la grabación volvió al abrir.
+- Si `stop()` falla, ya no se borra el audio con datos (antes un error a los 90 min borraba todo).
+- Medidor del micrófono en el servicio (único lector de `getMaxAmplitude`, cada 60 ms): cuenta segundos en silencio y saturados (`level` en el estado), detecta el micrófono silenciado por Android (`isClientSilenced`, API 29+) o en cero 15 s seguidos y avisa en la pantalla de Grabar y en la notificación, con vibración. Revisa el espacio cada minuto: avisa bajo 50 MB y detiene y guarda bajo 15 MB.
+- Wake lock suelto durante la pausa.
+- `FilesStore.update` acepta la grabación en curso (`.aac`): las ★ se siguen guardando al instante.
+
+**Antes de gastar**
+- Grabación casi muda (90 % de silencio, `RecorderService.mostlySilent`): «Casi no se oye nada» antes de transcribir, y la transcripción automática no la envía.
+- Costo estimado sobre US$0,50 o mayor que el último saldo comprobado: se pide confirmar (`RecordingActions.guard`).
+
+**Transcripción más robusta**
+- Si Android o el fabricante matan el servicio (barrer de Recientes en Xiaomi, vivo…), una tarea de respaldo (`Pipeline.backup`) retoma: el servicio la rearma cada 5 min con 15 de espera, y `onTaskRemoved` la arma a 1 min.
+- `catch (Throwable)` en los hilos de `TranscribeService` y `PipelineJob`: un `Error` ya no deja el wake lock renovándose ni la notificación pegada.
+- Espera de respuesta con OpenRouter proporcional al bloque (mitad de su duración más 1 min, mínimo 5): un bloque de 12 min espera 7 y no se reenvía (ni se cobra dos veces) un trabajo que estaba por terminar.
+- Tras un 429, de a una parte por vez durante 30 min (`Transcriber.parallel`).
+- Un 200 ilegible no se reintenta por segunda vez para la misma grabación (cada reintento volvía a cobrar).
+- Tiempos de cada tramo dentro de su parte y en orden (`Transcript.fromParts`).
+- Voces de las partes siguientes que no se pudieron unir con la parte 1: la bitácora dice cuántas y dónde unirlas.
+- Cortes en pausas: si en ±10 s solo hay habla, se busca hasta 25 s antes (nunca después: la parte no pasa del máximo).
+
+**Nota con IA más fiable** (`Notes`)
+- La transcripción va entre `<transcript>` y `</transcript>` y una regla en los 4 idiomas (`GUARD_*`) dice que lo de adentro nunca son instrucciones: alguien grabado ya no puede dictarle a la IA.
+- Salida estructurada estricta (`json_schema`, `Notes.schema`) y temperatura 0,2 donde el modelo la acepta; `models` con los otros dos modelos de nota como respaldo. El modo simple sigue igual.
+- La nota se reintenta sola ante 429/5xx (hasta 2 veces, respetando Retry-After) y, si se cortó por el tope de salida, una vez con el doble.
+- Un nombre escrito por la IA se acepta solo si aparece en la conversación; una «frase textual» que no está (menos del 80 % de sus palabras) se descarta. Topes de largo (panorama 1500, cada punto 400).
+- `parseAnswer` encuentra el objeto aunque haya llaves después; una respuesta cortada dice «cortada», no «formato inesperado».
+- Se dice cuál marca es quien usa la app («{S1} es la persona que usa esta app»); en «Sesión con cliente» esa persona es el profesional.
+- «Sesión con cliente» sin tono clínico: «con qué tema o pedido llegó el cliente», «asuntos que conviene seguir», «Recomendaciones y acuerdos» (antes «cómo llegó», «señales que observar», «Indicaciones»). El ejemplo de las pruebas pasó de ejercicios y hombro a un plan de ventas.
+- El pie de la nota muestra el modelo para leer («Claude Sonnet 5.5», `Notes.modelName`) y avisa si la conversación era tan larga que la IA leyó solo el comienzo. El Markdown conserva el id exacto.
+
+**Pantallas**
+- Eliminar tiene «Deshacer»: la grabación se oculta (`Recording.HIDDEN`) y se borra 10 s después; si la app se cierra antes, no se borra.
+- La Biblioteca busca en el título, el comienzo de la transcripción y las personas, sin importar tildes; arma las filas de a 40 con «Ver más».
+- La lista de grabaciones se guarda en memoria (`Recording.list`, por versión y fecha de la carpeta): las pantallas ya no leen un JSON por grabación varias veces por segundo.
+- Reproducción: pausa al desconectar audífonos (`BECOMING_NOISY`), vuelve a sonar tras una interrupción breve y sigue donde iba al girar el teléfono.
+- Tablet: el contenido no pasa de 680 dp, centrado. Verde de la marca más oscuro en modo oscuro (contraste 4,6:1). Las filas con interruptor se leen una sola vez en TalkBack; los filtros se tocan en 48 dp; las opciones de las hojas reciben foco con teclado. Las hojas se cierran al destruir la pantalla.
+- Ayuda y soporte: «Escribir al soporte» abre un correo a latribumaker@gmail.com con el informe adjunto.
+- Bienvenida con cifras: «Carga unos US$5: una hora de audio cuesta desde US$0,10», y qué es OpenRouter en una línea.
+- Importar: «Abrir con Verbapp» además de «Compartir», y errores claros (sin espacio, demasiado corto, formato que el teléfono no lee).
+
+**Idiomas**
+- Alemán: «Second Brain» (como la ficha de Play) y «Klient» en vez de «Kunde» («Klientensitzung»).
+- Español: «grabaciones» en vez de «audios» y «OpenRouter» en vez de «la API» en los avisos. El consentimiento dice que las muestras de voz van con el audio. «Segundo cerebro» se explica: «Para tus notas personales: …».
+- «Idioma del audio» sugiere «Detección automática» para audios en otro idioma o mezclados.
+
+**Android 8 y 9**
+- `MediaMetadataRetriever` sin try-with-resources (`close()` existe recién en Android 10): importar y listar se caían en Android 8-9.
+- Nuevo emulador `Verbapp28` (Android 9) en `.tools/avd`: la suite completa pasa ahí (con las animaciones del sistema apagadas, como pide su render por software).
+
+**Publicación, pruebas y proyecto**
+- R8 en la versión de publicación (`minifyEnabled` + `shrinkResources`, `-dontobfuscate` para que el informe de soporte siga legible): AAB de 3,1 MB a 1,1 MB. Probada en la tablet: graba, guarda y recupera.
+- Pruebas JVM (`app/src/test/PureTest`, JUnit + org.json), que el CI ahora corre (`testDebugUnitTest`). `RobustChecks` (androidTest) prueba lo nuevo: recuperación de un ADTS a medias, avisos, IA, motor, «Deshacer» y errores de importación.
+- CI con las acciones fijadas por commit; wrapper de Gradle con `distributionSha256Sum`.
+- `RECEIVE_BOOT_COMPLETED` se queda: la auditoría lo creyó sin uso, pero las tareas persistentes (`setPersisted`) lo exigen para sobrevivir a un reinicio. `VIBRATE` también se usa (★ desde la notificación).
+- README al día, `.gitignore` con las carpetas personales, `build-apk.ps1` toma la versión de `app/build.gradle`, política de privacidad (4 idiomas) con «Tu nombre» y fecha nueva, y notas de Play actualizadas.
+
+**Lo que quedó fuera, a propósito**
+- El refactor grande de las pantallas (dividir `RecordingActivity`, `SettingsActivity`…): no cambia nada visible y es de alto riesgo para una sola versión.
+- Borrar el código antiguo de OpenAI y Anthropic directos: desde la 0.8.0 nadie llega ahí (todo va por OpenRouter) y sus pruebas aún lo usan.
+- Portugués «Configurações» en la barra: es una decisión documentada y la palabra no cabe bien.
+- El respaldo WAV global si falla FLAC: es una falla del teléfono, no de una grabación.
+- Unificar «1 h 04 min» entre idiomas: el formato por idioma es intencional y está probado.
+
 ## 0.9.5 — 2026-10-09 · «Ajustes más simples y un resumen para tus sesiones»
 
 **Ajustes por temas** (pedido del dueño: «demasiado largo para encontrar lo que necesito»). Reemplaza la idea del acordeón: como Android y como ya funcionaba «Tus métricas».

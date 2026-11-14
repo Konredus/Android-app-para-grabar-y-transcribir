@@ -46,7 +46,7 @@
     <string name="onb_welcome_voices">Transkribieren, Stimme für Stimme</string>
     <string name="onb_welcome_voices_detail">Damit du weißt, wer was gesagt hat.</string>
     <string name="onb_welcome_note">Eine Notiz, bereit zum Speichern</string>
-    <string name="onb_welcome_note_detail">Direkt in dein zweites Gehirn.</string>
+    <string name="onb_welcome_note_detail">Direkt in dein Second Brain.</string>
     <!-- Selector de idioma; %1$s: el nombre del idioma en su propio idioma. -->
     <string name="onb_language_desc">Sprache: %1$s</string>
 
@@ -95,9 +95,9 @@
     <string name="onb_key_or_later">Füge deinen Schlüssel ein oder tippe auf „%1$s“.</string>
     <string name="onb_key_save_failed">Der Schlüssel konnte nicht auf diesem Handy gespeichert werden. Bitte versuch es noch mal.</string>
     <string name="onb_howto_title">So bekommst du deinen Schlüssel</string>
-    <string name="onb_howto_body">Mit OpenRouter nutzt du viele KIs mit einem einzigen Schlüssel. Du zahlst nur, was du nutzt.</string>
+    <string name="onb_howto_body">OpenRouter ist ein Dienst, der viele KIs bündelt. Mit einem Schlüssel (wie ein langes Passwort) transkribiert Verbapp für dich, und du zahlst nur, was du nutzt.</string>
     <string name="onb_howto_1">Erstelle dein Konto auf openrouter.ai.</string>
-    <string name="onb_howto_2">Lade etwas Guthaben auf: Abgezogen wird nur, was du nutzt.</string>
+    <string name="onb_howto_2">Lade etwa 5 US$ Guthaben auf: Eine Stunde Audio kostet ab 0,10 US$, abgezogen wird nur, was du nutzt.</string>
     <string name="onb_howto_3">Erstelle unter „Keys“ einen Schlüssel und kopiere ihn.</string>
     <string name="onb_howto_4">Komm zurück zu Verbapp und tippe auf „Einfügen“.</string>
     <!-- %1$s: openrouter.ai -->

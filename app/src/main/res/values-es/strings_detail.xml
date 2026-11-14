@@ -142,7 +142,7 @@
     <string name="detail_previous_title">Versión anterior</string>
     <string name="detail_previous_failed">No se pudo recuperar la versión anterior.</string>
 
-    <string name="detail_demo_note">Texto de demostración: no proviene de la API. Prueba a nombrar las voces.</string>
+    <string name="detail_demo_note">Texto de demostración: no proviene de OpenRouter. Prueba a nombrar las voces.</string>
     <string name="detail_auto_voices_note">Voces separadas automáticamente: pueden tener errores. Toca el nombre de una intervención para escuchar y corregir quién habla.</string>
     <string name="detail_parts_note">Audio procesado en partes: los tiempos indican el inicio de cada parte.</string>
     <string name="detail_transcript">Transcripción</string>
@@ -458,4 +458,15 @@
     <string name="detail_audio_clean_noise">con menos ruido de fondo</string>
     <!-- 0.9.5: título de la nota de «Sesión con cliente» -->
     <string name="detail_note_client_title">Resumen de la sesión</string>
+    <string name="voices_people_title">¿Cuántas personas hablan?</string>
+    <string name="voices_people_sub">Toca la cantidad y Verbapp une las voces repetidas.</string>
+    <string name="voices_people_sub_joined">Verbapp unió %1$d voces en %2$d personas. Toca otra cantidad para cambiarlo.</string>
+    <string name="voices_people_separate">Sin unir</string>
+    <string name="voices_people_working">Comparando las voces…</string>
+    <string name="voices_people_failed">No se pudieron comparar las voces. La transcripción quedó como estaba.</string>
+    <string name="voices_people_separated">Voces como las separó la IA</string>
+    <plurals name="voices_people_done">
+        <item quantity="one">Voces unidas: quedó %1$d persona</item>
+        <item quantity="other">Voces unidas: quedaron %1$d personas</item>
+    </plurals>
 </resources>

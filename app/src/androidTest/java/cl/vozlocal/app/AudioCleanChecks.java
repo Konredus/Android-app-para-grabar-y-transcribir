@@ -34,11 +34,11 @@ final class AudioCleanChecks {
         // Un tono continuo no es «voz» para el nivelador (no tiene pausas): el volumen no cambia.
         check(Math.abs(voiceOut/voiceIn-1)<0.1,"A steady 1 kHz tone should pass unchanged: "+Math.round(voiceIn)+" -> "+Math.round(voiceOut));
     }
-    /** Una voz baja (con pausas) sube hasta +12 dB; una muy fuerte baja; nada pasa del techo. */
+    /** Una voz baja (con pausas) sube hasta +6 dB (0.9.6; antes +12); una muy fuerte baja; nada pasa del techo. */
     private static void level()throws Exception{
         short[] quiet=bursts(8*RATE,400,15,2),out=clean(quiet,AudioClean.LEVEL,777);
         double gain=tone(out,5*RATE,8*RATE,1000)/tone(quiet,5*RATE,8*RATE,1000);
-        check(gain>2.5&&gain<4.4,"A quiet voice should be raised (up to +12 dB): x"+gain);
+        check(gain>1.7&&gain<2.2,"A quiet voice should be raised (up to +6 dB): x"+gain);
         short[] loud=bursts(8*RATE,20000,15,3),down=clean(loud,AudioClean.LEVEL,4096);
         double cut=tone(down,5*RATE,8*RATE,1000)/tone(loud,5*RATE,8*RATE,1000);
         check(cut>0.4&&cut<0.75,"A very loud voice should be lowered: x"+cut);

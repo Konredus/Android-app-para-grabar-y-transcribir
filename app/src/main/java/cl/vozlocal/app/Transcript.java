@@ -178,6 +178,57 @@ final class Transcript {
         if(inherited!=null&&names!=null)for(Iterator<String> it=inherited.keys();it.hasNext();){String y=it.next();if(names.optString(y,"").trim().equals(inherited.optString(y).trim()))names.remove(y);}
         data.remove("inherited");
     }
+    // ---------- Voces repetidas (0.9.7, VoiceMatch) ----------
+    /**
+     * Voz original de un tramo: la que entregó el modelo, antes de unir voces repetidas ("raw") y de las correcciones a
+     * mano ("orig"). Con ella se puede volver a agrupar con otra cantidad de personas sin transcribir de nuevo.
+     */
+    static String raw(JSONObject segment){
+        String r=segment.optString("raw","");if(!r.isEmpty())return r;
+        String o=segment.optString("orig","");return o.isEmpty()?segment.optString("speaker"):o;
+    }
+    /** Voces originales, en orden de aparición. */
+    LinkedHashSet<String> rawVoices(){
+        LinkedHashSet<String> ids=new LinkedHashSet<>();JSONArray s=segments();
+        for(int i=0;i<s.length();i++){JSONObject seg=s.optJSONObject(i);if(seg!=null)ids.add(raw(seg));}
+        return ids;
+    }
+    /** ¿Se unieron voces repetidas? (algún tramo guarda una voz original distinta de la que muestra). */
+    boolean unified(){JSONArray s=segments();for(int i=0;i<s.length();i++){JSONObject seg=s.optJSONObject(i);if(seg!=null&&seg.has("raw"))return true;}return false;}
+    /** Cuántas personas dijo quien grabó (0 = no lo dijo). */
+    int people(){return data.optInt("people",0);}
+    /**
+     * Une voces: cada voz original pasa a la que la representa (into: voz original → representante; las que faltan quedan
+     * igual). Se parte siempre de las voces originales, así que se puede llamar otra vez con otra agrupación. Lo corregido
+     * a mano se respeta: el tramo sigue con la persona que se le asignó (o con su representante, si ella también se unió).
+     * El nombre que tenía alguna voz del grupo pasa al grupo. La numeración («Persona 1…») se recalcula.
+     */
+    void unify(Map<String,String> into,int people) throws JSONException {
+        JSONArray s=segments();
+        for(int i=0;i<s.length();i++){
+            JSONObject seg=s.getJSONObject(i);String r=raw(seg),rep=into.containsKey(r)?into.get(r):r;
+            if(seg.has("orig")){
+                String assigned=seg.getString("speaker"),target=into.containsKey(assigned)?into.get(assigned):assigned;
+                seg.put("speaker",target);if(target.equals(rep))seg.remove("orig");else seg.put("orig",rep);
+            }else seg.put("speaker",rep);
+            if(r.equals(seg.getString("speaker"))&&!seg.has("orig"))seg.remove("raw");else seg.put("raw",r);
+        }
+        JSONObject names=data.optJSONObject("names");if(names==null){names=new JSONObject();data.put("names",names);}
+        for(Map.Entry<String,String> e:into.entrySet()){
+            String member=e.getKey(),rep=e.getValue();if(member.equals(rep))continue;
+            String name=names.optString(member,"").trim();
+            if(!name.isEmpty()&&names.optString(rep,"").trim().isEmpty())names.put(rep,name);
+        }
+        if(people>0)data.put("people",people);else data.remove("people");
+        data.remove("order");
+    }
+    /** Deshace la unión: cada tramo vuelve a la voz que entregó el modelo (también lo corregido a mano). */
+    void separate() throws JSONException {
+        JSONArray s=segments();
+        for(int i=0;i<s.length();i++){JSONObject seg=s.getJSONObject(i);seg.put("speaker",raw(seg));seg.remove("raw");seg.remove("orig");}
+        data.remove("people");data.remove("order");data.remove("inherited");
+    }
+
     /** Aplica nombres; las voces con el mismo nombre se unen (mismo nombre = misma persona). Devuelve cuántas se unieron. */
     int applyNames(Map<String,String> names) throws Exception {
         JSONObject mapping=data.optJSONObject("names");if(mapping==null)mapping=new JSONObject();
@@ -256,10 +307,15 @@ final class Transcript {
                 if(segment.optString("text").trim().isEmpty())continue;
                 String speaker=segment.isNull("speaker")?"unknown":segment.getString("speaker");
                 String id=map.containsKey(speaker)?map.get(speaker):prefix+(parts.size()<=1?speaker:(p>0&&legacy.contains(speaker)?"block0:"+speaker:"block"+p+":"+speaker));
-                segments.put(new JSONObject().put("speaker",id)
-                    .put("start",segment.getDouble("start")+offsets.get(p)).put("end",segment.getDouble("end")+offsets.get(p)).put("text",segment.getString("text")));
+                // 0.9.6: tiempos dentro de su parte (un modelo puede devolver uno fuera del audio) y el fin nunca antes del inicio.
+                double from=offsets.get(p),limit=p+1<offsets.size()?offsets.get(p+1)+2:Double.MAX_VALUE;
+                double start=Math.min(limit,Math.max(from,segment.getDouble("start")+from)),end=Math.min(limit,Math.max(start,segment.getDouble("end")+from));
+                segments.put(new JSONObject().put("speaker",id).put("start",start).put("end",end).put("text",segment.getString("text")));
             }
         }
+        // En orden de tiempo (orden estable: lo que ya venía ordenado queda igual).
+        List<JSONObject> ordered=new ArrayList<>();for(int i=0;i<segments.length();i++)ordered.add(segments.getJSONObject(i));
+        ordered.sort((x,y)->Double.compare(x.optDouble("start"),y.optDouble("start")));segments=new JSONArray(ordered);
         // Con voces si ALGUNA parte vino con voces (0.8.0): con OpenRouter cada respuesta dice lo suyo, y una parte 1 en
         // silencio (sin hablantes) no debe dejar como «Texto» a las personas de las demás. Con OpenAI todas traen lo mismo.
         boolean diarized=parts.isEmpty();for(JSONObject part:parts)if(part.optBoolean("_diarized",true)){diarized=true;break;}

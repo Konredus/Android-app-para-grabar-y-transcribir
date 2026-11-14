@@ -21,7 +21,7 @@
     <string name="key_fix_in_settings">Confira em Ajustes.</string>
 
     <string name="consent_title">Seu áudio é enviado para ser transcrito</string>
-    <string name="consent_body">Para transcrever, o Verbapp envia o áudio de cada gravação que você transcreve ao OpenRouter e ao modelo de IA que você escolher. Para escrever a nota, envia o texto da transcrição. As gravações que você não transcreve nunca são enviadas, e sua chave paga só o que você usar.</string>
+    <string name="consent_body">Para transcrever, o Verbapp envia o áudio de cada gravação que você transcreve ao OpenRouter e ao modelo de IA que você escolher. Se você salvou vozes conhecidas, as amostras curtas delas vão junto com o áudio para a IA reconhecê-las. Para escrever a nota, envia o texto da transcrição. As gravações que você não transcreve nunca são enviadas, e sua chave paga só o que você usar.</string>
     <string name="consent_accept">Concordo</string>
     <string name="consent_later">Agora não</string>
     <string name="privacy_policy">Política de privacidade</string>

@@ -83,7 +83,7 @@ final class UiChecks {
         // La píldora de Grabar (MainActivity.queueText): «Transcribiendo» solo de la que se procesa; si no, por qué espera.
         check("«Reunión» · En cola · esperando Wi-Fi".equals(MainActivity.queueText(1,null,0,0,"Reunión","En cola · esperando Wi-Fi")),"Una sola en espera de Wi-Fi no debe decir «Transcribiendo»");
         check("«Reunión» · En cola".equals(MainActivity.queueText(1,null,0,0,"Reunión",null)),"Sin motivo, «En cola»");
-        check("3 audios en cola".equals(MainActivity.queueText(3,null,0,0,"Reunión","En cola")),"Varias sin ninguna en proceso: cuántas esperan");
+        check("En cola: 3 grabaciones".equals(MainActivity.queueText(3,null,0,0,"Reunión","En cola")),"Varias sin ninguna en proceso: cuántas esperan");
         check("Transcribiendo «Reunión»".equals(MainActivity.queueText(1,"Reunión",0,0,"Reunión",null)),"La que se procesa, sola");
         check("Transcribiendo «Reunión» · 1 de 3 · 2 en cola".equals(MainActivity.queueText(3,"Reunión",3,1,"Otra",null)),"La que se procesa, con sus partes y las que esperan detrás: «"+MainActivity.queueText(3,"Reunión",3,1,"Otra",null)+"»");
     }

@@ -21,6 +21,22 @@ final class Inbox {
     private static final Object SAVING=new Object();
 
     static boolean configured(Context c){return !new Settings(c).inboxTree().isEmpty();}
+    /**
+     * ¿La app conserva el permiso para escribir en la carpeta rápida? "none": no hay carpeta; "held": sí; "lost": la
+     * carpeta está elegida pero Android ya no tiene el permiso (p. ej. Drive lo retiró): hay que elegirla de nuevo.
+     * Para el informe de soporte y para avisar a tiempo; no toca la red.
+     */
+    static String permission(Context c){
+        String tree=new Settings(c).inboxTree();if(tree.isEmpty())return "none";
+        try{for(android.content.UriPermission p:c.getContentResolver().getPersistedUriPermissions())if(p.isWritePermission()&&tree.equals(p.getUri().toString()))return "held";}catch(RuntimeException e){return "unknown";}
+        return "lost";
+    }
+    /** drive / device / other: dónde está la carpeta rápida (sin su nombre ni su ruta). */
+    static String place(Context c){
+        String tree=new Settings(c).inboxTree();if(tree.isEmpty())return "none";
+        String authority=String.valueOf(Uri.parse(tree).getAuthority());
+        return authority.contains("google.android.apps.docs")?"drive":authority.contains("externalstorage")?"device":"other";
+    }
     static String folderName(Context c){return new Settings(c).inboxName();}
     static long savedAt(Context c,String id){return FilesStore.state(c,id).optLong("inboxAt",0);}
     /** "md", "txt" o "" si nunca se guardó. */

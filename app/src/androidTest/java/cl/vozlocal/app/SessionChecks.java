@@ -51,15 +51,15 @@ final class SessionChecks {
         long created=new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm",java.util.Locale.ROOT).parse("2026-10-09 10:00").getTime();
         Recording r=new Recording("session-check","Sesión de prueba",created,600_000);
         Transcript t=new Transcript(new JSONObject().put("diarized",true).put("reviewed",true).put("names",new JSONObject().put("A","Stephan").put("B","Lisa")).put("segments",new JSONArray()
-            .put(seg("A",0,5,"¿Cómo te fue esta semana con los ejercicios?")).put(seg("B",6,12,"Mejor, pero el hombro me molesta en la mañana."))
-            .put(seg("A",13,20,"Entonces sigue tres veces por semana y nos vemos el jueves."))));
+            .put(seg("A",0,5,"¿Cómo te fue esta semana con el plan de ventas?")).put(seg("B",6,12,"Mejor, pero me cuesta ordenar las mañanas."))
+            .put(seg("A",13,20,"Entonces revisa el plan tres veces por semana y nos vemos el jueves."))));
         String[] own={"(professional)","(profesional)","(profissional)","(Fachperson)"};
         String[] forbidden={"terap","therap","pacient","patient","salud","health","saúde","gesundheit","clínic","clinic","klinik","médic","medic","diagn"};
         try{
             for(int i=0;i<Lang.SUPPORTED.length;i++){
                 String lang=Lang.SUPPORTED[i];
                 Notes.Prompt brain=Notes.prompt(t,r,new JSONArray(),lang);
-                check(brain.system().equals(Notes.system(lang)),"The second brain note must keep its instructions ("+lang+")");
+                check(brain.system().startsWith(Notes.system(lang))&&brain.system().contains("<transcript>"),"The second brain note must keep its instructions plus the transcript rule ("+lang+")");
                 Notes.Prompt client=Notes.prompt(t,r,new JSONArray(),lang).as(Notes.CLIENT,null);String sys=client.system();
                 for(String field:new String[]{"\"client\":[","\"work\":[","\"agreements\":[","\"next\":[","\"watch\":[","- summary: ","- client: ","- work: ","- agreements: ","- next: ","- watch: ","- quotes: ","- tags: "," 60 "})
                     check(sys.contains(field),"Client session instructions in "+lang+" lack «"+field+"»");
@@ -83,18 +83,18 @@ final class SessionChecks {
             Notes.Prompt p=Notes.prompt(t,r,new JSONArray(),Lang.ES).as(Notes.CLIENT,null);
             JSONArray many=new JSONArray();for(int i=0;i<15;i++)many.put("Punto "+i+" de {S2}");
             JSONObject raw=new JSONObject().put("title","Seguimiento semanal").put("summary","{S1} (profesional) y {S2} (cliente) revisaron la semana.")
-                .put("client",new JSONArray().put("{s2} siente molestias en la mañana.").put("")).put("work",new JSONArray().put("Revisaron los ejercicios."))
+                .put("client",new JSONArray().put("{s2} siente que le cuesta ordenar las mañanas.").put("")).put("work",new JSONArray().put("Revisaron el plan de ventas."))
                 .put("agreements",new JSONArray().put("Seguir tres veces por semana.")).put("next",new JSONArray().put("Sesión el jueves.")).put("watch",many)
                 .put("quotes",new JSONArray()).put("tags",new JSONArray().put("seguimiento"));
             JSONObject note=Notes.normalize(raw,p.tokens,r.duration).put("kind",Notes.CLIENT).put("speakers",new JSONObject(p.tokens)).put("provider","openrouter").put("model",Models.NOTE_DEFAULT);
-            check(note.getJSONArray("client").length()==1&&note.getJSONArray("client").getString(0).equals("{S2} siente molestias en la mañana.")&&note.getJSONArray("watch").length()==12,
+            check(note.getJSONArray("client").length()==1&&note.getJSONArray("client").getString(0).equals("{S2} siente que le cuesta ordenar las mañanas.")&&note.getJSONArray("watch").length()==12,
                 "Client lists not cleaned: "+note);
             check(!Notes.normalize(new JSONObject().put("summary","x"),p.tokens,r.duration).has("client"),"A second brain note must not get client lists");
             String md=Notes.markdown(r,note,t,new JSONArray());
             int at=0;
-            for(String section:new String[]{"## Panorama general\n","## Lo que contó el cliente\n","## Lo que se trabajó\n","## Indicaciones y acuerdos\n","## Próximos pasos\n","## Puntos a vigilar\n","## Transcripción\n"}){
+            for(String section:new String[]{"## Panorama general\n","## Lo que contó el cliente\n","## Lo que se trabajó\n","## Recomendaciones y acuerdos\n","## Próximos pasos\n","## Puntos a vigilar\n","## Transcripción\n"}){
                 int k=md.indexOf(section);check(k>at,"Client Markdown section missing or out of order: "+section+"\n"+md);at=k;}
-            check(md.contains("- Lisa siente molestias en la mañana.\n")&&!md.contains("## Resumen\n"),"Client Markdown body wrong:\n"+md);
+            check(md.contains("- Lisa siente que le cuesta ordenar las mañanas.\n")&&!md.contains("## Resumen\n"),"Client Markdown body wrong:\n"+md);
         }finally{
             Lang.override(Lang.ES);
             android.content.SharedPreferences.Editor e=s.prefs.edit();

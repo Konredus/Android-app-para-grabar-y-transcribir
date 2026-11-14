@@ -685,7 +685,7 @@ final class OpenRouterChecks {
         // 413: los bloques bajan a la mitad.
         check(Transcriber.orBlockMs(30*60_000L,12*60_000L,true)==5*60_000L&&Transcriber.orBlockMs(10*60_000L,12*60_000L,true)==5*60_000L,"Halved blocks wrong");
         // Espera de la respuesta: con OpenRouter no pasa de 5 min; los demás proveedores, igual que antes.
-        check(Transcriber.responseLimit("openrouter",12*60_000L)==5*60_000L&&Transcriber.responseLimit("openrouter",30_000)==3*60_000L
+        check(Transcriber.responseLimit("openrouter",12*60_000L)==7*60_000L&&Transcriber.responseLimit("openrouter",4*60_000L)==5*60_000L&&Transcriber.responseLimit("openrouter",30_000)==3*60_000L
             &&Transcriber.responseLimit("openai",12*60_000L)==13*60_000L&&Transcriber.responseLimit("custom",12*60_000L)==Transcriber.responseLimit(12*60_000L),"Response limit by provider wrong");
         // «Sin cortar»: lo que acepta el modelo y no más de 24 MB de FLAC estimado (20 min).
         check(Retranscribe.singleMaxMs(wide)==20*60_000L&&Retranscribe.singleMaxMs(narrow)==10*60_000L&&Retranscribe.fitsSingle(wide,20*60_000L)&&!Retranscribe.fitsSingle(wide,20*60_000L+1)&&!Retranscribe.fitsSingle(wide,0),"Single-request limit for OpenRouter wrong");

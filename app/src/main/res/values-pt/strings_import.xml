@@ -76,4 +76,7 @@
     <string name="imp_crop_name">%1$s · recorte</string>
     <string name="imp_whatsapp_title">Áudio do WhatsApp %1$s %2$s</string>
     <string name="imp_whatsapp_audio">Áudio do WhatsApp</string>
+    <string name="imp_err_space">Não há espaço suficiente no celular para preparar este áudio. Libere espaço e tente de novo.</string>
+    <string name="imp_err_short">O áudio é curto demais: precisa durar pelo menos meio segundo.</string>
+    <string name="imp_err_format">Este celular não consegue ler este formato de áudio. Tente exportar como M4A, MP3 ou WAV.</string>
 </resources>

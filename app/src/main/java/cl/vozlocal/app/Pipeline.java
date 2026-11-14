@@ -62,10 +62,23 @@ final class Pipeline {
         start(c,byUser);
     }
     /** Al guardar una grabación. «Transcribir automáticamente» solo envía el audio si ya se aceptó el aviso de envío (Consent). */
-    static void afterRecording(Context c,String id){LocalStorage.enqueue(c,id);Diagnostics.event("audio_saved",id);try{if(new Settings(c).automatic()&&Consent.given(c))request(c,id,new Settings(c).defaultSpeakers(),false);}catch(Exception ignored){}}
+    static void afterRecording(Context c,String id){LocalStorage.enqueue(c,id);Diagnostics.event("audio_saved",id);try{if(new Settings(c).automatic()&&Consent.given(c)){
+        // 0.9.6: una grabación casi muda no se envía sola (se pagaría por silencio): queda lista para revisarla y transcribirla a mano.
+        if(RecorderService.mostlySilent(FilesStore.state(c,id))){Diagnostics.event("transcribe_guard",id,"reason","silent_auto");RecorderService.notice=Lang.str(c,R.string.eng_rec_silent_kept);return;}
+        request(c,id,new Settings(c).defaultSpeakers(),false);}}catch(Exception ignored){}}
     static void edited(Context c,String id)throws Exception{
         if(FilesStore.state(c,id).optBoolean("demo")){FilesStore.version.incrementAndGet();return;}
         LocalStorage.enqueue(c,id);Diagnostics.event("recording_edited",id);
+        // 0.9.7: lo ya guardado en la carpeta rápida se actualiza solo.
+        AutoSave.afterEdit(c,id);
+    }
+    /**
+     * 0.9.7: cuántas personas hablan en esta grabación (0 = no se sabe), dicho al pedir la transcripción. El motor une
+     * las voces repetidas hasta dejar esa cantidad (VoiceMatch). Se guarda en el estado: un reintento la conserva.
+     */
+    static void people(Context c,String id,int people)throws Exception{
+        // "peopleAsked": la pregunta ya se respondió para esta grabación; «Reintentar» no la repite.
+        FilesStore.update(c,id,s->{if(people>0)s.put("people",people);else s.remove("people");s.put("peopleAsked",true);});
     }
     static boolean pending(Context c){for(Recording r:Recording.list(c))if(FilesStore.state(c,r.id).optBoolean("requested"))return true;return false;}
     /** Hay grabaciones pedidas que aún no tuvieron ningún intento (recién encoladas). */
@@ -80,6 +93,16 @@ final class Pipeline {
         Settings settings=new Settings(c);
         JobInfo info=jobInfo(c,settings,anyMobileOk(c),Transcriber.serverDelay(c,TranscribeService.pendingIds(c),System.currentTimeMillis()));
         scheduler.schedule(info);
+    }
+    /**
+     * 0.9.6: red de seguridad mientras el servicio en primer plano trabaja. Si Android o el fabricante lo matan (p. ej. al
+     * barrer la app de Recientes en algunos teléfonos), esta tarea retoma lo pedido sin esperar a que se abra la app. El
+     * servicio la vuelve a armar cada 5 min con 15 de espera, así que mientras viva nunca llega a correr; si corre con el
+     * servicio vivo, PipelineJob cede (devuelve false) y la próxima renovación la arma de nuevo. No lee el disco.
+     */
+    static final long BACKUP_MS=15*60_000L;
+    static void backup(Context c,long latencyMs){
+        try{c.getSystemService(JobScheduler.class).schedule(jobInfo(c,new Settings(c),false,latencyMs));}catch(RuntimeException e){Diagnostics.event("backup_job_failed",null,"error_class",e.getClass().getSimpleName());}
     }
     /** La tarea de fondo según los ajustes (Wi-Fi, cargador). */
     static JobInfo jobInfo(Context c,Settings settings){return jobInfo(c,settings,false);}
