@@ -461,37 +461,38 @@ final class RecordingActions {
         Sheet sheet=s.sheet(Lang.str(s,R.string.act_delete_title,r.title),Lang.str(s,R.string.act_delete_body));
         SheetParts.hero(sheet,R.drawable.ic_trash,true);
         sheet.primary(Lang.str(s,R.string.act_delete),Ui.Style.DESTRUCTIVE,()->{
-            if(before!=null)before.run();trash(s,r);if(after!=null)after.run();offerUndo(s);
+            if(before!=null)before.run();
+            if(!trash(s,r)){s.message(Lang.str(s,R.string.act_delete),Lang.str(s,R.string.act_delete_failed));return true;}
+            if(after!=null)after.run();offerUndo(s);
             return true;
         }).secondary(Lang.str(s,R.string.common_cancel),null).show();
     }
 
     /*
-     * 0.9.6: eliminar se puede deshacer. La grabación se oculta al instante (Recording.HIDDEN) y sus archivos se borran
-     * UNDO_MS después; mientras, «Grabación eliminada · Deshacer» la devuelve tal cual. Si la app se cierra antes, no se
-     * borra nada (vuelve a aparecer): nunca se pierde por un toque. Un segundo borrado confirma el anterior.
+     * 0.9.8: eliminar manda la grabación a la Papelera (Trash): sale de la Biblioteca al instante, «Deshacer» la devuelve
+     * en el momento y, pasado eso, se recupera desde Ajustes → Guardar y copias → Papelera durante 30 días.
+     * (0.9.6: se ocultaba 10 s y después se borraba de verdad.)
      */
     static final long UNDO_MS=10_000;
     private static final android.os.Handler TRASH=new android.os.Handler(android.os.Looper.getMainLooper());
-    private static Recording trashed;private static Context trashApp;private static java.lang.ref.WeakReference<Screen> shownOn;
-    static void trash(Context c,Recording r){
-        commitTrash();trashed=r;trashApp=c.getApplicationContext();Recording.HIDDEN.add(r.id);FilesStore.version.incrementAndGet();
-        TRASH.postDelayed(RecordingActions::commitTrash,UNDO_MS);Diagnostics.event("recording_trashed",r.id);
+    private static Recording trashed;private static Context trashApp;
+    /** Manda la grabación a la Papelera; false si no se pudo. Deja listo el «Deshacer» por UNDO_MS. */
+    static boolean trash(Context c,Recording r){
+        TRASH.removeCallbacksAndMessages(null);trashed=null;
+        if(!Trash.move(c,r))return false;
+        trashed=r;trashApp=c.getApplicationContext();
+        TRASH.postDelayed(RecordingActions::commitTrash,UNDO_MS);
+        return true;
     }
-    /** Borra de verdad lo que estaba esperando el «Deshacer». */
-    static void commitTrash(){
-        TRASH.removeCallbacksAndMessages(null);Recording r=trashed;if(r==null)return;trashed=null;Context c=trashApp;
-        Screen shown=shownOn==null?null:shownOn.get();shownOn=null;if(shown!=null&&!shown.isFinishing())shown.hideSnackbar();
-        new Thread(()->{boolean ok=false;try{ok=r.delete(c);}catch(Exception e){Diagnostics.crash(e);}
-            Recording.HIDDEN.remove(r.id);FilesStore.version.incrementAndGet();Diagnostics.event(ok?"recording_deleted":"recording_delete_failed",r.id);},"VozLocal-delete").start();
-    }
+    /** Se acabó el tiempo del «Deshacer»: la grabación sigue en la Papelera, solo se deja de ofrecer aquí. */
+    static void commitTrash(){TRASH.removeCallbacksAndMessages(null);trashed=null;}
     static void undoTrash(){
-        TRASH.removeCallbacksAndMessages(null);Recording r=trashed;trashed=null;shownOn=null;if(r==null)return;
-        Recording.HIDDEN.remove(r.id);FilesStore.version.incrementAndGet();Diagnostics.event("recording_restored",r.id);
+        TRASH.removeCallbacksAndMessages(null);Recording r=trashed;trashed=null;if(r==null)return;
+        Trash.restore(trashApp,r.id);
     }
-    /** «Grabación eliminada · Deshacer» en esta pantalla, si hay un borrado esperando (también al volver del detalle). */
+    /** «Grabación eliminada · Deshacer» en esta pantalla, si se acaba de eliminar una (también al volver del detalle). */
     static void offerUndo(Screen s){
-        Recording r=trashed;if(r==null||s.isFinishing())return;shownOn=new java.lang.ref.WeakReference<>(s);
+        Recording r=trashed;if(r==null||s.isFinishing())return;
         s.snackbar(Lang.str(s,R.string.act_deleted,r.title),Lang.str(s,R.string.detail_undo),RecordingActions::undoTrash);
     }
     private RecordingActions(){}

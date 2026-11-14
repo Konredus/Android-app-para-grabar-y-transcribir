@@ -1,5 +1,25 @@
 # Historial de versiones
 
+## 0.9.8 — 2026-11-14 · «Elimina al tiro y recupera cuando quieras»
+
+Pedido del dueño al probar la 0.9.7: «cuando termino de grabar, a veces grabé algo muy cortito y no quiero que lo guarde… un botoncito al lado de Ver grabación, un tarrito chiquitito y en rojo… igual que confirme», y «que los eliminados, en caso de haberlos eliminado sin querer, tengan un lugar de almacenaje oculto».
+
+**Tarro rojo en «Nombra esta grabación»** (`MainActivity.afterSave`, `Sheet.lead`)
+- Un botón redondo chico, rojo, con el tarro, delante de «Listo» y «Ver grabación». Pide confirmar («¿Eliminar esta grabación?») y, al aceptar, cierra la hoja sin guardar el título, saca la grabación de la Biblioteca y deja «Deshacer» abajo.
+- `Sheet.lead(View)` pone una vista de 52 dp delante de los dos botones de una hoja (si no caben lado a lado, va arriba).
+
+**Papelera** (`Trash`, Ajustes → Guardar y copias → Papelera)
+- Eliminar ya no borra: los archivos de la grabación (audio, datos, transcripción, nota, voces, onda) pasan a `files/trash` con un renombrado, así que es inmediato y no duplica nada. Antes se detiene lo que se estuviera haciendo con ella (`Pipeline.cancel`). Quedan fuera de la Biblioteca, de «Tus métricas» y del motor.
+- «Deshacer» (10 s) la devuelve tal cual. Después se restaura desde la Papelera: la lista muestra cada grabación con su duración y en cuántos días se borra; al tocar una, «Restaurar» o «Borrar para siempre» (con confirmación). «Vaciar la Papelera» borra todo, también con confirmación.
+- A los 30 días (`Trash.KEEP_DAYS`) se borran solas, al abrir la app (`Trash.expire`, en el mismo hilo que recupera grabaciones cortadas).
+- La fila de Ajustes dice «Vacía» o «3 grabaciones · 12 MB». El informe de soporte también lo cuenta.
+- La confirmación de «Eliminar» de siempre ahora dice que va a la Papelera (antes: «No se puede deshacer»).
+- Se retiró el ocultamiento de 10 s de la 0.9.6 (`Recording.HIDDEN` ya no se usa al eliminar): la Papelera lo reemplaza.
+
+**Pruebas**
+- `RobustChecks.library`: eliminar mueve todos los archivos a la Papelera, «Deshacer» y «Restaurar» los devuelven sin dejar restos, a los 29 días sigue y a los 31 se borra.
+- Suite completa en teléfono (API 35), tablet (API 36) y Android 9.
+
 ## 0.9.7 — 2026-11-14 · «Un solo toque y cada voz en su lugar»
 
 Pedido del dueño, a partir de su informe de soporte del 2026-11-14 (un mes de uso real en un vivo V2318 con la 0.9.6): «un solo botón: que al terminar de transcribir guarde solo en el inbox» y «preguntar cuántas voces antes de transcribir; en audios largos la misma voz vuelve como otra persona».

@@ -280,7 +280,7 @@
     <string name="act_previous_version">Vorherige Version</string>
     <string name="act_restore_failed">Die vorherige Version konnte nicht wiederhergestellt werden. Dein Audio ist unverändert.</string>
     <string name="act_delete_title">„%1$s“ löschen?</string>
-    <string name="act_delete_body">Audio und Transkript werden von diesem Handy gelöscht. Kopien in deinem gewählten Ordner bleiben erhalten. Das lässt sich nicht rückgängig machen.</string>
+    <string name="act_delete_body">Audio und Transkript verlassen deine Bibliothek und kommen für 30 Tage in den Papierkorb (Einstellungen → Speichern und Kopien). Kopien in deinem gewählten Ordner bleiben erhalten.</string>
     <string name="act_delete_failed">Das Audio konnte nicht gelöscht werden.</string>
 
     <!-- ===== Oberflächen-Kit (Ui, Sheet) ===== -->
@@ -323,4 +323,7 @@
         <item quantity="other">%1$d Personen</item>
     </plurals>
     <string name="home_inbox_lost">Verbapp hat den Zugriff auf „%1$s“ verloren. Wähle den Ordner neu, damit Notizen weiter automatisch gespeichert werden.</string>
+    <string name="home_delete_recording">Diese Aufnahme löschen</string>
+    <string name="home_delete_q">Diese Aufnahme löschen?</string>
+    <string name="home_delete_body">Sie kommt in den Papierkorb und wird nach %1$d Tagen von selbst gelöscht. Du holst sie unter Einstellungen → Speichern und Kopien → Papierkorb zurück.</string>
 </resources>

@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.9.8",
+    "date": "2026-11-14",
+    "title": "Sofort löschen, jederzeit wiederherstellen",
+    "items": [
+      "Löschen direkt nach der Aufnahme: Unter Benenne diese Aufnahme gibt es jetzt einen roten Papierkorb neben den Buttons. Ist die Aufnahme misslungen oder zu kurz, löschst du sie gleich dort (mit Rückfrage).",
+      "Papierkorb: Was du löschst, ist nicht mehr sofort weg. Es bleibt 30 Tage unter Einstellungen → Speichern und Kopien → Papierkorb, außerhalb deiner Bibliothek, und von dort stellst du es wieder her oder löschst es endgültig.",
+      "Papierkorb leeren: Brauchst du den Platz, leerst du ihn mit einem Tipp. Nach 30 Tagen leert er sich von selbst."
+    ]
+  },
+  {
     "version": "0.9.7",
     "date": "2026-11-14",
     "title": "Ein Tipp, und jede Stimme an ihrem Platz",

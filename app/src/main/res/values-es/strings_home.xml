@@ -286,7 +286,7 @@
     <string name="act_previous_version">Versión anterior</string>
     <string name="act_restore_failed">No se pudo recuperar la versión anterior. Tu audio sigue intacto.</string>
     <string name="act_delete_title">¿Eliminar «%1$s»?</string>
-    <string name="act_delete_body">Se borrarán el audio y la transcripción de este teléfono. Las copias en tu carpeta elegida se conservan. No se puede deshacer.</string>
+    <string name="act_delete_body">El audio y la transcripción salen de tu Biblioteca y van a la Papelera, donde quedan 30 días (Ajustes → Guardar y copias). Las copias en tu carpeta elegida se conservan.</string>
     <string name="act_delete_failed">No se pudo eliminar el audio.</string>
 
     <!-- ===== Kit de interfaz (Ui, Sheet) ===== -->
@@ -328,4 +328,7 @@
         <item quantity="other">%1$d personas</item>
     </plurals>
     <string name="home_inbox_lost">Verbapp perdió el acceso a «%1$s». Elígela de nuevo para que las notas se sigan guardando solas.</string>
+    <string name="home_delete_recording">Eliminar esta grabación</string>
+    <string name="home_delete_q">¿Eliminar esta grabación?</string>
+    <string name="home_delete_body">Va a la Papelera y se borra sola a los %1$d días. La recuperas en Ajustes → Guardar y copias → Papelera.</string>
 </resources>

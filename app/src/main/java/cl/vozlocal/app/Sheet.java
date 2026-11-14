@@ -172,13 +172,19 @@ final class Sheet {
      * apilan con los principales arriba. «Cortos» = ≤ 14 letras cada uno y, además, que quepan en una línea en su mitad de
      * la hoja (ver fitsHalf): con «Tamaño de fuente» grande, «Ver grabación» ya no cabe en media hoja y se cortaba.
      */
+    /** 0.9.8: un botón chico (p. ej. el tarro de «Eliminar») que va delante de los dos botones de la hoja, en su misma fila. */
+    private View lead;
+    Sheet lead(View v){buttons();lead=v;return this;}
     private void layoutButtons(){
         if(laidOut)return;laidOut=true;
         if(buttons==null||primaries.isEmpty()&&secondaries.isEmpty())return;
         boolean side=primaries.size()==1&&secondaries.size()==1;
-        if(side){int half=halfWidth();side=fitsHalf(primaries.get(0),half)&&fitsHalf(secondaries.get(0),half);}
+        // Con el botón chico delante, cada uno de los otros dos tiene 32 dp menos.
+        if(side){int half=halfWidth()-(lead==null?0:ui.dp(32));side=fitsHalf(primaries.get(0),half)&&fitsHalf(secondaries.get(0),half);}
+        if(lead!=null&&!side){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(ui.dp(52),ui.dp(52));lp.bottomMargin=ui.dp(S2);buttons.addView(lead,lp);}
         if(side){
             LinearLayout row=ui.row();row.setBaselineAligned(false);Ui.Btn s=secondaries.get(0),pr=primaries.get(0);
+            if(lead!=null){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(ui.dp(52),ui.dp(52));lp.setMarginEnd(ui.dp(S3));lp.gravity=android.view.Gravity.CENTER_VERTICAL;row.addView(lead,lp);}
             // Alto mínimo de 52 dp (lo trae Btn), no fijo: si el texto igual pasara a dos líneas (p. ej. al aparecer el indicador
             // de carga), el botón crece en vez de cortarlo, y el otro lo acompaña (alto -1: el de la fila).
             s.setPadding(ui.dp(S3),ui.dp(S2),ui.dp(S3),ui.dp(S2));pr.setPadding(ui.dp(S3),ui.dp(S2),ui.dp(S3),ui.dp(S2));

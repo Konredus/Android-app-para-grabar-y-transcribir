@@ -289,7 +289,7 @@
     <string name="act_previous_version">Versão anterior</string>
     <string name="act_restore_failed">Não foi possível recuperar a versão anterior. Seu áudio continua intacto.</string>
     <string name="act_delete_title">Excluir “%1$s”?</string>
-    <string name="act_delete_body">O áudio e a transcrição serão apagados deste celular. As cópias na pasta escolhida são mantidas. Não é possível desfazer.</string>
+    <string name="act_delete_body">O áudio e a transcrição saem da sua Biblioteca e vão para a Lixeira, onde ficam 30 dias (Ajustes → Salvar e cópias). As cópias na pasta escolhida são mantidas.</string>
     <string name="act_delete_failed">Não foi possível excluir o áudio.</string>
 
     <!-- ===== Kit de interfaz (Ui, Sheet) ===== -->
@@ -331,4 +331,7 @@
         <item quantity="other">%1$d pessoas</item>
     </plurals>
     <string name="home_inbox_lost">O Verbapp perdeu o acesso a “%1$s”. Escolha de novo para as notas continuarem sendo salvas sozinhas.</string>
+    <string name="home_delete_recording">Excluir esta gravação</string>
+    <string name="home_delete_q">Excluir esta gravação?</string>
+    <string name="home_delete_body">Ela vai para a Lixeira e é apagada sozinha depois de %1$d dias. Você a recupera em Ajustes → Salvar e cópias → Lixeira.</string>
 </resources>

@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.9.8",
+    "date": "2026-11-14",
+    "title": "Elimina al tiro y recupera cuando quieras",
+    "items": [
+      "Eliminar al terminar de grabar: en «Nombra esta grabación» hay un tarro rojo junto a los botones. Si la grabación salió mal o muy corta, la eliminas ahí mismo (siempre te pide confirmar).",
+      "Papelera: lo que eliminas ya no se borra de inmediato. Queda 30 días en Ajustes → Guardar y copias → Papelera, fuera de tu Biblioteca, y desde ahí lo restauras o lo borras para siempre.",
+      "Vaciar la Papelera: si quieres recuperar espacio, la vacías con un toque. Pasados los 30 días se vacía sola."
+    ]
+  },
+  {
     "version": "0.9.7",
     "date": "2026-11-14",
     "title": "Un solo toque y cada voz en su lugar",

@@ -1,6 +1,6 @@
 # Verbapp (antes Voz local) para Android
 
-Grabadora y transcriptor para Android 8 o posterior: graba sin internet y transcribe con **OpenRouter**, con una sola clave. Versión **0.9.7**, en prueba cerrada de Google Play (paquete `cl.verbapp.app`), en español, inglés, portugués y alemán. Licencia MIT. Letra Outfit incluida bajo la SIL Open Font License (`app/src/main/assets/fonts/OFL-Outfit.txt`).
+Grabadora y transcriptor para Android 8 o posterior: graba sin internet y transcribe con **OpenRouter**, con una sola clave. Versión **0.9.8**, en prueba cerrada de Google Play (paquete `cl.verbapp.app`), en español, inglés, portugués y alemán. Licencia MIT. Letra Outfit incluida bajo la SIL Open Font License (`app/src/main/assets/fonts/OFL-Outfit.txt`).
 
 [Historial](CHANGELOG.md) · [Google Play](docs/play-store/README.md) · [Auditoría 0.9.5](docs/auditoria-0.9.5.md) · [Criterios de diseño](docs/diseno/CRITERIOS.md)
 

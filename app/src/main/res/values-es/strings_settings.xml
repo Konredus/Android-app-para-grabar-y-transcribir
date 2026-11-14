@@ -444,4 +444,33 @@
     <string name="set_auto_inbox">Guardar sola al terminar</string>
     <string name="set_auto_inbox_sub">Al terminar de transcribir, la nota va a esta carpeta sin tocar Guardar. Si después cambias nombres o el título, se actualiza el mismo archivo.</string>
     <string name="set_auto_inbox_need">Primero elige una carpeta</string>
+    <string name="set_trash">Papelera</string>
+    <string name="set_trash_empty">Vacía</string>
+    <string name="set_trash_foot">Lo que eliminas queda aquí %1$d días, fuera de tu Biblioteca, y después se borra solo.</string>
+    <string name="set_trash_body">Las grabaciones eliminadas quedan aquí %1$d días. Toca una para restaurarla o borrarla para siempre.</string>
+    <string name="set_trash_none">No hay grabaciones eliminadas.</string>
+    <string name="set_trash_item">%1$s · se borra en %2$s</string>
+    <string name="set_trash_item_body">%1$s · %2$s. Al restaurarla vuelve a tu Biblioteca tal como estaba.</string>
+    <string name="set_trash_restore">Restaurar</string>
+    <string name="set_trash_restored">Grabación restaurada en tu Biblioteca</string>
+    <string name="set_trash_restore_failed">No se pudo restaurar la grabación completa. Revisa el espacio libre e inténtalo otra vez.</string>
+    <string name="set_trash_delete">Borrar para siempre</string>
+    <string name="set_trash_delete_q">¿Borrar para siempre?</string>
+    <string name="set_trash_delete_body">El audio y su transcripción se borran de este teléfono. No se puede deshacer.</string>
+    <string name="set_trash_deleted">Borrada para siempre</string>
+    <string name="set_trash_empty_action">Vaciar la Papelera</string>
+    <string name="set_trash_empty_q">¿Vaciar la Papelera?</string>
+    <string name="set_trash_emptied">La Papelera quedó vacía</string>
+    <plurals name="set_trash_count">
+        <item quantity="one">%1$d grabación</item>
+        <item quantity="other">%1$d grabaciones</item>
+    </plurals>
+    <plurals name="set_trash_days">
+        <item quantity="one">%1$d día</item>
+        <item quantity="other">%1$d días</item>
+    </plurals>
+    <plurals name="set_trash_empty_body">
+        <item quantity="one">Se borrará para siempre %1$d grabación. No se puede deshacer.</item>
+        <item quantity="other">Se borrarán para siempre %1$d grabaciones. No se puede deshacer.</item>
+    </plurals>
 </resources>
