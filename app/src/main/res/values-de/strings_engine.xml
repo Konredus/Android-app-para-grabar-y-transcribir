@@ -313,4 +313,12 @@
         <item quantity="one">%1$d Stimme aus späteren Teilen ließ sich nicht mit Teil 1 zusammenführen · wenn jemand doppelt erscheint, führe die Stimmen unter Stimmen prüfen zusammen</item>
         <item quantity="other">%1$d Stimmen aus späteren Teilen ließen sich nicht mit Teil 1 zusammenführen · wenn jemand doppelt erscheint, führe die Stimmen unter Stimmen prüfen zusammen</item>
     </plurals>
+    <string name="eng_st_voices">Wiederholte Stimmen werden zusammengeführt</string>
+    <string name="eng_log_voices_joined">Wiederholte Stimmen zusammengeführt: %1$d Stimmen → %2$d Personen</string>
+    <string name="eng_log_voices_joined_people">Wiederholte Stimmen zusammengeführt: %1$d Stimmen → %2$d Personen (du hast %3$d gesagt)</string>
+    <string name="eng_log_auto_saved">Automatisch in „%1$s“ gespeichert</string>
+    <string name="eng_log_auto_save_failed">Automatisches Speichern in „%1$s“ fehlgeschlagen · wähle den Ordner in den Einstellungen neu</string>
+    <string name="eng_notif_done_saved">„%1$s“ · in %2$s gespeichert</string>
+    <string name="eng_notif_done_review_saved">„%1$s“ · in %3$s gespeichert · %2$d Stimmen zu prüfen</string>
+    <string name="eng_notif_done_save_failed">„%1$s“ · Speichern in %2$s fehlgeschlagen: Wähle den Ordner neu</string>
 </resources>

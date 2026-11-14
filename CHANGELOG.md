@@ -1,5 +1,53 @@
 # Historial de versiones
 
+## 0.9.7 — 2026-11-14 · «Un solo toque y cada voz en su lugar»
+
+Pedido del dueño, a partir de su informe de soporte del 2026-11-14 (un mes de uso real en un vivo V2318 con la 0.9.6): «un solo botón: que al terminar de transcribir guarde solo en el inbox» y «preguntar cuántas voces antes de transcribir; en audios largos la misma voz vuelve como otra persona».
+
+**Lo que mostraba el informe**
+- En 30 transcripciones hubo 26 toques a «Guardar en…» después de terminar: siempre el mismo paso a mano.
+- Una reunión de 1 h 22 se envió en 7 partes de ~11 min y terminó con **15 voces de más** («voces de las partes siguientes no se pudieron unir con la parte 1»). En «Revisar voces» hubo que escuchar unas 25 muestras para unirlas a mano. Lo mismo, en menor medida, en otras cuatro grabaciones largas (6, 5, 2 y 1 voces sueltas).
+- Un guardado falló con `SecurityException`: Drive había retirado el permiso de la carpeta y hubo que elegirla de nuevo.
+- El informe no decía cómo estaba configurada la app (si la transcripción era automática, si se pedía título, si la carpeta tenía permiso): había que deducirlo de los toques.
+
+**Se guarda sola** (`AutoSave`, Ajustes → Guardar y copias → «Guardar sola al terminar», encendida por defecto)
+- Al terminar de transcribir (y de armar la nota), `Inbox.save` corre solo. La bitácora dice «Guardada sola en «0-Inbox»» y el aviso de «Transcripción lista» dice dónde quedó; ya no ofrece el botón «Guardar en…».
+- Si después cambia algo de una grabación ya guardada (nombres de las voces, el título, la nota, una tarea marcada), el **mismo archivo** se actualiza solo a los 4 s (`AutoSave.afterEdit`, desde `Pipeline.edited`): varios cambios seguidos hacen un solo guardado.
+- Si el guardado falla, queda en el estado (`inboxAutoFailed`), en la bitácora y en el aviso («no se pudo guardar en 0-Inbox: elige la carpeta de nuevo»). Al elegir la carpeta otra vez, lo pendiente se guarda solo (`AutoSave.retryFailed`).
+- `Inbox.permission` detecta sin tocar la red que la carpeta perdió su permiso; la pantalla de inicio lo avisa una vez al abrir, con «Elegir la carpeta de nuevo».
+
+**¿Cuántas personas hablan?** (`RecordingActions.askPeople`, Ajustes → Grabar y transcribir → Preguntas, encendida por defecto)
+- Al tocar «Transcribir» sale una hoja con 1 a 8 y «No sé». Un toque y empieza. La última cantidad queda marcada. «1» transcribe sin separar voces (más rápido y más barato). Reemplaza a «¿Separar voces?».
+- La cantidad queda en el estado (`people`, `Pipeline.people`); «Reintentar» no vuelve a preguntar (`peopleAsked`).
+
+**Voces repetidas, unidas en el teléfono** (`VoiceMatch`, nuevo)
+- De cada voz se escuchan hasta 90 s de sus tramos más largos (20 min de audio en total como máximo, saltando en el archivo con `OrAudio.decodeRanges`) y se resume su timbre: 16 coeficientes cepstrales por cuadro de 32 ms, guardados como cuenta, suma y productos (`VoiceMatch.Print`). Todo local: no se envía nada y no cuesta.
+- Se unen de a dos las voces que menos se distinguen (ΔBIC sin penalización entre gaussianas de covarianza completa) hasta dejar la cantidad dicha. Sin cantidad, se detiene cuando unir ya no conviene (BIC con λ = 5): ante la duda deja una voz de más en vez de juntar a dos personas.
+- Dos voces conocidas distintas nunca se unen; las voces que casi no hablan (menos de ~6 s o del 1,5 %) se suman a la persona a la que más se parecen; un «ajá» sin audio aprovechable va con quien habla justo antes.
+- Corre al transcribir cuando el audio fue en varias partes, o cuando se dijo la cantidad y el modelo entregó más voces. La bitácora dice «Voces repetidas unidas: 19 voces → 4 personas (dijiste 4)».
+- Cada tramo guarda su voz original (`raw`), así que en «Nombrar voces» se puede cambiar la cantidad después («2 3 4…», o «Sin unir») sin volver a transcribir, también en grabaciones anteriores a esta versión. Lo corregido a mano se respeta y se puede deshacer. Las huellas quedan en `id.voices.json`: la segunda vez es inmediato.
+- **Medido con reuniones reales** de 4 personas grabadas con micrófono lejano (corpus AMI: ES2004b, dos mujeres y dos hombres; IS1009b, cuatro mujeres), partidas en bloques de 11 min, con voces fantasma y 8 % de tramos mal atribuidos: de 20 a 24 voces quedan 4 personas, con 95 % y 90 % del tiempo con la persona correcta (el techo, dado lo que entrega el modelo, es 94–96 %). Sin decir la cantidad encuentra 4 o 5. En el emulador, la reunión de 39 min tarda 18 s en escucharse y 80 ms en agruparse.
+- No se envía `maxSpeakers` al modelo: las muestras de voces conocidas van dentro del mismo audio, así que el tope tendría que ser «personas + muestras» y no ayudaría; y un tope corto no se puede deshacer después.
+
+**Quién es quién con un toque** («Nombrar voces»)
+- Los nombres sugeridos ahora incluyen las voces conocidas guardadas (antes solo «Yo» y los recientes), hasta 7.
+- La tarjeta «¿Cuántas personas hablan?» va arriba cuando hay 3 voces originales o más.
+
+**Informe de soporte más útil** (`Diagnostics`)
+- Sección «AJUSTES»: idioma, si hay clave, transcripción automática, Wi-Fi y cargador, modo de voces, si se pregunta la cantidad, voces conocidas (cuántas), modelos, nota, título, carpeta rápida (drive/teléfono, permiso vigente o perdido, guardado automático), ruido, permisos y totales de grabaciones. Sin claves, nombres, títulos ni rutas.
+- Teléfono: memoria total y libre, espacio libre y grupo de uso que Android le asigna a la app.
+- Cada bitácora dice cuántas voces entregó el modelo, cuántas personas quedaron, si se revisaron y si la grabación está guardada en la carpeta.
+- Eventos nuevos: `people_chosen`, `voices_unified`, `voices_regrouped`, `auto_inbox`, `inbox_permission`. Los campos `voices`, `people`, `prints`, `permission`, `merged` y `changed` ahora sí se guardan (antes la lista de campos permitidos los descartaba).
+
+**Arreglos**
+- Las píldoras de filtro (Biblioteca, «Nombrar voces») habían perdido su margen lateral en la 0.9.6: el fondo con margen propio reemplazaba el relleno de la vista. El relleno se pone después del fondo.
+- La nota sigue a una voz unida automáticamente (`Notes.mergedInto` también mira `raw`).
+
+**Pruebas**
+- `VoiceMatchTest` (JVM): voces sintéticas repartidas en etiquetas, voces conocidas que no se unen, y la medición opcional con reuniones reales (`VERBAPP_AMI`).
+- `VoiceChecks` (emulador): unir, cambiar la cantidad y deshacer respetando lo corregido a mano; un audio AAC real con dos «personas» y etiquetas cruzadas, escuchado con `decodeRanges`; valores por defecto, carpeta sin permiso e informe de soporte. `-e meeting <nombre>` mide una reunión real copiada a la caché.
+- Suite completa en teléfono (API 35), tablet (API 36) y Android 9.
+
 ## 0.9.6 — 2026-10-09 · «Grabaciones a prueba de todo»
 
 Todas las mejoras de la auditoría de la 0.9.5 (`docs/auditoria-0.9.5.md`), pedidas por el dueño en una sola versión: «Implementa todas las sugerencias en 1 sola versión, arréglalo todo».

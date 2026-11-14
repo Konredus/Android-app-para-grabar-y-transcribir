@@ -435,4 +435,9 @@
     <string name="set_contact_subject">Verbapp %1$s · Hilfe</string>
     <string name="set_contact_body">Hallo! Erzähl uns, was passiert ist und, wenn möglich, wann:\n\n</string>
     <string name="set_contact_no_app">Auf diesem Handy ist keine E-Mail-App. Schreib an %1$s.</string>
+    <string name="set_ask_people">Fragen, wie viele Personen sprechen</string>
+    <string name="set_ask_people_sub">Ein Tipp vor dem Transkribieren; Verbapp führt wiederholte Stimmen zusammen</string>
+    <string name="set_auto_inbox">Nach dem Transkribieren automatisch speichern</string>
+    <string name="set_auto_inbox_sub">Wenn die Transkription fertig ist, landet die Notiz ohne Tippen auf Speichern in diesem Ordner. Änderst du später Namen oder den Titel, wird dieselbe Datei aktualisiert.</string>
+    <string name="set_auto_inbox_need">Wähle zuerst einen Ordner</string>
 </resources>

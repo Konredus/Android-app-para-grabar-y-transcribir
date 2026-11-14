@@ -258,6 +258,8 @@ public class SettingsActivity extends Screen {
         // Preguntas (0.9.5, pedido del dueño: «que no pregunten tanto»): por defecto no se pregunta nada; quien quiera, las prende.
         page.addView(ui.section(getString(R.string.set_section_questions)));LinearLayout ask=ui.group();page.addView(ask,Ui.fill());
         add(ask,toggleRow(R.drawable.ic_title,getString(R.string.set_ask_title),getString(R.string.set_ask_title_sub),settings.askTitle(),on->toggle("askTitle",on)));
+        // 0.9.7 (pedido del dueño): «¿Cuántas personas hablan?» antes de transcribir; encendida por defecto.
+        if(settings.canSeparate())add(ask,toggleRow(R.drawable.ic_people,getString(R.string.set_ask_people),getString(R.string.set_ask_people_sub),settings.askPeople(),on->toggle("askPeople",on)));
         if(settings.canSeparate())add(ask,row(R.drawable.ic_people,getString(R.string.set_speakers_title),null,getString(SPEAKER_NAMES[Math.max(0,Arrays.asList(SPEAKER_MODES).indexOf(settings.speakersMode()))])).onClick(v->speakersSheet()));
         page.addView(ui.footnote(getString(R.string.set_questions_foot)));
     }
@@ -300,6 +302,8 @@ public class SettingsActivity extends Screen {
         largeTitle(page,getString(R.string.set_topic_save),null);
         LinearLayout group=ui.group();page.addView(group,Ui.fill());
         saveRow=row(R.drawable.ic_inbox,getString(R.string.set_quick_save),getString(R.string.set_quick_save_sub),inboxValue());saveRow.onClick(v->saveSheet());add(group,saveRow);
+        // 0.9.7 («un solo botón»): al terminar de transcribir se guarda sola en esa carpeta (AutoSave).
+        add(group,toggleRow(R.drawable.ic_save,getString(R.string.set_auto_inbox),getString(R.string.set_auto_inbox_sub),settings.autoInbox(),on->{toggle("autoInbox",on);if(on&&!Inbox.configured(this))toast(getString(R.string.set_auto_inbox_need));}));
         // «Más información» del guardado rápido: también cuenta la nota y las voces conocidas (el recorrido de cada grabación).
         page.addView(more(getString(R.string.set_flow_foot),getString(R.string.set_quick_save),getString(R.string.set_flow_more,Transcriber.MAX_KNOWN)));
         page.addView(ui.section(getString(R.string.set_section_copies)));group=ui.group();page.addView(group,Ui.fill());
@@ -1240,6 +1244,7 @@ public class SettingsActivity extends Screen {
             Uri tree=data.getData();
             try{getContentResolver().takePersistableUriPermission(tree,Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                 io.execute(()->{String name=folderName(tree);settings.prefs.edit().putString("saveTree",tree.toString()).putString("saveTreeName",name).apply();Diagnostics.event("setting_changed",null,"action","save_tree","result",tree.getAuthority()!=null&&tree.getAuthority().contains("google.android.apps.docs")?"drive":"device");
+                    AutoSave.retryFailed(this);
                     runOnUiThread(()->{if(isDestroyed())return;if(saveRow!=null)saveRow.setValue(name);toast(getString(R.string.set_quick_save_in,name));if(inboxFlow)finish();});});}
             catch(Exception e){message(getString(R.string.set_quick_save),getString(R.string.set_quick_save_no_perm));}
         }

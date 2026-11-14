@@ -567,8 +567,9 @@ final class Transcriber {
                 // 0.9.6: voces de la parte 2 en adelante que no se pudieron unir con las de la parte 1 (alguien que entró más
                 // tarde, o sin muestras limpias): pueden aparecer como otra persona. Se dice dónde unirlas.
                 if(n>1&&transcript.diarized()){int loose=0;for(String v:transcript.speakers().keySet())if(v.matches("block[1-9][0-9]*:.*"))loose++;
-                    if(loose>0){Pipeline.log(c,r.id,Lang.plural(c,R.plurals.eng_log_voices_loose,loose));Diagnostics.event("voices_loose",r.id,"count",loose,"parts",n);}}
+                    if(loose>0)Diagnostics.event("voices_loose",r.id,"count",loose,"parts",n);}
                 if(mode!=null)transcript.data.put("pass",mode.name());
+                unifyVoices(r,transcript,n);
                 prefillVoices(c,transcript);
                 if(!corrections.isEmpty())prefill(transcript,fixed);
                 boolean note=settings.noteAuto()&&transcript.hasText()&&canNote();
@@ -586,7 +587,28 @@ final class Transcriber {
         FilesStore.update(c,r.id,s->{s.remove("serverRetryAt");s.remove("serverSince");s.remove("serverTries");s.remove("serverBlocks");s.remove("lastErrorKind");s.put("requested",false).put("failed",false).put("attempts",0).put("doneIn",total).put("upSent",0).put("upTotal",0).put("doneAudioMs",r.duration).put("doneAt",System.currentTimeMillis());s.remove("prepPct");});
         Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_done,Lang.str(c,R.string.eng_frag_total,Recording.time(total))));
         if(again)Pipeline.log(c,r.id,Lang.str(c,R.string.eng_log_new_version_ready));
+        // 0.9.7 («un solo botón»): la nota se guarda sola en la carpeta rápida; el aviso de «lista» dice cómo le fue.
+        AutoSave.afterTranscription(c,r);
         LocalStorage.enqueue(c,r.id);done(r,again);Diagnostics.event("job_complete",r.id,"elapsed_ms",System.currentTimeMillis()-start,"mode",mode==null?"":mode.name());
+    }
+    /**
+     * 0.9.7: une las voces repetidas (VoiceMatch). Corre si el audio fue en varias partes (cada una trae sus propias
+     * etiquetas) o si la persona dijo cuántos hablan y el modelo entregó más voces. Con «people» en el estado se deja
+     * esa cantidad; sin él, solo se unen las voces claramente iguales. Si algo falla, la transcripción sigue como venía.
+     */
+    private void unifyVoices(Recording r,Transcript transcript,int parts){
+        try{
+            if(!transcript.diarized())return;
+            int people=FilesStore.state(c,r.id).optInt("people",0),voices=transcript.rawVoices().size();
+            if(voices<2||!(parts>1||(people>0&&voices>people)))return;
+            stage(r,Lang.str(c,R.string.eng_st_voices),-1);long started=android.os.SystemClock.elapsedRealtime();
+            Map<String,VoiceMatch.Print> prints=VoiceMatch.ensure(c,r.id,r.audio(c),transcript,http);
+            VoiceMatch.Result result=VoiceMatch.apply(transcript,prints,people);
+            if(result==null)return;
+            Pipeline.log(c,r.id,people>0?Lang.str(c,R.string.eng_log_voices_joined_people,result.before,result.after,people):Lang.str(c,R.string.eng_log_voices_joined,result.before,result.after));
+            Diagnostics.event("voices_unified",r.id,"voices",result.before,"count",result.after,"people",people,"parts",parts,"prints",prints.size(),"elapsed_ms",android.os.SystemClock.elapsedRealtime()-started);
+        }catch(java.io.InterruptedIOException e){/* cancelado: lo ve el check(r) que sigue */}
+        catch(Exception e){Diagnostics.event("voices_unify_failed",r.id,"error_class",e.getClass().getSimpleName(),"parts",parts);}
     }
     private boolean allDone(Recording r,int from,int n){for(int i=from;i<n;i++)if(!FilesStore.file(c,r.id,".part"+i+".json").exists())return false;return true;}
     private static List<Double> offsets(List<AudioParts.Part> parts){List<Double> o=new ArrayList<>();for(AudioParts.Part p:parts)o.add(p.offset);return o;}
@@ -892,11 +914,18 @@ final class Transcriber {
         int voices=0;boolean review=false;
         try{Transcript t=Transcript.load(c,r.id);voices=t.speakers().size();review=t.diarized()&&voices>1&&!t.reviewed();}catch(Exception ignored){}
         Intent open=openIntent(c,r.id);if(again)open.putExtra("retranscribed",true);
-        String text=review?Lang.str(c,R.string.eng_notif_done_review,r.title,voices):Lang.str(c,again?R.string.eng_notif_done_again:R.string.eng_notif_done_text,r.title);
+        // 0.9.7: con el guardado automático el aviso dice dónde quedó (o que no se pudo, para elegir la carpeta de nuevo).
+        JSONObject st=FilesStore.state(c,r.id);boolean auto=AutoSave.on(c),failed=auto&&st.optBoolean("inboxAutoFailed"),saved=auto&&!failed&&st.optLong("inboxAt",0)>0;
+        String folder=Next.shortName(Inbox.folderName(c));
+        String text=failed?Lang.str(c,R.string.eng_notif_done_save_failed,r.title,folder)
+            :review?Lang.str(c,saved?R.string.eng_notif_done_review_saved:R.string.eng_notif_done_review,r.title,voices,folder)
+            :saved?Lang.str(c,R.string.eng_notif_done_saved,r.title,folder)
+            :Lang.str(c,again?R.string.eng_notif_done_again:R.string.eng_notif_done_text,r.title);
         Notification.Builder b=new Notification.Builder(c,DONE_CHANNEL).setSmallIcon(R.drawable.ic_notification).setColor(0xFF2F6B58).setContentTitle(Lang.str(c,again?R.string.eng_notif_new_version_ready:R.string.eng_done_title)).setContentText(text)
             .setContentIntent(activity(c,r.id,0,open)).setAutoCancel(true).setCategory(Notification.CATEGORY_STATUS).setShowWhen(true);
         if(review)b.addAction(action(c,R.drawable.ic_people,Lang.str(c,R.string.eng_action_review_voices),activity(c,r.id,1,openIntent(c,r.id).putExtra("names",true))));
-        else if(Inbox.configured(c))b.addAction(action(c,R.drawable.ic_save,Lang.str(c,R.string.eng_action_save_in,Inbox.folderName(c)),activity(c,r.id,2,openIntent(c,r.id).putExtra("save",true))));
+        if(saved){/* ya está en la carpeta: no hace falta el botón */}
+        else if((!review||failed)&&Inbox.configured(c))b.addAction(action(c,R.drawable.ic_save,Lang.str(c,R.string.eng_action_save_in,Inbox.folderName(c)),activity(c,r.id,2,openIntent(c,r.id).putExtra("save",true))));
         return b.build();
     }
     private void done(Recording r,boolean again){

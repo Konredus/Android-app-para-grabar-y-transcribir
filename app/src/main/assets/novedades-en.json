@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.9.7",
+    "date": "2026-11-14",
+    "title": "One tap, and every voice in its place",
+    "items": [
+      "It saves by itself: when the transcription is ready, the note goes to your quick folder without tapping Save. If you later change names or the title, the same file updates by itself. Turn it off in Settings → Saving and copies.",
+      "How many people are speaking?: before transcribing you pick the number with one tap. Verbapp compares the voices on your phone and joins the repeated ones, also in long recordings that are sent in parts.",
+      "Who is who with one tap: Name voices now suggests the names of your known voices, and you can change the number of people whenever you want, without transcribing again.",
+      "Folder warning: if Drive removes its permission, Verbapp tells you when you open it and, once you choose it again, saves what was left pending.",
+      "Fixes: filter pills got their side margin back, and the support report now includes your settings (no keys or names) to find problems faster."
+    ]
+  },
+  {
     "version": "0.9.6",
     "date": "2026-10-09",
     "title": "Recordings that survive anything",

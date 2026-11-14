@@ -18,7 +18,7 @@ final class Diagnostics {
         Context context=app;
         IO.execute(()->{try{
             JSONObject row=new JSONObject().put("time",System.currentTimeMillis()).put("event",event).put("version",version).put("job",job==null?"":job);
-            for(int i=0;i+1<fields.length;i+=2){String key=String.valueOf(fields[i]);Object value=fields[i+1];if((key.equals("action")||key.equals("label"))&&value instanceof String)value=safeAction((String)value);if(Arrays.asList("stage","provider","model","http","request_id","code","type","param","elapsed_ms","bytes","duration_ms","part","parts","action","screen","result","error_class","count","runner","net","reason","local","display","idle","battery","mode","kind","source","label","cost","format","anchors","matched").contains(key))row.put(key,value);}
+            for(int i=0;i+1<fields.length;i+=2){String key=String.valueOf(fields[i]);Object value=fields[i+1];if((key.equals("action")||key.equals("label"))&&value instanceof String)value=safeAction((String)value);if(Arrays.asList("stage","provider","model","http","request_id","code","type","param","elapsed_ms","bytes","duration_ms","part","parts","action","screen","result","error_class","count","runner","net","reason","local","display","idle","battery","mode","kind","source","label","cost","format","anchors","matched","voices","people","prints","permission","merged","changed","sample","place","free").contains(key))row.put(key,value);}
             File dir=new File(context.getFilesDir(),"diagnostics");dir.mkdirs();File file=new File(dir,"events.jsonl"),old=new File(dir,"events.previous.jsonl");
             if(file.length()>2*1024*1024){old.delete();file.renameTo(old);}
             if(old.exists() && old.lastModified()<System.currentTimeMillis()-30L*86400000)old.delete();
@@ -41,7 +41,7 @@ final class Diagnostics {
                 File file=new File(c.getFilesDir(),"diagnostics/"+name);if(!file.exists())continue;
                 try(BufferedReader reader=new BufferedReader(new InputStreamReader(new FileInputStream(file),StandardCharsets.UTF_8))){String line;while((line=reader.readLine())!=null){try{JSONObject row=new JSONObject(line);if(row.optLong("time")<System.currentTimeMillis()-30L*86400000)continue;String label=row.optString("event")+" "+row.optString("action",row.optString("screen",""));counts.put(label,counts.getOrDefault(label,0)+1);events.append(row).append('\n');}catch(Exception ignored){}}}
             }
-            File crash=new File(c.getFilesDir(),"last-crash.json");if(crash.exists()&&crash.lastModified()>System.currentTimeMillis()-30L*86400000)out.append("ÚLTIMO FALLO\n").append(FilesStore.read(crash)).append("\n\n");out.append(timelines(c));out.append("FRECUENCIA DE EVENTOS\n");for(Map.Entry<String,Integer> count:counts.entrySet())out.append(count.getKey()).append(": ").append(count.getValue()).append('\n');
+            File crash=new File(c.getFilesDir(),"last-crash.json");if(crash.exists()&&crash.lastModified()>System.currentTimeMillis()-30L*86400000)out.append("ÚLTIMO FALLO\n").append(FilesStore.read(crash)).append("\n\n");out.append(setup(c));out.append(timelines(c));out.append("FRECUENCIA DE EVENTOS\n");for(Map.Entry<String,Integer> count:counts.entrySet())out.append(count.getKey()).append(": ").append(count.getValue()).append('\n');
             out.append("\nSECUENCIA TÉCNICA\n").append(events);try(FileOutputStream stream=new FileOutputStream(export)){stream.write(out.toString().getBytes(StandardCharsets.UTF_8));}return export;
         }).get(15,TimeUnit.SECONDS);
     }
@@ -50,8 +50,42 @@ final class Diagnostics {
         StringBuilder d=new StringBuilder("Teléfono: "+Build.MANUFACTURER+" "+Build.MODEL+"\n");
         try{android.os.PowerManager pm=c.getSystemService(android.os.PowerManager.class);d.append("Optimización de batería para Verbapp: ").append(pm.isIgnoringBatteryOptimizations(c.getPackageName())?"desactivada (sin restricciones)":"activada (Android puede frenar el trabajo de fondo)").append("\n");}catch(Exception ignored){}        try{android.app.ActivityManager am=c.getSystemService(android.app.ActivityManager.class);if(Build.VERSION.SDK_INT>=28)d.append("Segundo plano restringido: ").append(am.isBackgroundRestricted()?"sí":"no").append("\n");}catch(Exception ignored){}
         try{d.append("Red al generar el informe: ").append(Pipeline.networkName(c)).append("\n");}catch(Exception ignored){}
+        // 0.9.7: memoria y espacio (un teléfono justo de memoria o de espacio explica preparaciones lentas y cortes).
+        try{android.app.ActivityManager am=c.getSystemService(android.app.ActivityManager.class);android.app.ActivityManager.MemoryInfo mi=new android.app.ActivityManager.MemoryInfo();am.getMemoryInfo(mi);
+            d.append("Memoria: ").append(mi.totalMem/(1024*1024)).append(" MB en total, ").append(mi.availMem/(1024*1024)).append(" MB libres").append(mi.lowMemory?" (poca memoria)":"").append("\n");}catch(Exception ignored){}
+        try{d.append("Espacio libre: ").append(Recording.directory(c).getUsableSpace()/(1024*1024)).append(" MB\n");}catch(Exception ignored){}
+        try{if(Build.VERSION.SDK_INT>=28){android.app.usage.UsageStatsManager u=c.getSystemService(android.app.usage.UsageStatsManager.class);d.append("Grupo de uso de la app (Android): ").append(u.getAppStandbyBucket()).append(" (10 activa, 20 uso frecuente, 30 ocasional, 40 rara vez, 45 restringida)\n");}}catch(Exception ignored){}
         return d.toString();
     }
+    /**
+     * 0.9.7: cómo está configurada la app. Sin esto el informe no decía, por ejemplo, si la transcripción era automática,
+     * si se preguntaba el título o si la carpeta rápida seguía con permiso: había que deducirlo de los toques. Solo
+     * opciones y cantidades: nunca la clave, nombres, títulos ni rutas.
+     */
+    private static String setup(Context c){
+        StringBuilder d=new StringBuilder("AJUSTES\n");
+        try{
+            Settings s=new Settings(c);
+            d.append("Idioma de la app: ").append(Lang.current(c)).append(" · idioma del audio: ").append(s.prefs.contains("language")?(s.language().isEmpty()?"detección automática":s.language()):"el de la app").append("\n");
+            d.append("Clave de OpenRouter: ").append(s.hasOpenRouterKey()?"guardada":"falta").append("\n");
+            d.append("Transcribir automáticamente: ").append(yes(s.automatic())).append(" · solo con Wi-Fi: ").append(yes(s.wifiOnly())).append(" · solo cargando: ").append(yes(s.charging())).append("\n");
+            d.append("Voces: ").append(s.canSeparate()?s.speakersMode():"el modelo no separa voces").append(" · preguntar cuántas personas: ").append(yes(s.askPeople())).append(" · última cantidad: ").append(s.lastPeople()).append("\n");
+            int known=0,used=0;try{for(Voices.Voice v:Voices.list(c)){known++;if(v.use)used++;}}catch(Exception ignored){}
+            d.append("Voces conocidas: ").append(known).append(" (en uso ").append(used).append(", incluida la propia: ").append(yes(Voices.has(c))).append(")\n");
+            d.append("Modelo con voces: ").append(s.orSpeakersModel().isEmpty()?"automático":s.orSpeakersModel()).append(" · modelo sin voces: ").append(s.orTextModel().isEmpty()?"automático":s.orTextModel()).append("\n");
+            d.append("Nota con IA: ").append(yes(s.noteAuto())).append(" · tipo: ").append(s.noteKind()).append(" · modelo: ").append(s.noteModel()==null||s.noteModel().trim().isEmpty()?"recomendado":s.noteModel()).append("\n");
+            d.append("Nombrar al terminar: ").append(yes(s.askTitle())).append(" · fecha en el nombre: ").append(yes(s.datePrefix())).append("\n");
+            d.append("Carpeta rápida: ").append(Inbox.place(c)).append(" · permiso: ").append(Inbox.permission(c)).append(" · guardar sola al terminar: ").append(yes(s.autoInbox())).append("\n");
+            d.append("Ruido de fondo: grabar con reducción ").append(yes(s.recordNoise())).append(" · limpieza al enviar ").append(s.audioClean()).append("\n");
+            d.append("Permisos: micrófono ").append(granted(c,android.Manifest.permission.RECORD_AUDIO)).append(" · notificaciones ").append(Build.VERSION.SDK_INT>=33?granted(c,android.Manifest.permission.POST_NOTIFICATIONS):"sí").append("\n");
+            int total=0,transcribed=0,saved=0,failed=0;long audioMs=0;
+            for(Recording r:Recording.list(c)){total++;audioMs+=r.duration;JSONObject st=FilesStore.state(c,r.id);if(Transcript.exists(c,r.id))transcribed++;if(st.optLong("inboxAt",0)>0)saved++;if(st.optBoolean("inboxAutoFailed"))failed++;}
+            d.append("Grabaciones: ").append(total).append(" (").append(Recording.time(audioMs)).append(" de audio) · transcritas ").append(transcribed).append(" · guardadas en la carpeta ").append(saved).append(" · guardado automático fallido ").append(failed).append("\n");
+        }catch(Exception e){d.append("(no se pudieron leer: ").append(e.getClass().getSimpleName()).append(")\n");}
+        return d.append("\n").toString();
+    }
+    private static String yes(boolean on){return on?"sí":"no";}
+    private static String granted(Context c,String permission){return c.checkSelfPermission(permission)==android.content.pm.PackageManager.PERMISSION_GRANTED?"sí":"no";}
     /**
      * Bitácoras de las últimas 5 grabaciones con actividad de transcripción (identificador corto, sin títulos). La
      * bitácora en pantalla puede nombrar personas; aquí se tapan con «…» el título, los nombres de las voces conocidas,
@@ -70,6 +104,11 @@ final class Diagnostics {
             out.append("\n· Grabación ").append(r.id,0,8).append(" · audio ").append(Recording.time(r.duration)).append(" · modelo ").append(st.optString("model","?")).append(" · voces ").append(st.optBoolean("speakers")?"sí":"no")
                .append(" · bloques ").append(st.optInt("blocksDone")).append('/').append(st.optInt("blocks")).append(" · reintentos ").append(st.optInt("retries",st.optInt("attempts"))).append(" (cortes del teléfono ").append(st.optInt("localCuts")).append(')').append(" · estado ").append(st.optBoolean("requested")?"en proceso":st.optBoolean("failed")?"error":"terminado").append("\n");
             if(st.has("doneIn"))out.append("  tiempo total ").append(Recording.time(st.optLong("doneIn"))).append("\n");
+            // 0.9.7: voces (las que entregó el modelo → personas tras unir las repetidas) y guardado en la carpeta rápida.
+            try{if(Transcript.exists(c,r.id)){Transcript tr=Transcript.load(c,r.id);
+                out.append("  voces: ").append(tr.rawVoices().size()).append(" del modelo → ").append(tr.speakers().size()).append(" personas").append(tr.people()>0?" (se dijo "+tr.people()+")":"").append(tr.reviewed()?" · revisadas":" · sin revisar").append(tr.edited()?" · con correcciones a mano":"")
+                   .append(" · partes ").append(tr.data.optInt("parts",1)).append(" · tramos ").append(tr.segments().length()).append("\n");}}catch(Exception ignored){}
+            out.append("  carpeta rápida: ").append(st.optLong("inboxAt",0)>0?"guardada ("+st.optString("inboxKind","txt")+")"+(Inbox.outdated(c,r.id)?" · con cambios sin guardar":""):"sin guardar").append(st.optBoolean("inboxAutoFailed")?" · el guardado automático falló":"").append("\n");
             for(int i=0;i<log.length();i++){JSONObject e=log.optJSONObject(i);if(e!=null)out.append("  ").append(f.format(new Date(e.optLong("t")))).append("  ").append(redact(e.optString("m"),hide)).append("\n");}
         }
         return out.append("\n").toString();

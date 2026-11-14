@@ -276,9 +276,47 @@ final class RecordingActions {
         if(!new Settings(s).hasKey()){missingKey(s);return;}
         Consent.ensure(s,()->guard(s,r,()->{
             Settings settings=new Settings(s);
+            // 0.9.7: una sola pregunta, «¿Cuántas personas hablan?». Reemplaza a «¿Separar voces?» (1 = sin separar).
+            JSONObject state=FilesStore.state(s,r.id);
+            // Ya respondida para esta grabación (p. ej. falló y se toca «Reintentar»): sigue con lo que se dijo.
+            if(state.optBoolean("peopleAsked")&&settings.canSeparate()){start(s,r,changed,state.optBoolean("speakers",settings.defaultSpeakers()));return;}
+            if(settings.defaultSpeakers()&&settings.askPeople()){askPeople(s,r,changed,settings);return;}
             if(settings.canSeparate()&&settings.speakersMode().equals("ask")){askSpeakers(s,r,changed,settings);return;}
             start(s,r,changed,settings.defaultSpeakers());
         }));
+    }
+    /** Hasta cuántas personas se ofrecen con un toque; más que eso es «No sé» (la app une solo las voces claramente iguales). */
+    static final int PEOPLE_MAX=8;
+    /**
+     * 0.9.7: «¿Cuántas personas hablan?», un toque y empieza. Con la cantidad, la app une las voces repetidas (en un
+     * audio largo cada parte vuelve con etiquetas nuevas) y deja Persona 1…N para nombrarlas después. «Solo yo» no separa
+     * voces (más rápido y más barato). La última cantidad elegida queda marcada. Se apaga en Ajustes → Grabar y transcribir.
+     */
+    static void askPeople(Screen s,Recording r,Runnable changed,Settings settings){
+        try{
+            Ui ui=s.ui;int last=settings.lastPeople();
+            Sheet sheet=s.sheet(Lang.str(s,R.string.act_people_title),Lang.str(s,R.string.act_people_body));
+            SheetParts.hero(sheet,R.drawable.ic_people,false);
+            java.util.function.IntConsumer go=n->{
+                sheet.dismiss();settings.prefs.edit().putInt("lastPeople",n).apply();
+                Diagnostics.event("people_chosen",r.id,"people",n);
+                try{Pipeline.people(s,r.id,n<=1?0:n);}catch(Exception ignored){}
+                start(s,r,changed,n!=1);
+            };
+            for(int row=0;row<2;row++){
+                LinearLayout line=ui.row();
+                for(int i=0;i<PEOPLE_MAX/2;i++){
+                    int n=row*(PEOPLE_MAX/2)+i+1;
+                    Ui.Btn b=ui.button(String.valueOf(n),0,n==last?Ui.Style.PRIMARY:Ui.Style.TONAL,v->go.accept(n));
+                    b.setContentDescription(n==1?Lang.str(s,R.string.act_people_one_spoken):Lang.plural(s,R.plurals.act_people_n_spoken,n));
+                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,ui.dp(56),1);if(i>0)lp.setMarginStart(ui.dp(S2));line.addView(b,lp);
+                }
+                sheet.body.addView(line,ui.top(row==0?S5:S2));
+            }
+            TextView hint=ui.text(Lang.str(s,R.string.act_people_one_hint),Type.BODY_SMALL,s.p.onSurfaceVariant);hint.setGravity(android.view.Gravity.CENTER);
+            sheet.body.addView(hint,ui.top(S3));
+            sheet.secondary(Lang.str(s,R.string.act_people_unknown),()->go.accept(0)).show();
+        }catch(Exception e){start(s,r,changed,settings.defaultSpeakers());}
     }
     /** 0.9.6: sobre este costo estimado (US$) se pide confirmar antes de enviar. Lo normal (una hora, sin voces) cuesta menos. */
     static final double CONFIRM_USD=0.50;

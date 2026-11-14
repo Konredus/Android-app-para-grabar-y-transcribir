@@ -189,6 +189,11 @@ public class MainActivity extends Screen {
         super.onResume();lastState="";if(search!=null&&search.hasFocus()){search.clearFocus();root.requestFocus();}
         boolean fromWelcome=welcoming&&welcomeLeft;if(fromWelcome)endWelcome();
         handler.post(tick);load();if(!Pipeline.startForeground(this))Pipeline.schedule(this,false);renderChip();renderGreeting();
+        // 0.9.7: la carpeta rápida perdió su permiso (pasa con Drive): se avisa una vez al abrir, antes de que falle un guardado.
+        if(!inboxLostWarned&&AutoSave.on(this)&&"lost".equals(Inbox.permission(this))){
+            inboxLostWarned=true;Diagnostics.event("inbox_permission",null,"permission","lost","place",Inbox.place(this));
+            snackbar(getString(R.string.home_inbox_lost,Next.shortName(Inbox.folderName(this))),getString(R.string.act_choose_folder_again),()->RecordingActions.chooseFolder(this));
+        }
         // 0.9.6: se eliminó una grabación desde su detalle: aquí aparece «Deshacer».
         RecordingActions.offerUndo(this);
         // 0.9.2: ¿hay una versión nueva en Google Play? (Updates espacia estas revisiones; la respuesta redibuja la píldora.)
@@ -637,6 +642,8 @@ public class MainActivity extends Screen {
     }
     /** Línea de ayuda al grabar. Sin marcas también explica la ★ (en 0.6 llevaba el rótulo «Marcar»; ahora es solo un ícono). */
     private String shownWarning;
+    /** El aviso de «la carpeta perdió el permiso» sale una vez por apertura de la app. */
+    private static boolean inboxLostWarned;
     private void renderHint(boolean paused){
         // Los botones se nombran igual que se ven («Reanudar», «Detener»).
         // 0.9.6: si el micrófono no capta nada (o queda poco espacio), el aviso reemplaza la ayuda y se anuncia.

@@ -413,6 +413,8 @@ final class Notes {
             FilesStore.update(c,id,st->{st.put("noteState","ready").remove("noteError");if(suggested.isEmpty())st.remove("suggestedTitle");else st.put("suggestedTitle",suggested);});
             log(c,id,Lang.str(c,R.string.note_log_ready)+" · "+Lang.str(c,R.string.note_log_took,Ui.humanDuration(took))+(applied?" · "+Lang.str(c,R.string.note_log_titled):""));
             // Solo datos sin contenido: el costo (un número) sirve para revisar tarifas; el título y el texto nunca se registran.
+            // 0.9.7: una nota creada o rehecha a mano también actualiza sola lo guardado en la carpeta rápida.
+            AutoSave.afterEdit(c,id);
             Diagnostics.event("note_ready",id,"provider",provider,"model",model,"elapsed_ms",took,"count",note.getJSONArray("tasks").length(),"result",applied?"title_applied":"title_suggested","cost",note.has("costUsd")?(Object)note.optDouble("costUsd"):null);
             LocalStorage.enqueue(c,id);
         }catch(Exception e){
@@ -914,7 +916,7 @@ final class Notes {
     /** Nombre de la voz que hoy dice la mayoría de los tramos que eran de «voice». */
     private static String mergedInto(Transcript t,String voice,Map<String,String> current){
         Map<String,Integer> count=new HashMap<>();JSONArray s=t.segments();
-        for(int i=0;i<s.length();i++){JSONObject seg=s.optJSONObject(i);if(seg!=null&&voice.equals(seg.optString("orig",null)))count.merge(seg.optString("speaker"),1,Integer::sum);}
+        for(int i=0;i<s.length();i++){JSONObject seg=s.optJSONObject(i);if(seg!=null&&(voice.equals(seg.optString("orig",null))||voice.equals(seg.optString("raw",null))))count.merge(seg.optString("speaker"),1,Integer::sum);}
         String best=null;int most=0;for(Map.Entry<String,Integer> e:count.entrySet())if(e.getValue()>most){most=e.getValue();best=e.getKey();}
         return best==null?null:current.get(best);
     }
@@ -926,7 +928,7 @@ final class Notes {
             if(tasks==null||index<0||index>=tasks.length()||tasks.optJSONObject(index)==null)return;
             tasks.getJSONObject(index).put("done",done);FilesStore.write(FilesStore.file(c,id,".note.json"),note);
         }
-        Diagnostics.event("note_task_toggled",id,"result",done?"done":"open");LocalStorage.enqueue(c,id);
+        Diagnostics.event("note_task_toggled",id,"result",done?"done":"open");LocalStorage.enqueue(c,id);AutoSave.afterEdit(c,id);
     }
     static void delete(Context c,String id){
         synchronized(FilesStore.LOCK){FilesStore.file(c,id,".note.json").delete();FilesStore.version.incrementAndGet();}

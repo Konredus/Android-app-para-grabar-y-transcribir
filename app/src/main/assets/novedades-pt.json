@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.9.7",
+    "date": "2026-11-14",
+    "title": "Um toque só e cada voz no seu lugar",
+    "items": [
+      "Salva sozinha: ao terminar de transcrever, a nota vai para a sua pasta rápida sem tocar em Salvar. Se depois você mudar nomes ou o título, o mesmo arquivo se atualiza sozinho. Desative em Ajustes → Salvar e cópias.",
+      "Quantas pessoas falam?: antes de transcrever você escolhe a quantidade com um toque. O Verbapp compara as vozes no seu celular e une as repetidas, também em áudios longos enviados em partes.",
+      "Quem é quem com um toque: em Nomear vozes agora aparecem os nomes das suas vozes conhecidas, e você pode mudar a quantidade de pessoas quando quiser, sem transcrever de novo.",
+      "Aviso da pasta: se o Drive tirar a permissão, o Verbapp avisa ao abrir e, quando você a escolhe de novo, salva o que tinha ficado pendente.",
+      "Correções: as pílulas de filtro recuperaram a margem lateral, e o relatório de suporte agora inclui seus ajustes (sem chaves nem nomes) para achar os problemas mais rápido."
+    ]
+  },
+  {
     "version": "0.9.6",
     "date": "2026-10-09",
     "title": "Gravações à prova de tudo",

@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.9.7",
+    "date": "2026-11-14",
+    "title": "Ein Tipp, und jede Stimme an ihrem Platz",
+    "items": [
+      "Speichert von selbst: Sobald die Transkription fertig ist, landet die Notiz in deinem Schnellordner, ohne auf Speichern zu tippen. Änderst du später Namen oder den Titel, aktualisiert sich dieselbe Datei von selbst. Abschalten unter Einstellungen → Speichern und Kopien.",
+      "Wie viele Personen sprechen?: Vor dem Transkribieren wählst du die Anzahl mit einem Tipp. Verbapp vergleicht die Stimmen auf deinem Handy und führt wiederholte zusammen, auch bei langen Aufnahmen, die in Teilen gesendet werden.",
+      "Wer ist wer mit einem Tipp: Unter Stimmen benennen erscheinen jetzt die Namen deiner bekannten Stimmen, und du kannst die Anzahl der Personen jederzeit ändern, ohne neu zu transkribieren.",
+      "Ordner-Warnung: Entzieht Drive die Berechtigung, sagt dir Verbapp das beim Öffnen und speichert nach der erneuten Auswahl, was noch offen war.",
+      "Korrekturen: Die Filter-Pillen haben ihren seitlichen Rand zurück, und der Support-Bericht enthält jetzt deine Einstellungen (ohne Schlüssel oder Namen), damit Probleme schneller gefunden werden."
+    ]
+  },
+  {
     "version": "0.9.6",
     "date": "2026-10-09",
     "title": "Aufnahmen, die alles überstehen",

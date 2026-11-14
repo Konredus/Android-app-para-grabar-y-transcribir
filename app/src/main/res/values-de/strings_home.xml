@@ -313,4 +313,14 @@
     <string name="act_cost_over_body">Dein zuletzt geprüftes Guthaben war %1$s und reicht vielleicht nicht. Lade Guthaben auf openrouter.ai auf oder transkribiere trotzdem.</string>
     <string name="act_deleted">„%1$s“ gelöscht</string>
     <string name="home_show_more">Mehr anzeigen</string>
+    <string name="act_people_title">Wie viele Personen sprechen?</string>
+    <string name="act_people_body">Verbapp führt wiederholte Stimmen zusammen und lässt genau so viele Personen übrig. Danach sagst du mit einem Tipp, wer wer ist.</string>
+    <string name="act_people_one_hint">1 = nur ich: Stimmen werden nicht getrennt (schneller und günstiger).</string>
+    <string name="act_people_unknown">Weiß ich nicht</string>
+    <string name="act_people_one_spoken">Eine Person, nur ich, ohne Stimmen zu trennen</string>
+    <plurals name="act_people_n_spoken">
+        <item quantity="one">%1$d Person</item>
+        <item quantity="other">%1$d Personen</item>
+    </plurals>
+    <string name="home_inbox_lost">Verbapp hat den Zugriff auf „%1$s“ verloren. Wähle den Ordner neu, damit Notizen weiter automatisch gespeichert werden.</string>
 </resources>

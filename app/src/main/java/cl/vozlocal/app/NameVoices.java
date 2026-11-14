@@ -70,7 +70,11 @@ final class NameVoices {
         if(names.isEmpty()){s.message(s.getString(R.string.voices_title),s.getString(R.string.voices_none));return null;}
         if(!tr.diarized()){s.message(s.getString(R.string.voices_title),s.getString(R.string.voices_not_diarized,s.getString(R.string.speaker_n,1),s.getString(R.string.speaker_n,2)));return null;}
         Map<String,Double> share=tr.talkShare();JSONArray segs=tr.segments();
-        boolean mine=Voices.has(s);String myName=Voices.name(s);List<String> recent=recentNames(s);
+        boolean mine=Voices.has(s);String myName=Voices.name(s);
+        // 0.9.7: primero los nombres de las voces conocidas guardadas (con un toque queda dicho quién es), después los recientes.
+        List<String> recent=new ArrayList<>();
+        try{for(Voices.Voice v:Voices.list(s))if(!v.me&&!v.name.trim().isEmpty())recent.add(v.name.trim());}catch(Exception ignored){}
+        for(String n:recentNames(s)){boolean dup=false;for(String x:recent)if(x.equalsIgnoreCase(n))dup=true;if(!dup)recent.add(n);}
         Recording recording=demo?null:FilesStore.recording(s,id);File audio=recording==null?null:recording.audio(s);
         boolean canListen=audio!=null&&audio.isFile();
 
@@ -85,6 +89,8 @@ final class NameVoices {
         Sheet sheet=s.sheet(s.getString(R.string.voices_title),s.getString(canListen?R.string.voices_body_listen:R.string.voices_body));
         Runnable[] refresh={null};
         refresh[0]=()->{for(Voice v:voices)renderRow(s,v,voices,mine,myName,recent,refresh[0]);};
+        // 0.9.7: lugar de la tarjeta «¿Cuántas personas hablan?» (se agrega más abajo, cuando ya existe «guardar»).
+        int peopleAt=sheet.body.getChildCount();
         // Una tarjeta por voz, separadas por 8 dp (en vez de divisores): cada persona se lee como un bloque.
         for(int i=0;i<voices.size();i++){
             Voice v=voices.get(i);boolean last=i==voices.size()-1;
@@ -95,6 +101,12 @@ final class NameVoices {
         // Se guarda una sola vez al cerrar. «Listo» además cuenta como «ya revisé las voces» aunque no cambies nada.
         boolean[] closed={false};
         java.util.function.Consumer<Boolean> save=explicit->{if(closed[0])return;closed[0]=true;sampler.release();commit(s,id,demo,tr,stamp,voices,explicit,changed);};
+        // 0.9.7: con 3 voces originales o más se puede decir cuántas personas son; la app une las repetidas (VoiceMatch).
+        int raw=tr.rawVoices().size();
+        if(!demo&&canListen&&raw>=3){
+            LinearLayout.LayoutParams plp=Ui.fill();plp.bottomMargin=s.ui.dp(S2);
+            sheet.body.addView(peopleCard(s,tr,raw,voices.size(),n->{save.accept(false);sheet.dismiss();regroup(s,id,audio,n,changed);}),peopleAt,plp);
+        }
         if(tr.edited()){
             Ui.Btn restore=ui.button(s.getString(R.string.voices_restore),R.drawable.ic_refresh,Ui.Style.PLAIN,null);
             restore.setOnClickListener(v->{save.accept(false);sheet.dismiss();
@@ -108,6 +120,63 @@ final class NameVoices {
         sheet.show();
         Diagnostics.event("name_voices_open",demo?null:id,"voices",voices.size(),"sample",canListen);
         return sheet;
+    }
+
+    // ---------- ¿Cuántas personas hablan? (0.9.7) ----------
+    /**
+     * Tarjeta con la cantidad de personas: «2 3 4 5…» y, si ya se unieron voces, «Sin unir». Tocar una cantidad guarda lo
+     * escrito, cierra la hoja, une las voces repetidas hasta dejar esa cantidad y vuelve a abrir la hoja con el resultado.
+     */
+    private static View peopleCard(Screen s,Transcript tr,int raw,int now,java.util.function.IntConsumer choose){
+        Ui ui=s.ui;Palette p=s.p;boolean unified=tr.unified();int people=tr.people();
+        LinearLayout card=ui.column();card.setBackground(SheetParts.card(s,p,R_CARD));card.setPadding(ui.dp(S4),ui.dp(S4),ui.dp(S4),ui.dp(S2));
+        card.addView(ui.text(s.getString(R.string.voices_people_title),Type.TITLE_MEDIUM,p.onSurface));
+        TextView sub=ui.text(unified?s.getString(R.string.voices_people_sub_joined,raw,now):s.getString(R.string.voices_people_sub),Type.BODY_MEDIUM,p.onSurfaceVariant);
+        card.addView(sub,ui.top(S1));
+        HorizontalScrollView hs=new HorizontalScrollView(s);hs.setHorizontalScrollBarEnabled(false);hs.setClipToPadding(false);LinearLayout chips=ui.row();hs.addView(chips);
+        for(int n=2;n<=Math.min(RecordingActions.PEOPLE_MAX,raw-1);n++){
+            int count=n;boolean on=unified&&(people>0?people==n:now==n);
+            TextView chip=ui.filter(String.valueOf(n),on,x->{Ui.haptic(x,Ui.Haptic.TICK);if(!on)choose.accept(count);});
+            chip.setContentDescription(Lang.plural(s,R.plurals.act_people_n_spoken,n));addChip(s,chips,chip);
+        }
+        if(unified){TextView chip=ui.filter(s.getString(R.string.voices_people_separate),false,x->{Ui.haptic(x,Ui.Haptic.TICK);choose.accept(0);});addChip(s,chips,chip);}
+        card.addView(hs,ui.top(S1));
+        return card;
+    }
+    /**
+     * Une las voces repetidas hasta dejar «people» personas (0 = deshacer la unión), en segundo plano: la primera vez se
+     * escucha el audio para comparar las voces (segundos, hasta un par de minutos en una reunión larga); después es
+     * inmediato. Al terminar vuelve a abrir «Nombrar voces» con el resultado. Se puede deshacer.
+     */
+    static void regroup(Screen s,String id,File audio,int people,Runnable changed){
+        Context app=s.getApplicationContext();s.toast(s.getString(R.string.voices_people_working));
+        new Thread(()->{
+            try{
+                Transcript snapshot;String stamp;long started=android.os.SystemClock.elapsedRealtime();
+                synchronized(FilesStore.LOCK){stamp=stamp(app,id);snapshot=Transcript.load(app,id);}
+                Map<String,VoiceMatch.Print> prints=people>0?VoiceMatch.ensure(app,id,audio,snapshot,new HttpApi()):null;
+                JSONObject[] before={null};String[] after={null};int[] count={0,snapshot.rawVoices().size()};boolean stale;
+                synchronized(FilesStore.LOCK){
+                    stale=!stamp.equals(stamp(app,id));
+                    if(!stale){
+                        before[0]=Transcript.edit(app,id,t->{if(people>0)VoiceMatch.apply(t,prints,people);else t.separate();count[0]=t.speakers().size();});
+                        after[0]=stamp(app,id);
+                    }
+                }
+                Diagnostics.event("voices_regrouped",id,"people",people,"voices",count[1],"count",count[0],"prints",prints==null?0:prints.size(),"elapsed_ms",android.os.SystemClock.elapsedRealtime()-started,"result",stale?"stale":"ok");
+                s.runOnUiThread(()->{
+                    if(s.isDestroyed()||s.isFinishing())return;
+                    if(stale){changedMeanwhile(s,id,"people");return;}
+                    if(changed!=null)changed.run();
+                    String done=people>0?Lang.plural(s,R.plurals.voices_people_done,count[0]):s.getString(R.string.voices_people_separated);
+                    s.snackbar(done,s.getString(R.string.detail_undo),()->undo(s,id,false,null,before[0],after[0],changed));
+                    show(s,id,false,null,changed);
+                });
+            }catch(Exception e){
+                Diagnostics.event("voices_regroup_failed",id,"error_class",e.getClass().getSimpleName(),"people",people);
+                s.runOnUiThread(()->{if(!s.isDestroyed()&&!s.isFinishing())s.message(s.getString(R.string.voices_title),s.getString(R.string.voices_people_failed));});
+            }
+        },"VozLocal-voices").start();
     }
 
     // ---------- Filas ----------
@@ -178,7 +247,7 @@ final class NameVoices {
         // Nombres sugeridos: «Yo» (tu voz, si la grabaste) y los que usaste hace poco. Tocar uno activo lo quita.
         LinkedHashSet<String> suggestions=new LinkedHashSet<>();
         if(mine)suggestions.add(myName);
-        for(String n:recent){if(suggestions.size()>=(mine?5:4))break;boolean dup=false;for(String x:suggestions)if(x.equalsIgnoreCase(n))dup=true;if(!dup)suggestions.add(n);}
+        for(String n:recent){if(suggestions.size()>=(mine?7:6))break;boolean dup=false;for(String x:suggestions)if(x.equalsIgnoreCase(n))dup=true;if(!dup)suggestions.add(n);}
         for(String name:suggestions){
             boolean on=target==null&&typed.equalsIgnoreCase(name);
             TextView chip=ui.filter(name,on,x->{Ui.haptic(x,Ui.Haptic.TICK);v.mergeInto=null;if(on)v.field.setText("");else{v.field.setText(name);v.field.setSelection(v.field.length());}refresh.run();});
@@ -196,17 +265,8 @@ final class NameVoices {
         }
         ((View)v.chips.getParent()).setVisibility(v.chips.getChildCount()==0?View.GONE:View.VISIBLE);
     }
-    /** El chip se ve de 32 dp (Material) pero se toca en 48 dp: el fondo va con 8 dp de margen arriba y abajo. */
+    /** Ui.filter ya trae la píldora de 36 dp con zona táctil de 48 (0.9.6): aquí solo se separa de la siguiente. */
     private static void addChip(Screen s,LinearLayout chips,TextView chip){
-        int inset=s.ui.dp(S2);chip.setMinHeight(s.ui.dp(48));chip.setMinimumHeight(s.ui.dp(48));
-        if(chip.getBackground()!=null){
-            // Un fondo con relleno propio (el InsetDrawable lo trae: 0, 8, 0, 8) reemplaza los cuatro lados del relleno de
-            // la vista, así que el lateral que puso ui.filter quedaba en 0 y el texto tocaba los extremos redondos de la
-            // píldora. Se guarda antes y se repone después; arriba y abajo se deja el del margen táctil, como antes.
-            int start=chip.getPaddingStart(),end=chip.getPaddingEnd();
-            chip.setBackground(new InsetDrawable(chip.getBackground(),0,inset,0,inset));
-            chip.setPaddingRelative(start,chip.getPaddingTop(),end,chip.getPaddingBottom());
-        }
         LinearLayout.LayoutParams lp=Ui.wrap();lp.setMarginEnd(s.ui.dp(S2));chips.addView(chip,lp);
     }
     private static Voice find(List<Voice> all,String key){for(Voice v:all)if(v.key.equals(key))return v;return null;}

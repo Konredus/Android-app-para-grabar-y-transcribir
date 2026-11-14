@@ -86,7 +86,7 @@ final class Recording {
         all.sort((a,b) -> Long.compare(b.created, a.created)); return all;
     }
     /** Archivos propios de cada grabación (además del audio). Los que no están en la lista igual se borran por prefijo. */
-    static final String[] FILES = {".json", ".sync.json", ".transcript.json", ".transcript.prev.json", ".note.json", ".note.prev.json", ".wave.json"};
+    static final String[] FILES = {".json", ".sync.json", ".transcript.json", ".transcript.prev.json", ".note.json", ".note.prev.json", ".wave.json", ".voices.json"};
     boolean delete(Context c) {
         // Al eliminar no se restaura la versión anterior de «Volver a transcribir»: se borra todo.
         try { Pipeline.cancel(c,id,false); } catch(Exception ignored) { }

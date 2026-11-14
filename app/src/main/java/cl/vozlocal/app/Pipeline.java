@@ -69,6 +69,16 @@ final class Pipeline {
     static void edited(Context c,String id)throws Exception{
         if(FilesStore.state(c,id).optBoolean("demo")){FilesStore.version.incrementAndGet();return;}
         LocalStorage.enqueue(c,id);Diagnostics.event("recording_edited",id);
+        // 0.9.7: lo ya guardado en la carpeta rápida se actualiza solo.
+        AutoSave.afterEdit(c,id);
+    }
+    /**
+     * 0.9.7: cuántas personas hablan en esta grabación (0 = no se sabe), dicho al pedir la transcripción. El motor une
+     * las voces repetidas hasta dejar esa cantidad (VoiceMatch). Se guarda en el estado: un reintento la conserva.
+     */
+    static void people(Context c,String id,int people)throws Exception{
+        // "peopleAsked": la pregunta ya se respondió para esta grabación; «Reintentar» no la repite.
+        FilesStore.update(c,id,s->{if(people>0)s.put("people",people);else s.remove("people");s.put("peopleAsked",true);});
     }
     static boolean pending(Context c){for(Recording r:Recording.list(c))if(FilesStore.state(c,r.id).optBoolean("requested"))return true;return false;}
     /** Hay grabaciones pedidas que aún no tuvieron ningún intento (recién encoladas). */

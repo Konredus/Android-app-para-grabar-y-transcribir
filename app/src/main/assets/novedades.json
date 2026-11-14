@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.9.7",
+    "date": "2026-11-14",
+    "title": "Un solo toque y cada voz en su lugar",
+    "items": [
+      "Se guarda sola: al terminar de transcribir, la nota va a tu carpeta rápida sin tocar «Guardar». Si después cambias nombres o el título, el mismo archivo se actualiza solo. Se apaga en Ajustes → Guardar y copias.",
+      "¿Cuántas personas hablan?: antes de transcribir eliges la cantidad con un toque. Verbapp compara las voces en tu teléfono y une las repetidas, también en audios largos que se envían por partes.",
+      "Quién es quién con un toque: en «Nombrar voces» ahora aparecen los nombres de tus voces conocidas, y puedes cambiar la cantidad de personas cuando quieras, sin volver a transcribir.",
+      "Aviso de la carpeta: si Drive le quita el permiso, Verbapp te avisa al abrir y, cuando la eliges de nuevo, guarda lo que había quedado pendiente.",
+      "Arreglos: las píldoras de filtro recuperaron su margen, y el informe de soporte ahora incluye tus ajustes (sin claves ni nombres) para encontrar los problemas más rápido."
+    ]
+  },
+  {
     "version": "0.9.6",
     "date": "2026-10-09",
     "title": "Grabaciones a prueba de todo",

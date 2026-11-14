@@ -439,4 +439,9 @@
     <string name="set_contact_subject">Verbapp %1$s · ayuda</string>
     <string name="set_contact_body">¡Hola! Cuéntanos qué pasó y, si puedes, cuándo:\n\n</string>
     <string name="set_contact_no_app">No hay una app de correo en este teléfono. Escribe a %1$s.</string>
+    <string name="set_ask_people">Preguntar cuántas personas hablan</string>
+    <string name="set_ask_people_sub">Un toque antes de transcribir; Verbapp une las voces repetidas</string>
+    <string name="set_auto_inbox">Guardar sola al terminar</string>
+    <string name="set_auto_inbox_sub">Al terminar de transcribir, la nota va a esta carpeta sin tocar Guardar. Si después cambias nombres o el título, se actualiza el mismo archivo.</string>
+    <string name="set_auto_inbox_need">Primero elige una carpeta</string>
 </resources>

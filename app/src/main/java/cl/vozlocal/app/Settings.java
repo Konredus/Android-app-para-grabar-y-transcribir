@@ -20,6 +20,12 @@ final class Settings {
      * grabación toma el título que sugiere la nota de la IA y se puede cambiar después. Quien lo quiera lo prende en Ajustes.
      */
     boolean askTitle() { return prefs.getBoolean("askTitle", false); }
+    /** 0.9.7: antes de transcribir se pregunta cuántas personas hablan (un toque); con eso se unen las voces repetidas. */
+    boolean askPeople() { return prefs.getBoolean("askPeople", true); }
+    /** La última cantidad elegida, para dejarla marcada la próxima vez (0 = ninguna). */
+    int lastPeople() { return prefs.getInt("lastPeople", 0); }
+    /** 0.9.7: al terminar de transcribir, la nota se guarda sola en la carpeta rápida (AutoSave). */
+    boolean autoInbox() { return prefs.getBoolean("autoInbox", true); }
     /**
      * Idioma del audio al transcribir: "en", "es", "pt" o "" (que el modelo lo detecte). Sin elegir (0.9.0), el idioma de
      * la app: quien la usa en inglés habla, lo más probable, en inglés. Antes partía siempre en "es" (la app era solo en

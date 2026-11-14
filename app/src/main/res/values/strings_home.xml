@@ -362,4 +362,14 @@
     <string name="act_cost_over_body">Your last checked balance was %1$s, which may not be enough. Add credit at openrouter.ai or transcribe anyway.</string>
     <string name="act_deleted">“%1$s” deleted</string>
     <string name="home_show_more">Show more</string>
+    <string name="act_people_title">How many people are speaking?</string>
+    <string name="act_people_body">Verbapp joins repeated voices and keeps that many people. Afterwards you say who is who with one tap.</string>
+    <string name="act_people_one_hint">1 = just me: voices aren\'t separated (faster and cheaper).</string>
+    <string name="act_people_unknown">I don\'t know</string>
+    <string name="act_people_one_spoken">One person, just me, without separating voices</string>
+    <plurals name="act_people_n_spoken">
+        <item quantity="one">%1$d person</item>
+        <item quantity="other">%1$d people</item>
+    </plurals>
+    <string name="home_inbox_lost">Verbapp lost access to “%1$s”. Choose it again so notes keep saving by themselves.</string>
 </resources>

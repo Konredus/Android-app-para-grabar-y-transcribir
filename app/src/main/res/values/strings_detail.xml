@@ -475,4 +475,15 @@
     <string name="detail_audio_clean_noise">less background noise</string>
     <!-- 0.9.5: título de la nota de «Sesión con cliente» -->
     <string name="detail_note_client_title">Session summary</string>
+    <string name="voices_people_title">How many people are speaking?</string>
+    <string name="voices_people_sub">Tap the number and Verbapp joins the repeated voices.</string>
+    <string name="voices_people_sub_joined">Verbapp joined %1$d voices into %2$d people. Tap another number to change it.</string>
+    <string name="voices_people_separate">Not joined</string>
+    <string name="voices_people_working">Comparing the voices…</string>
+    <string name="voices_people_failed">Couldn\'t compare the voices. The transcript was left as it was.</string>
+    <string name="voices_people_separated">Voices left as the AI separated them</string>
+    <plurals name="voices_people_done">
+        <item quantity="one">Voices joined: %1$d person</item>
+        <item quantity="other">Voices joined: %1$d people</item>
+    </plurals>
 </resources>

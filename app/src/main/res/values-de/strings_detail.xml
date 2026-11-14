@@ -469,4 +469,15 @@
     <string name="detail_audio_clean_noise">weniger Hintergrundrauschen</string>
     <!-- 0.9.5: título de la nota de «Sesión con cliente» -->
     <string name="detail_note_client_title">Zusammenfassung der Sitzung</string>
+    <string name="voices_people_title">Wie viele Personen sprechen?</string>
+    <string name="voices_people_sub">Tippe auf die Anzahl und Verbapp führt die wiederholten Stimmen zusammen.</string>
+    <string name="voices_people_sub_joined">Verbapp hat %1$d Stimmen zu %2$d Personen zusammengeführt. Tippe auf eine andere Anzahl, um das zu ändern.</string>
+    <string name="voices_people_separate">Nicht zusammenführen</string>
+    <string name="voices_people_working">Stimmen werden verglichen…</string>
+    <string name="voices_people_failed">Die Stimmen konnten nicht verglichen werden. Das Transkript bleibt, wie es war.</string>
+    <string name="voices_people_separated">Stimmen wie von der KI getrennt</string>
+    <plurals name="voices_people_done">
+        <item quantity="one">Stimmen zusammengeführt: %1$d Person</item>
+        <item quantity="other">Stimmen zusammengeführt: %1$d Personen</item>
+    </plurals>
 </resources>

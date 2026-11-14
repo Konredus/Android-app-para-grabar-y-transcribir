@@ -325,4 +325,12 @@
         <item quantity="one">%1$d voice from the later parts couldn\'t be matched with part 1 · if someone appears twice, merge them in Review voices</item>
         <item quantity="other">%1$d voices from the later parts couldn\'t be matched with part 1 · if someone appears twice, merge them in Review voices</item>
     </plurals>
+    <string name="eng_st_voices">Joining repeated voices</string>
+    <string name="eng_log_voices_joined">Repeated voices joined: %1$d voices → %2$d people</string>
+    <string name="eng_log_voices_joined_people">Repeated voices joined: %1$d voices → %2$d people (you said %3$d)</string>
+    <string name="eng_log_auto_saved">Saved by itself in “%1$s”</string>
+    <string name="eng_log_auto_save_failed">Couldn\'t save by itself in “%1$s” · choose the folder again in Settings</string>
+    <string name="eng_notif_done_saved">“%1$s” · saved in %2$s</string>
+    <string name="eng_notif_done_review_saved">“%1$s” · saved in %3$s · %2$d voices to review</string>
+    <string name="eng_notif_done_save_failed">“%1$s” · couldn\'t save in %2$s: choose the folder again</string>
 </resources>

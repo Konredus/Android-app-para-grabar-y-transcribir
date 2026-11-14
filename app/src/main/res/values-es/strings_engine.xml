@@ -324,4 +324,12 @@
         <item quantity="one">%1$d voz de las partes siguientes no se pudo unir con la parte 1 · si alguien aparece dos veces, únelo en Revisar voces</item>
         <item quantity="other">%1$d voces de las partes siguientes no se pudieron unir con la parte 1 · si alguien aparece dos veces, únelo en Revisar voces</item>
     </plurals>
+    <string name="eng_st_voices">Uniendo voces repetidas</string>
+    <string name="eng_log_voices_joined">Voces repetidas unidas: %1$d voces → %2$d personas</string>
+    <string name="eng_log_voices_joined_people">Voces repetidas unidas: %1$d voces → %2$d personas (dijiste %3$d)</string>
+    <string name="eng_log_auto_saved">Guardada sola en «%1$s»</string>
+    <string name="eng_log_auto_save_failed">No se pudo guardar sola en «%1$s» · elige la carpeta de nuevo en Ajustes</string>
+    <string name="eng_notif_done_saved">«%1$s» · guardada en %2$s</string>
+    <string name="eng_notif_done_review_saved">«%1$s» · guardada en %3$s · %2$d voces por revisar</string>
+    <string name="eng_notif_done_save_failed">«%1$s» · no se pudo guardar en %2$s: elige la carpeta de nuevo</string>
 </resources>

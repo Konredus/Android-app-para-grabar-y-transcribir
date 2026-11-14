@@ -13,7 +13,8 @@ public class RecorderSmokeTest extends Instrumentation {
     private boolean longChecks = true;
     /** {@code -e demo es|en|pt}: en vez de probar, deja las grabaciones de muestra para las capturas de Play (StoreDemo). */
     private String demo;
-    @Override public void onCreate(Bundle args) { super.onCreate(args); longChecks = args == null || !"false".equals(args.getString("long")); demo = args == null ? null : args.getString("demo"); start(); }
+    private String meeting;
+    @Override public void onCreate(Bundle args) { super.onCreate(args); longChecks = args == null || !"false".equals(args.getString("long")); demo = args == null ? null : args.getString("demo"); meeting = args == null ? null : args.getString("meeting"); start(); }
     private void check(boolean value, String message) { if (!value) throw new AssertionError(message); }
     private void command(Context context, String action) {
         runOnMainSync(() -> {
@@ -31,6 +32,13 @@ public class RecorderSmokeTest extends Instrumentation {
     @Override public void onStart() {
         Bundle report = new Bundle();
         Context c = getTargetContext();
+        // 0.9.7: «-e meeting <nombre>» mide la unión de voces con una reunión real copiada a la caché de la app
+        // (cache/ami/<nombre>.wav y .rttm, del corpus AMI). No es parte de la suite: los audios no van en el repositorio.
+        if (meeting != null) {
+            try { report.putString("stream", VoiceChecks.meeting(c, meeting)); finish(Activity.RESULT_OK, report); }
+            catch (Throwable error) { report.putString("stream", "FAIL: " + android.util.Log.getStackTraceString(error)); finish(Activity.RESULT_CANCELED, report); }
+            return;
+        }
         if (demo != null) {
             try { StoreDemo.seed(c, demo); report.putString("stream", "DEMO " + demo + ": " + Recording.list(c).size() + " recordings\n"); finish(Activity.RESULT_OK, report); }
             catch (Throwable error) { report.putString("stream", "FAIL: " + android.util.Log.getStackTraceString(error)); finish(Activity.RESULT_CANCELED, report); }
@@ -46,6 +54,9 @@ public class RecorderSmokeTest extends Instrumentation {
             new Settings(c).prefs.edit().putBoolean("welcomed", true).commit();
             // 0.9.0: el aviso de envío a OpenRouter (Consent) se da por aceptado; OnboardingChecks prueba el aviso en sí.
             Consent.accept(c);
+            // 0.9.7: las novedades de la versión también se dan por vistas (OnboardingChecks prueba la hoja en sí): al
+            // actualizar desde otra versión la hoja quedaba encima de Grabar y la corrida se detenía ahí.
+            new Settings(c).setLastSeenVersion(Integer.MAX_VALUE);
             Activity activity = startActivitySync(new Intent(c, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             waitForIdleSync(); Thread.sleep(700);
             command(c, "START"); Thread.sleep(3000);
@@ -111,6 +122,7 @@ public class RecorderSmokeTest extends Instrumentation {
             AudioCleanChecks.run(c,r);
             SessionChecks.run(this,c);
             RobustChecks.run(this,c);
+            VoiceChecks.run(c);
             I18nChecks.run(c);
             long longStarted = SystemClock.elapsedRealtime();
             if (longChecks) LongImportChecks.run(c,r);
